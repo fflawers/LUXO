@@ -15,6 +15,7 @@ import openpyxl
 import math
 from dotenv import load_dotenv
 import bcrypt
+import difflib
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -4830,20 +4831,44 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 }
                 query_palabras = [w for w in palabras_query if w not in stopwords and len(w) >= 2]
                 
-                # Raíces de la consulta
-                query_roots = [obtener_raiz_espanol(w) for w in query_palabras]
+                # Raíces de la consulta con corrección ortográfica (Fuzzy Matching)
+                query_roots_raw = [obtener_raiz_espanol(w) for w in query_palabras]
+                query_roots = []
+                
+                # Obtener vocabulario de raíces conocidas en los manuales (si RAG_IDF_CACHE existe)
+                vocabulario_valido = list(RAG_IDF_CACHE.keys()) if RAG_IDF_CACHE else []
+                
+                for r in query_roots_raw:
+                    # Si la raíz ya es válida o es muy corta, se deja igual
+                    if not vocabulario_valido or r in vocabulario_valido or len(r) <= 3:
+                        query_roots.append(r)
+                    else:
+                        # Buscar la palabra más parecida en los manuales (corrige faltas ortográficas o dedazos)
+                        matches = difflib.get_close_matches(r, vocabulario_valido, n=1, cutoff=0.75)
+                        if matches:
+                            query_roots.append(matches[0])
+                        else:
+                            query_roots.append(r)
+
                 core_roots = list(query_roots)
                 
-                # Diccionario de sinónimos a nivel de raíces
+                # Diccionario de sinónimos a nivel de raíces (Incluyendo Mexicanismos y Abreviaciones)
                 SINONIMOS_RAICES = {
-                    "rob": ["3r", "siniestr", "perd"],
-                    "caj": ["cierr", "arqu"],
-                    "cierr": ["caj", "finaliz"],
-                    "cambi": ["devoluc", "garanti"],
-                    "devoluc": ["cambi", "garanti"],
-                    "impresor": ["epson", "papel", "ticket"],
+                    "rob": ["3r", "siniestr", "perd", "asalto"],
+                    "caj": ["cierr", "arqu", "morrall", "feri", "lan", "dinero", "efectiv"],
+                    "cierr": ["caj", "finaliz", "cort"],
+                    "cambi": ["devoluc", "garanti", "reemplaz"],
+                    "devoluc": ["cambi", "garanti", "dev"],
+                    "impresor": ["epson", "papel", "ticket", "tkt", "tck", "recib"],
                     "papel": ["roll", "impresor"],
-                    "terminal": ["caj", "pinpad"],
+                    "terminal": ["caj", "pinpad", "clip", "banam", "banc", "tarjet", "tj"],
+                    "sistem": ["sys", "plataform", "lux", "portal"],
+                    "inform": ["info", "ayud", "doc", "manual"],
+                    "telefon": ["cel", "movil", "llama"],
+                    "trabaj": ["chamb", "labor", "tare"],
+                    "revis": ["chec", "verific", "valid"],
+                    "necesit": ["ocup", "requier", "quier"],
+                    "punt": ["pto", "sucursal", "tiend"]
                 }
                 
                 # Expansión de sinónimos sobre raíces
