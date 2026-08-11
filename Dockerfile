@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     alsa-utils \
     libgl1 \
     libglib2.0-0 \
+    python3-tk \
     && rm -rf /var/lib/apt/lists/*
 
 # Directorio de trabajo en el contenedor
