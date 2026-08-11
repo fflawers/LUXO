@@ -30,7 +30,8 @@ ASSETS_PATH = os.path.join(BASE_PATH, "custom_assets")
 # Valores de APIs leídos desde entorno (.env) o valores por defecto
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")
-GROQ_KEYS = [k for k in [GROQ_API_KEY, GROQ_API_KEY_2] if k]  # lista de llaves activas
+GROQ_API_KEY_3 = os.getenv("GROQ_API_KEY_3", "")
+GROQ_KEYS = [k for k in [GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3] if k]  # lista de llaves activas
 _groq_key_index = 0  # índice de la llave activa actual
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 URL_GROQ = "https://api.groq.com/openai/v1/chat/completions"
