@@ -49,10 +49,11 @@ if __name__ == "__main__":
     app.mount("/custom_assets", StaticFiles(directory="custom_assets"), name="custom_assets")
     app.mount("/", flet_asgi_app)
 
+    puerto = int(os.environ.get("PORT", 8550))
     uvicorn.run(
         app, 
         host="0.0.0.0", 
-        port=8550, 
+        port=puerto, 
         ws_ping_interval=30.0, 
         ws_ping_timeout=120.0, 
         timeout_keep_alive=300, 
