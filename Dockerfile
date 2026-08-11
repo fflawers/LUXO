@@ -5,6 +5,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Instalar dependencias del sistema operativo (Audio, OpenCV, etc)
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3-dev \
     portaudio19-dev \
     libasound2-dev \
     alsa-utils \
