@@ -827,15 +827,14 @@ def configurar_rutas_fastapi(app):
                                 for (let i = e.resultIndex; i < e.results.length; ++i) {
                                     const transcript = e.results[i][0].transcript;
                                     const lower = transcript.toLowerCase();
-                                    console.log("🎙️ [Luxo Global Mic]:", transcript, "isFinal:", e.results[i].isFinal);
                                     
-                                    if (lower.includes("oye luxo") || lower.includes("oye lujo") || lower.includes("oye luco") || lower.includes("oye lux")) {
+                                    if (lower.includes("oye luxo") || lower.includes("oye lujo") || lower.includes("hola luxo") || lower.includes("hey luxo")) {
                                         const now = Date.now();
                                         let query = transcript
                                             .replace(/oye luxo/gi, '')
                                             .replace(/oye lujo/gi, '')
-                                            .replace(/oye luco/gi, '')
-                                            .replace(/oye lux/gi, '')
+                                            .replace(/hola luxo/gi, '')
+                                            .replace(/hey luxo/gi, '')
                                             .trim();
                                             
                                         // Activar orbe flotante Siri en la esquina inferior derecha mientras habla
@@ -854,6 +853,8 @@ def configurar_rutas_fastapi(app):
                                                 fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
                                                 // Ocultar orbe flotante tras procesar/enviar
                                                 setTimeout(function(){ window.hideLuxoSiriOrb(); }, 2000);
+                                                window.luxoManualDictating = false;
+                                                try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
                                             }
                                         }
                                     } else if (window.luxoManualDictating && e.results[i].isFinal) {
@@ -866,6 +867,7 @@ def configurar_rutas_fastapi(app):
                                             window.luxoManualDictating = false;
                                             // Ocultar orbe flotante al finalizar de hablar
                                             setTimeout(function(){ window.hideLuxoSiriOrb(); }, 2000);
+                                            try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
                                         }
                                     }
                                 }
@@ -1244,14 +1246,13 @@ def configurar_rutas_fastapi(app):
                                 transcriptDiv.innerText = text;
                                 const lower = text.toLowerCase();
 
-                                if (lower.includes("oye luxo") || lower.includes("hola luxo") || lower.includes("luxo") || lower.includes("lujo") || lower.includes("luco")) {
+                                if (lower.includes("oye luxo") || lower.includes("hola luxo") || lower.includes("hey luxo") || lower.includes("oye lujo")) {
                                     const now = Date.now();
                                     let query = text
                                         .replace(/oye luxo/gi, '')
                                         .replace(/hola luxo/gi, '')
-                                        .replace(/luxo/gi, '')
-                                        .replace(/lujo/gi, '')
-                                        .replace(/luco/gi, '')
+                                        .replace(/hey luxo/gi, '')
+                                        .replace(/oye lujo/gi, '')
                                         .trim();
 
                                     if (!query && e.results[i].isFinal) {
@@ -1259,6 +1260,7 @@ def configurar_rutas_fastapi(app):
                                         status.innerText = "👂 ¡'Oye LUXO' Detectado! Di tu pregunta...";
                                         status.style.color = "#FF00FF";
                                         status.style.borderColor = "#FF00FF";
+                                        window.luxoManualDictating = true;
                                     } else if (query && (e.results[i].isFinal || (now - lastSentTime > 2000))) {
                                         if (query !== lastSentText) {
                                             lastSentText = query;
@@ -1273,7 +1275,21 @@ def configurar_rutas_fastapi(app):
                                                 status.style.color = "#00FFFF";
                                                 status.style.borderColor = "#00FFFF";
                                             }, 3500);
+                                            window.luxoManualDictating = false;
+                                            try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
                                         }
+                                    }
+                                } else if (window.luxoManualDictating && e.results[i].isFinal) {
+                                    const query = text.trim();
+                                    if (query && query !== lastSentText) {
+                                        lastSentText = query;
+                                        playBeep();
+                                        status.innerText = "🚀 Enviado a la IA: " + query;
+                                        status.style.color = "#7CFC00";
+                                        status.style.borderColor = "#7CFC00";
+                                        fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                        window.luxoManualDictating = false;
+                                        try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
                                     }
                                 }
                             }
@@ -4980,7 +4996,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         
                         # Penalización por cobertura baja
                         if len(attention_weights) > 2 and matches < 2:
-                            score_b_scaled *= 0.5
+                            score_b_scaled *= 0.2
                         
                         if score_b_scaled >= 30: # Aumentar umbral
                             candidatos.append((score_b_scaled, b["nombre"], b["texto"], b))
@@ -5060,8 +5076,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     bloques_candidatos.sort(key=lambda x: x[0], reverse=True)
                     max_score = bloques_candidatos[0][0]
                     for score_val, doc_nombre, blk_texto, b_obj in bloques_candidatos:
-                        # Exigir un umbral de score absoluto mínimo de 45 para evitar asociar manuales irrelevantes
-                        if score_val >= (max_score * 0.5) and score_val >= 45:
+                        # Exigir un umbral de score absoluto mínimo de 65 para evitar asociar manuales irrelevantes
+                        if score_val >= (max_score * 0.5) and score_val >= 65:
                             bloques_filtrados.append((score_val, doc_nombre, blk_texto, b_obj))
                 else:
                     candidatos = []
@@ -6090,14 +6106,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 const lower = transcript.toLowerCase();
                                 console.log("🎙️ [Luxo Chat Mic]:", transcript, "isFinal:", e.results[i].isFinal);
                                 
-                                if (lower.includes("oye luxo") || lower.includes("hola luxo") || lower.includes("luxo") || lower.includes("lujo") || lower.includes("luco")) {
+                                if (lower.includes("oye luxo") || lower.includes("hola luxo") || lower.includes("hey luxo") || lower.includes("oye lujo")) {
                                     const now = Date.now();
                                     let query = transcript
                                         .replace(/oye luxo/gi, '')
                                         .replace(/hola luxo/gi, '')
-                                        .replace(/luxo/gi, '')
-                                        .replace(/lujo/gi, '')
-                                        .replace(/luco/gi, '')
+                                        .replace(/hey luxo/gi, '')
+                                        .replace(/oye lujo/gi, '')
                                         .trim();
                                         
                                     // Activar orbe flotante en la esquina inferior derecha al detectar frase clave (5 segundos de visualización)
@@ -6115,7 +6130,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             window.showLuxoSiriOrb(5000);
                                             setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
                                             fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                            window.luxoManualDictating = false;
                                             setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
+                                            try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
                                         }
                                     }
                                 } else if (window.luxoManualDictating && e.results[i].isFinal) {
@@ -6128,6 +6145,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
                                         window.luxoManualDictating = false;
                                         setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
+                                        try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
                                     }
                                 }
                             }
