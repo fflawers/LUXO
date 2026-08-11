@@ -785,6 +785,11 @@ def configurar_rutas_fastapi(app):
                     let lastSentTime = 0;
 
                     window.initLuxoMicPermission = function() {
+                        // === VOZ DESACTIVADA TEMPORALMENTE ===
+                        console.log("🎙️ [Luxo Global Mic]: Voz desactivada temporalmente.");
+                        setStatus("🔇 Voz desactivada temporalmente", "#888888", "🔇");
+                        return;
+                        // === FIN VOZ DESACTIVADA ===
                         if (window.luxoSpeechRecognitionActive) {
                             console.log("🎙️ [Luxo Global Mic]: Already active. Skipping duplicate init.");
                             return;
@@ -1318,11 +1323,11 @@ def configurar_rutas_fastapi(app):
                 }
 
                 micBtn.addEventListener('click', () => {
-                    startListening();
+                    // startListening(); // VOZ DESACTIVADA TEMPORALMENTE
                 });
 
                 // Auto-iniciar al cargar
-                startListening();
+                    // startListening(); // VOZ DESACTIVADA TEMPORALMENTE
             </script>
         </body>
         </html>
@@ -6094,6 +6099,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 let lastSentTime = 0;
 
                 window.initLuxoMicPermission = function() {
+                    // === VOZ DESACTIVADA TEMPORALMENTE ===
+                    console.log("🎙️ [Luxo Chat Mic]: Voz desactivada temporalmente.");
+                    setStatus("🔇 Voz desactivada temporalmente", "#888888", "🔇");
+                    return;
+                    // === FIN VOZ DESACTIVADA ===
                     if (window.luxoSpeechRecognitionActive) {
                         console.log("🎙️ [Luxo Chat Mic]: Already active. Skipping duplicate init.");
                         return;
