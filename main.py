@@ -4836,6 +4836,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 query_roots = []
                 
                 # Obtener vocabulario de raíces conocidas en los manuales (si RAG_IDF_CACHE existe)
+                global RAG_BLOQUES_CACHE, RAG_IDF_CACHE
                 vocabulario_valido = list(RAG_IDF_CACHE.keys()) if RAG_IDF_CACHE else []
                 
                 for r in query_roots_raw:
@@ -4958,7 +4959,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     return bloques_finales
 
                 # --- SEGMENTACIÓN GLOBAL DE MANUALES Y CÁLCULO DE TF-IDF (CON CACHÉ) ---
-                global RAG_BLOQUES_CACHE, RAG_IDF_CACHE
                 if RAG_BLOQUES_CACHE is None:
                     rebuild_rag_cache()
                 
