@@ -1,0 +1,21 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+__pycache__/
+
+# Secretos y Configuración
+.env
+config.json
+*.pem
+*.key
+*.cert
+
+# Bases de datos y respaldos
+*.sql
+*.sqlite3
+*.db
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

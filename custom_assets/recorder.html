@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grabadora de Voz LUXO</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000000;
+            color: #ffffff;
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            text-align: center;
+            background: rgba(20, 20, 30, 0.7);
+            border: 1px solid #D8B4FE;
+            padding: 30px;
+            border-radius: 24px;
+            box-shadow: 0 8px 32px 0 rgba(216, 180, 254, 0.15);
+            backdrop-filter: blur(10px);
+            width: 85%;
+            max-width: 320px;
+        }
+        h2 {
+            margin: 0 0 8px 0;
+            color: #D8B4FE;
+            font-size: 20px;
+            font-weight: 800;
+        }
+        .status {
+            font-size: 13px;
+            color: #aaaaaa;
+            margin-bottom: 24px;
+            line-height: 1.4;
+        }
+        .mic-btn {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: #6E48AA;
+            border: 2px solid #D8B4FE;
+            color: white;
+            font-size: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin: 0 auto 24px auto;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 15px rgba(110, 72, 170, 0.4);
+        }
+        .mic-btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 6px 20px rgba(110, 72, 170, 0.6);
+        }
+        .mic-btn.recording {
+            background: #FF4500;
+            border-color: #FF6347;
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 25px rgba(255, 69, 0, 0.6);
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 69, 0, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(255, 69, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 69, 0, 0); }
+        }
+        canvas {
+            width: 100%;
+            height: 50px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .info-note {
+            font-size: 11px;
+            color: #555555;
+            margin-top: 15px;
+        }
+        .fallback-btn {
+            background: #6E48AA;
+            border: 1px solid #D8B4FE;
+            color: white;
+            padding: 14px 22px;
+            border-radius: 14px;
+            cursor: pointer;
+            font-family: 'Outfit';
+            font-weight: 600;
+            font-size: 14px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(110, 72, 170, 0.3);
+        }
+        .fallback-btn:hover {
+            background: #8e5bd6;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Grabador de Voz</h2>
+        <div class="status" id="status-text">Toca el micrófono para comenzar</div>
+        
+        <div class="mic-btn" id="mic-button">🎙️</div>
+        
+        <button class="fallback-btn" id="native-upload-btn" style="display: none;">
+            Grabar / Elegir Audio 🎙️
+        </button>
+        <input type="file" id="file-input" accept="audio/*" style="display: none;">
+        
+        <canvas id="waveform"></canvas>
+        
+        <div class="info-note">Se enviará directamente a Luxo AI</div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('user_id');
+        
+        const statusText = document.getElementById('status-text');
+        const micButton = document.getElementById('mic-button');
+        const nativeUploadBtn = document.getElementById('native-upload-btn');
+        const fileInput = document.getElementById('file-input');
+        const canvas = document.getElementById('waveform');
+        const canvasCtx = canvas.getContext('2d');
+
+        // Detectar soporte para grabacion en tiempo real (requiere contexto seguro HTTPS o localhost)
+        const isMicSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+        if (!isMicSupported) {
+            // Contexto HTTP no seguro (ej: accediendo desde movil por IP 192.168.x.x)
+            micButton.style.display = "none";
+            nativeUploadBtn.style.display = "inline-block";
+            statusText.innerHTML = "Tu navegador requiere HTTPS para grabación directa.<br><b>Usa la grabadora nativa de tu teléfono:</b>";
+        }
+
+        micButton.addEventListener('click', async () => {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        nativeUploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            statusText.textContent = "Procesando y transcribiendo audio...";
+            nativeUploadBtn.style.display = "none";
+
+            const formData = new FormData();
+            formData.append('file', file, file.name);
+
+            const uploadUrl = `${window.location.origin}/upload?user_id=${userId}`;
+
+            try {
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    statusText.textContent = "¡Transcrito con éxito!";
+                    setTimeout(() => {
+                        window.close();
+                    }, 800);
+                } else {
+                    statusText.textContent = "Error al enviar el archivo de audio.";
+                    nativeUploadBtn.style.display = "inline-block";
+                }
+            } catch (err) {
+                console.error(err);
+                statusText.textContent = "Error de conexión con el servidor.";
+                nativeUploadBtn.style.display = "inline-block";
+            }
+        });
+
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let audioContext;
+        let analyser;
+        let dataArray;
+        let source;
+        let animationId;
+        let streamRef;
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                streamRef = stream;
+                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = e => {
+                    audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    statusText.textContent = "Transcribiendo audio...";
+                    micButton.style.display = "none";
+                    canvas.style.display = "none";
+                    
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const formData = new FormData();
+                    formData.append('file', audioBlob, 'recording.wav');
+                    
+                    const uploadUrl = `${window.location.origin}/upload?user_id=${userId}`;
+                    
+                    try {
+                        const response = await fetch(uploadUrl, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (response.ok) {
+                            statusText.textContent = "¡Transcrito con éxito!";
+                            setTimeout(() => {
+                                window.close();
+                            }, 800);
+                        } else {
+                            statusText.textContent = "Error al enviar el audio.";
+                            micButton.style.display = "flex";
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        statusText.textContent = "Error de conexión.";
+                        micButton.style.display = "flex";
+                    }
+                };
+
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                analyser.fftSize = 256;
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+                
+                canvas.style.display = "block";
+                drawWaveform();
+
+                mediaRecorder.start();
+                isRecording = true;
+                micButton.classList.add('recording');
+                micButton.textContent = "🛑";
+                statusText.textContent = "Grabando... habla ahora";
+            } catch (err) {
+                console.error(err);
+                statusText.textContent = "Acceso al micrófono denegado.";
+                alert("Por favor permite el acceso al micrófono en tu navegador.");
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                isRecording = false;
+                micButton.classList.remove('recording');
+                micButton.textContent = "🎙️";
+                
+                if (streamRef) {
+                    streamRef.getTracks().forEach(t => t.stop());
+                }
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+            }
+        }
+
+        function drawWaveform() {
+            animationId = requestAnimationFrame(drawWaveform);
+            analyser.getByteFrequencyData(dataArray);
+
+            canvasCtx.fillStyle = '#0c0c14';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / dataArray.length) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for (let i = 0; i < dataArray.length; i++) {
+                barHeight = dataArray[i] / 2;
+                canvasCtx.fillStyle = `rgb(${barHeight + 100}, 80, 200)`;
+                canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+    </script>
+</body>
+</html>

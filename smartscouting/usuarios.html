@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartScouting · Usuarios</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='10' fill='%2300D084'/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<script src="tema.js"></script>
+<style>
+.cols{display:grid;grid-template-columns:352px 1fr;gap:18px;align-items:start;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.grid2>.field{min-width:0;}
+.field .fw{max-width:100%;}
+.tabla-wrap{overflow-x:auto;}
+.acc{display:flex;gap:6px;justify-content:flex-end;}
+.gen{background:none;border:none;color:var(--accent);font-size:10px;font-weight:700;cursor:pointer;
+  font-family:var(--sans);padding:0;text-transform:uppercase;letter-spacing:.05em;}
+.gen:hover{text-decoration:underline;}
+.pw-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.pw-row label{margin-bottom:0;}
+@media(max-width:900px){.cols{grid-template-columns:1fr;}}
+/* avisos flotantes: no mueven el formulario */
+#avisos{position:fixed;top:64px;right:20px;z-index:400;display:flex;flex-direction:column;gap:9px;max-width:380px;}
+.toast{display:flex;align-items:flex-start;gap:9px;border-radius:10px;padding:12px 14px;font-size:11.5px;line-height:1.55;
+  box-shadow:0 14px 40px rgba(0,0,0,.5);animation:entra .25s ease;backdrop-filter:blur(8px);}
+.toast.err{background:rgba(239,68,68,.16);border:0.5px solid var(--dn-b);color:#FCA5A5;}
+.toast.ok{background:rgba(0,208,132,.14);border:0.5px solid var(--ac-b);color:var(--accent);}
+.toast svg{flex-shrink:0;margin-top:1px;}
+.toast .x{margin-left:auto;background:none;border:none;color:inherit;cursor:pointer;opacity:.6;padding:0;display:flex;}
+.toast .x:hover{opacity:1;}
+@keyframes entra{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+/* boton de icono en la tabla */
+.ico-btn{width:30px;height:30px;border-radius:7px;border:0.5px solid var(--border-s);background:var(--s2);color:var(--t3);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s;}
+.ico-btn:hover{background:var(--s3);color:var(--t1);}
+.ico-btn.danger:hover{background:var(--dn-dim);color:#FCA5A5;border-color:var(--dn-b);}
+.ico-btn.ok:hover{background:var(--ac-dim);color:var(--accent);border-color:var(--ac-b);}
+/* ventana de edicion */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(5px);z-index:500;display:none;align-items:center;justify-content:center;padding:16px;}
+.mo.on{display:flex;}
+.md{background:var(--s1);border:0.5px solid var(--border-s);border-radius:16px;width:100%;max-width:460px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;}
+.mh{padding:16px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.mh-t{font-size:13px;font-weight:700;}
+.mb{padding:20px;overflow-y:auto;}
+.mf{padding:14px 20px;border-top:0.5px solid var(--border);display:flex;gap:10px;justify-content:flex-end;}
+.nota{background:var(--wn-dim);border:0.5px solid var(--wn-b);color:var(--warn);border-radius:9px;padding:10px 13px;font-size:11px;line-height:1.55;margin-bottom:16px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tb-left">
+    <div class="logo"><div class="logo-dot"></div><span class="logo-txt">SmartScouting</span></div>
+    <a class="back-link" href="panel.html">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+      Volver al panel
+    </a>
+  </div>
+  <div class="tb-right">
+    <div class="user-pill">
+      <div class="user-av" id="av">··</div>
+      <span class="user-nm" id="nm">Cargando…</span>
+      <span class="rol-tag admin">Administrador</span>
+    </div>
+    <button class="btn btn-sec btn-sm" data-tema-icono style="height:34px;width:34px;padding:0"></button>
+    <button class="btn btn-sec btn-sm" id="salir" style="height:34px">Salir</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="page-ttl">Creación de usuarios</div>
+  <div class="page-sub">Da de alta a las personas del equipo. Entrarán al sistema con el correo y la contraseña que les asignes aquí.</div>
+
+  <div class="cols">
+
+    <!-- ── Formulario de alta ── -->
+    <div class="card">
+      <div class="card-hd"><span class="card-ttl">Nuevo usuario</span></div>
+      <div class="card-bd">
+
+        <div class="grid2">
+          <div class="field">
+            <label for="nombre">Nombre</label>
+            <div class="fw"><input type="text" id="nombre" placeholder="Juan Manuel"></div>
+          </div>
+          <div class="field">
+            <label for="apellidos">Apellidos</label>
+            <div class="fw"><input type="text" id="apellidos" placeholder="Almazán Arteaga"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="edad">Edad</label>
+          <div class="fw"><input type="number" id="edad" min="15" max="100" placeholder="25"></div>
+        </div>
+
+        <div class="field">
+          <label for="correo">Correo electrónico</label>
+          <div class="fw"><input type="email" id="correo" placeholder="nombre@empresa.com"></div>
+          <div class="hint">Con este correo iniciará sesión.</div>
+        </div>
+
+        <div class="field">
+          <div class="pw-row">
+            <label for="pass">Contraseña</label>
+            <button class="gen" id="generar" type="button">Generar</button>
+          </div>
+          <div class="fw">
+            <input type="text" id="pass" placeholder="Mínimo 6 caracteres">
+          </div>
+          <div class="hint">Se muestra en texto para que puedas copiarla y entregarla. Anótala: después no se puede consultar.</div>
+        </div>
+
+        <div class="field">
+          <label for="rol">Rol</label>
+          <div class="fw sel-w">
+            <select id="rol">
+              <option value="scouting">Equipo de scouting</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <div class="hint" id="rol-hint">Podrá usar la calculadora y ver las comisiones, sin cambiarlas.</div>
+        </div>
+
+        <button class="btn btn-pri" id="crear" style="width:100%;height:42px"><span id="crear-txt">Crear usuario</span></button>
+      </div>
+    </div>
+
+    <!-- ── Listado ── -->
+    <div class="card">
+      <div class="card-hd">
+        <span class="card-ttl">Usuarios registrados</span>
+        <span class="card-ttl" id="conteo" style="color:var(--t4)"></span>
+      </div>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th><th>Correo</th><th>Edad</th><th>Rol</th><th>Estado</th><th style="text-align:right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="6" class="vacio">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="avisos"></div>
+
+<!-- Ventana para corregir los datos de una cuenta -->
+<div class="mo" id="editor">
+  <div class="md">
+    <div class="mh">
+      <span class="mh-t">Modificar usuario</span>
+      <button class="ico-btn" id="ed-cerrar" title="Cerrar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="mb">
+      <div class="nota" id="ed-nota" style="display:none"></div>
+      <div class="grid2">
+        <div class="field"><label for="ed-nombre">Nombre</label><div class="fw"><input type="text" id="ed-nombre"></div></div>
+        <div class="field"><label for="ed-apellidos">Apellidos</label><div class="fw"><input type="text" id="ed-apellidos"></div></div>
+      </div>
+      <div class="field"><label for="ed-edad">Edad</label><div class="fw"><input type="number" id="ed-edad" min="15" max="100"></div></div>
+      <div class="field"><label for="ed-correo">Correo electrónico</label><div class="fw"><input type="email" id="ed-correo"></div></div>
+      <div class="field">
+        <div class="pw-row"><label for="ed-pass">Nueva contraseña</label><button class="gen" id="ed-generar" type="button">Generar</button></div>
+        <div class="fw"><input type="text" id="ed-pass" placeholder="Déjala vacía para no cambiarla"></div>
+      </div>
+      <div class="field">
+        <label for="ed-rol">Rol</label>
+        <div class="fw sel-w"><select id="ed-rol">
+          <option value="scouting">Equipo de scouting</option>
+          <option value="admin">Administrador</option>
+        </select></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-sec" id="ed-cancelar">Cancelar</button>
+      <button class="btn btn-pri" id="ed-guardar"><span id="ed-guardar-txt">Guardar cambios</span></button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="db.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let yo = null;
+
+const ICO_ERR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>';
+const ICO_OK  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>';
+
+/* Los avisos flotan sobre la pantalla, así que el formulario nunca se mueve */
+function aviso(tipo, msg){
+  const t = document.createElement('div');
+  t.className = 'toast ' + tipo;
+  t.innerHTML = (tipo==='err'?ICO_ERR:ICO_OK) +
+    '<span></span><button class="x" title="Cerrar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>';
+  t.querySelector('span').textContent = msg;
+  t.querySelector('.x').addEventListener('click', ()=>t.remove());
+  $('avisos').appendChild(t);
+  setTimeout(()=>t.remove(), tipo==='err' ? 7000 : 12000);
+}
+function limpiarAvisos(){ $('avisos').innerHTML = ''; }
+
+/* ── Listado ── */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function pintarLista(){
+  const r = await db.listarUsuarios();
+  const tb = $('tbody');
+  if(!r.ok){ tb.innerHTML = '<tr><td colspan="6" class="vacio">No se pudo cargar la lista.<br>'+esc(r.mensaje)+'</td></tr>'; return; }
+  if(!r.filas.length){ tb.innerHTML = '<tr><td colspan="6" class="vacio">Todavía no hay usuarios registrados.</td></tr>'; return; }
+
+  $('conteo').textContent = r.filas.length + (r.filas.length === 1 ? ' cuenta' : ' cuentas');
+  tb.innerHTML = r.filas.map(u=>{
+    const soyYo = u.id === yo.id;
+    return `<tr>
+      <td class="td-nm">${esc(u.nombre)} ${esc(u.apellidos)}${soyYo?' <span style="color:var(--t4);font-weight:500">(tú)</span>':''}</td>
+      <td class="td-mail">${esc(u.correo)}</td>
+      <td>${u.edad ?? '—'}</td>
+      <td><span class="rol-tag ${u.rol}">${u.rol === 'admin' ? 'Administrador' : 'Scouting'}</span></td>
+      <td><span class="estado ${u.activo?'si':'no'}"><span class="pt"></span>${u.activo?'Activo':'Inactivo'}</span></td>
+      <td><div class="acc">
+        <button class="ico-btn" data-editar="${u.id}" title="Modificar los datos de esta cuenta">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+        </button>
+        ${soyYo ? '' : `
+        <button class="ico-btn ${u.activo?'danger':'ok'}" data-estado="${u.id}" data-activo="${u.activo?'0':'1'}" title="${u.activo?'Desactivar la cuenta':'Activar la cuenta'}">
+          ${u.activo
+            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 5.64M12 2v10"/></svg>'
+            : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>'}
+        </button>`}
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  tb.querySelectorAll('[data-estado]').forEach(b=>b.addEventListener('click', async ()=>{
+    b.disabled = true;
+    const r = await db.cambiarEstado(b.dataset.estado, b.dataset.activo === '1');
+    if(!r.ok) aviso('err', 'No se pudo cambiar el estado: ' + r.mensaje);
+    pintarLista();
+  }));
+  tb.querySelectorAll('[data-editar]').forEach(b=>b.addEventListener('click', ()=>{
+    abrirEditor(r.filas.find(u=>u.id === b.dataset.editar));
+  }));
+}
+
+/* ── Ventana de edición ── */
+let editando = null;
+
+function clave(){
+  const abc = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const n = new Uint32Array(12); crypto.getRandomValues(n);
+  return [...n].map(x=>abc[x % abc.length]).join('');
+}
+
+function abrirEditor(u){
+  if(!u) return;
+  editando = u;
+  $('ed-nombre').value = u.nombre;
+  $('ed-apellidos').value = u.apellidos;
+  $('ed-edad').value = u.edad || '';
+  $('ed-correo').value = u.correo;
+  $('ed-pass').value = '';
+  $('ed-rol').value = u.rol;
+  $('ed-rol').disabled = u.id === yo.id;
+
+  /* En la nube, correo y contraseña los administra el sistema de cuentas */
+  const acceso = db.PUEDE_EDITAR_ACCESO;
+  $('ed-correo').disabled = !acceso;
+  $('ed-pass').disabled = !acceso;
+  $('ed-generar').style.display = acceso ? '' : 'none';
+  $('ed-nota').style.display = acceso ? 'none' : 'block';
+  $('ed-nota').textContent = 'El correo y la contraseña se administran desde el tablero de Supabase, en Authentication → Users. Aquí puedes corregir el resto de los datos.';
+
+  $('editor').classList.add('on');
+  $('ed-nombre').focus();
+}
+
+function cerrarEditor(){ $('editor').classList.remove('on'); editando = null; }
+
+$('ed-cerrar').addEventListener('click', cerrarEditor);
+$('ed-cancelar').addEventListener('click', cerrarEditor);
+$('editor').addEventListener('click', e=>{ if(e.target === $('editor')) cerrarEditor(); });
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && editando) cerrarEditor(); });
+$('ed-generar').addEventListener('click', ()=>{ $('ed-pass').value = clave(); });
+
+$('ed-guardar').addEventListener('click', async ()=>{
+  if(!editando) return;
+  const d = {
+    nombre: $('ed-nombre').value.trim(),
+    apellidos: $('ed-apellidos').value.trim(),
+    edad: $('ed-edad').value,
+    rol: $('ed-rol').value
+  };
+  if(db.PUEDE_EDITAR_ACCESO){
+    d.correo = $('ed-correo').value.trim();
+    if($('ed-pass').value) d.contrasena = $('ed-pass').value;
+  }
+
+  if(!d.nombre || !d.apellidos) return aviso('err','Escribe el nombre y los apellidos.');
+  if(!d.edad || d.edad < 15 || d.edad > 100) return aviso('err','La edad debe estar entre 15 y 100 años.');
+  if(d.correo != null && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.correo)) return aviso('err','El correo no tiene un formato válido.');
+  if(d.contrasena && d.contrasena.length < 6) return aviso('err','La contraseña necesita al menos 6 caracteres.');
+
+  $('ed-guardar').disabled = true;
+  $('ed-guardar-txt').outerHTML = '<div class="spin" id="ed-guardar-txt"></div>';
+
+  const r = await db.actualizarUsuario(editando.id, d);
+
+  $('ed-guardar').disabled = false;
+  $('ed-guardar-txt').outerHTML = '<span id="ed-guardar-txt">Guardar cambios</span>';
+
+  if(!r.ok) return aviso('err', r.mensaje);
+  const cambioClave = !!d.contrasena;
+  cerrarEditor();
+  aviso('ok', 'Datos actualizados' + (cambioClave ? '. Nueva contraseña: ' + d.contrasena : '.'));
+  pintarLista();
+});
+
+/* ── Alta ── */
+$('generar').addEventListener('click', ()=>{
+  const abc = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const n = new Uint32Array(12); crypto.getRandomValues(n);
+  $('pass').value = [...n].map(x=>abc[x % abc.length]).join('');
+});
+
+$('rol').addEventListener('change', e=>{
+  $('rol-hint').textContent = e.target.value === 'admin'
+    ? 'Podrá cambiar comisiones y variables, y dar de alta a otras personas.'
+    : 'Podrá usar la calculadora y ver las comisiones, sin cambiarlas.';
+});
+
+$('crear').addEventListener('click', async ()=>{
+  limpiarAvisos();
+  const d = {
+    nombre: $('nombre').value.trim(),
+    apellidos: $('apellidos').value.trim(),
+    edad: $('edad').value,
+    correo: $('correo').value.trim(),
+    contrasena: $('pass').value,
+    rol: $('rol').value
+  };
+
+  if(!d.nombre || !d.apellidos) return aviso('err','Escribe el nombre y los apellidos.');
+  if(!d.edad || d.edad < 15 || d.edad > 100) return aviso('err','La edad debe estar entre 15 y 100 años.');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.correo)) return aviso('err','El correo no tiene un formato válido.');
+  if(d.contrasena.length < 6) return aviso('err','La contraseña necesita al menos 6 caracteres.');
+
+  $('crear').disabled = true;
+  $('crear-txt').outerHTML = '<div class="spin" id="crear-txt"></div>';
+
+  const r = await db.crearUsuario(d);
+
+  $('crear').disabled = false;
+  $('crear-txt').outerHTML = '<span id="crear-txt">Crear usuario</span>';
+
+  if(!r.ok) return aviso('err', r.mensaje);
+
+  aviso('ok', `Cuenta creada para ${d.nombre} ${d.apellidos}. Entrega estos datos: correo ${d.correo}, contraseña ${d.contrasena}`);
+  ['nombre','apellidos','edad','correo','pass'].forEach(i=>$(i).value='');
+  pintarLista();
+});
+
+/* ── Arranque ── */
+(async ()=>{
+  yo = await db.proteger('admin');
+  if(!yo) return;
+  $('nm').textContent = yo.nombre + ' ' + yo.apellidos;
+  $('av').textContent = (yo.nombre[0] + (yo.apellidos[0]||'')).toUpperCase();
+  pintarLista();
+})();
+
+$('salir').addEventListener('click', async ()=>{ await db.salir(); location.replace('index.html'); });
+</script>
+</body>
+</html>

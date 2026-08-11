@@ -1,0 +1,508 @@
+{
+    "global_meta": {
+        "semana": "30",
+        "tienda": "Atizapán",
+        "num_tienda": "3488",
+        "anio": "2026"
+    },
+    "store_state": {
+        "DOMINGO": {
+            "meta_diaria": 40000.0,
+            "trafico_esperado": 80,
+            "conversion_target": 0.09,
+            "vta_ly": 4800.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 5000.0,
+            "aur_dia": 5000.0,
+            "atv_mtd": 5000.0,
+            "aur_mtd": 5000.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "moises garcia valtierra",
+                    "horas": 10.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                }
+            ],
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "VIVIANA",
+                    "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."
+                },
+                {
+                    "colaborador": "moises",
+                    "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."
+                },
+                {
+                    "colaborador": "diego",
+                    "compromiso": "Ofrecer limpiadores en cada cierre de venta."
+                }
+            ]
+        },
+        "LUNES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "moises garcia valtierra",
+                    "horas": 10.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                }
+            ],
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "VIVIANA",
+                    "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."
+                },
+                {
+                    "colaborador": "moises",
+                    "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."
+                },
+                {
+                    "colaborador": "diego",
+                    "compromiso": "Ofrecer limpiadores en cada cierre de venta."
+                }
+            ]
+        },
+        "MARTES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "moises garcia valtierra",
+                    "horas": 10.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                }
+            ],
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "VIVIANA",
+                    "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."
+                },
+                {
+                    "colaborador": "moises",
+                    "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."
+                },
+                {
+                    "colaborador": "diego",
+                    "compromiso": "Ofrecer limpiadores en cada cierre de venta."
+                }
+            ]
+        },
+        "MIÉRCOLES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "moises garcia valtierra",
+                    "horas": 10.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                }
+            ],
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "VIVIANA",
+                    "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."
+                },
+                {
+                    "colaborador": "moises",
+                    "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."
+                },
+                {
+                    "colaborador": "diego",
+                    "compromiso": "Ofrecer limpiadores en cada cierre de venta."
+                }
+            ]
+        },
+        "JUEVES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "moises garcia valtierra",
+                    "horas": 10.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                }
+            ],
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "VIVIANA",
+                    "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."
+                },
+                {
+                    "colaborador": "moises",
+                    "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."
+                },
+                {
+                    "colaborador": "diego",
+                    "compromiso": "Ofrecer limpiadores en cada cierre de venta."
+                }
+            ]
+        },
+        "VIERNES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "moises garcia valtierra",
+                    "horas": 10.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                }
+            ],
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "VIVIANA",
+                    "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."
+                },
+                {
+                    "colaborador": "moises",
+                    "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."
+                },
+                {
+                    "colaborador": "diego",
+                    "compromiso": "Ofrecer limpiadores en cada cierre de venta."
+                }
+            ]
+        },
+        "SÁBADO": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "moises garcia valtierra",
+                    "horas": 10.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0
+                }
+            ],
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "VIVIANA",
+                    "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."
+                },
+                {
+                    "colaborador": "moises",
+                    "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."
+                },
+                {
+                    "colaborador": "diego",
+                    "compromiso": "Ofrecer limpiadores en cada cierre de venta."
+                }
+            ]
+        }
+    },
+    "historico_semanal_state": {}
+}

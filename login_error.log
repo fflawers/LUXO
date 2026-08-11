@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "C:\Users\MOISES\Desktop\luxo6.0\main.py", line 17646, in login_click
+    "cambiar_vista": cambiar_vista,
+                     ^^^^^^^^^^^^^
+NameError: name 'cambiar_vista' is not defined
