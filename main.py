@@ -1297,7 +1297,7 @@ def configurar_rutas_fastapi(app):
                 }
 
                 micBtn.addEventListener('click', () => {
-                    startListening(); // Micrófono manual activado por clic
+                    // startListening(); // VOZ DESACTIVADA TEMPORALMENTE
                 });
 
                 // Auto-iniciar al cargar
