@@ -29,8 +29,27 @@ ASSETS_PATH = os.path.join(BASE_PATH, "custom_assets")
 
 # Valores de APIs leídos desde entorno (.env) o valores por defecto
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")
+GROQ_KEYS = [k for k in [GROQ_API_KEY, GROQ_API_KEY_2] if k]  # lista de llaves activas
+_groq_key_index = 0  # índice de la llave activa actual
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 URL_GROQ = "https://api.groq.com/openai/v1/chat/completions"
+
+def get_groq_key():
+    """Devuelve la llave de Groq activa. Si hay varias, rota entre ellas en caso de 429."""
+    global _groq_key_index
+    if not GROQ_KEYS:
+        return GROQ_API_KEY
+    return GROQ_KEYS[_groq_key_index % len(GROQ_KEYS)]
+
+def rotate_groq_key():
+    """Rota a la siguiente llave de Groq disponible (se llama cuando hay error 429)."""
+    global _groq_key_index
+    if len(GROQ_KEYS) > 1:
+        _groq_key_index = (_groq_key_index + 1) % len(GROQ_KEYS)
+        print(f"⚡ Groq 429 - Rotando a llave #{_groq_key_index + 1}")
+        return True
+    return False
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Configuración de Base de Datos MySQL (leída desde .env)
@@ -5369,8 +5388,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         "messages": mensajes_api
                     }
 
+
                     try:
-                        res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=15)
+                        headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+                        res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
+                        # Si hay error 429 (cuota agotada), rotar a llave de respaldo y reintentar
+                        if res.status_code == 429 and rotate_groq_key():
+                            headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+                            res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
                         if res.status_code == 200:
                             try:
                                 data = res.json()
@@ -5387,6 +5412,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     except Exception as re_err:
                         print("API REQUEST EXCEPTION:", re_err)
                         respuesta = "Error de conexión: No se pudo establecer contacto con el servidor de Inteligencia Artificial. Por favor, verifica tu conexión a internet e inténtalo de nuevo."
+
 
                     historial_sesion.append({"role": "assistant", "content": respuesta})
 
