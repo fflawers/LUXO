@@ -1362,31 +1362,45 @@ def configurar_rutas_fastapi(app):
 
     @app.api_route("/text_input", methods=["GET", "POST"])
     async def post_text_input(user_id: str = "1", text: str = ""):
-        print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
-        user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
-        session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
-        if session and text:
-            cambiar_vista = session.get("cambiar_vista")
-            page = session.get("page")
-            
-            if cambiar_vista:
-                try:
-                    cambiar_vista("chat")
-                except Exception as ex:
-                    print("Error al cambiar a vista chat:", ex)
+        import traceback
+        try:
+            print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
+            user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
+            session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+            print(f"DEBUG: active_sessions keys={list(active_sessions.keys())}, session encontrada={'Sí' if session else 'No'}")
+            if session and text:
+                cambiar_vista = session.get("cambiar_vista")
+                page = session.get("page")
 
-            input_msg = session.get("input_msg")
-            enviar_mensaje = session.get("enviar_mensaje")
-            
-            if input_msg and enviar_mensaje and page:
-                input_msg.value = text
-                page.update()
-                
-                async def trigger_send():
-                    enviar_mensaje(None)
-                page.run_task(trigger_send)
-                return {"status": "success"}
-        return {"status": "session_not_found"}
+                if cambiar_vista:
+                    try:
+                        cambiar_vista("chat")
+                    except Exception as ex:
+                        print("Error al cambiar a vista chat:", ex)
+
+                input_msg = session.get("input_msg")
+                enviar_mensaje = session.get("enviar_mensaje")
+
+                if input_msg and enviar_mensaje and page:
+                    input_msg.value = text
+                    try:
+                        page.update()
+                    except Exception as ex:
+                        print(f"WARN page.update() falló: {ex}")
+
+                    async def trigger_send():
+                        try:
+                            enviar_mensaje(None)
+                        except Exception as ex:
+                            print(f"ERROR en enviar_mensaje: {ex}\n{traceback.format_exc()}")
+                    page.run_task(trigger_send)
+                    return {"status": "success"}
+                else:
+                    print(f"DEBUG: Faltan componentes - input_msg={input_msg is not None}, enviar_mensaje={enviar_mensaje is not None}, page={page is not None}")
+            return {"status": "session_not_found"}
+        except Exception as e:
+            print(f"ERROR CRÍTICO en /text_input: {traceback.format_exc()}")
+            return {"status": "error", "detail": str(e)}
 
     @app.post("/upload")
     async def post_upload(request: Request, user_id: str = "1"):
