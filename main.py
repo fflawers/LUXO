@@ -1241,7 +1241,7 @@ def configurar_rutas_fastapi(app):
                         rec.onstart = function() {
                             isListening = true;
                             micBtn.classList.add('active');
-                            status.innerText = "🎤 ESCUCHANDO CONTINUAMENTE... Di 'Oye LUXO'";
+                            status.innerText = "🎤 ESCUCHANDO... Habla ahora";
                             status.style.color = "#00FFFF";
                             status.style.borderColor = "#00FFFF";
                         };
@@ -1252,50 +1252,24 @@ def configurar_rutas_fastapi(app):
                                 transcriptDiv.innerText = text;
                                 const lower = text.toLowerCase();
 
-                                if (lower.includes("oye luxo") || lower.includes("hola luxo") || lower.includes("hey luxo") || lower.includes("oye lujo")) {
-                                    const now = Date.now();
-                                    let query = text
-                                        .replace(/oye luxo/gi, '')
-                                        .replace(/hola luxo/gi, '')
-                                        .replace(/hey luxo/gi, '')
-                                        .replace(/oye lujo/gi, '')
-                                        .trim();
-
-                                    if (!query && e.results[i].isFinal) {
-                                        playBeep();
-                                        status.innerText = "👂 ¡'Oye LUXO' Detectado! Di tu pregunta...";
-                                        status.style.color = "#FF00FF";
-                                        status.style.borderColor = "#FF00FF";
-                                        window.luxoManualDictating = true;
-                                    } else if (query && e.results[i].isFinal) {
-                                        if (query !== lastSentText) {
-                                            lastSentText = query;
-                                            lastSentTime = now;
-                                            playBeep();
-                                            status.innerText = "🚀 Enviado a la IA: " + query;
-                                            status.style.color = "#7CFC00";
-                                            status.style.borderColor = "#7CFC00";
-                                            fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
-                                            setTimeout(() => {
-                                                status.innerText = "🎤 ESCUCHANDO CONTINUAMENTE... Di 'Oye LUXO'";
-                                                status.style.color = "#00FFFF";
-                                                status.style.borderColor = "#00FFFF";
-                                            }, 3500);
-                                            window.luxoManualDictating = false;
-                                            try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
-                                        }
-                                    }
-                                } else if (window.luxoManualDictating && e.results[i].isFinal) {
+                                if (e.results[i].isFinal) {
                                     const query = text.trim();
                                     if (query && query !== lastSentText) {
+                                        const now = Date.now();
                                         lastSentText = query;
-                                        playBeep();
+                                        lastSentTime = now;
                                         status.innerText = "🚀 Enviado a la IA: " + query;
                                         status.style.color = "#7CFC00";
                                         status.style.borderColor = "#7CFC00";
                                         fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
-                                        window.luxoManualDictating = false;
-                                        try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
+                                        setTimeout(() => {
+                                            status.innerText = "🎤 Presiona el micrófono para hablar";
+                                            status.style.color = "#00FFFF";
+                                            status.style.borderColor = "#00FFFF";
+                                            isListening = false;
+                                            micBtn.classList.remove('active');
+                                            try { rec.stop(); } catch(ex){}
+                                        }, 2500);
                                     }
                                 }
                             }
@@ -1323,7 +1297,7 @@ def configurar_rutas_fastapi(app):
                 }
 
                 micBtn.addEventListener('click', () => {
-                    // startListening(); // VOZ DESACTIVADA TEMPORALMENTE
+                    startListening(); // Micrófono manual activado por clic
                 });
 
                 // Auto-iniciar al cargar
