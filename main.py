@@ -712,7 +712,7 @@ def configurar_rutas_fastapi(app):
 
                     let banner = document.createElement("div");
                     banner.id = "luxo-voice-banner";
-                    banner.style.cssText = "position:fixed; bottom:30px; right:30px; z-index:9999999; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 35% 35%, rgba(224, 64, 251, 0.85), rgba(0, 240, 255, 0.85), rgba(10, 10, 24, 0.95)); animation: siriGlowPulse 2.5s infinite ease-in-out; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none; transition: opacity 0.5s ease, transform 0.5s ease; opacity:0; pointer-events:none; transform:scale(0.7);";
+                    banner.style.cssText = "position:fixed; bottom:30px; right:30px; z-index:9999999; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 35% 35%, rgba(224, 64, 251, 0.85), rgba(0, 240, 255, 0.85), rgba(10, 10, 24, 0.95)); animation: siriGlowPulse 2.5s infinite ease-in-out; display:none !important; align-items:center; justify-content:center; cursor:pointer; user-select:none; transition: opacity 0.5s ease, transform 0.5s ease; opacity:0; pointer-events:none; transform:scale(0.7);";
                     banner.setAttribute("title", "Asistente de Voz LUXO (Oye LUXO)");
                     banner.innerHTML = `
                         <div style="display:flex; align-items:center; justify-content:center; gap:4px; height:100%; width:100%;">
@@ -1176,7 +1176,7 @@ def configurar_rutas_fastapi(app):
                 <h1>Control por Voz LUXO</h1>
                 <p>Toca el botón para otorgar permiso e iniciar la escucha continua. Luego di en voz alta:<br><strong style="color:#00FFFF; font-size:18px;">"Oye LUXO [tu pregunta]"</strong></p>
                 
-                <div id="micBtn" class="mic-btn">🎙️</div>
+                <div id="micBtn" class="mic-btn" style="display: none !important;">🎙️</div>
                 
                 <div id="status" class="status">Toca el micrófono para comenzar</div>
                 
@@ -6014,7 +6014,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 if (!banner) {
                     banner = topDoc.createElement("div");
                     banner.id = "luxo-voice-banner";
-                    banner.style.cssText = "position:fixed; bottom:30px; right:30px; z-index:999999; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 35% 35%, rgba(224, 64, 251, 0.85), rgba(0, 240, 255, 0.85), rgba(10, 10, 24, 0.95)); animation: siriGlowPulse 2.5s infinite ease-in-out; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none; transition: opacity 0.5s ease, transform 0.5s ease; opacity:0; pointer-events:none; transform:scale(0.7);";
+                    banner.style.cssText = "position:fixed; bottom:30px; right:30px; z-index:999999; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 35% 35%, rgba(224, 64, 251, 0.85), rgba(0, 240, 255, 0.85), rgba(10, 10, 24, 0.95)); animation: siriGlowPulse 2.5s infinite ease-in-out; display:none !important; align-items:center; justify-content:center; cursor:pointer; user-select:none; transition: opacity 0.5s ease, transform 0.5s ease; opacity:0; pointer-events:none; transform:scale(0.7);";
                     banner.setAttribute("title", "Asistente de Voz LUXO (Oye LUXO)");
                     banner.innerHTML = `
                         <div style="display:flex; align-items:center; justify-content:center; gap:4px; height:100%; width:100%;">
