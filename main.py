@@ -844,7 +844,7 @@ def configurar_rutas_fastapi(app):
                                             playBeep();
                                             setStatus("👂 ¡Oye LUXO Detectado! Di tu pregunta...", "#FF00FF", "🔊");
                                             window.luxoManualDictating = true;
-                                        } else if (query && (e.results[i].isFinal || (now - lastSentTime > 2000))) {
+                                        } else if (query && e.results[i].isFinal) {
                                             if (query !== lastSentText) {
                                                 lastSentText = query;
                                                 lastSentTime = now;
@@ -1261,7 +1261,7 @@ def configurar_rutas_fastapi(app):
                                         status.style.color = "#FF00FF";
                                         status.style.borderColor = "#FF00FF";
                                         window.luxoManualDictating = true;
-                                    } else if (query && (e.results[i].isFinal || (now - lastSentTime > 2000))) {
+                                    } else if (query && e.results[i].isFinal) {
                                         if (query !== lastSentText) {
                                             lastSentText = query;
                                             lastSentTime = now;
@@ -6122,7 +6122,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         playBeep();
                                         setStatus("👂 ¡Oye LUXO Detectado! Di tu pregunta...", "#FF00FF", "🔊");
                                         window.luxoManualDictating = true;
-                                    } else if (query && (e.results[i].isFinal || (now - lastSentTime > 2000))) {
+                                    } else if (query && e.results[i].isFinal) {
                                         if (query !== lastSentText) {
                                             lastSentText = query;
                                             lastSentTime = now;
