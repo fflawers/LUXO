@@ -773,24 +773,9 @@ def configurar_rutas_fastapi(app):
                     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
                     function playBeep() {
-                        try {
-                            if (!window.luxoAudioCtx) {
-                                window.luxoAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                            }
-                            const ctx = window.luxoAudioCtx;
-                            if (ctx.state === 'suspended') ctx.resume();
-                            const osc = ctx.createOscillator();
-                            const gain = ctx.createGain();
-                            osc.type = 'sine';
-                            osc.frequency.setValueAtTime(880, ctx.currentTime);
-                            gain.gain.setValueAtTime(0.4, ctx.currentTime);
-                            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-                            osc.connect(gain);
-                            gain.connect(ctx.destination);
-                            osc.start();
-                            osc.stop(ctx.currentTime + 0.35);
-                        } catch(e){}
+                        // Sonido desactivado
                     }
+
 
                     let rec = null;
                     let isListening = false;
@@ -1198,24 +1183,10 @@ def configurar_rutas_fastapi(app):
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
                 function playBeep() {
-                    try {
-                        if (!window.luxoAudioCtx) {
-                            window.luxoAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                        }
-                        const ctx = window.luxoAudioCtx;
-                        if (ctx.state === 'suspended') ctx.resume();
-                        const osc = ctx.createOscillator();
-                        const gain = ctx.createGain();
-                        osc.type = 'sine';
-                        osc.frequency.setValueAtTime(880, ctx.currentTime);
-                        gain.gain.setValueAtTime(0.4, ctx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-                        osc.connect(gain);
-                        gain.connect(ctx.destination);
-                        osc.start();
-                        osc.stop(ctx.currentTime + 0.35);
-                    } catch(e){}
+                    // Sonido desactivado
                 }
+
+
 
                 let rec = null;
                 let isListening = false;
@@ -6057,24 +6028,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                 
                 function playBeep() {
-                    try {
-                        if (!window.luxoAudioCtx) {
-                            window.luxoAudioCtx = new (window.AudioContext || window.webkitAudioContext || (window.top && (window.top.AudioContext || window.top.webkitAudioContext)))();
-                        }
-                        const ctx = window.luxoAudioCtx;
-                        if (ctx.state === 'suspended') ctx.resume();
-                        const osc = ctx.createOscillator();
-                        const gain = ctx.createGain();
-                        osc.type = 'sine';
-                        osc.frequency.setValueAtTime(880, ctx.currentTime);
-                        gain.gain.setValueAtTime(0.4, ctx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-                        osc.connect(gain);
-                        gain.connect(ctx.destination);
-                        osc.start();
-                        osc.stop(ctx.currentTime + 0.35);
-                    } catch(e){}
+                    // Sonido desactivado
                 }
+
 
                 let rec = null;
                 let isListening = false;
