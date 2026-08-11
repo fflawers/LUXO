@@ -6291,7 +6291,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 border=ft.Border.all(1.5, "#00FFFF"),
                 width=46,
                 height=46,
-                alignment=ft.alignment.Alignment(0, 0)
+                alignment=ft.alignment.Alignment(0, 0),
+                visible=False  # VOZ DESACTIVADA TEMPORALMENTE
             )
 
             if user_info.get("id") and user_info["id"] in active_sessions:
