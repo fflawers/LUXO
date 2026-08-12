@@ -10,5 +10,3 @@ fastapi
 uvicorn
 SpeechRecognition
 pyaudio
-easyocr
-opencv-python-headless

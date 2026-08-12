@@ -2523,20 +2523,7 @@ def auditar_foto_con_gemini(guia_bytes, tienda_bytes, instrucciones):
 
 GLOBAL_OCR_READER = None
 def get_ocr_reader():
-    global GLOBAL_OCR_READER
-    if GLOBAL_OCR_READER is None:
-        try:
-            import easyocr
-            GLOBAL_OCR_READER = easyocr.Reader(['es', 'en'], gpu=False)
-        except Exception as ex:
-            print("Error cargando EasyOCR reader:", ex)
-    return GLOBAL_OCR_READER
-
-# Pre-calentar el modelo EasyOCR en segundo plano al arrancar el módulo
-import threading
-try:
-    threading.Thread(target=get_ocr_reader, daemon=True).start()
-except Exception: pass
+    return None
 
 def procesar_ticket_con_gemini(imagen_bytes):
     import base64
