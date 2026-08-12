@@ -2010,7 +2010,7 @@ def iniciar_hilo_escucha_luxo():
                                 print(f"🎙️ Voz captada en micrófono de Windows: '{text}'")
                                 lower = text.lower()
                                 
-                                wake_phrases = ["oye luxo", "oye lujo", "oye luco", "oye lux"]
+                                wake_phrases = ["oye luxo", "oye lujo", "oye luco", "oye lux", "hola luxo", "hola lujo", "hola luco", "hola lux"]
                                 matched_phrase = next((w for w in wake_phrases if w in lower), None)
                                 
                                 if matched_phrase:
@@ -2024,7 +2024,7 @@ def iniciar_hilo_escucha_luxo():
                                     except Exception:
                                         pass
                                     
-                                    query = re.sub(r"oye\s+(luxo|lujo|luco|lux)", "", text, flags=re.IGNORECASE).strip()
+                                    query = re.sub(r"(oye|hola)\s+(luxo|lujo|luco|lux)", "", text, flags=re.IGNORECASE).strip()
                                     
                                     session = active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
                                     if session:
@@ -2106,9 +2106,27 @@ def obtener_64(nombre):
 # ==============================================================================
 
 def reproducir_saludo_login(nombre_usuario):
-    """Reproduce el saludo por voz personalizado al iniciar sesión biométrica."""
-    return  # Desactivado a petición del usuario para mayor velocidad
-
+    """Reproduce el saludo por voz personalizado al iniciar sesión biométrica en segundo plano."""
+    saludo_text = f"Hola, {nombre_usuario}. Sesión iniciada."
+    
+    def _speak_thread():
+        try:
+            import platform
+            if platform.system() == "Windows":
+                import win32com.client
+                import pythoncom
+                pythoncom.CoInitialize()
+                speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                speaker.Speak(saludo_text, 1)  # 1 = SVSFlagsAsync
+            elif platform.system() == "Darwin":
+                import subprocess
+                subprocess.Popen(["say", saludo_text])
+        except Exception as e:
+            print("Error en reproducir_saludo_login:", e)
+            
+    import threading
+    t = threading.Thread(target=_speak_thread, daemon=True)
+    t.start()
 def guardar_biometria_db(usuario_id, nombre_usuario, encoding_rostro=None, hash_huella=None):
     """Guarda o actualiza el registro biométrico de un usuario en MySQL."""
     try:
@@ -6230,8 +6248,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             r_direct.non_speaking_duration = 0.8
                             with sr.Microphone() as src_direct:
                                 r_direct.adjust_for_ambient_noise(src_direct, duration=0.2)
-                                # winsound.Beep desactivado para dictado directo
-                                pass
+                                try:
+                                    if platform.system() == "Windows":
+                                        winsound.Beep(1200, 250)
+                                    elif platform.system() == "Darwin":
+                                        import os
+                                        os.system('afplay /System/Library/Sounds/Ping.aiff &')
+                                except Exception:
+                                    pass
                                 
                                 audio_direct = r_direct.listen(src_direct, timeout=6, phrase_time_limit=25)
                                 text_direct = r_direct.recognize_google(audio_direct, language="es-MX")
