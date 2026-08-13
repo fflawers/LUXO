@@ -16892,69 +16892,80 @@ Ejemplo:
                 import time
                 time.sleep(0.01) # Dar tiempo a pintar el loader en el cliente
             
-            if vista == "chat":
-                content_area.content = build_chat_view()
-            elif vista == "historial":
-                content_area.content = build_historial_view()
-            elif vista == "checklists":
-                content_area.content = build_checklists_view()
-            elif vista == "manuales":
-                content_area.content = build_manuals_view()
-            elif vista == "garantias":
-                content_area.content = build_garantias_view()
-            elif vista == "tareas":
-                content_area.content = build_tareas_view()
-            elif vista == "campanas":
-                content_area.content = build_campanas_view()
-            elif vista == "presupuesto":
-                content_area.content = build_presupuesto_view()
-            elif vista == "reto":
-                content_area.content = build_reto_dia_view()
-            elif vista == "dashboard":
-                content_area.content = build_dashboard_view()
-            elif vista == "vendedores":
-                content_area.content = build_vendedores_view()
-            elif vista == "simulador":
-                content_area.content = build_simulador_view()
-            elif vista == "crm":
-                content_area.content = build_crm_view()
-            elif vista == "meta_semanal":
-                content_area.content = build_meta_semanal_view()
-            elif vista == "weekly":
-                content_area.content = build_weekly_view()
-            elif vista == "enfoque_diario":
-                import enfoque_diario
-                content_area.content = enfoque_diario.build_enfoque_diario_view(page, user_info)
-            elif vista == "operacion_diaria":
-                if es_admin():
-                    content_area.content = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)
-                else:
-                    content_area.content = operacion_tiendas.build_operacion_diaria_view(
-                        page, user_info, conectar_db, mostrar_snack, tr,
-                        seleccionar_archivo_async=seleccionar_archivo_async
-                    )
-            elif vista == "admin_trivia":
-                if not es_admin():
-                    mostrar_snack("Acceso denegado: Se requieren permisos de administrador.", color="red")
-                    cambiar_vista("chat")
-                    return
-                content_area.content = build_admin_trivia_view()
-            elif vista == "bitacora":
-                if not es_admin():
-                    mostrar_snack("Acceso denegado: Solo Administradores pueden ver la Bitácora de Seguridad.", color="red")
-                    cambiar_vista("chat")
-                    return
-                content_area.content = build_bitacora_view()
+            def procesar_cambio():
+                try:
+                    if vista == "chat":
+                        content_area.content = build_chat_view()
+                    elif vista == "historial":
+                        content_area.content = build_historial_view()
+                    elif vista == "checklists":
+                        content_area.content = build_checklists_view()
+                    elif vista == "manuales":
+                        content_area.content = build_manuals_view()
+                    elif vista == "garantias":
+                        content_area.content = build_garantias_view()
+                    elif vista == "tareas":
+                        content_area.content = build_tareas_view()
+                    elif vista == "campanas":
+                        content_area.content = build_campanas_view()
+                    elif vista == "presupuesto":
+                        content_area.content = build_presupuesto_view()
+                    elif vista == "reto":
+                        content_area.content = build_reto_dia_view()
+                    elif vista == "dashboard":
+                        content_area.content = build_dashboard_view()
+                    elif vista == "vendedores":
+                        content_area.content = build_vendedores_view()
+                    elif vista == "simulador":
+                        content_area.content = build_simulador_view()
+                    elif vista == "crm":
+                        content_area.content = build_crm_view()
+                    elif vista == "meta_semanal":
+                        content_area.content = build_meta_semanal_view()
+                    elif vista == "weekly":
+                        content_area.content = build_weekly_view()
+                    elif vista == "enfoque_diario":
+                        import enfoque_diario
+                        content_area.content = enfoque_diario.build_enfoque_diario_view(page, user_info)
+                    elif vista == "operacion_diaria":
+                        if es_admin():
+                            content_area.content = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)
+                        else:
+                            content_area.content = operacion_tiendas.build_operacion_diaria_view(
+                                page, user_info, conectar_db, mostrar_snack, tr,
+                                seleccionar_archivo_async=seleccionar_archivo_async
+                            )
+                    elif vista == "admin_trivia":
+                        if not es_admin():
+                            mostrar_snack("Acceso denegado: Se requieren permisos de administrador.", color="red")
+                            # Revert to chat
+                            active_view[0] = "chat"
+                            content_area.content = build_chat_view()
+                        else:
+                            content_area.content = build_admin_trivia_view()
+                    elif vista == "bitacora":
+                        if not es_admin():
+                            mostrar_snack("Acceso denegado: Solo Administradores pueden ver la Bitácora de Seguridad.", color="red")
+                            active_view[0] = "chat"
+                            content_area.content = build_chat_view()
+                        else:
+                            content_area.content = build_bitacora_view()
 
+                    # Cerrar el menú lateral en móviles al cambiar de vista
+                    if getattr(page, "width", None) and page.width < 800:
+                        sidebar.visible = False
+                except Exception as ex:
+                    print(f"Error cambiando a vista {vista}:", ex)
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    if full_screen_loader and full_screen_loader in page.overlay:
+                        page.overlay.remove(full_screen_loader)
+                    try: page.update()
+                    except: pass
 
-            # Cerrar el menú lateral en móviles al cambiar de vista
-            if getattr(page, "width", None) and page.width < 800:
-                sidebar.visible = False
-                
-            if full_screen_loader and full_screen_loader in page.overlay:
-                page.overlay.remove(full_screen_loader)
-                
-            page.update()
+            import threading
+            threading.Thread(target=procesar_cambio, daemon=True).start()
 
         sess_data["cambiar_vista"] = cambiar_vista
 
@@ -17795,190 +17806,213 @@ Ejemplo:
     # =====================================
 
     def login_click(e):
+        # 1. Feedback visual inmediato en el botón
+        btn_acceder.disabled = True
+        btn_acceder.content.value = "Validando credenciales..."
+        try: page.update()
+        except: pass
+        import time
+        time.sleep(0.01)
 
-        try:
-            db = conectar_db()
+        def procesar_login():
+            try:
+                db = conectar_db()
 
-            if not db:
-                mostrar_snack("Error Base de Datos", color="#FF4B4B")
-                return
+                if not db:
+                    mostrar_snack("Error Base de Datos", color="#FF4B4B")
+                    btn_acceder.disabled = False
+                    btn_acceder.content.value = "ACCEDER"
+                    try: page.update()
+                    except: pass
+                    return
 
-            cursor = db.cursor(dictionary=True)
+                cursor = db.cursor(dictionary=True)
 
-            cursor.execute(
-                """
-                SELECT
-                ID_Usuario,
-                Nombre_Completo,
-                Rol,
-                Tienda,
-                Zona,
-                Contrasena
-                FROM usuarios
-                WHERE Usuario = %s
-                """,
-                (txt_user.value,)
-            )
-
-            res = cursor.fetchone()
-
-            if res and verify_password(txt_pass.value, res.get("Contrasena", "")):
-                # Migración transparente: Si la contraseña en BD era texto plano legacy, actualizarla con hash bcrypt
-                stored_pass = str(res.get("Contrasena") or "")
-                if not (stored_pass.startswith("$2b$") or stored_pass.startswith("$2a$")):
-                    try:
-                        new_hash = hash_password(txt_pass.value)
-                        cursor.execute("UPDATE usuarios SET Contrasena = %s WHERE ID_Usuario = %s", (new_hash, res["ID_Usuario"]))
-                        db.commit()
-                        print(f"🔒 Contraseña del usuario '{res['Nombre_Completo']}' migrada exitosamente a hash bcrypt.")
-                    except Exception as ex_mig:
-                        print("Error migrando contraseña a bcrypt:", ex_mig)
-                login_message.value = ""
-                login_error_box.visible = False
-
-                user_info["id"] = res["ID_Usuario"]
-                user_info["usuario"] = res.get("Usuario") or ""
-                user_info["nombre"] = res["Nombre_Completo"]
-                user_info["rol"] = res["Rol"]
-                user_info["tienda"] = res["Tienda"] if res["Tienda"] is not None else ""
-                user_info["zona"] = res["Zona"] if res["Zona"] is not None else "Zona Centro"
-                user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
-                reproducir_saludo_login(res["Nombre_Completo"])
-                
-                # Guardar sesión de forma en memoria active_sessions
-                user_id_key = res["ID_Usuario"]
-                active_sessions[user_id_key] = {
-                    "page": page,
-                    "user_info": user_info,
-                    "cargar_chat": cargar_chat,
-                    "active_file_callback": active_file_callback
-                }
-
-                # --- REGISTRAR INICIO DE SESIÓN ---
-                ip_client = getattr(page, "client_ip", None) or "Desconocido"
-                
-                def registrar_sesion_async(u_id, ip):
-                    city = "Desconocido"
-                    country = "Desconocido"
-                    is_local = False
-                    
-                    if not ip or ip == "Desconocido":
-                        is_local = True
-                    else:
-                        ip_clean = ip.strip()
-                        if ip_clean in ("127.0.0.1", "::1", "localhost") or \
-                           ip_clean.startswith("192.168.") or \
-                           ip_clean.startswith("10.") or \
-                           ip_clean.startswith("172.16.") or \
-                           ip_clean.startswith("fe80:"):
-                            is_local = True
-                    
-                    if is_local:
-                        city = "Localhost"
-                        country = "Local / Desarrollo"
-                    else:
-                        try:
-                            resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=5)
-                            if resp.status_code == 200:
-                                data = resp.json()
-                                if data.get("status") == "success":
-                                    city = data.get("city", "Desconocido")
-                                    country = data.get("country", "Desconocido")
-                        except Exception as err:
-                            print("Error consultando geolocalización de IP:", err)
-                            
-                    try:
-                        db_log = conectar_db()
-                        if db_log:
-                            cursor_log = db_log.cursor()
-                            cursor_log.execute(
-                                """
-                                INSERT INTO sesiones (ID_Usuario, Direccion_IP, Ubicacion_Ciudad, Ubicacion_Pais)
-                                VALUES (%s, %s, %s, %s)
-                                """,
-                                (u_id, ip, city, country)
-                            )
-                            db_log.commit()
-                            db_log.close()
-                    except Exception as err_db:
-                        print("Error al guardar sesión en BD:", err_db)
-
-                threading.Thread(target=registrar_sesion_async, args=(user_info["id"], ip_client), daemon=True).start()
-
-                async def guardar_sesion_storage():
-                    try:
-                        import time
-                        if hasattr(page, "shared_preferences") and page.shared_preferences:
-                            await page.shared_preferences.set("logged_user_id", str(user_info["id"]))
-                            await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
-                    except Exception as ex_st:
-                        print("Notice guardar shared_preferences:", ex_st)
-
-                page.run_task(guardar_sesion_storage)
-
-                # Registrar en la bitácora como sesión por contraseña (no biométrica)
-                user_info["biometria_metodo"] = None
-                user_info["es_gerente_verificado"] = False
-                try:
-                    u_rol_bit = str(res.get("Rol", "")).lower()
-                    es_gerente_pw = "admin" in u_rol_bit
-                    _ip_log = getattr(page, "client_ip", None) or "Localhost"
-                    _ua_log = "LUXO-Desktop"
-                    def _reg_bit_pw(uid, nombre, rol_str, ip, ua):
-                        try:
-                            db_bit2 = conectar_db()
-                            if db_bit2:
-                                cur_bit2 = db_bit2.cursor()
-                                cur_bit2.execute("""
-                                    INSERT INTO bitacora_sesiones_biometricas
-                                        (ID_Usuario, Nombre_Usuario, Empleado_Identificado, Metodo_Ingreso, Es_Gerente_Verificado, IP_Acceso, Dispositivo)
-                                    VALUES (%s, %s, %s, 'Contrasena', %s, %s, %s)
-                                """, (uid, nombre, nombre, es_gerente_pw, ip, ua[:150]))
-                                db_bit2.commit()
-                                db_bit2.close()
-                        except Exception as ex_bit2:
-                            print("Error bitácora contraseña:", ex_bit2)
-                    import threading as _th
-                    _th.Thread(target=_reg_bit_pw, args=(user_info["id"], user_info["nombre"], u_rol_bit, _ip_log, _ua_log), daemon=True).start()
-                except Exception as ex_bit_pw:
-                    print("Error preparando bitácora contraseña:", ex_bit_pw)
-
-                cargar_chat()
-
-
-            else:
                 cursor.execute(
                     """
                     SELECT
-                    ID_Usuario
+                    ID_Usuario,
+                    Nombre_Completo,
+                    Rol,
+                    Tienda,
+                    Zona,
+                    Contrasena
                     FROM usuarios
                     WHERE Usuario = %s
                     """,
                     (txt_user.value,)
                 )
-                usuario_existe = cursor.fetchone()
 
-                if usuario_existe:
-                    mensaje = "Contraseña incorrecta"
+                res = cursor.fetchone()
+
+                if res and verify_password(txt_pass.value, res.get("Contrasena", "")):
+                    # Migración transparente: Si la contraseña en BD era texto plano legacy, actualizarla con hash bcrypt
+                    stored_pass = str(res.get("Contrasena") or "")
+                    if not (stored_pass.startswith("$2b$") or stored_pass.startswith("$2a$")):
+                        try:
+                            new_hash = hash_password(txt_pass.value)
+                            cursor.execute("UPDATE usuarios SET Contrasena = %s WHERE ID_Usuario = %s", (new_hash, res["ID_Usuario"]))
+                            db.commit()
+                            print(f"🔒 Contraseña del usuario '{res['Nombre_Completo']}' migrada exitosamente a hash bcrypt.")
+                        except Exception as ex_mig:
+                            print("Error migrando contraseña a bcrypt:", ex_mig)
+                    login_message.value = ""
+                    login_error_box.visible = False
+
+                    user_info["id"] = res["ID_Usuario"]
+                    user_info["usuario"] = res.get("Usuario") or ""
+                    user_info["nombre"] = res["Nombre_Completo"]
+                    user_info["rol"] = res["Rol"]
+                    user_info["tienda"] = res["Tienda"] if res["Tienda"] is not None else ""
+                    user_info["zona"] = res["Zona"] if res["Zona"] is not None else "Zona Centro"
+                    user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
+                    reproducir_saludo_login(res["Nombre_Completo"])
+                    
+                    # Guardar sesión de forma en memoria active_sessions
+                    user_id_key = res["ID_Usuario"]
+                    active_sessions[user_id_key] = {
+                        "page": page,
+                        "user_info": user_info,
+                        "cargar_chat": cargar_chat,
+                        "active_file_callback": active_file_callback
+                    }
+
+                    # --- REGISTRAR INICIO DE SESIÓN ---
+                    ip_client = getattr(page, "client_ip", None) or "Desconocido"
+                    
+                    def registrar_sesion_async(u_id, ip):
+                        city = "Desconocido"
+                        country = "Desconocido"
+                        is_local = False
+                        
+                        if not ip or ip == "Desconocido":
+                            is_local = True
+                        else:
+                            ip_clean = ip.strip()
+                            if ip_clean in ("127.0.0.1", "::1", "localhost") or \
+                               ip_clean.startswith("192.168.") or \
+                               ip_clean.startswith("10.") or \
+                               ip_clean.startswith("172.16.") or \
+                               ip_clean.startswith("fe80:"):
+                                is_local = True
+                        
+                        if is_local:
+                            city = "Localhost"
+                            country = "Local / Desarrollo"
+                        else:
+                            try:
+                                resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=5)
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    if data.get("status") == "success":
+                                        city = data.get("city", "Desconocido")
+                                        country = data.get("country", "Desconocido")
+                            except Exception as err:
+                                print("Error consultando geolocalización de IP:", err)
+                                
+                        try:
+                            db_log = conectar_db()
+                            if db_log:
+                                cursor_log = db_log.cursor()
+                                cursor_log.execute(
+                                    """
+                                    INSERT INTO sesiones (ID_Usuario, Direccion_IP, Ubicacion_Ciudad, Ubicacion_Pais)
+                                    VALUES (%s, %s, %s, %s)
+                                    """,
+                                    (u_id, ip, city, country)
+                                )
+                                db_log.commit()
+                                db_log.close()
+                        except Exception as err_db:
+                            print("Error al guardar sesión en BD:", err_db)
+
+                    threading.Thread(target=registrar_sesion_async, args=(user_info["id"], ip_client), daemon=True).start()
+
+                    async def guardar_sesion_storage():
+                        try:
+                            import time
+                            if hasattr(page, "shared_preferences") and page.shared_preferences:
+                                await page.shared_preferences.set("logged_user_id", str(user_info["id"]))
+                                await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
+                        except Exception as ex_st:
+                            print("Notice guardar shared_preferences:", ex_st)
+
+                    page.run_task(guardar_sesion_storage)
+
+                    # Registrar en la bitácora como sesión por contraseña (no biométrica)
+                    user_info["biometria_metodo"] = None
+                    user_info["es_gerente_verificado"] = False
+                    try:
+                        u_rol_bit = str(res.get("Rol", "")).lower()
+                        es_gerente_pw = "admin" in u_rol_bit
+                        _ip_log = getattr(page, "client_ip", None) or "Localhost"
+                        _ua_log = "LUXO-Desktop"
+                        def _reg_bit_pw(uid, nombre, rol_str, ip, ua):
+                            try:
+                                db_bit2 = conectar_db()
+                                if db_bit2:
+                                    cur_bit2 = db_bit2.cursor()
+                                    cur_bit2.execute("""
+                                        INSERT INTO bitacora_sesiones_biometricas
+                                            (ID_Usuario, Nombre_Usuario, Empleado_Identificado, Metodo_Ingreso, Es_Gerente_Verificado, IP_Acceso, Dispositivo)
+                                        VALUES (%s, %s, %s, 'Contrasena', %s, %s, %s)
+                                    """, (uid, nombre, nombre, es_gerente_pw, ip, ua[:150]))
+                                    db_bit2.commit()
+                                    db_bit2.close()
+                            except Exception as ex_bit2:
+                                print("Error bitácora contraseña:", ex_bit2)
+                        import threading as _th
+                        _th.Thread(target=_reg_bit_pw, args=(user_info["id"], user_info["nombre"], u_rol_bit, _ip_log, _ua_log), daemon=True).start()
+                    except Exception as ex_bit_pw:
+                        print("Error preparando bitácora contraseña:", ex_bit_pw)
+
+                    cargar_chat()
+
+
                 else:
-                    mensaje = "Usuario no registrado"
+                    cursor.execute(
+                        """
+                        SELECT
+                        ID_Usuario
+                        FROM usuarios
+                        WHERE Usuario = %s
+                        """,
+                        (txt_user.value,)
+                    )
+                    usuario_existe = cursor.fetchone()
 
-                login_message.value = mensaje
-                login_message.color = "#FF4B4B"
-                login_error_box.visible = True
-                page.update()
+                    if usuario_existe:
+                        mensaje = "Contraseña incorrecta"
+                    else:
+                        mensaje = "Usuario no registrado"
 
-            db.close()
-        except Exception as err:
-            import traceback
-            tb_str = traceback.format_exc()
-            print("--- DETECTADO ERROR EN LOGIN ---")
-            print(tb_str)
-            try:
-                with open("login_error.log", "w", encoding="utf-8") as log_f:
-                    log_f.write(tb_str)
-            except Exception as e_log:
-                print("No se pudo escribir en login_error.log:", e_log)
+                    login_message.value = mensaje
+                    login_message.color = "#FF4B4B"
+                    login_error_box.visible = True
+                    
+                    btn_acceder.disabled = False
+                    btn_acceder.content.value = "ACCEDER"
+                    page.update()
+
+                db.close()
+            except Exception as err:
+                import traceback
+                tb_str = traceback.format_exc()
+                print("--- DETECTADO ERROR EN LOGIN ---")
+                print(tb_str)
+                try:
+                    with open("login_error.log", "w", encoding="utf-8") as log_f:
+                        log_f.write(tb_str)
+                except Exception as e_log:
+                    print("No se pudo escribir en login_error.log:", e_log)
+                btn_acceder.disabled = False
+                try: btn_acceder.content.value = "ACCEDER"
+                except: pass
+                try: page.update()
+                except: pass
+
+        import threading
+        threading.Thread(target=procesar_login, daemon=True).start()
 
     # =====================================
     # LOGIN UI
