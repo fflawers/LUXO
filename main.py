@@ -5249,10 +5249,11 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     
                         if mejor_manual and mayor_coincidencia > 0:
                             # Se encontró un match directo. Obtenemos URL segura.
+                            import urllib.parse as _urllib_parse
                             nombre_safe = obtener_pdf_assets(mejor_manual['ID_Manual'])
                             if nombre_safe:
-                                nombre_quoted = urllib.parse.quote(nombre_safe)
-                                original_quoted = urllib.parse.quote(mejor_manual['Nombre_Archivo'] or "documento")
+                                nombre_quoted = _urllib_parse.quote(nombre_safe)
+                                original_quoted = _urllib_parse.quote(mejor_manual['Nombre_Archivo'] or "documento")
                                 
                                 base_url_req = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
                                 if base_url_req.startswith("ws://"):
@@ -11314,7 +11315,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                                     "▶ Abrir Video",
                                                     bgcolor="#A100F2",
                                                     color="white",
-                                                    on_click=lambda e, u=video_url: page.run_task(lambda: page.launch_url(u))
+                                                    url=video_url,
+                                                    url_target="_blank"
                                                 )
                                             ], spacing=10, alignment="center", horizontal_alignment="center")
 
@@ -19075,7 +19077,7 @@ Ejemplo:
                             print("Sesión expirada EN VIVO por inactividad (>30m)")
                             # Lanzar recarga en cliente para forzar pantalla de login
                             try:
-                                page.launch_url("javascript:window.location.reload();")
+                                await page.launch_url("javascript:window.location.reload();")
                             except:
                                 pass
                             break # Termina el loop para esta sesion
