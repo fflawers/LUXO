@@ -4483,6 +4483,24 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
     def cargar_chat():
         page.clean()
+        page.add(
+            ft.Container(
+                content=ft.Column([
+                    ft.ProgressRing(color="#00FFFF", stroke_width=5),
+                    ft.Text(f"Bienvenido/a {user_info.get('nombre', '')}, iniciando sesión...", color="white", weight="bold", size=16),
+                    ft.Text("Preparando módulos de Inteligencia Artificial...", color="#aaaaaa", size=12)
+                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.Alignment(0, 0),
+                expand=True,
+                bgcolor="#080812"
+            )
+        )
+        try: page.update()
+        except: pass
+        import time
+        time.sleep(0.01)
+        
+        page.clean()
 
         chat_display = ft.ListView(
             expand=True,
@@ -16856,6 +16874,21 @@ Ejemplo:
                     bgcolor="#141424" if vista == "admin_trivia" else "transparent",
                     shape=ft.RoundedRectangleBorder(radius=8)
                 )
+                
+            # Mostrar Loader inmediatamente antes de procesar la nueva vista
+            content_area.content = ft.Container(
+                content=ft.Column([
+                    ft.ProgressRing(color="#00FFFF", stroke_width=5),
+                    ft.Text(f"Cargando {vista.replace('_', ' ').title()}...", color="white", weight="bold", size=14)
+                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.Alignment(0, 0),
+                expand=True
+            )
+            try: page.update()
+            except: pass
+            
+            import time
+            time.sleep(0.01) # Permitir que Flet envíe el loader al cliente antes de bloquear el hilo principal
             
             if vista == "chat":
                 content_area.content = build_chat_view()
