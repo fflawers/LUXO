@@ -3182,6 +3182,16 @@ class DownloadHTTPHandler(http.server.BaseHTTPRequestHandler):
                                 self.send_header("Content-Type", "image/jpeg")
                             elif ext == ".png":
                                 self.send_header("Content-Type", "image/png")
+                            elif ext == ".gif":
+                                self.send_header("Content-Type", "image/gif")
+                            elif ext == ".webp":
+                                self.send_header("Content-Type", "image/webp")
+                            elif ext == ".mp4":
+                                self.send_header("Content-Type", "video/mp4")
+                            elif ext in (".mov",):
+                                self.send_header("Content-Type", "video/quicktime")
+                            elif ext == ".avi":
+                                self.send_header("Content-Type", "video/x-msvideo")
                             elif ext in (".xls", ".xlsx"):
                                 self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                             else:
@@ -8061,14 +8071,33 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
             def on_multimedia_cargado(ruta):
                 try:
-                    os.makedirs(ASSETS_PATH, exist_ok=True)
+                    mostrar_snack("Procesando e insertando multimedia...", color="#D8B4FE")
                     nombre_archivo = os.path.basename(ruta)
-                    destino = os.path.join(ASSETS_PATH, nombre_archivo)
-                    shutil.copy(ruta, destino)
-                    optimizar_archivo_multimedia(destino)
-                    mostrar_snack(f"Archivo multimedia '{nombre_archivo}' cargado con éxito en custom_assets/.")
-                    
-                    # Recargar después de cargar
+
+                    # Leer binario del archivo
+                    with open(ruta, "rb") as f:
+                        archivo_binario = f.read()
+
+                    # Insertar en la tabla manuales (igual que PDF/Excel)
+                    db_m = conectar_db()
+                    if not db_m:
+                        mostrar_snack("Error: No se pudo conectar a la base de datos.", color="#FF4500")
+                        return
+                    cursor_m = db_m.cursor()
+                    ext_mm = os.path.splitext(nombre_archivo)[1].lower()
+                    tipo = "Imagen" if ext_mm in [".png",".jpg",".jpeg",".gif",".webp"] else "Video"
+                    cursor_m.execute("""
+                        INSERT INTO manuales
+                        (Titulo, Nombre_Archivo, Archivo_PDF, Contenido_Texto, Categoria, Version)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (nombre_archivo, nombre_archivo, archivo_binario, f"Archivo {tipo}: {nombre_archivo}", tipo, "1.0"))
+                    db_m.commit()
+                    db_m.close()
+
+                    mostrar_snack(f"✅ '{nombre_archivo}' cargado correctamente.")
+                    crear_notificacion_a_rol("Gerente", "Nuevo Multimedia Disponible 🖼️", f"Se ha subido: '{nombre_archivo}'", "manual")
+
+                    # Recargar lista después de cargar
                     def reload_after_delay():
                         import time
                         time.sleep(1.5)
@@ -8077,7 +8106,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     threading.Thread(target=reload_after_delay, daemon=True).start()
                 except Exception as ex:
                     print("ERROR CARGANDO MULTIMEDIA:", ex)
-                    mostrar_snack("Error al guardar archivo multimedia.", color="red")
+                    mostrar_snack(f"Error al guardar archivo multimedia: {ex}", color="red")
 
             btn_pdf = ft.ElevatedButton(
                 "Cargar PDF",
@@ -11241,7 +11270,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             pages_to_render = min(total_pages, 50)
                                             
                                             images_col = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
-                                            img_dir = os.path.join(ASSETS_PATH, "temp_pdfs", "img_cache", n_pdf.replace(".pdf", ""))
+                                            # Usar el safe_name (n_pdf) sin extensión como carpeta de caché
+                                            cache_folder = os.path.splitext(n_pdf)[0]
+                                            img_dir = os.path.join(ASSETS_PATH, "temp_pdfs", "img_cache", cache_folder)
                                             os.makedirs(img_dir, exist_ok=True)
                                             
                                             for i in range(pages_to_render):
@@ -11252,14 +11283,41 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                                     pix.save(page_img_path)
                                                     
                                                 images_col.controls.append(
-                                                    ft.Image(src=f"/custom_assets/temp_pdfs/img_cache/{n_pdf.replace('.pdf', '')}/page_{i}.jpg", fit="contain")
+                                                    ft.Image(src=f"/custom_assets/temp_pdfs/img_cache/{cache_folder}/page_{i}.jpg", fit="contain")
                                                 )
                                             doc.close()
                                             content_viewer.content = images_col
                                             
                                         elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
-                                            content_viewer.content = ft.Image(src=f"/custom_assets/temp_pdfs/{n_pdf}", fit="contain")
-                                            
+                                            # n_pdf es el safe_name (ej: manual_5.jpg) — la ruta correcta
+                                            content_viewer.content = ft.Image(
+                                                src=f"/custom_assets/temp_pdfs/{n_pdf}",
+                                                fit="contain",
+                                                expand=True
+                                            )
+
+                                        elif ext in [".mp4", ".mov", ".avi"]:
+                                            # Para video usamos un iframe HTML con video tag via URL del servidor
+                                            base_url_v = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
+                                            if base_url_v.startswith("ws://"):
+                                                base_url_v = base_url_v.replace("ws://", "http://", 1)
+                                            elif base_url_v.startswith("wss://"):
+                                                base_url_v = base_url_v.replace("wss://", "https://", 1)
+                                            elif base_url_v.startswith("tcp://"):
+                                                base_url_v = base_url_v.replace("tcp://", "http://", 1)
+                                            base_dl_v = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url_v)
+                                            video_url = f"{base_dl_v}/view?file={urllib.parse.quote(n_pdf)}"
+                                            content_viewer.content = ft.Column([
+                                                ft.Text("🎬 Vista previa de video:", color="#aaaaaa", size=12),
+                                                ft.Text("Haz clic en el botón para abrir el video en el navegador.", color="#aaaaaa", size=11),
+                                                ft.ElevatedButton(
+                                                    "▶ Abrir Video",
+                                                    bgcolor="#A100F2",
+                                                    color="white",
+                                                    on_click=lambda e, u=video_url: page.run_task(lambda: page.launch_url(u))
+                                                )
+                                            ], spacing=10, alignment="center", horizontal_alignment="center")
+
                                         elif ext in [".xlsx", ".xls"]:
                                             import openpyxl
                                             wb = openpyxl.load_workbook(r_pdf, data_only=True)
@@ -11320,6 +11378,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 elif ext_m in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
                                     icon_m = ft.Icons.IMAGE
                                     color_m = "#FF00FF"
+                                elif ext_m in [".mp4", ".mov", ".avi"]:
+                                    icon_m = ft.Icons.VIDEOCAM_ROUNDED
+                                    color_m = "#FF6B35"
                                     
                                 if nombre_f:
                                     nombre_quoted = urllib.parse.quote(nombre_f)
@@ -11350,17 +11411,17 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             ft.Row([
                                                 ft.ElevatedButton(
                                                     t("view_pdf"),
-                                                    on_click=lambda e, n=nombre_f, r=os.path.join(ASSETS_PATH, "temp_pdfs", nombre_f): visualizar_pdf_interno(e, n, r) if n else None,
-                                                    bgcolor="#6E48AA",
-                                                    color="white",
+                                                    on_click=lambda e, n=nombre_f, r=os.path.join(ASSETS_PATH, "temp_pdfs", nombre_f) if nombre_f else "": visualizar_pdf_interno(e, n, r) if n else None,
+                                                    bgcolor="#6E48AA" if abierto == 1 else "#222222",
+                                                    color="white" if abierto == 1 else "#666666",
                                                     expand=True,
-                                                    disabled=(url_view == "")
+                                                    disabled=(url_view == "" or abierto == 0)
                                                 ),
                                                 ft.ElevatedButton(
-                                                    t("download_pdf") if abierto == 1 else "Bloqueado",
+                                                    t("download_pdf") if abierto == 1 else "🔒 Bloqueado",
                                                     icon=ft.Icons.DOWNLOAD if abierto == 1 else ft.Icons.LOCK,
                                                     url=url_dl if abierto == 1 else None,
-                                                    bgcolor="#444444" if abierto == 1 else "#222222",
+                                                    bgcolor="#204870" if abierto == 1 else "#222222",
                                                     color="white" if abierto == 1 else "#666666",
                                                     expand=True,
                                                     disabled=(url_dl == "" or abierto == 0)
