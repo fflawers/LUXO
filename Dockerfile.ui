@@ -1,0 +1,30 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Dependencias para Flet, PyAudio y otras herramientas
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libasound-dev \
+    portaudio19-dev \
+    libportaudio2 \
+    libportaudiocpp0 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Para mantener la voz intacta, usamos el frontend modificado
+COPY frontend/ /app/
+# Archivos necesarios en la raíz como .env si se requiere
+COPY .env /app/.env
+COPY run_web.py /app/run_web.py
+
+# Assets y carpetas necesarias
+COPY custom_assets/ /app/custom_assets/
+COPY uploads/ /app/uploads/
+
+EXPOSE 8550
+
+CMD ["python", "run_web.py"]

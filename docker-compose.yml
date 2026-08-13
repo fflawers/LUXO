@@ -9,26 +9,39 @@ services:
       MYSQL_ROOT_PASSWORD: los4valtierra
       MYSQL_DATABASE: sgh_portal
     volumes:
-      # Este mapeo permite que el respaldo SQL se ejecute y restaure automáticamente 
-      # cuando el contenedor se levante por primera vez.
       - ./respaldo_base_de_datos_luxo.sql:/docker-entrypoint-initdb.d/dump.sql
-      # Persistencia de datos (opcional pero recomendada)
       - mysql_data:/var/lib/mysql
 
-  web:
-    build: .
-    container_name: luxo_web
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: luxo_api
+    restart: always
+    ports:
+      - "8553:8553"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=los4valtierra
+      - DB_NAME=sgh_portal
+    depends_on:
+      - db
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: luxo_ui
     restart: always
     ports:
       - "8550:8550"
-      - "8553:8553"
     environment:
-      # Apunta la conexión al nombre del contenedor de la base de datos
-      - DB_HOST=db
-      # Activa SSL si montarás tus certificados en producción
+      - API_URL=http://api:8553
       - USE_SSL=false
     depends_on:
-      - db
+      - api
 
 volumes:
   mysql_data:
