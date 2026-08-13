@@ -785,11 +785,7 @@ def configurar_rutas_fastapi(app):
                     let lastSentTime = 0;
 
                     window.initLuxoMicPermission = function() {
-                        // === VOZ DESACTIVADA TEMPORALMENTE ===
-                        console.log("🎙️ [Luxo Global Mic]: Voz desactivada temporalmente.");
-                        setStatus("🔇 Voz desactivada temporalmente", "#888888", "🔇");
-                        return;
-                        // === FIN VOZ DESACTIVADA ===
+                        // La voz estaba desactivada temporalmente aquí, ahora está activa.
                         if (window.luxoSpeechRecognitionActive) {
                             console.log("🎙️ [Luxo Global Mic]: Already active. Skipping duplicate init.");
                             return;
@@ -1347,6 +1343,25 @@ def configurar_rutas_fastapi(app):
                 break
         return {"command": cmd}
 
+    @app.api_route("/luxo_listening_start", methods=["POST"])
+    async def post_listening_start(user_id: str = "1"):
+        user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
+        session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+        if session:
+            page = session.get("page")
+            siri_orb = session.get("siri_orb")
+            if page:
+                try:
+                    if siri_orb:
+                        siri_orb.opacity = 1
+                        siri_orb.scale = 1
+                    page.snack_bar = ft.SnackBar(ft.Text("✨ ¡Oye LUXO detectado! Escuchando...", color="white", weight="bold"), bgcolor="#9D50BB", duration=3000)
+                    page.snack_bar.open = True
+                    page.update()
+                except Exception as ex:
+                    print(f"WARN Flet overlay error: {ex}")
+        return {"status": "success"}
+
     @app.api_route("/text_input", methods=["GET", "POST"])
     async def post_text_input(user_id: str = "1", text: str = ""):
         import traceback
@@ -1369,6 +1384,36 @@ def configurar_rutas_fastapi(app):
                 enviar_mensaje = session.get("enviar_mensaje")
 
                 if input_msg and enviar_mensaje and page:
+                    btn_mic_cont = session.get("btn_mic_container")
+                    siri_orb = session.get("siri_orb")
+                    
+                    if siri_orb:
+                        try:
+                            siri_orb.opacity = 1
+                            siri_orb.scale = 1
+                            siri_orb.update()
+                        except: pass
+                        
+                    if btn_mic_cont:
+                        try:
+                            btn_mic_cont.bgcolor = "#9D50BB" # Morado brilloso (Siri vibe)
+                            btn_mic_cont.border = ft.Border.all(3, "#00FFFF") # Cyan grueso
+                            btn_mic_cont.update()
+                            def revert_glow(bmc, orb):
+                                import time
+                                time.sleep(3)
+                                bmc.bgcolor = "#1E1E2E"
+                                bmc.border = ft.Border.all(1.5, "#00FFFF")
+                                try: bmc.update()
+                                except: pass
+                                if orb:
+                                    orb.opacity = 0
+                                    orb.scale = 0.1
+                                    try: orb.update()
+                                    except: pass
+                            threading.Thread(target=revert_glow, args=(btn_mic_cont, siri_orb), daemon=True).start()
+                        except: pass
+                        
                     input_msg.value = text
                     try:
                         page.update()
@@ -2034,8 +2079,39 @@ def iniciar_hilo_escucha_luxo():
                                         if query:
                                             print(f"🚀 Enviando pregunta a LUXO IA: '{query}'")
                                             if input_msg and enviar_mensaje and page:
+                                                btn_mic_cont = session.get("btn_mic_container")
+                                                siri_orb = session.get("siri_orb")
+                                                
+                                                if siri_orb:
+                                                    try:
+                                                        siri_orb.opacity = 1
+                                                        siri_orb.scale = 1
+                                                        page.update()
+                                                    except: pass
+
+                                                if btn_mic_cont:
+                                                    try:
+                                                        btn_mic_cont.bgcolor = "#9D50BB" # Morado brilloso
+                                                        btn_mic_cont.border = ft.Border.all(3, "#00FFFF") # Borde Cyan grueso
+                                                        btn_mic_cont.update()
+                                                        def revert_glow(bmc, orb):
+                                                            import time
+                                                            time.sleep(3)
+                                                            bmc.bgcolor = "#1E1E2E"
+                                                            bmc.border = ft.Border.all(1.5, "#00FFFF")
+                                                            try: bmc.update()
+                                                            except: pass
+                                                            if orb:
+                                                                orb.opacity = 0
+                                                                orb.scale = 0.1
+                                                                try: orb.update()
+                                                                except: pass
+                                                        threading.Thread(target=revert_glow, args=(btn_mic_cont,siri_orb), daemon=True).start()
+                                                    except: pass
+                                                    
                                                 input_msg.value = query
-                                                page.update()
+                                                try: page.update()
+                                                except: pass
                                                 
                                                 async def trigger_send():
                                                     enviar_mensaje(None)
@@ -3489,7 +3565,9 @@ def main(page: ft.Page):
         btn_play_pause.update()
 
         try:
-            clean_text = text.replace('"', '').replace("'", "").replace("*", "").replace("#", "").replace("`", "").strip()
+            import re
+            clean_text = re.sub(r'[*_#`~>\[\]\(\)]+', '', text)
+            clean_text = clean_text.replace('"', '').replace("'", "").strip()
             
             def reproducir_sapi_thread():
                 try:
@@ -3508,28 +3586,29 @@ def main(page: ft.Page):
                         proc = subprocess.Popen(["say", clean_text])
                         active_sapi_instance[0] = proc
                 except Exception as ex_spk:
-                    print("Error en reproductor nativo SAPI.SpVoice:", ex_spk)
+                    print("Error en reproductor nativo:", ex_spk)
 
-            t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
-            t_speak.start()
-
-            try:
-                import urllib.parse
-                import hashlib
-                os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
-                text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
-                filename = f"speak_{text_hash}.mp3"
-                filepath = os.path.join(ASSETS_PATH, "temp_audio", filename)
-                if not os.path.exists(filepath):
-                    from gtts import gTTS
-                    tts = gTTS(text=clean_text, lang="es")
-                    tts.save(filepath)
-                url_url = f"/temp_audio/{urllib.parse.quote(filename)}"
-                current_audio_player = ft.Audio(src=url_url, autoplay=True)
-                page.overlay.append(current_audio_player)
-                page.update()
-            except Exception as e_ft:
-                print("Nota ft.Audio:", e_ft)
+            if getattr(page, "web", False):
+                try:
+                    import urllib.parse
+                    import hashlib
+                    os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
+                    text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
+                    filename = f"speak_{text_hash}.mp3"
+                    filepath = os.path.join(ASSETS_PATH, "temp_audio", filename)
+                    if not os.path.exists(filepath):
+                        from gtts import gTTS
+                        tts = gTTS(text=clean_text, lang="es")
+                        tts.save(filepath)
+                    url_url = f"/temp_audio/{urllib.parse.quote(filename)}"
+                    current_audio_player = ft.Audio(src=url_url, autoplay=True)
+                    page.overlay.append(current_audio_player)
+                    page.update()
+                except Exception as e_ft:
+                    print("Nota ft.Audio:", e_ft)
+            else:
+                t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
+                t_speak.start()
 
         except Exception as e:
             print("ERROR STARTING SPEAK CLIENT:", e)
@@ -6019,7 +6098,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 if (!banner) {
                     banner = topDoc.createElement("div");
                     banner.id = "luxo-voice-banner";
-                    banner.style.cssText = "position:fixed; bottom:30px; right:30px; z-index:999999; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 35% 35%, rgba(224, 64, 251, 0.85), rgba(0, 240, 255, 0.85), rgba(10, 10, 24, 0.95)); animation: siriGlowPulse 2.5s infinite ease-in-out; display:none !important; align-items:center; justify-content:center; cursor:pointer; user-select:none; transition: opacity 0.5s ease, transform 0.5s ease; opacity:0; pointer-events:none; transform:scale(0.7);";
+                    banner.style.cssText = "position:fixed; bottom:30px; right:30px; z-index:2147483647; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 35% 35%, rgba(224, 64, 251, 0.85), rgba(0, 240, 255, 0.85), rgba(10, 10, 24, 0.95)); animation: siriGlowPulse 2.5s infinite ease-in-out; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none; transition: opacity 0.5s ease, transform 0.5s ease; opacity:0; pointer-events:none; transform:scale(0.7);";
                     banner.setAttribute("title", "Asistente de Voz LUXO (Oye LUXO)");
                     banner.innerHTML = `
                         <div style="display:flex; align-items:center; justify-content:center; gap:4px; height:100%; width:100%;">
@@ -6078,11 +6157,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 let lastSentTime = 0;
 
                 window.initLuxoMicPermission = function() {
-                    // === VOZ DESACTIVADA TEMPORALMENTE ===
-                    console.log("🎙️ [Luxo Chat Mic]: Voz desactivada temporalmente.");
-                    setStatus("🔇 Voz desactivada temporalmente", "#888888", "🔇");
-                    return;
-                    // === FIN VOZ DESACTIVADA ===
+                    // La voz web estaba desactivada temporalmente aquí, ahora está activa.
                     if (window.luxoSpeechRecognitionActive) {
                         console.log("🎙️ [Luxo Chat Mic]: Already active. Skipping duplicate init.");
                         return;
@@ -6142,7 +6217,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         .replace(/hey luxo/gi, '')
                                         .replace(/oye lujo/gi, '')
                                         .trim();
-                                        
+                                    if (!window.luxoIsListeningAlertSent) {
+                                        window.luxoIsListeningAlertSent = true;
+                                        fetch('/luxo_listening_start?user_id=1', { method: 'POST' });
+                                    }
+                                    
                                     // Activar orbe flotante en la esquina inferior derecha al detectar frase clave (5 segundos de visualización)
                                     window.showLuxoSiriOrb(5000);
 
@@ -6158,6 +6237,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             window.showLuxoSiriOrb(5000);
                                             setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
                                             fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                            window.luxoIsListeningAlertSent = false;
                                             window.luxoManualDictating = false;
                                             setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
                                             try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
@@ -6232,8 +6312,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                 try:
                     mostrar_snack("🎙️ Escuchando pregunta directa... Habla ahora", "#00FFFF")
-                    btn_mic.icon_color = "#FF0000"
-                    btn_mic.update()
+                    btn_mic_container.bgcolor = "#FF0000"
+                    btn_mic_container.border = ft.Border.all(2, "white")
+                    btn_mic_container.update()
                     
                     def dictado_thread():
                         try:
@@ -6268,13 +6349,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                     async def trigger_send():
                                         enviar_mensaje(None)
                                     page.run_task(trigger_send)
+                        except sr.WaitTimeoutError:
+                            print("⏳ Tiempo de espera agotado. No se detectó voz.")
                         except Exception as ex_dict:
                             print("Error en dictado directo de botón:", ex_dict)
                         finally:
                             dictado_en_progreso[0] = False
                             try:
-                                btn_mic.icon_color = "#00FFFF"
-                                btn_mic.update()
+                                btn_mic_container.bgcolor = "#1E1E2E"
+                                btn_mic_container.border = ft.Border.all(1.5, "#00FFFF")
+                                btn_mic_container.update()
                             except Exception:
                                 pass
 
@@ -6303,11 +6387,22 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 width=46,
                 height=46,
                 alignment=ft.alignment.Alignment(0, 0),
-                visible=False  # VOZ DESACTIVADA TEMPORALMENTE
+                visible=True
+            )
+
+            siri_orb_flet = ft.Container(
+                width=80, height=80, border_radius=40,
+                gradient=ft.RadialGradient(center=ft.alignment.Alignment(0, 0), radius=0.5, colors=["#E040FB", "#00F0FF", "#0A0A18"]),
+                shadow=ft.BoxShadow(spread_radius=10, blur_radius=20, color="#00F0FF", offset=ft.Offset(0,0)),
+                animate_scale=ft.Animation(400, ft.AnimationCurve.EASE_IN_OUT),
+                animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_IN_OUT),
+                scale=0.1, opacity=0, bottom=30, right=30
             )
 
             if user_info.get("id") and user_info["id"] in active_sessions:
                 active_sessions[user_info["id"]]["btn_mic"] = btn_mic
+                active_sessions[user_info["id"]]["btn_mic_container"] = btn_mic_container
+                active_sessions[user_info["id"]]["siri_orb"] = siri_orb_flet
 
             btn_send_whatsapp = ft.Container(
                 content=ft.Text("✈️", color="white", size=16, weight="bold"),
@@ -14490,7 +14585,7 @@ Ejemplo:
                         ft.Text("Acceso Restringido ⚠️", size=20, color="red", weight="bold"),
                         ft.Text("Esta sección de gestión de preguntas es exclusiva para Administradores.", color="#aaaaaa", size=14)
                     ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
-                    alignment=ft.alignment.center,
+                    alignment=ft.alignment.Alignment(0, 0),
                     expand=True
                 )
 
