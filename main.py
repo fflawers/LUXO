@@ -5265,32 +5265,69 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                 url_dl = f"{base_dl}/download?file={nombre_quoted}&original={original_quoted}"
                                 url_view = f"{base_dl}/view?file={nombre_quoted}"
                                 
-                                respuesta_rapida = f"¡Aquí tienes el archivo que buscabas!\n\n**{mejor_manual['Titulo'] or mejor_manual['Nombre_Archivo']}**\n\n[👁️ Ver Documento]({url_view}) | [📥 Descargar]({url_dl})"
-                                
-                                # Mostrar en chat simulando respuesta de LUXO
-                                msg_row = ft.Row([
-                                    ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
-                                    ft.Markdown(
-                                        respuesta_rapida, 
-                                        selectable=True, 
-                                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                                        on_tap_link=lambda e: page.launch_url(e.data)
-                                    )
-                                ], vertical_alignment="start", spacing=10)
-                                
+                                nombre_display = mejor_manual['Titulo'] or mejor_manual['Nombre_Archivo'] or nombre_safe
+
+                                # Mensaje de confirmación de LUXO
                                 chat_display.controls.append(
                                     ft.Container(
-                                        content=msg_row,
+                                        content=ft.Row([
+                                            ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
+                                            ft.Text(f"¡Aquí tienes el archivo que buscabas!", color="white", expand=True)
+                                        ], spacing=10),
                                         bgcolor="#0F0F1A",
                                         padding=10,
                                         border_radius=10,
                                         border=ft.Border.all(1, "#D8B4FE")
                                     )
                                 )
+
+                                # Tarjeta de archivo con botones (igual que el flujo RAG)
+                                ext_quick = os.path.splitext(nombre_safe)[1].lower()
+                                icon_quick = ft.Icons.PICTURE_AS_PDF if ext_quick == ".pdf" else (
+                                    ft.Icons.TABLE_CHART if ext_quick in [".xlsx", ".xls"] else (
+                                        ft.Icons.IMAGE if ext_quick in [".png", ".jpg", ".jpeg", ".gif", ".webp"] else
+                                        ft.Icons.VIDEOCAM_ROUNDED
+                                    )
+                                )
+                                chat_display.controls.append(
+                                    ft.Container(
+                                        content=ft.Column([
+                                            ft.Row([
+                                                ft.Icon(icon_quick, color="#D8B4FE"),
+                                                ft.Text(nombre_display, color="white", weight="bold", size=13, expand=True),
+                                            ], spacing=5),
+                                            ft.Row([
+                                                ft.ElevatedButton(
+                                                    t("view_pdf"),
+                                                    url=url_view,
+                                                    bgcolor="#6E48AA",
+                                                    color="white",
+                                                    expand=True,
+                                                    disabled=(url_view == "")
+                                                ),
+                                                ft.ElevatedButton(
+                                                    t("download_pdf"),
+                                                    url=url_dl,
+                                                    bgcolor="#204870",
+                                                    color="white",
+                                                    expand=True,
+                                                    disabled=(url_dl == "")
+                                                ),
+                                            ], spacing=5),
+                                            ft.Text(
+                                                "💡 Tip: Mantén presionado 'Descargar' y elige 'Descargar vínculo/enlace' para guardarlo directo en tu celular.",
+                                                color="#aaaaaa",
+                                                size=10,
+                                                italic=True
+                                            )
+                                        ], spacing=8),
+                                        bgcolor="#1a1a2e",
+                                        padding=12,
+                                        border_radius=10
+                                    )
+                                )
                                 page.update()
-                                
-                                # Opcional: Registrar en base de datos la intercepción (por ahora lo dejamos sin registrar o podríamos)
-                                return # 🛑 CORTAMOS EL FLUJO: No llamamos a Groq ni al RAG
+                                return  # 🛑 CORTAMOS EL FLUJO: No llamamos a Groq ni al RAG
                 
                 # =======================================================
 
