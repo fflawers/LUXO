@@ -16875,20 +16875,22 @@ Ejemplo:
                     shape=ft.RoundedRectangleBorder(radius=8)
                 )
                 
-            # Mostrar Loader inmediatamente antes de procesar la nueva vista
-            content_area.content = ft.Container(
-                content=ft.Column([
-                    ft.ProgressRing(color="#00FFFF", stroke_width=5),
-                    ft.Text(f"Cargando {vista.replace('_', ' ').title()}...", color="white", weight="bold", size=14)
-                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.alignment.Alignment(0, 0),
-                expand=True
-            )
-            try: page.update()
-            except: pass
-            
-            import time
-            time.sleep(0.01) # Permitir que Flet envíe el loader al cliente antes de bloquear el hilo principal
+            full_screen_loader = None
+            if vista != "chat":
+                full_screen_loader = ft.Container(
+                    content=ft.Column([
+                        ft.ProgressRing(color="#00FFFF", stroke_width=5),
+                        ft.Text(f"Cargando {vista.replace('_', ' ').title()}...", color="white", weight="bold", size=16)
+                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    bgcolor="#D9000000",
+                    alignment=ft.alignment.Alignment(0, 0),
+                    left=0, right=0, top=0, bottom=0 # Flet overlay stretch
+                )
+                page.overlay.append(full_screen_loader)
+                try: page.update()
+                except: pass
+                import time
+                time.sleep(0.01) # Dar tiempo a pintar el loader en el cliente
             
             if vista == "chat":
                 content_area.content = build_chat_view()
@@ -16948,6 +16950,9 @@ Ejemplo:
             # Cerrar el menú lateral en móviles al cambiar de vista
             if getattr(page, "width", None) and page.width < 800:
                 sidebar.visible = False
+                
+            if full_screen_loader and full_screen_loader in page.overlay:
+                page.overlay.remove(full_screen_loader)
                 
             page.update()
 
