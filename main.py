@@ -3076,8 +3076,19 @@ def obtener_pdf_temporal(id_manual):
         db.close()
         if manual:
             ruta = os.path.join(tempfile.gettempdir(), manual["Nombre_Archivo"])
+            data = manual["Archivo_PDF"]
+            if data:
+                if isinstance(data, str) and (data.startswith("b'") or data.startswith('b"')):
+                    import ast
+                    try: data = ast.literal_eval(data)
+                    except: pass
+                elif isinstance(data, bytes) and (data.startswith(b"b'") or data.startswith(b'b"')):
+                    import ast
+                    try: data = ast.literal_eval(data.decode('utf-8', errors='ignore'))
+                    except: pass
+                    
             with open(ruta, "wb") as archivo:
-                archivo.write(manual["Archivo_PDF"])
+                archivo.write(data)
             return ruta, manual["Nombre_Archivo"]
         return None, None
     except Exception as e:
@@ -3110,8 +3121,19 @@ def obtener_pdf_assets(id_manual):
             safe_name = f"manual_{id_manual}{ext}"
             os.makedirs(os.path.join(ASSETS_PATH, "temp_pdfs"), exist_ok=True)
             ruta_destino = os.path.join(ASSETS_PATH, "temp_pdfs", safe_name)
+            
+            data = row["Archivo_PDF"]
+            if isinstance(data, str) and (data.startswith("b'") or data.startswith('b"')):
+                import ast
+                try: data = ast.literal_eval(data)
+                except: pass
+            elif isinstance(data, bytes) and (data.startswith(b"b'") or data.startswith(b'b"')):
+                import ast
+                try: data = ast.literal_eval(data.decode('utf-8', errors='ignore'))
+                except: pass
+
             with open(ruta_destino, "wb") as f:
-                f.write(row["Archivo_PDF"])
+                f.write(data)
             return safe_name
         return None
     except Exception as e:
@@ -3147,7 +3169,10 @@ class DownloadHTTPHandler(http.server.BaseHTTPRequestHandler):
                             original_name = query.get("original", [None])[0]
                             download_name = urllib.parse.unquote(original_name) if original_name else safe_name
                             self.send_header("Content-Type", "application/octet-stream")
-                            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
+                            encoded_name = urllib.parse.quote(download_name)
+                            safe_ascii_name = download_name.encode('ascii', 'ignore').decode('ascii')
+                            if not safe_ascii_name: safe_ascii_name = "descarga"
+                            self.send_header("Content-Disposition", f"attachment; filename=\"{safe_ascii_name}\"; filename*=UTF-8''{encoded_name}")
                         else:
                             # Visualización online
                             ext = os.path.splitext(safe_name)[1].lower()
@@ -7476,16 +7501,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
             def build_stats_bar(label, count, total, color):
                 pct = (count / total * 100) if total > 0 else 0.0
-                max_width = 320 if not is_mobile else 180
+                max_width = 320 if not is_mobile else 130
                 bar_width = (count / total * max_width) if total > 0 else 0
                 return ft.Row([
-                    ft.Text(label, size=12, color="white", width=200 if not is_mobile else 120, weight="bold"),
+                    ft.Text(label, size=11 if is_mobile else 12, color="white", width=120 if is_mobile else 200, weight="bold"),
                     ft.Stack([
-                        ft.Container(width=max_width, height=16, bgcolor="#141424", border_radius=4),
-                        ft.Container(width=max(bar_width, 6) if count > 0 else 0, height=16, bgcolor=color, border_radius=4, shadow=ft.BoxShadow(color=color, blur_radius=3, spread_radius=0.1))
+                        ft.Container(width=max_width, height=14 if is_mobile else 16, bgcolor="#141424", border_radius=4),
+                        ft.Container(width=max(bar_width, 6) if count > 0 else 0, height=14 if is_mobile else 16, bgcolor=color, border_radius=4, shadow=ft.BoxShadow(color=color, blur_radius=3, spread_radius=0.1))
                     ]),
-                    ft.Text(f"{count} ({pct:.1f}%)", size=12, color="white", weight="bold", width=90 if not is_mobile else 65)
-                ], spacing=8, alignment="start", vertical_alignment="center")
+                    ft.Text(f"{count} ({pct:.1f}%)", size=10 if is_mobile else 12, color="white", weight="bold", width=50 if is_mobile else 90)
+                ], spacing=6 if is_mobile else 8, alignment="start", vertical_alignment="center")
 
             tot_preguntas_val = max(total_consultas, 1)
 
@@ -7494,12 +7519,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ft.Row([
                         ft.Row([
                             ft.Icon(ft.Icons.BAR_CHART_ROUNDED, color="#00FFFF", size=22),
-                            ft.Text("Gráfica Estadísticas de Consultas a LUXO AI 📊", color="white", size=15, weight="bold"),
-                        ], spacing=6),
+                            ft.Text("Gráfica Estadísticas de Consultas a LUXO AI 📊", color="white", size=13 if is_mobile else 15, weight="bold"),
+                        ], spacing=6, expand=True),
                         ft.Container(
-                            content=ft.Text(f"Eficacia IA: {eficacia:.1f}%", color="white", weight="bold", size=12),
+                            content=ft.Text(f"Eficacia IA: {eficacia:.1f}%", color="white", weight="bold", size=11 if is_mobile else 12),
                             bgcolor="#008080" if eficacia >= 70 else "#7B2D00",
-                            padding=ft.padding.Padding(10, 4, 10, 4),
+                            padding=ft.padding.Padding(8 if is_mobile else 10, 4, 8 if is_mobile else 10, 4),
                             border_radius=6
                         )
                     ], alignment="spaceBetween", vertical_alignment="center"),
@@ -7564,16 +7589,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ft.Row([
                         ft.Row([
                             ft.Icon(ft.Icons.STOREFRONT_ROUNDED, color="#FFD700", size=22),
-                            ft.Text(f"Ranking de Uso por Tienda (Total: {len(tiendas_uso)} registradas) 🏬", color="white", size=15, weight="bold"),
-                        ], spacing=6),
+                            ft.Text(f"Ranking de Uso por Tienda (Total: {len(tiendas_uso)} registradas) 🏬", color="white", size=12 if is_mobile else 15, weight="bold"),
+                        ], spacing=6, expand=True),
                         ft.Container(
-                            content=ft.Text(f"Más Activa: {top_store_name} 👑", color="black", weight="bold", size=11),
+                            content=ft.Text(f"Más Activa: {top_store_name} 👑", color="black", weight="bold", size=10 if is_mobile else 11),
                             bgcolor="#FFD700",
-                            padding=ft.padding.Padding(10, 4, 10, 4),
+                            padding=ft.padding.Padding(6 if is_mobile else 10, 4, 6 if is_mobile else 10, 4),
                             border_radius=6
                         )
                     ], alignment="spaceBetween", vertical_alignment="center"),
-                    ft.Text("Mide el volumen de consultas real de todas las tiendas registradas en el sistema para monitorear el Piloto.", color="#aaaaaa", size=11),
+                    ft.Text("Mide el volumen de consultas real de todas las tiendas registradas en el sistema para monitorear el Piloto.", color="#aaaaaa", size=10 if is_mobile else 11),
                     ft.Divider(height=10, color="#333333"),
                     ft.Container(
                         content=ft.Column(store_usage_controls, spacing=10, scroll=ft.ScrollMode.AUTO),
@@ -7623,15 +7648,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
             def build_horizontal_bar(label, count, total, color):
                 pct = (count / total * 100) if total > 0 else 0.0
-                bar_width = (count / total * 200) if total > 0 else 0
+                max_w = 110 if is_mobile else 200
+                bar_width = (count / total * max_w) if total > 0 else 0
                 return ft.Row([
-                    ft.Text(label, size=11, color="white", width=95),
+                    ft.Text(label, size=10 if is_mobile else 11, color="white", width=80 if is_mobile else 95),
                     ft.Stack([
-                        ft.Container(width=200, height=12, bgcolor="#141424", border_radius=3),
-                        ft.Container(width=max(bar_width, 4) if count > 0 else 0, height=12, bgcolor=color, border_radius=3, shadow=ft.BoxShadow(color=color, blur_radius=3, spread_radius=0.1))
+                        ft.Container(width=max_w, height=10 if is_mobile else 12, bgcolor="#141424", border_radius=3),
+                        ft.Container(width=max(bar_width, 4) if count > 0 else 0, height=10 if is_mobile else 12, bgcolor=color, border_radius=3, shadow=ft.BoxShadow(color=color, blur_radius=3, spread_radius=0.1))
                     ]),
-                    ft.Text(f"{count} ({pct:.0f}%)", size=11, color="#aaaaaa", width=65)
-                ], spacing=5, alignment="start", vertical_alignment="center")
+                    ft.Text(f"{count} ({pct:.0f}%)", size=9 if is_mobile else 11, color="#aaaaaa", width=50 if is_mobile else 65)
+                ], spacing=4 if is_mobile else 5, alignment="start", vertical_alignment="center")
 
             campaign_chart_card = ft.Container(
                 content=ft.Column([
@@ -7647,8 +7673,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 bgcolor="#0F0F1A",
                 border=ft.Border.all(1.5, "#D8B4FE"),
                 border_radius=10,
-                padding=12,
-                width=400,
+                padding=10 if is_mobile else 12,
+                width=320 if is_mobile else 400,
                 height=180
             )
 
@@ -11185,10 +11211,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     db = conectar_db()
                     if db:
                         cursor = db.cursor(dictionary=True)
-                        if es_admin():
-                            cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto FROM manuales ORDER BY Nombre_Archivo")
-                        else:
-                            cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto FROM manuales WHERE Abierto = 1 ORDER BY Nombre_Archivo")
+                        cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto FROM manuales ORDER BY Nombre_Archivo")
                         manuales = cursor.fetchall()
                         db.close()
 
@@ -11201,11 +11224,103 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 nombre = m.get("Nombre_Archivo") or ""
                                 version = m.get("Version") or ""
                                 titulo = m.get("Titulo") or ""
+                                abierto = m.get("Abierto", 1)
+
+                                def visualizar_pdf_interno(e, n_pdf, r_pdf):
+                                    mostrar_snack("Abriendo archivo, por favor espera...", color="#00FFFF")
+                                    try:
+                                        import os
+                                        ext = os.path.splitext(n_pdf)[1].lower()
+                                        
+                                        content_viewer = ft.Container(padding=5, expand=True)
+                                        
+                                        if ext == ".pdf":
+                                            import pymupdf
+                                            doc = pymupdf.open(r_pdf)
+                                            total_pages = len(doc)
+                                            pages_to_render = min(total_pages, 50)
+                                            
+                                            images_col = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+                                            img_dir = os.path.join(ASSETS_PATH, "temp_pdfs", "img_cache", n_pdf.replace(".pdf", ""))
+                                            os.makedirs(img_dir, exist_ok=True)
+                                            
+                                            for i in range(pages_to_render):
+                                                page_img_path = os.path.join(img_dir, f"page_{i}.jpg")
+                                                if not os.path.exists(page_img_path):
+                                                    page_pdf = doc.load_page(i)
+                                                    pix = page_pdf.get_pixmap(matrix=pymupdf.Matrix(2.0, 2.0))
+                                                    pix.save(page_img_path)
+                                                    
+                                                images_col.controls.append(
+                                                    ft.Image(src=f"/custom_assets/temp_pdfs/img_cache/{n_pdf.replace('.pdf', '')}/page_{i}.jpg", fit="contain")
+                                                )
+                                            doc.close()
+                                            content_viewer.content = images_col
+                                            
+                                        elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+                                            content_viewer.content = ft.Image(src=f"/custom_assets/temp_pdfs/{n_pdf}", fit="contain")
+                                            
+                                        elif ext in [".xlsx", ".xls"]:
+                                            import openpyxl
+                                            wb = openpyxl.load_workbook(r_pdf, data_only=True)
+                                            ws = wb.active
+                                            
+                                            max_rows = 50
+                                            max_cols = 10
+                                            
+                                            columns = []
+                                            for col in ws.iter_cols(1, min(ws.max_column, max_cols)):
+                                                val = col[0].value
+                                                columns.append(ft.DataColumn(ft.Text(str(val) if val is not None else "", weight="bold", color="#00FFFF")))
+                                                
+                                            rows = []
+                                            for i, row in enumerate(ws.iter_rows(min_row=2, max_row=min(ws.max_row, max_rows))):
+                                                cells = []
+                                                for cell in row[:max_cols]:
+                                                    cells.append(ft.DataCell(ft.Text(str(cell.value) if cell.value is not None else "")))
+                                                rows.append(ft.DataRow(cells=cells))
+                                                
+                                            dt = ft.DataTable(columns=columns, rows=rows, bgcolor="#1A1A24")
+                                            content_viewer.content = ft.Column([
+                                                ft.Text("Previsualización rápida de Excel (Máximo 50 filas)", color="#aaaaaa", italic=True),
+                                                ft.Row([dt], scroll=ft.ScrollMode.ALWAYS, expand=True)
+                                            ], scroll=ft.ScrollMode.AUTO, expand=True)
+                                            
+                                        else:
+                                            mostrar_snack(f"Formato {ext} no soportado para previsualización. Usa Descargar.", color="orange")
+                                            return
+                                        
+                                        dialog = ft.AlertDialog(
+                                            title=ft.Row([
+                                                ft.Text(n_pdf, weight="bold", size=14, color="white"), 
+                                                ft.IconButton(ft.Icons.CLOSE, on_click=lambda e: page.pop_dialog())
+                                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                            content=ft.Container(content_viewer, width=800, height=600),
+                                            bgcolor="#1A1A24"
+                                        )
+                                        page.show_dialog(dialog)
+                                        try: page.update()
+                                        except: pass
+                                    except Exception as ex:
+                                        print("Error al abrir archivo interno:", ex)
+                                        mostrar_snack("El archivo parece estar dañado o su formato no es compatible. Usa el botón 'Descargar'.", color="orange")
 
                                 import urllib.parse
                                 nombre_f = obtener_pdf_assets(id_m)
                                 url_view = ""
                                 url_dl = ""
+                                
+                                # Dynamic icon
+                                ext_m = os.path.splitext(nombre)[1].lower() if nombre else ""
+                                icon_m = ft.Icons.PICTURE_AS_PDF
+                                color_m = "#00FFFF"
+                                if ext_m in [".xlsx", ".xls"]:
+                                    icon_m = ft.Icons.TABLE_CHART
+                                    color_m = "#7CFC00"
+                                elif ext_m in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+                                    icon_m = ft.Icons.IMAGE
+                                    color_m = "#FF00FF"
+                                    
                                 if nombre_f:
                                     nombre_quoted = urllib.parse.quote(nombre_f)
                                     base_url = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
@@ -11226,7 +11341,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                     ft.Container(
                                         content=ft.Column([
                                             ft.Row([
-                                                ft.Icon(ft.Icons.INSERT_DRIVE_FILE, color="#00FFFF"),
+                                                ft.Icon(icon_m, color=color_m),
                                                 ft.Column([
                                                     ft.Text(nombre, color="white", weight="bold", size=14),
                                                     ft.Text(f"{t('version')}: {version} | {titulo}", color="#aaaaaa", size=11)
@@ -11235,19 +11350,20 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             ft.Row([
                                                 ft.ElevatedButton(
                                                     t("view_pdf"),
-                                                    url=url_view,
+                                                    on_click=lambda e, n=nombre_f, r=os.path.join(ASSETS_PATH, "temp_pdfs", nombre_f): visualizar_pdf_interno(e, n, r) if n else None,
                                                     bgcolor="#6E48AA",
                                                     color="white",
                                                     expand=True,
                                                     disabled=(url_view == "")
                                                 ),
                                                 ft.ElevatedButton(
-                                                    t("download_pdf"),
-                                                    url=url_dl,
-                                                    bgcolor="#444444",
-                                                    color="white",
+                                                    t("download_pdf") if abierto == 1 else "Bloqueado",
+                                                    icon=ft.Icons.DOWNLOAD if abierto == 1 else ft.Icons.LOCK,
+                                                    url=url_dl if abierto == 1 else None,
+                                                    bgcolor="#444444" if abierto == 1 else "#222222",
+                                                    color="white" if abierto == 1 else "#666666",
                                                     expand=True,
-                                                    disabled=(url_dl == "")
+                                                    disabled=(url_dl == "" or abierto == 0)
                                                 )
                                             ], spacing=5),
                                             ft.Text(
