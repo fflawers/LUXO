@@ -67,6 +67,7 @@ DB_CONFIG = {
 RAG_BLOQUES_CACHE = None
 RAG_DF_CACHE = None
 RAG_IDF_CACHE = None
+RAG_EXCEL_CACHE = []
 RAG_CACHE_LOCK = threading.Lock()
 
 # Variables globales para control de aperturas
@@ -687,6 +688,120 @@ def configurar_rutas_fastapi(app):
                 body = b"".join(response_body)
                 html_text = body.decode("utf-8", errors="ignore")
                 
+                # Inyectar un Botón Flotante Nativo en HTML EXCLUSIVO para celulares.
+                # Esto soluciona la restricción de navegadores móviles (Safari/Chrome) 
+                # que bloquean el micrófono cuando se invoca desde WebSockets (Flet).
+                mobile_mic_script = """
+                <script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    const isMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
+                    if (isMobile) {
+                        let mobileMicBtn = document.createElement("div");
+                        mobileMicBtn.innerHTML = "🎙️";
+                        mobileMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 64px; z-index: 9999999; font-size: 20px; background: #1E1E2E; border: 1.5px solid #00FFFF; border-radius: 23px; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;";
+                        mobileMicBtn.id = "native-mobile-mic";
+                        
+                        let isDragging = false;
+                        let startX, startY, initialX, initialY;
+                        
+                        mobileMicBtn.addEventListener('touchstart', function(e) {
+                            isDragging = false;
+                            let touch = e.touches[0];
+                            startX = touch.clientX;
+                            startY = touch.clientY;
+                            let rect = mobileMicBtn.getBoundingClientRect();
+                            initialX = rect.left;
+                            initialY = rect.top;
+                            mobileMicBtn.style.transition = 'none'; // Disable transition during drag
+                        });
+
+                        mobileMicBtn.addEventListener('touchmove', function(e) {
+                            let touch = e.touches[0];
+                            let dx = touch.clientX - startX;
+                            let dy = touch.clientY - startY;
+                            
+                            // If moved more than 5 pixels, consider it a drag
+                            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                                isDragging = true;
+                                e.preventDefault(); // Prevent scrolling while dragging
+                                let newX = initialX + dx;
+                                let newY = initialY + dy;
+                                
+                                // Keep within screen bounds
+                                newX = Math.max(0, Math.min(newX, window.innerWidth - 46));
+                                newY = Math.max(0, Math.min(newY, window.innerHeight - 46));
+                                
+                                mobileMicBtn.style.left = newX + 'px';
+                                mobileMicBtn.style.top = newY + 'px';
+                                mobileMicBtn.style.right = 'auto';
+                                mobileMicBtn.style.bottom = 'auto';
+                            }
+                        }, { passive: false });
+
+                        mobileMicBtn.addEventListener('touchend', function(e) {
+                            mobileMicBtn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease'; // Re-enable transitions
+                            // The actual logic is moved to onclick to ensure trusted user gesture on Android
+                        });
+                        
+                        mobileMicBtn.onclick = function(e) {
+                            if (isDragging) {
+                                return; // Was a drag, do not trigger click
+                            }
+                            
+                            // Was a click/tap
+                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+                            if (!SR) { 
+                                alert('❌ Tu navegador no soporta dictado. Usa Safari o Chrome.'); 
+                                return; 
+                            }
+                            const r = new SR();
+                            r.lang = 'es-MX';
+                            r.interimResults = false;
+                            r.continuous = false;
+                            r.maxAlternatives = 1;
+                            
+                            r.onstart = function() {
+                                mobileMicBtn.style.background = "#FF0000";
+                                mobileMicBtn.style.borderColor = "#FFFFFF";
+                                mobileMicBtn.style.boxShadow = "0 0 25px #FF0000";
+                            };
+                            r.onresult = function(ev) {
+                                const txt = ev.results[0][0].transcript;
+                                if (txt) {
+                                    fetch('/text_input?user_id=1&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                }
+                            };
+                            r.onerror = function(ev) { 
+                                console.log("Speech recognition error:", ev.error);
+                                if (ev.error === 'aborted') {
+                                    alert('❌ Error: El micrófono fue abortado. Asegúrate de dar permisos en tu navegador.');
+                                } else {
+                                    alert('❌ Error micrófono: ' + ev.error); 
+                                }
+                                mobileMicBtn.style.background = "#1E1E2E";
+                                mobileMicBtn.style.borderColor = "#00FFFF";
+                                mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
+                            };
+                            r.onend = function() { 
+                                mobileMicBtn.style.background = "#1E1E2E";
+                                mobileMicBtn.style.borderColor = "#00FFFF";
+                                mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
+                            };
+                            
+                            try { 
+                                r.start(); 
+                            } catch(e) { 
+                                alert("❌ Error iniciando: " + e.message); 
+                            }
+                        };
+                        
+                        document.body.appendChild(mobileMicBtn);
+                    }
+                });
+                </script>
+                """
+                html_text = html_text.replace("</body>", mobile_mic_script + "</body>")
+                
                 script_tag = """
                 <script>
                 (function() {
@@ -784,8 +899,15 @@ def configurar_rutas_fastapi(app):
                     let lastSentText = "";
                     let lastSentTime = 0;
 
+                    // Detección de dispositivo móvil para evitar loop de SpeechRecognition
+                    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
+
                     window.initLuxoMicPermission = function() {
-                        // La voz estaba desactivada temporalmente aquí, ahora está activa.
+                        // En celulares/tablets: NO activar reconocimiento continuo "Oye LUXO"
+                        if (isMobileDevice) {
+                            console.log("📱 [Luxo Global Mic]: Dispositivo móvil detectado. 'Oye LUXO' desactivado.");
+                            return;
+                        }
                         if (window.luxoSpeechRecognitionActive) {
                             console.log("🎙️ [Luxo Global Mic]: Already active. Skipping duplicate init.");
                             return;
@@ -2310,8 +2432,8 @@ def conectar_db():
         return None
 
 def rebuild_rag_cache():
-    global RAG_BLOQUES_CACHE, RAG_DF_CACHE, RAG_IDF_CACHE
-    print("RECONSTRUYENDO CACHE DE RAG (MANUALES)...")
+    global RAG_BLOQUES_CACHE, RAG_DF_CACHE, RAG_IDF_CACHE, RAG_EXCEL_CACHE
+    print("RECONSTRUYENDO CACHE DE RAG (MANUALES Y EXCEL)...")
     db = conectar_db()
     if not db:
         print("Error al conectar a la base de datos para reconstruir cache RAG.")
@@ -2428,13 +2550,35 @@ def rebuild_rag_cache():
             return bloques_finales
 
         todos_los_bloques = []
+        cache_excel_temp = []
+        
         for m in manuales:
             texto_m = m.get("Contenido_Texto") or ""
             nombre_m = m.get("Nombre_Archivo") or ""
             id_man = m["ID_Manual"]
             abierto_man = m.get("Abierto") if m.get("Abierto") is not None else 1
             
-            if m.get("Categoria") == "Excel":
+            if m.get("Categoria") == "Excel" or nombre_m.lower().endswith((".xlsx", ".xls", ".csv")):
+                hoja_actual = "Hoja 1"
+                for linea in texto_m.split("\n"):
+                    if linea.startswith("HOJA:"):
+                        hoja_actual = linea.replace("HOJA:", "").strip()
+                    elif linea.startswith("FILA"):
+                        partes = linea.split(":", 1)
+                        if len(partes) == 2:
+                            fila_num = partes[0].replace("FILA", "").strip()
+                            texto_fila = partes[1].strip()
+                            cache_excel_temp.append({
+                                "id_manual": id_man,
+                                "nombre_archivo": nombre_m,
+                                "hoja": hoja_actual,
+                                "fila": fila_num,
+                                "texto": texto_fila,
+                                "norm": normalizar_texto(texto_fila),
+                                "abierto": abierto_man
+                            })
+
+                # Para el RAG clásico, solo le damos un extracto corto de qué columnas contiene
                 lineas = texto_m.split("\n")
                 lineas_filtradas = []
                 for idx_linea, linea in enumerate(lineas):
@@ -2487,7 +2631,8 @@ def rebuild_rag_cache():
             RAG_BLOQUES_CACHE = todos_los_bloques
             RAG_DF_CACHE = df_dict
             RAG_IDF_CACHE = idf_dict
-        print(f"CACHE RAG RECONSTRUIDO CON EXITO: {num_tot_blocks} bloques cargados.")
+            RAG_EXCEL_CACHE = cache_excel_temp
+        print(f"CACHE RAG RECONSTRUIDO CON EXITO: {num_tot_blocks} bloques cargados, {len(cache_excel_temp)} filas Excel indexadas.")
     except Exception as ex:
         print("Error reconstruyendo cache RAG:", ex)
         import traceback
@@ -3938,6 +4083,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
             texto += f"COLUMNAS: {' | '.join(encabezados)}\n\n"
 
+            texto += "--- LECTURA HORIZONTAL ---\n"
             # Cada fila de datos asociada con su encabezado
             for num_fila, fila in enumerate(todas_filas[1:], start=2):
                 pares = []
@@ -3947,6 +4093,21 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         pares.append(f"{header}: {valor}")
                 if pares:
                     texto += f"FILA {num_fila}: " + " | ".join(pares) + "\n"
+
+            texto += "\n--- LECTURA VERTICAL ---\n"
+            columnas_valores = {header: [] for header in encabezados}
+            for fila in todas_filas[1:]:
+                for i, valor in enumerate(fila):
+                    if valor:
+                        header = encabezados[i] if i < len(encabezados) else f"Columna_{i+1}"
+                        if header not in columnas_valores:
+                            columnas_valores[header] = []
+                        columnas_valores[header].append(valor)
+            
+            for header, valores in columnas_valores.items():
+                if valores:
+                    texto += f"COLUMNA '{header}': " + ", ".join(valores) + "\n"
+
 
         wb.close()
         return texto
@@ -4534,8 +4695,11 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         # Historial de conversación en memoria para enviar al LLM
         historial_sesion = []
+        
+        # Cargar imagen de avatar del usuario si existe
+        img_usuario = obtener_64("istockphoto-468228782-612x612")
 
-        # Cargar historial de la base de datos de forma silenciosa en memoria para el contexto del LLM (evita problemas de rendimiento en la UI)
+        # Cargar historial de la base de datos en memoria para el contexto del LLM y en la interfaz visual
         try:
             db = conectar_db()
             if db:
@@ -4550,13 +4714,55 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 historial = cursor.fetchall()
                 db.close()
                 for row in historial:
+                    # 1. Agregar a la memoria del LLM
                     historial_sesion.append({"role": "user", "content": row["Pregunta_Usuario"]})
                     historial_sesion.append({"role": "assistant", "content": row["Respuesta_IA"]})
+                    
+                    # 2. Agregar visualmente al chat de Flet
+                    # Burbuja de Usuario
+                    chat_display.controls.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Container(
+                                    content=ft.Image(src=user_info.get("img_usuario") or img_usuario, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if (user_info.get("img_usuario") or img_usuario) else ft.Icon(ft.Icons.PERSON, color="#00FFFF", size=20),
+                                    width=35,
+                                    height=35,
+                                    border_radius=17.5,
+                                    bgcolor="#333333",
+                                    clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                                    alignment=ft.alignment.Alignment(0, 0),
+                                    border=ft.Border.all(1.5, "#D8B4FE"),
+                                ),
+                                ft.Text(f"{user_info.get('nombre', 'Usuario')}: {row['Pregunta_Usuario']}", color="white", weight="bold", expand=True, selectable=True),
+                            ], vertical_alignment="start", spacing=10),
+                            bgcolor="#141424",
+                            padding=10,
+                            border_radius=10
+                        )
+                    )
+                    
+                    # Burbuja de IA (LUXO)
+                    chat_display.controls.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Container(
+                                    content=ft.Image(src=avatar_luxo_base64, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if avatar_luxo_base64 else ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
+                                    width=35,
+                                    height=35,
+                                    border_radius=17.5,
+                                    bgcolor="#2A1B4E",
+                                    alignment=ft.alignment.Alignment(0, 0),
+                                    border=ft.Border.all(1.5, "#D8B4FE"),
+                                ),
+                                ft.Text(row['Respuesta_IA'], color="white", expand=True, selectable=True)
+                            ], vertical_alignment="start", spacing=10),
+                            bgcolor="#0F0F1A",
+                            padding=10,
+                            border_radius=10
+                        )
+                    )
         except Exception as e:
-            print("ERROR AL CARGAR HISTORIAL EN MEMORIA:", e)
-
-        # Cargar imagen de avatar del usuario si existe
-        img_usuario = obtener_64("istockphoto-468228782-612x612")
+            print("ERROR AL CARGAR HISTORIAL EN LA UI:", e)
 
         # =================================
         # ENVIAR MENSAJE
@@ -4573,7 +4779,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             user_text_norm = normalizar_texto(user_text_expandido)
 
             # --- 1. COMANDO DIRECTO DE NOTIFICACIONES (Pestaña / Alertas) ---
-            is_notif_query = any(w in user_text_norm for w in ["notificaci", "campan", "abren no"])
+            is_notif_query = any(w in user_text_norm for w in ["notificaci", "abren no"])
             if is_notif_query:
                 input_msg.value = ""
                 try:
@@ -4628,7 +4834,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             # Si contiene "campana" pero NO es un comando de navegación explícito (ni es la palabra exacta "campañas"), NO permitimos redirección
             if "campana" in user_text_norm:
                 msg_limpio = user_text_norm.strip()
-                if not (es_comando_navegacion or msg_limpio in ["campana", "campanas"]):
+                if not (es_comando_navegacion or msg_limpio in ["campana", "campanas", "fotos de campana", "foto de campana"]):
                     permitir_redireccion = False
 
             if permitir_redireccion:
@@ -4876,6 +5082,83 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 chats_fallidos = cursor.fetchall()
                 db.close()
 
+                # =======================================================
+                # 3. INTENT ROUTING: Descarga directa de archivos
+                # =======================================================
+                palabras_descarga = {"pdf", "archivo", "formato", "documento", "descargar", "manual"}
+                user_words = set(user_text_norm.split())
+                intencion_descarga = bool(user_words.intersection(palabras_descarga))
+                
+                if intencion_descarga:
+                    # Búsqueda rápida por nombre de archivo o título
+                    stop_words = {"de", "el", "la", "los", "las", "un", "una", "quiero", "puedes", "pasar", "pasame", "dame", "ver", "necesito", "buscame", "busca", "por", "favor", "luxo", "oye"}
+                    palabras_query = user_words - palabras_descarga - stop_words
+                    
+                    mejor_manual = None
+                    mayor_coincidencia = 0
+                    
+                    if palabras_query: # Si hay más contexto que solo la palabra "pdf"
+                        for m in manuales:
+                            titulo_norm = normalizar_texto(m.get("Titulo") or "")
+                            nombre_norm = normalizar_texto(m.get("Nombre_Archivo") or "")
+                            
+                            # Evitamos que el `.pdf` del nombre_norm sume falsos positivos eliminándolo temporalmente para el set
+                            nombre_limpio = nombre_norm.replace(".pdf", "").replace(".xlsx", "")
+                            
+                            palabras_doc = set(titulo_norm.split()) | set(nombre_limpio.split())
+                            
+                            coincidencias = len(palabras_query.intersection(palabras_doc))
+                            
+                            if coincidencias > mayor_coincidencia:
+                                mayor_coincidencia = coincidencias
+                                mejor_manual = m
+                    
+                        if mejor_manual and mayor_coincidencia > 0:
+                            # Se encontró un match directo. Obtenemos URL segura.
+                            nombre_safe = obtener_pdf_assets(mejor_manual['ID_Manual'])
+                            if nombre_safe:
+                                nombre_quoted = urllib.parse.quote(nombre_safe)
+                                original_quoted = urllib.parse.quote(mejor_manual['Nombre_Archivo'] or "documento")
+                                
+                                base_url_req = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
+                                if base_url_req.startswith("ws://"):
+                                    base_url_req = base_url_req.replace("ws://", "http://", 1)
+                                elif base_url_req.startswith("wss://"):
+                                    base_url_req = base_url_req.replace("wss://", "https://", 1)
+                                
+                                base_dl = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url_req)
+                                url_dl = f"{base_dl}/download?file={nombre_quoted}&original={original_quoted}"
+                                url_view = f"{base_dl}/view?file={nombre_quoted}"
+                                
+                                respuesta_rapida = f"¡Aquí tienes el archivo que buscabas!\n\n**{mejor_manual['Titulo'] or mejor_manual['Nombre_Archivo']}**\n\n[👁️ Ver Documento]({url_view}) | [📥 Descargar]({url_dl})"
+                                
+                                # Mostrar en chat simulando respuesta de LUXO
+                                msg_row = ft.Row([
+                                    ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
+                                    ft.Markdown(
+                                        respuesta_rapida, 
+                                        selectable=True, 
+                                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                                        on_tap_link=lambda e: page.launch_url(e.data)
+                                    )
+                                ], vertical_alignment="start", spacing=10)
+                                
+                                chat_display.controls.append(
+                                    ft.Container(
+                                        content=msg_row,
+                                        bgcolor="#0F0F1A",
+                                        padding=10,
+                                        border_radius=10,
+                                        border=ft.Border.all(1, "#D8B4FE")
+                                    )
+                                )
+                                page.update()
+                                
+                                # Opcional: Registrar en base de datos la intercepción (por ahora lo dejamos sin registrar o podríamos)
+                                return # 🛑 CORTAMOS EL FLUJO: No llamamos a Groq ni al RAG
+                
+                # =======================================================
+
                 # Definición de la función de lematización/raíz en español
                 def obtener_raiz_espanol(word):
                     if len(word) <= 3:
@@ -4917,7 +5200,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 query_roots = []
                 
                 # Obtener vocabulario de raíces conocidas en los manuales (si RAG_IDF_CACHE existe)
-                global RAG_BLOQUES_CACHE, RAG_IDF_CACHE
+                global RAG_BLOQUES_CACHE, RAG_IDF_CACHE, RAG_EXCEL_CACHE
                 vocabulario_valido = list(RAG_IDF_CACHE.keys()) if RAG_IDF_CACHE else []
                 
                 for r in query_roots_raw:
@@ -5046,6 +5329,105 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 with RAG_CACHE_LOCK:
                     todos_los_bloques = RAG_BLOQUES_CACHE or []
                     idf_dict = RAG_IDF_CACHE or {}
+                    excel_cache = list(RAG_EXCEL_CACHE) if RAG_EXCEL_CACHE else []
+
+                # --- ⚡ MOTOR DE BÚSQUEDA DIRECTO EN PYTHON PARA EXCEL (0 TOKENS) ---
+                print(f"[EXCEL-DEBUG] excel_cache len={len(excel_cache)}, query_palabras={query_palabras}")
+                # Verificar si la consulta busca datos estructurados
+                palabras_clave_excel = ["telefono", "gerente", "direccion", "tienda", "correo", "numero", "directorio"]
+                raices_clave = [obtener_raiz_espanol(p) for p in palabras_clave_excel]
+                es_consulta_excel = any(obtener_raiz_espanol(w) in raices_clave for w in query_palabras)
+                print(f"[EXCEL-DEBUG] es_consulta_excel={es_consulta_excel}")
+                
+                if es_consulta_excel and excel_cache:
+                    mejor_fila = None
+                    max_matches = 0
+                    
+                    # Extraer palabras clave importantes del query del usuario (ignorando stopwords largas)
+                    query_norm_excel = normalizar_texto(user_text)
+                    palabras_busqueda = set(w for w in re.findall(r"\w+", query_norm_excel) if len(w) > 2 and w not in stopwords)
+                    
+                    for fila_excel in excel_cache:
+                        if not fila_excel.get("abierto", 1):
+                            continue
+                            
+                        texto_norm_fila = fila_excel["norm"]
+                        matches = sum(1 for w in palabras_busqueda if w in texto_norm_fila)
+                        
+                        if matches > max_matches and matches >= 1:
+                            max_matches = matches
+                            mejor_fila = fila_excel
+                            
+                    print(f"[EXCEL-DEBUG] palabras_busqueda={palabras_busqueda}, max_matches={max_matches}, umbral={max(1, len(palabras_busqueda) * 0.4)}")
+                    if mejor_fila:
+                        print(f"[EXCEL-DEBUG] mejor_fila encontrada: {mejor_fila['texto'][:100]}")
+                    else:
+                        print("[EXCEL-DEBUG] NO se encontró mejor_fila")
+                            
+                    # Si encontró al menos 1 coincidencia fuerte (y representa al menos el 50% de las palabras buscadas)
+                    if mejor_fila and max_matches >= max(1, len(palabras_busqueda) * 0.4):
+                        texto_fila = mejor_fila["texto"]
+                        partes_fila = texto_fila.split(" | ")
+                        
+                        # Construir filas visuales individualmente para que cada campo se vea en su propia línea
+                        campos_ui = []
+                        respuesta_texto_plano = "📍 Búsqueda Instantánea en Directorio (0 Tokens)\n\n"
+                        
+                        for parte in partes_fila:
+                            if ":" in parte:
+                                clave, valor = parte.split(":", 1)
+                                campos_ui.append(
+                                    ft.Row([
+                                        ft.Text(f"🔹 {clave.strip()}:", color="#D8B4FE", weight="bold", size=13),
+                                        ft.Text(valor.strip(), color="white", size=13, selectable=True),
+                                    ], spacing=5, wrap=True)
+                                )
+                                respuesta_texto_plano += f"🔹 {clave.strip()}: {valor.strip()}\n"
+                            else:
+                                campos_ui.append(ft.Text(f"🔹 {parte.strip()}", color="white", size=13))
+                                respuesta_texto_plano += f"🔹 {parte.strip()}\n"
+                        
+                        respuesta_texto_plano += f"\n📄 Fuente: {mejor_fila['nombre_archivo']} (Hoja: {mejor_fila['hoja']}, Fila: {mejor_fila['fila']})"
+                        
+                        # Añadir a la interfaz de usuario
+                        chat_display.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
+                                        ft.Text("Búsqueda Instantánea en Directorio (0 Tokens)", color="#D8B4FE", weight="bold", size=14),
+                                    ], spacing=8),
+                                    ft.Divider(height=1, color="#333355"),
+                                    *campos_ui,
+                                    ft.Text(
+                                        f"📄 Fuente: {mejor_fila['nombre_archivo']} (Hoja: {mejor_fila['hoja']}, Fila: {mejor_fila['fila']})",
+                                        color="#888888", size=11, italic=True
+                                    ),
+                                ], spacing=4),
+                                bgcolor="#1F1F30",
+                                padding=12,
+                                border_radius=10,
+                                border=ft.Border.all(1, "#D8B4FE33"),
+                            )
+                        )
+                        page.update()
+                        
+                        # Guardar historial
+                        try:
+                            db_h = conectar_db()
+                            if db_h:
+                                cur_h = db_h.cursor()
+                                cur_h.execute("""
+                                    INSERT INTO historial_conversaciones 
+                                    (ID_Usuario, ID_Manual, Pregunta_Usuario, Respuesta_IA, Fue_Respondida_Con_Manual, Fecha_Hora) 
+                                    VALUES (%s, %s, %s, %s, %s, NOW())
+                                """, (user_info["id"], mejor_fila["id_manual"], user_text, respuesta_texto_plano, 1))
+                                db_h.commit()
+                                db_h.close()
+                        except Exception as e:
+                            print("Error guardando historial excel directo:", e)
+                                
+                        return
 
                 # Calificación de Bloques mediante Similitud Probabilística de Raíces
                 def buscar_candidatos(q_roots, exp_roots, texto_query):
@@ -5126,7 +5508,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     obtener_raiz_espanol(t) in [obtener_raiz_espanol(w) for w in palabras_utiles] 
                     for t in terminos_ambiguos
                 )
-                if contiene_termino_ambiguo and len(palabras_utiles) <= 2:
+                if contiene_termino_ambiguo and len(palabras_utiles) <= 1:
                     es_corta_o_ambigua = True
 
                 # Verificar si el usuario ya está respondiendo a un sondeo previo en el historial
@@ -5182,8 +5564,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     bloques_candidatos.sort(key=lambda x: x[0], reverse=True)
                     max_score = bloques_candidatos[0][0]
                     for score_val, doc_nombre, blk_texto, b_obj in bloques_candidatos:
-                        # Exigir un umbral de score absoluto mínimo de 65 para evitar asociar manuales irrelevantes
-                        if score_val >= (max_score * 0.5) and score_val >= 65:
+                        # Exigir un umbral de score absoluto mínimo de 25 para evitar asociar manuales irrelevantes pero tolerar errores ortográficos
+                        if score_val >= (max_score * 0.4) and score_val >= 25:
                             bloques_filtrados.append((score_val, doc_nombre, blk_texto, b_obj))
                 else:
                     candidatos = []
@@ -6174,8 +6556,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 let lastSentText = "";
                 let lastSentTime = 0;
 
+                // Detección de dispositivo móvil
+                const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
+
                 window.initLuxoMicPermission = function() {
-                    // La voz web estaba desactivada temporalmente aquí, ahora está activa.
+                    // En celulares/tablets: NO activar escucha continua "Oye LUXO"
+                    if (isMobileDevice) {
+                        console.log("📱 [Luxo Chat Mic]: Dispositivo móvil. 'Oye LUXO' continuo desactivado.");
+                        return;
+                    }
                     if (window.luxoSpeechRecognitionActive) {
                         console.log("🎙️ [Luxo Chat Mic]: Already active. Skipping duplicate init.");
                         return;
@@ -6323,68 +6712,83 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             dictado_en_progreso = [False]
 
             def on_mic_click(e):
+                print(f"[DEBUG-MIC] on_mic_click disparado. dictado_en_progreso={dictado_en_progreso[0]}, platform={page.platform}")
                 if dictado_en_progreso[0]:
-                    print("⚠️ Dictado en progreso, ignorando clic secundario.")
+                    print("⚠️ Dictado en progreso, ignorando clic.")
                     return
                 dictado_en_progreso[0] = True
 
                 try:
-                    mostrar_snack("🎙️ Escuchando pregunta directa... Habla ahora", "#00FFFF")
+                    mostrar_snack("🎙️ Preparando micrófono...", "#00FFFF")
                     btn_mic_container.bgcolor = "#FF0000"
                     btn_mic_container.border = ft.Border.all(2, "white")
                     btn_mic_container.update()
-                    
-                    def dictado_thread():
-                        try:
-                            import speech_recognition as sr
-                            import platform
-                            if platform.system() == "Windows":
-                                import winsound
-                            
-                            r_direct = sr.Recognizer()
-                            r_direct.dynamic_energy_threshold = True
-                            r_direct.pause_threshold = 1.0
-                            r_direct.non_speaking_duration = 0.8
-                            with sr.Microphone() as src_direct:
-                                r_direct.adjust_for_ambient_noise(src_direct, duration=0.2)
-                                try:
-                                    if platform.system() == "Windows":
-                                        winsound.Beep(1200, 250)
-                                    elif platform.system() == "Darwin":
-                                        import os
-                                        os.system('afplay /System/Library/Sounds/Ping.aiff &')
-                                except Exception:
-                                    pass
-                                
-                                audio_direct = r_direct.listen(src_direct, timeout=6, phrase_time_limit=25)
-                                text_direct = r_direct.recognize_google(audio_direct, language="es-MX")
-                                
-                                if text_direct:
-                                    print(f"🎙️ Dictado directo captado en botón: '{text_direct}'")
-                                    input_msg.value = text_direct
-                                    page.update()
-                                    
-                                    async def trigger_send():
-                                        enviar_mensaje(None)
-                                    page.run_task(trigger_send)
-                        except sr.WaitTimeoutError:
-                            print("⏳ Tiempo de espera agotado. No se detectó voz.")
-                        except Exception as ex_dict:
-                            print("Error en dictado directo de botón:", ex_dict)
-                        finally:
-                            dictado_en_progreso[0] = False
-                            try:
-                                btn_mic_container.bgcolor = "#1E1E2E"
-                                btn_mic_container.border = ft.Border.all(1.5, "#00FFFF")
-                                btn_mic_container.update()
-                            except Exception:
-                                pass
 
-                    t_dict = threading.Thread(target=dictado_thread, daemon=True)
-                    t_dict.start()
+                    print("[DEBUG-MIC] UI actualizada a ROJO. Lanzando JS...")
+
+                    # Agregamos alerts de depuración al JS para que el usuario las vea en su celular
+                    js_dictate = """javascript:void((function(){
+                        try {
+                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+                            if (!SR) { 
+                                alert('❌ API no soportada en este navegador.'); 
+                                return; 
+                            }
+                            const r = new SR();
+                            r.lang = 'es-MX';
+                            r.interimResults = false;
+                            r.continuous = false;
+                            r.maxAlternatives = 1;
+                            
+                            r.onstart = function() {
+                                console.log('[DEBUG-MIC] JS: onstart');
+                            };
+                            r.onresult = function(ev) {
+                                const txt = ev.results[0][0].transcript;
+                                if (txt) {
+                                    fetch('/text_input?user_id=1&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                }
+                            };
+                            r.onerror = function(ev) { 
+                                alert('❌ Error JS Dictado: ' + ev.error); 
+                            };
+                            r.onend = function() { 
+                                console.log('[DEBUG-MIC] JS: onend');
+                            };
+                            
+                            r.start();
+                        } catch(err) {
+                            alert('❌ Excepción JS: ' + err.message);
+                        }
+                    })());"""
+
+                    def revert_ui():
+                        import time
+                        time.sleep(6) 
+                        dictado_en_progreso[0] = False
+                        try:
+                            btn_mic_container.bgcolor = "#1E1E2E"
+                            btn_mic_container.border = ft.Border.all(1.5, "#00FFFF")
+                            btn_mic_container.update()
+                            print("[DEBUG-MIC] UI restaurada a normal.")
+                        except Exception as e:
+                            print("[DEBUG-MIC] Error restaurando UI:", e)
+
+                    async def _lanzar_js():
+                        try:
+                            await page.launch_url(js_dictate)
+                            print("[DEBUG-MIC] launch_url ejecutado exitosamente.")
+                        except Exception as ex:
+                            print("[DEBUG-MIC] Error lanzando URL js_dictate:", ex)
+
+                    # Ejecutar el JS de manera asíncrona correcta
+                    page.run_task(_lanzar_js)
+
+                    threading.Thread(target=revert_ui, daemon=True).start()
+
                 except Exception as ex:
                     dictado_en_progreso[0] = False
-                    print("Error en on_mic_click:", ex)
+                    print("[DEBUG-MIC] Error crítico en on_mic_click:", ex)
 
             btn_mic = EmojiIconButton(
                 icon_emoji="🎙️",
@@ -6405,7 +6809,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 width=46,
                 height=46,
                 alignment=ft.alignment.Alignment(0, 0),
-                visible=True
+                visible=False  # Oculto a petición del usuario, se usa el botón nativo en celular y background en PC
             )
 
             siri_orb_flet = ft.Container(
@@ -18117,7 +18521,7 @@ Ejemplo:
                 autoplay=True,
                 volume=100.0,
                 muted=False,
-                controls=None,
+                show_controls=False,
                 expand=True,
                 fit=ft.BoxFit.COVER,
                 filter_quality=ft.FilterQuality.HIGH,
@@ -18286,6 +18690,24 @@ Ejemplo:
         try:
             if hasattr(page, "shared_preferences") and page.shared_preferences:
                 uid_saved = await page.shared_preferences.get("logged_user_id")
+                last_act_str = await page.shared_preferences.get("last_activity_timestamp")
+                
+                # Control de expiración de sesión (30 minutos de inactividad máxima)
+                if uid_saved and last_act_str:
+                    try:
+                        import time
+                        last_act = int(last_act_str)
+                        if time.time() - last_act > 1800: # 1800 segundos = 30 minutos
+                            await page.shared_preferences.remove("logged_user_id")
+                            await page.shared_preferences.remove("last_activity_timestamp")
+                            uid_saved = None
+                            print("Sesión expirada automáticamente por inactividad (>30m)")
+                        else:
+                            # Renovar la actividad para dar otros 30 minutos a partir de ahora
+                            await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
+                    except:
+                        pass
+                        
                 if uid_saved:
                     db_r = conectar_db()
                     if db_r:
