@@ -1647,7 +1647,7 @@ def configurar_rutas_fastapi(app):
             camera_btn_html = '''
             <label class="file-btn" style="background: linear-gradient(135deg, #1f6f43, #2e7d32); margin-bottom: 12px;">
                 📷 Tomar Foto con Cámara Celular
-                <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="submitFile(this)">
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="handleFileSelect(this)">
             </label>
             '''
 
@@ -1674,7 +1674,7 @@ def configurar_rutas_fastapi(app):
                 .title {{ font-size: 18px; font-weight: bold; color: #D8B4FE; margin-bottom: 20px; }}
                 .file-btn {{
                     display: block; width: 100%; background: linear-gradient(135deg, #7c3aed, #9D50BB);
-                    color: #ffffff; font-weight: bold; font-size: 15px;
+                    color: #ffffff; font-weight: bold; font-size: 15px; border: none;
                     padding: 14px 20px; border-radius: 12px; cursor: pointer;
                     box-shadow: 0 4px 20px rgba(124,58,237,0.5); transition: transform 0.2s;
                 }}
@@ -1685,51 +1685,129 @@ def configurar_rutas_fastapi(app):
         </head>
         <body>
             <div class="upload-card">
-                <div class="title">{title_val}</div>
-                <div>
+                <div class="title" id="titleText">{title_val}</div>
+                <div id="selectionArea">
                     {camera_btn_html}
                     <label class="file-btn">
                         📁 Buscar en Galería / Archivos
-                        <input type="file" id="galleryInput" accept="{accept_val}" onchange="submitFile(this)">
+                        <input type="file" id="galleryInput" accept="{accept_val}" onchange="handleFileSelect(this)">
                     </label>
                 </div>
+                
+                <div id="previewArea" style="display: none; flex-direction: column; align-items: center; width: 100%;">
+                    <img id="imagePreview" style="max-width: 100%; max-height: 250px; border-radius: 12px; margin-bottom: 15px; border: 2px solid #D8B4FE; display: none; object-fit: contain;" />
+                    <video id="videoPreview" controls style="max-width: 100%; max-height: 250px; border-radius: 12px; margin-bottom: 15px; border: 2px solid #D8B4FE; display: none;"></video>
+                    <div style="font-size: 13px; color: #a1a1aa; margin-bottom: 15px; word-break: break-all;" id="fileNameDisplay"></div>
+                    
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <button class="file-btn" style="background: linear-gradient(135deg, #e11d48, #be123c); flex: 1;" onclick="resetSelection()">🔄 Tomar Otra</button>
+                        <button class="file-btn" style="background: linear-gradient(135deg, #059669, #047857); flex: 1;" onclick="confirmUpload()">🚀 Enviar</button>
+                    </div>
+                </div>
+
                 <div id="statusMsg" class="status">⏳ Procesando archivo en el servidor...</div>
             </div>
             <script>
-                function submitFile(input) {{
+                let selectedFile = null;
+                
+                function handleFileSelect(input) {{
                     if (input.files && input.files.length > 0) {{
-                        let msg = document.getElementById('statusMsg');
-                        msg.style.display = 'block';
-                        msg.style.color = '#00FFFF';
-                        msg.innerText = '⏳ Cargando y procesando archivo...';
+                        selectedFile = input.files[0];
+                        let selectionArea = document.getElementById('selectionArea');
+                        let previewArea = document.getElementById('previewArea');
+                        let titleText = document.getElementById('titleText');
+                        let imgPreview = document.getElementById('imagePreview');
+                        let vidPreview = document.getElementById('videoPreview');
+                        let nameDisplay = document.getElementById('fileNameDisplay');
                         
-                        let formData = new FormData();
-                        formData.append('user_id', '{user_id}');
-                        formData.append('upload_type', '{type}');
-                        formData.append('file', input.files[0]);
-                        
-                        fetch('/api/upload_generic', {{
-                            method: 'POST',
-                            body: formData
-                        }})
-                        .then(res => res.json())
-                        .then(data => {{
-                            if (data.status === 'success') {{
-                                msg.style.color = '#7CFC00';
-                                msg.innerText = '✅ ¡Éxito! Archivo cargado correctamente.';
-                                setTimeout(() => {{
-                                    window.close();
-                                }}, 800);
-                            }} else {{
-                                msg.style.color = '#FF4500';
-                                msg.innerText = '❌ Error: ' + (data.message || 'Error al subir');
+                        if (selectedFile.type.startsWith('image/')) {{
+                            let reader = new FileReader();
+                            reader.onload = function(e) {{
+                                imgPreview.src = e.target.result;
+                                imgPreview.style.display = 'block';
+                                vidPreview.style.display = 'none';
                             }}
-                        }})
-                        .catch(err => {{
-                            msg.style.color = '#FF4500';
-                            msg.innerText = '❌ Error de conexión al cargar archivo';
-                        }});
+                            reader.readAsDataURL(selectedFile);
+                        }} else if (selectedFile.type.startsWith('video/')) {{
+                            let reader = new FileReader();
+                            reader.onload = function(e) {{
+                                vidPreview.src = e.target.result;
+                                vidPreview.style.display = 'block';
+                                imgPreview.style.display = 'none';
+                            }}
+                            reader.readAsDataURL(selectedFile);
+                        }} else {{
+                            imgPreview.style.display = 'none';
+                            vidPreview.style.display = 'none';
+                        }}
+                        
+                        nameDisplay.innerText = selectedFile.name || "Archivo multimedia";
+                        titleText.innerText = "👀 ¿Enviar esta imagen?";
+                        selectionArea.style.display = 'none';
+                        previewArea.style.display = 'flex';
                     }}
+                }}
+                
+                function resetSelection() {{
+                    selectedFile = null;
+                    document.getElementById('selectionArea').style.display = 'block';
+                    document.getElementById('previewArea').style.display = 'none';
+                    document.getElementById('titleText').innerText = '{title_val}';
+                    document.getElementById('statusMsg').style.display = 'none';
+                    
+                    let cam = document.getElementById('cameraInput');
+                    if(cam) cam.value = "";
+                    let gal = document.getElementById('galleryInput');
+                    if(gal) gal.value = "";
+                }}
+
+                function confirmUpload() {{
+                    if (!selectedFile) return;
+                    
+                    document.getElementById('previewArea').style.display = 'none';
+                    document.getElementById('titleText').innerText = 'Subiendo...';
+                    
+                    let msg = document.getElementById('statusMsg');
+                    msg.style.display = 'block';
+                    msg.style.color = '#00FFFF';
+                    msg.innerText = '⏳ Cargando y procesando archivo...';
+                    
+                    let formData = new FormData();
+                    formData.append('user_id', '{user_id}');
+                    formData.append('upload_type', '{type}');
+                    formData.append('file', selectedFile);
+                    
+                    fetch('/api/upload_generic', {{
+                        method: 'POST',
+                        body: formData
+                    }})
+                    .then(res => res.json())
+                    .then(data => {{
+                        if (data.status === 'success') {{
+                            msg.style.color = '#7CFC00';
+                            msg.innerText = '✅ ¡Éxito! Archivo cargado correctamente.';
+                            setTimeout(() => {{
+                                window.close();
+                            }}, 800);
+                        }} else {{
+                            msg.style.color = '#FF4500';
+                            msg.innerText = '❌ Error: ' + (data.message || 'Error al subir');
+                            setTimeout(function(){{
+                                document.getElementById('previewArea').style.display = 'flex';
+                                document.getElementById('titleText').innerText = '👀 ¿Reintentar?';
+                                msg.style.display = 'none';
+                            }}, 3000);
+                        }}
+                    }})
+                    .catch(err => {{
+                        msg.style.color = '#FF4500';
+                        msg.innerText = '❌ Error de conexión al cargar archivo';
+                        setTimeout(function(){{
+                            document.getElementById('previewArea').style.display = 'flex';
+                            document.getElementById('titleText').innerText = '👀 ¿Reintentar?';
+                            msg.style.display = 'none';
+                        }}, 3000);
+                    }});
                 }}
             </script>
         </body>
@@ -4707,12 +4785,14 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 cursor.execute("""
                     SELECT Pregunta_Usuario, Respuesta_IA 
                     FROM historial_conversaciones 
-                    WHERE ID_Usuario = %s 
-                    ORDER BY Fecha_Hora ASC 
+                    WHERE ID_Usuario = %s AND Fecha_Hora >= NOW() - INTERVAL 30 MINUTE
+                    ORDER BY Fecha_Hora DESC 
                     LIMIT 10
                 """, (user_info["id"],))
                 historial = cursor.fetchall()
                 db.close()
+                # Invertir para mostrarlos en orden cronológico (del más antiguo al más reciente dentro de los últimos 10)
+                historial.reverse()
                 for row in historial:
                     # 1. Agregar a la memoria del LLM
                     historial_sesion.append({"role": "user", "content": row["Pregunta_Usuario"]})
@@ -4773,6 +4853,15 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 return
 
             user_text = input_msg.value
+            
+            # Ping de actividad para mantener la sesión viva
+            async def ping_actividad():
+                import time
+                try:
+                    if hasattr(page, "shared_preferences") and page.shared_preferences:
+                        await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
+                except: pass
+            page.run_task(ping_actividad)
 
             # Expandir abreviaturas informales antes de procesar el mensaje
             user_text_expandido = expandir_abreviaturas(user_text)
@@ -18736,5 +18825,29 @@ Ejemplo:
             print("Notice auto-restore session:", ex_r)
 
     page.run_task(intentar_restaurar_sesion)
+    
+    async def monitor_inactividad_bg():
+        import asyncio
+        import time
+        while True:
+            await asyncio.sleep(60) # Revisar cada minuto
+            try:
+                if hasattr(page, "shared_preferences") and page.shared_preferences:
+                    last_act_str = await page.shared_preferences.get("last_activity_timestamp")
+                    if last_act_str:
+                        last_act = int(last_act_str)
+                        if time.time() - last_act > 1800:
+                            # Inactividad superada.
+                            await page.shared_preferences.remove("logged_user_id")
+                            await page.shared_preferences.remove("last_activity_timestamp")
+                            print("Sesión expirada EN VIVO por inactividad (>30m)")
+                            # Lanzar recarga en cliente para forzar pantalla de login
+                            try:
+                                page.launch_url("javascript:window.location.reload();")
+                            except:
+                                pass
+                            break # Termina el loop para esta sesion
+            except Exception as e:
+                pass
 
-     
+    page.run_task(monitor_inactividad_bg)
