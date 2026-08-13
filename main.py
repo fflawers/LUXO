@@ -423,6 +423,53 @@ def configurar_rutas_fastapi(app):
     except Exception:
         pass
 
+    # ─── Endpoint de descarga sin autenticación ────────────────────────────────
+    # Funciona tanto en local como en Render (mismo puerto 443/8550)
+    @app.get("/dl")
+    async def download_file_route(file: str = "", original: str = ""):
+        import urllib.parse as _up
+        import re
+        from fastapi.responses import FileResponse, Response
+        safe = os.path.basename(_up.unquote(file))
+        if not safe:
+            return Response(content="Archivo no especificado", status_code=400)
+
+        filepath = os.path.join(ASSETS_PATH, "temp_pdfs", safe)
+        if not os.path.exists(filepath):
+            m_id = re.match(r"^manual_(\d+)", safe)
+            if m_id:
+                try:
+                    obtener_pdf_assets(int(m_id.group(1)))
+                except Exception as e_rec:
+                    print("Error recuperando asset para descarga:", e_rec)
+
+        if not os.path.exists(filepath):
+            return Response(content="Archivo no encontrado", status_code=404)
+
+        display_name = _up.unquote(original) if original else safe
+        ext = os.path.splitext(safe)[1].lower()
+        mime_map = {
+            ".pdf": "application/pdf",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls": "application/vnd.ms-excel",
+            ".csv": "text/csv",
+            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".webp": "image/webp",
+            ".mp4": "video/mp4", ".mov": "video/quicktime", ".avi": "video/x-msvideo",
+        }
+        media_type = mime_map.get(ext, "application/octet-stream")
+        safe_ascii_name = display_name.encode('ascii', 'ignore').decode('ascii') or "descarga"
+        encoded_name = _up.quote(display_name)
+        return FileResponse(
+            path=filepath,
+            filename=display_name,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_ascii_name}"; filename*=UTF-8\'\'{encoded_name}',
+                "Access-Control-Allow-Origin": "*"
+            }
+        )
+
     @app.get("/api/download_enfoque_pdf/{day}")
     async def download_enfoque_pdf_route(day: str):
         try:
@@ -3757,6 +3804,136 @@ def main(page: ft.Page):
         page.overlay.append(snack)
         page.update()
 
+    def abrir_visor_modal_global(id_or_safe, nombre_display=None):
+        mostrar_snack("Abriendo archivo, por favor espera...", color="#00FFFF")
+        try:
+            safe_name = None
+            if isinstance(id_or_safe, int) or (isinstance(id_or_safe, str) and id_or_safe.isdigit()):
+                safe_name = obtener_pdf_assets(int(id_or_safe))
+            elif id_or_safe:
+                safe_name = str(id_or_safe)
+                r_check = os.path.join(ASSETS_PATH, "temp_pdfs", safe_name)
+                if not os.path.exists(r_check):
+                    import re
+                    m_match = re.match(r"^manual_(\d+)", safe_name)
+                    if m_match:
+                        try:
+                            obtener_pdf_assets(int(m_match.group(1)))
+                        except Exception:
+                            pass
+
+            if not safe_name:
+                mostrar_snack("No se pudo cargar el archivo.", color="orange")
+                return
+
+            r_pdf = os.path.join(ASSETS_PATH, "temp_pdfs", safe_name)
+            if not os.path.exists(r_pdf):
+                mostrar_snack("El archivo no se encuentra disponible en el servidor.", color="orange")
+                return
+
+            ext = os.path.splitext(safe_name)[1].lower()
+            titulo_modal = nombre_display if nombre_display else safe_name
+
+            content_viewer = ft.Container(padding=5, expand=True)
+
+            if ext == ".pdf":
+                import pymupdf
+                doc = pymupdf.open(r_pdf)
+                total_pages = len(doc)
+                pages_to_render = min(total_pages, 50)
+
+                images_col = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+                cache_folder = os.path.splitext(safe_name)[0]
+                img_dir = os.path.join(ASSETS_PATH, "temp_pdfs", "img_cache", cache_folder)
+                os.makedirs(img_dir, exist_ok=True)
+
+                for i in range(pages_to_render):
+                    page_img_path = os.path.join(img_dir, f"page_{i}.jpg")
+                    if not os.path.exists(page_img_path):
+                        page_pdf = doc.load_page(i)
+                        pix = page_pdf.get_pixmap(matrix=pymupdf.Matrix(2.0, 2.0))
+                        pix.save(page_img_path)
+
+                    images_col.controls.append(
+                        ft.Image(src=f"/custom_assets/temp_pdfs/img_cache/{cache_folder}/page_{i}.jpg", fit="contain")
+                    )
+                doc.close()
+                content_viewer.content = images_col
+
+            elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+                content_viewer.content = ft.Image(
+                    src=f"/custom_assets/temp_pdfs/{safe_name}",
+                    fit="contain",
+                    expand=True
+                )
+
+            elif ext in [".mp4", ".mov", ".avi"]:
+                video_url = f"/temp_pdfs/{safe_name}"
+                content_viewer.content = ft.Column([
+                    ft.Icon(ft.Icons.VIDEOCAM_ROUNDED, size=48, color="#D8B4FE"),
+                    ft.Text("🎬 Vista previa de video", color="white", size=16, weight="bold"),
+                    ft.Text(titulo_modal, color="#aaaaaa", size=13),
+                    ft.Divider(height=15, color="#333333"),
+                    ft.ElevatedButton(
+                        "▶ Reproducir Video",
+                        icon=ft.Icons.PLAY_ARROW,
+                        bgcolor="#A100F2",
+                        color="white",
+                        url=video_url,
+                        url_target="_blank"
+                    )
+                ], spacing=10, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+            elif ext in [".xlsx", ".xls"]:
+                import openpyxl
+                wb = openpyxl.load_workbook(r_pdf, data_only=True)
+                ws = wb.active
+
+                max_rows = 50
+                max_cols = 10
+
+                columns = []
+                for col in ws.iter_cols(1, min(ws.max_column, max_cols)):
+                    val = col[0].value
+                    columns.append(ft.DataColumn(ft.Text(str(val) if val is not None else "", weight="bold", color="#00FFFF")))
+
+                rows = []
+                for i, row in enumerate(ws.iter_rows(min_row=2, max_row=min(ws.max_row, max_rows))):
+                    cells = []
+                    for cell in row[:max_cols]:
+                        cells.append(ft.DataCell(ft.Text(str(cell.value) if cell.value is not None else "")))
+                    rows.append(ft.DataRow(cells=cells))
+
+                dt = ft.DataTable(columns=columns, rows=rows, bgcolor="#1A1A24")
+                content_viewer.content = ft.Column([
+                    ft.Text("Previsualización de Excel (Primeras 50 filas)", color="#aaaaaa", italic=True),
+                    ft.Row([dt], scroll=ft.ScrollMode.ALWAYS, expand=True)
+                ], scroll=ft.ScrollMode.AUTO, expand=True)
+
+            else:
+                mostrar_snack(f"Formato {ext} no soportado para previsualización directa. Usa Descargar.", color="orange")
+                return
+
+            pw = getattr(page, "width", 800) or 800
+            ph = getattr(page, "height", 600) or 600
+            dlg_w = min(int(pw * 0.92), 850)
+            dlg_h = min(int(ph * 0.85), 650)
+
+            dialog = ft.AlertDialog(
+                title=ft.Row([
+                    ft.Text(titulo_modal, weight="bold", size=14, color="white", expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                    ft.IconButton(ft.Icons.CLOSE, on_click=lambda e: page.pop_dialog())
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                content=ft.Container(content_viewer, width=dlg_w, height=dlg_h),
+                bgcolor="#1A1A24"
+            )
+            page.show_dialog(dialog)
+            try: page.update()
+            except: pass
+        except Exception as ex:
+            print("Error al abrir visor modal global:", ex)
+            mostrar_snack("El archivo no se pudo previsualizar. Usa el botón 'Descargar'.", color="orange")
+
     current_speak_btn_speaker = None
     current_speak_btn_play_pause = None
     current_speak_is_paused = False
@@ -5255,16 +5432,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                 nombre_quoted = _urllib_parse.quote(nombre_safe)
                                 original_quoted = _urllib_parse.quote(mejor_manual['Nombre_Archivo'] or "documento")
                                 
-                                base_url_req = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
-                                if base_url_req.startswith("ws://"):
-                                    base_url_req = base_url_req.replace("ws://", "http://", 1)
-                                elif base_url_req.startswith("wss://"):
-                                    base_url_req = base_url_req.replace("wss://", "https://", 1)
-                                
-                                base_dl = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url_req)
-                                url_dl = f"{base_dl}/download?file={nombre_quoted}&original={original_quoted}"
-                                url_view = f"{base_dl}/view?file={nombre_quoted}"
-                                
+                                url_dl = f"/dl?file={nombre_quoted}&original={original_quoted}"
                                 nombre_display = mejor_manual['Titulo'] or mejor_manual['Nombre_Archivo'] or nombre_safe
 
                                 # Mensaje de confirmación de LUXO
@@ -5299,14 +5467,16 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                             ft.Row([
                                                 ft.ElevatedButton(
                                                     t("view_pdf"),
-                                                    url=url_view,
+                                                    icon=ft.Icons.VISIBILITY,
+                                                    on_click=lambda e, s=nombre_safe, d=nombre_display: abrir_visor_modal_global(s, d),
                                                     bgcolor="#6E48AA",
                                                     color="white",
                                                     expand=True,
-                                                    disabled=(url_view == "")
+                                                    disabled=(not nombre_safe)
                                                 ),
                                                 ft.ElevatedButton(
                                                     t("download_pdf"),
+                                                    icon=ft.Icons.DOWNLOAD,
                                                     url=url_dl,
                                                     bgcolor="#204870",
                                                     color="white",
@@ -6428,15 +6598,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     url_view = ""
                     url_dl = ""
                     if nombre:
-                        nombre_quoted = urllib.parse.quote(nombre)
-                        base_url = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
-                        if base_url.startswith("ws://"):
-                            base_url = base_url.replace("ws://", "http://", 1)
-                        elif base_url.startswith("wss://"):
-                            base_url = base_url.replace("wss://", "https://", 1)
-                        url_view = f"{base_url}/temp_pdfs/{nombre_quoted}"
-                        base_dl = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url)
-                        url_dl = f"{base_dl}/download?file={nombre_quoted}"
+                        import urllib.parse as _up2
+                        nombre_quoted = _up2.quote(nombre)
+                        original_quoted = _up2.quote(nombre_pdf or nombre)
+                        url_dl = f"/dl?file={nombre_quoted}&original={original_quoted}"
                     
                     chat_display.controls.append(
                         ft.Container(
@@ -6448,16 +6613,18 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 ft.Row([
                                     ft.ElevatedButton(
                                         t("view_pdf"),
-                                        url=url_view,
+                                        icon=ft.Icons.VISIBILITY,
+                                        on_click=lambda e, s=nombre, d=nombre_pdf: abrir_visor_modal_global(s, d),
                                         bgcolor="#6E48AA",
                                         color="white",
                                         expand=True,
-                                        disabled=(url_view == "")
+                                        disabled=(not nombre)
                                     ),
                                     ft.ElevatedButton(
                                         t("download_pdf"),
+                                        icon=ft.Icons.DOWNLOAD,
                                         url=url_dl,
-                                        bgcolor="#444444",
+                                        bgcolor="#204870",
                                         color="white",
                                         expand=True,
                                         disabled=(url_dl == "")
@@ -9940,14 +10107,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     print("ERROR EXPORTANDO EXCEL TAREAS:", ex_exp)
                     mostrar_snack(f"Error al generar Excel: {ex_exp}", color="red")
 
-            base_url = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
-            if base_url.startswith("ws://"):
-                base_url = base_url.replace("ws://", "http://", 1)
-            elif base_url.startswith("wss://"):
-                base_url = base_url.replace("wss://", "https://", 1)
-
-            base_dl = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url)
-            url_dl_tareas = f"{base_dl}/download?file=Tareas_Consolidadas.csv&original=Tareas_Consolidadas.csv"
+            url_dl_tareas = "/dl?file=Tareas_Consolidadas.csv&original=Tareas_Consolidadas.csv"
 
             btn_descargar_excel_tareas = ft.ElevatedButton(
                 content=ft.Row([
@@ -11293,118 +11453,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 titulo = m.get("Titulo") or ""
                                 abierto = m.get("Abierto", 1)
 
-                                def visualizar_pdf_interno(e, n_pdf, r_pdf):
-                                    mostrar_snack("Abriendo archivo, por favor espera...", color="#00FFFF")
-                                    try:
-                                        import os
-                                        ext = os.path.splitext(n_pdf)[1].lower()
-                                        
-                                        content_viewer = ft.Container(padding=5, expand=True)
-                                        
-                                        if ext == ".pdf":
-                                            import pymupdf
-                                            doc = pymupdf.open(r_pdf)
-                                            total_pages = len(doc)
-                                            pages_to_render = min(total_pages, 50)
-                                            
-                                            images_col = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
-                                            # Usar el safe_name (n_pdf) sin extensión como carpeta de caché
-                                            cache_folder = os.path.splitext(n_pdf)[0]
-                                            img_dir = os.path.join(ASSETS_PATH, "temp_pdfs", "img_cache", cache_folder)
-                                            os.makedirs(img_dir, exist_ok=True)
-                                            
-                                            for i in range(pages_to_render):
-                                                page_img_path = os.path.join(img_dir, f"page_{i}.jpg")
-                                                if not os.path.exists(page_img_path):
-                                                    page_pdf = doc.load_page(i)
-                                                    pix = page_pdf.get_pixmap(matrix=pymupdf.Matrix(2.0, 2.0))
-                                                    pix.save(page_img_path)
-                                                    
-                                                images_col.controls.append(
-                                                    ft.Image(src=f"/custom_assets/temp_pdfs/img_cache/{cache_folder}/page_{i}.jpg", fit="contain")
-                                                )
-                                            doc.close()
-                                            content_viewer.content = images_col
-                                            
-                                        elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
-                                            # n_pdf es el safe_name (ej: manual_5.jpg) — la ruta correcta
-                                            content_viewer.content = ft.Image(
-                                                src=f"/custom_assets/temp_pdfs/{n_pdf}",
-                                                fit="contain",
-                                                expand=True
-                                            )
-
-                                        elif ext in [".mp4", ".mov", ".avi"]:
-                                            # Para video usamos un iframe HTML con video tag via URL del servidor
-                                            base_url_v = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
-                                            if base_url_v.startswith("ws://"):
-                                                base_url_v = base_url_v.replace("ws://", "http://", 1)
-                                            elif base_url_v.startswith("wss://"):
-                                                base_url_v = base_url_v.replace("wss://", "https://", 1)
-                                            elif base_url_v.startswith("tcp://"):
-                                                base_url_v = base_url_v.replace("tcp://", "http://", 1)
-                                            base_dl_v = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url_v)
-                                            video_url = f"{base_dl_v}/view?file={urllib.parse.quote(n_pdf)}"
-                                            content_viewer.content = ft.Column([
-                                                ft.Text("🎬 Vista previa de video:", color="#aaaaaa", size=12),
-                                                ft.Text("Haz clic en el botón para abrir el video en el navegador.", color="#aaaaaa", size=11),
-                                                ft.ElevatedButton(
-                                                    "▶ Abrir Video",
-                                                    bgcolor="#A100F2",
-                                                    color="white",
-                                                    url=video_url,
-                                                    url_target="_blank"
-                                                )
-                                            ], spacing=10, alignment="center", horizontal_alignment="center")
-
-                                        elif ext in [".xlsx", ".xls"]:
-                                            import openpyxl
-                                            wb = openpyxl.load_workbook(r_pdf, data_only=True)
-                                            ws = wb.active
-                                            
-                                            max_rows = 50
-                                            max_cols = 10
-                                            
-                                            columns = []
-                                            for col in ws.iter_cols(1, min(ws.max_column, max_cols)):
-                                                val = col[0].value
-                                                columns.append(ft.DataColumn(ft.Text(str(val) if val is not None else "", weight="bold", color="#00FFFF")))
-                                                
-                                            rows = []
-                                            for i, row in enumerate(ws.iter_rows(min_row=2, max_row=min(ws.max_row, max_rows))):
-                                                cells = []
-                                                for cell in row[:max_cols]:
-                                                    cells.append(ft.DataCell(ft.Text(str(cell.value) if cell.value is not None else "")))
-                                                rows.append(ft.DataRow(cells=cells))
-                                                
-                                            dt = ft.DataTable(columns=columns, rows=rows, bgcolor="#1A1A24")
-                                            content_viewer.content = ft.Column([
-                                                ft.Text("Previsualización rápida de Excel (Máximo 50 filas)", color="#aaaaaa", italic=True),
-                                                ft.Row([dt], scroll=ft.ScrollMode.ALWAYS, expand=True)
-                                            ], scroll=ft.ScrollMode.AUTO, expand=True)
-                                            
-                                        else:
-                                            mostrar_snack(f"Formato {ext} no soportado para previsualización. Usa Descargar.", color="orange")
-                                            return
-                                        
-                                        dialog = ft.AlertDialog(
-                                            title=ft.Row([
-                                                ft.Text(n_pdf, weight="bold", size=14, color="white"), 
-                                                ft.IconButton(ft.Icons.CLOSE, on_click=lambda e: page.pop_dialog())
-                                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                            content=ft.Container(content_viewer, width=800, height=600),
-                                            bgcolor="#1A1A24"
-                                        )
-                                        page.show_dialog(dialog)
-                                        try: page.update()
-                                        except: pass
-                                    except Exception as ex:
-                                        print("Error al abrir archivo interno:", ex)
-                                        mostrar_snack("El archivo parece estar dañado o su formato no es compatible. Usa el botón 'Descargar'.", color="orange")
-
-                                import urllib.parse
                                 nombre_f = obtener_pdf_assets(id_m)
-                                url_view = ""
                                 url_dl = ""
                                 
                                 # Dynamic icon
@@ -11422,20 +11471,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                     color_m = "#FF6B35"
                                     
                                 if nombre_f:
-                                    nombre_quoted = urllib.parse.quote(nombre_f)
-                                    base_url = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
-                                    if base_url.startswith("ws://"):
-                                        base_url = base_url.replace("ws://", "http://", 1)
-                                    elif base_url.startswith("wss://"):
-                                        base_url = base_url.replace("wss://", "https://", 1)
-                                    elif base_url.startswith("tcp://"):
-                                        base_url = base_url.replace("tcp://", "http://", 1)
-                                    
-                                    # Apuntar directamente a nuestro servidor HTTP en PUERTO_DESCARGAS
-                                    base_dl = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url)
-                                    url_view = f"{base_dl}/view?file={nombre_quoted}"
-                                    nombre_original_quoted = urllib.parse.quote(nombre)
-                                    url_dl = f"{base_dl}/download?file={nombre_quoted}&original={nombre_original_quoted}"
+                                    import urllib.parse as _up3
+                                    nombre_quoted = _up3.quote(nombre_f)
+                                    nombre_original_quoted = _up3.quote(nombre)
+                                    url_dl = f"/dl?file={nombre_quoted}&original={nombre_original_quoted}"
 
                                 manuals_list.controls.append(
                                     ft.Container(
@@ -11450,11 +11489,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             ft.Row([
                                                 ft.ElevatedButton(
                                                     t("view_pdf"),
-                                                    on_click=lambda e, n=nombre_f, r=os.path.join(ASSETS_PATH, "temp_pdfs", nombre_f) if nombre_f else "": visualizar_pdf_interno(e, n, r) if n else None,
+                                                    icon=ft.Icons.VISIBILITY if abierto == 1 else ft.Icons.LOCK,
+                                                    on_click=lambda e, s=nombre_f, d=nombre: abrir_visor_modal_global(s, d) if (s and abierto == 1) else None,
                                                     bgcolor="#6E48AA" if abierto == 1 else "#222222",
                                                     color="white" if abierto == 1 else "#666666",
                                                     expand=True,
-                                                    disabled=(url_view == "" or abierto == 0)
+                                                    disabled=(not nombre_f or abierto == 0)
                                                 ),
                                                 ft.ElevatedButton(
                                                     t("download_pdf") if abierto == 1 else "🔒 Bloqueado",
@@ -15304,16 +15344,7 @@ Ejemplo:
             import threading
             threading.Thread(target=cargar_bitacora, daemon=True).start()
 
-            base_url = page.url.rstrip("/") if (page and page.url) else "http://localhost:8550"
-            if base_url.startswith("ws://"):
-                base_url = base_url.replace("ws://", "http://", 1)
-            elif base_url.startswith("wss://"):
-                base_url = base_url.replace("wss://", "https://", 1)
-            elif base_url.startswith("tcp://"):
-                base_url = base_url.replace("tcp://", "http://", 1)
-
-            base_dl = re.sub(r":\d+$", f":{PUERTO_DESCARGAS}", base_url)
-            url_dl = f"{base_dl}/download?file=Bitacora_Seguridad.csv&original=Bitacora_Seguridad.csv"
+            url_dl = "/dl?file=Bitacora_Seguridad.csv&original=Bitacora_Seguridad.csv"
 
             btn_descargar_excel = ft.ElevatedButton(
                 content=ft.Row([
