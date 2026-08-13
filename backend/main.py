@@ -22,10 +22,10 @@ def health_check():
         return {"status": "ok", "database": "connected"}
     return {"status": "ok", "database": "disconnected"}
 
-# Aquí se incluirán los routers, por ejemplo:
-# from routers import ai_router, file_router
-# app.include_router(ai_router.router, prefix="/api/ai")
-# app.include_router(file_router.router, prefix="/api/files")
+from routers import files, biometrics, ai
+app.include_router(files.router)
+app.include_router(biometrics.router, prefix="/api/biometria")
+app.include_router(ai.router, prefix="/api/ai")
 
 if __name__ == "__main__":
     import uvicorn
