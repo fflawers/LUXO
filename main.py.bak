@@ -2781,7 +2781,7 @@ def auditar_foto_con_gemini(guia_bytes, tienda_bytes, instrucciones):
         guia_b64 = base64.b64encode(guia_bytes).decode('utf-8')
         tienda_b64 = base64.b64encode(tienda_bytes).decode('utf-8')
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         headers = {"Content-Type": "application/json"}
         
         prompt = (
@@ -2886,7 +2886,7 @@ def procesar_ticket_con_gemini(imagen_bytes):
                     "contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": img_b64}}]}],
                     "generationConfig": {"temperature": 0.1}
                 }
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
                 res = requests.post(url, json=payload, timeout=20)
                 if res.status_code == 200:
                     cand = res.json().get("candidates", [])
@@ -9142,6 +9142,95 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 tasks_list
             ], expand=True)
 
+        def build_admin_usuarios_tab():
+            if user_info.get("usuario") != "mx204562":
+                return ft.Container(
+                    content=ft.Text("ACCESO DENEGADO: Solo el usuario mx204562 tiene privilegios para crear usuarios en la plataforma.", color="#FF4500", weight="bold"),
+                    padding=20, alignment=ft.alignment.center
+                )
+                
+            txt_nombre = ft.TextField(label="Nombre Completo", width=350, bgcolor="#0A0A12", color="white")
+            txt_usuario = ft.TextField(label="ID de Usuario / Cuenta", width=350, bgcolor="#0A0A12", color="white")
+            txt_pass = ft.TextField(label="Contraseña", password=True, can_reveal_password=True, width=350, bgcolor="#0A0A12", color="white")
+            dd_rol = ft.Dropdown(
+                label="Rol del Usuario",
+                options=[ft.dropdown.Option("Administrador"), ft.dropdown.Option("Perfil de Tienda")],
+                width=350, bgcolor="#0A0A12", color="white"
+            )
+            txt_tienda = ft.TextField(label="Tienda Asignada (Opcional)", width=350, bgcolor="#0A0A12", color="white")
+            
+            lbl_status = ft.Text("", size=14, weight="bold")
+            
+            def guardar_nuevo_usuario(e):
+                if not txt_nombre.value or not txt_usuario.value or not txt_pass.value or not dd_rol.value:
+                    lbl_status.value = "⚠️ Por favor, llena todos los campos obligatorios."
+                    lbl_status.color = "orange"
+                    page.update()
+                    return
+                
+                try:
+                    db = conectar_db()
+                    if not db:
+                        lbl_status.value = "❌ Error de conexión a Base de Datos."
+                        lbl_status.color = "red"
+                        page.update()
+                        return
+                    cur = db.cursor(dictionary=True)
+                    cur.execute("SELECT ID_Usuario FROM usuarios WHERE Usuario = %s", (txt_usuario.value.strip(),))
+                    if cur.fetchone():
+                        lbl_status.value = "❌ El ID de usuario ya existe en el sistema."
+                        lbl_status.color = "red"
+                        page.update()
+                        db.close()
+                        return
+                    
+                    hashed_pw = generar_hash_password(txt_pass.value)
+                    cur.execute("""
+                        INSERT INTO usuarios (Nombre_Completo, Usuario, Contrasena, Rol, Tienda, Zona)
+                        VALUES (%s, %s, %s, %s, %s, 'CENTRO')
+                    """, (
+                        txt_nombre.value.strip(), 
+                        txt_usuario.value.strip(), 
+                        hashed_pw, 
+                        dd_rol.value, 
+                        txt_tienda.value.strip() if txt_tienda.value else ""
+                    ))
+                    db.commit()
+                    db.close()
+                    
+                    lbl_status.value = f"✅ Usuario '{txt_usuario.value}' creado exitosamente como {dd_rol.value}."
+                    lbl_status.color = "#7CFC00"
+                    txt_nombre.value = ""
+                    txt_usuario.value = ""
+                    txt_pass.value = ""
+                    txt_tienda.value = ""
+                    page.update()
+                except Exception as ex:
+                    print("Error creando usuario:", ex)
+                    lbl_status.value = f"❌ Error interno: {ex}"
+                    lbl_status.color = "red"
+                    page.update()
+            
+            return ft.Container(
+                content=ft.Column([
+                    ft.Text("Gestión de Usuarios (Admin Exclusivo)", size=24, weight="bold", color="#D8B4FE"),
+                    ft.Text("Usa este formulario para dar de alta a nuevos Administradores y Perfiles de Tienda en el sistema.\nNota: El rol 'Perfil de Tienda' permite utilizar el chat, checklist y reportes.", color="#aaaaaa", size=13),
+                    ft.Container(height=15),
+                    ft.Column([
+                        txt_nombre,
+                        txt_usuario,
+                        txt_pass,
+                        dd_rol,
+                        txt_tienda,
+                        ft.Container(height=10),
+                        ft.ElevatedButton("Crear Usuario 💾", icon=ft.Icons.PERSON_ADD, bgcolor="#9D50BB", color="white", on_click=guardar_nuevo_usuario),
+                        lbl_status
+                    ], spacing=15)
+                ], spacing=10, scroll=ft.ScrollMode.AUTO),
+                padding=20,
+                expand=True
+            )
+
         def build_dashboard_view():
             is_mobile = (page.width < 800) if (page and page.width) else False
             tab_defs = [
@@ -9155,6 +9244,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 ("Aperturas y Cierres 🔑", ft.Icons.KEY_ROUNDED, lambda: operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)),
             ]
 
+            if user_info.get("usuario") == "mx204562":
+                tab_defs.append(("Gestión de Usuarios", ft.Icons.MANAGE_ACCOUNTS_ROUNDED, build_admin_usuarios_tab))
             
             curr_idx = dashboard_tab_index[0]
             if curr_idx < 0 or curr_idx >= len(tab_defs):
@@ -13080,16 +13171,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             )
             es_mx = user_info.get("usuario") == "mx204562"
             
-            def on_rol_change(e):
-                if es_mx:
-                    if puesto_vendedor_input.value == "Administrador":
-                        vendedor_name_input.label = "Nombre del Administrador"
-                        txt_tienda_num.visible = False
-                    else:
-                        vendedor_name_input.label = "Nombre de la Tienda"
-                        txt_tienda_num.visible = True
-                    page.update()
-            
             puesto_vendedor_input = EmojiDropdown(
                 label="Puesto / Rol",
                 options=[ft.dropdown.Option("Administrador"), ft.dropdown.Option("Perfil de Tienda")] if es_mx else [
@@ -13099,16 +13180,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 ],
                 value="Perfil de Tienda" if es_mx else "Vendedor",
                 border_color="#9D50BB",
-                width=160 if is_mobile_w else 200,
-                on_change=on_rol_change
+                width=160 if is_mobile_w else 200
             )
 
-            txt_tienda_num = ft.TextField(label="Número de la Tienda", width=160 if is_mobile_w else 200, border_color="#9D50BB", color="white", visible=es_mx)
             txt_usuario_sys = ft.TextField(label="Usuario (Login)", width=160 if is_mobile_w else 200, border_color="#9D50BB", color="white", visible=es_mx)
             txt_pass_sys = ft.TextField(label="Contraseña", password=True, can_reveal_password=True, width=160 if is_mobile_w else 200, border_color="#9D50BB", color="white", visible=es_mx)
-            
-            if es_mx:
-                vendedor_name_input.label = "Nombre de la Tienda"
 
             def cargar_vendedores():
                 vendedores_list.controls.clear()
@@ -13255,17 +13331,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 mostrar_snack("⚠️ Debes ingresar Usuario y Contraseña", "orange")
                                 db.close()
                                 return
-                            if puesto_val == "Perfil de Tienda" and not txt_tienda_num.value:
-                                mostrar_snack("⚠️ Debes ingresar el Número de la Tienda", "orange")
-                                db.close()
-                                return
-                                
-                            hashed = hash_password(txt_pass_sys.value)
-                            num_tienda = txt_tienda_num.value.strip() if puesto_val == "Perfil de Tienda" else ""
-                            cursor.execute(
-                                "INSERT INTO usuarios (Nombre_Completo, Usuario, Contrasena, Rol, Tienda, Zona) VALUES (%s, %s, %s, %s, %s, 'CENTRO')", 
-                                (name, txt_usuario_sys.value.strip(), hashed, puesto_val, num_tienda)
-                            )
+                            hashed = generar_hash_password(txt_pass_sys.value)
+                            cursor.execute("INSERT INTO usuarios (Nombre_Completo, Usuario, Contrasena, Rol, Tienda, Zona) VALUES (%s, %s, %s, %s, %s, 'CENTRO')", (name, txt_usuario_sys.value.strip(), hashed, puesto_val, user_info.get("tienda", "")))
                         else:
                             cursor.execute("INSERT INTO vendedores (ID_Usuario_Tienda, Nombre_Completo, Puesto) VALUES (%s, %s, %s)", (user_info["id"], name, puesto_val))
                         db.commit()
@@ -13274,7 +13341,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         if es_mx:
                             txt_usuario_sys.value = ""
                             txt_pass_sys.value = ""
-                            txt_tienda_num.value = ""
                         mostrar_snack("Colaborador registrado con éxito 🎉", "#7CFC00")
                         if not es_mx:
                             cargar_vendedores()
@@ -13415,7 +13481,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
             form_section = ft.Row([
                 vendedor_name_input,
-                txt_tienda_num,
                 txt_usuario_sys,
                 txt_pass_sys,
                 puesto_vendedor_input,
