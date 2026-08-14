@@ -307,15 +307,20 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
             
             estado = "Puntual" if now_time <= limit_time else "Tarde"
             
+            # Usar hora local de Python, no CURRENT_TIME() de MySQL (que puede ser UTC)
+            now_dt = datetime.now()
+            now_str = now_dt.strftime("%H:%M:%S")
+            fecha_str = now_dt.strftime("%Y-%m-%d")
+            
             cursor = db.cursor()
             cursor.execute("""
                 INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Apertura, Foto_Apertura, Estado_Apertura)
-                VALUES (%s, CURRENT_DATE(), CURRENT_TIME(), %s, %s)
+                VALUES (%s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
-                    Hora_Apertura = IF(Hora_Apertura IS NULL, CURRENT_TIME(), Hora_Apertura),
+                    Hora_Apertura = IF(Hora_Apertura IS NULL, %s, Hora_Apertura),
                     Foto_Apertura = IF(Hora_Apertura IS NULL, %s, Foto_Apertura),
                     Estado_Apertura = IF(Hora_Apertura IS NULL, %s, Estado_Apertura)
-            """, (tienda_usuario, foto_rel_path, estado, foto_rel_path, estado))
+            """, (tienda_usuario, fecha_str, now_str, foto_rel_path, estado, now_str, foto_rel_path, estado))
             db.commit()
             db.close()
             
@@ -467,7 +472,10 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Text(f"Apertura registrada a las: {ap_time}", color="#aaaaaa"),
                 ft.Container(
-                    content=ft.Image(src=reg["Foto_Apertura"], width=120, height=120, fit=ft.BoxFit.COVER, border_radius=8) if reg["Foto_Apertura"] else ft.Icon(ft.Icons.IMAGE, size=40),
+                    content=ft.Image(
+                        src="/" + reg["Foto_Apertura"].lstrip("/") if reg["Foto_Apertura"] else None,
+                        width=200, height=200, fit=ft.BoxFit.COVER, border_radius=8
+                    ) if reg["Foto_Apertura"] else ft.Icon(ft.Icons.IMAGE, size=40, color="#aaaaaa"),
                     bgcolor="#222233",
                     border_radius=8,
                     padding=2
