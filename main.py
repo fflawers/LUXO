@@ -3368,7 +3368,9 @@ def main(page: ft.Page):
         
         try:
             upload_url = page.get_upload_url(f_name, 600)
-            file_picker_app.upload([ft.FilePickerUploadFile(f_name, upload_url=upload_url)])
+            async def _do_up():
+                await file_picker_app.upload([ft.FilePickerUploadFile(f_name, upload_url=upload_url)])
+            page.run_task(_do_up)
         except Exception as ex_up:
             print("Error al iniciar subida Flet Web:", ex_up)
             mostrar_snack(f"Error al cargar archivo: {ex_up}", color="red")
@@ -4304,11 +4306,13 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             elif upload_type == "excel":
                 allowed_exts = ["xlsx", "xls"]
                 
-            file_picker_app.pick_files(
-                dialog_title=titulo,
-                allow_multiple=False,
-                allowed_extensions=allowed_exts
-            )
+            async def _run_picker():
+                await file_picker_app.pick_files(
+                    dialog_title=titulo,
+                    allow_multiple=False,
+                    allowed_extensions=allowed_exts
+                )
+            page.run_task(_run_picker)
         except Exception as ex:
             print("Error abriendo file picker nativo:", ex)
             mostrar_snack("Error al abrir seleccionador de archivos.", color="red")
