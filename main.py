@@ -330,7 +330,7 @@ def save_and_transcribe_audio(user_id_val, audio_bytes):
                 transcripcion = res.json().get("text", "").strip()
                 if transcripcion:
                     user_id = int(user_id_val) if isinstance(user_id_val, str) and user_id_val.isdigit() else user_id_val
-                    session = active_sessions.get(user_id) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+                    session = active_sessions.get(user_id) or active_sessions.get(str(user_id))
                     if session:
                         input_msg = session.get("input_msg")
                         enviar_mensaje = session.get("enviar_mensaje")
@@ -740,6 +740,19 @@ def configurar_rutas_fastapi(app):
                 # que bloquean el micrófono cuando se invoca desde WebSockets (Flet).
                 mobile_mic_script = """
                 <script>
+                window.getLuxoUserId = function() {
+                    if (window.luxoUserId) return window.luxoUserId;
+                    try {
+                        for (let i = 0; i < localStorage.length; i++) {
+                            let key = localStorage.key(i);
+                            if (key && key.includes('logged_user_id')) {
+                                let val = localStorage.getItem(key);
+                                if (val) return val.replace(/["']/g, '');
+                            }
+                        }
+                    } catch(e) {}
+                    return '1';
+                };
                 document.addEventListener("DOMContentLoaded", function() {
                     const isMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
                     if (isMobile) {
@@ -815,7 +828,7 @@ def configurar_rutas_fastapi(app):
                             r.onresult = function(ev) {
                                 const txt = ev.results[0][0].transcript;
                                 if (txt) {
-                                    fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
                             r.onerror = function(ev) { 
@@ -1021,7 +1034,7 @@ def configurar_rutas_fastapi(app):
                                                 lastSentTime = now;
                                                 playBeep();
                                                 setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                                fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
+                                                fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                                 // Ocultar orbe flotante tras procesar/enviar
                                                 setTimeout(function(){ window.hideLuxoSiriOrb(); }, 2000);
                                                 window.luxoManualDictating = false;
@@ -1034,7 +1047,7 @@ def configurar_rutas_fastapi(app):
                                             lastSentText = query;
                                             playBeep();
                                             setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                            fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
+                                            fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                             window.luxoManualDictating = false;
                                             // Ocultar orbe flotante al finalizar de hablar
                                             setTimeout(function(){ window.hideLuxoSiriOrb(); }, 2000);
@@ -1426,7 +1439,7 @@ def configurar_rutas_fastapi(app):
                                         status.innerText = "🚀 Enviado a la IA: " + query;
                                         status.style.color = "#7CFC00";
                                         status.style.borderColor = "#7CFC00";
-                                        fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
+                                        fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                         setTimeout(() => {
                                             status.innerText = "🎤 Presiona el micrófono para hablar";
                                             status.style.color = "#00FFFF";
@@ -1515,7 +1528,7 @@ def configurar_rutas_fastapi(app):
     @app.api_route("/luxo_listening_start", methods=["POST"])
     async def post_listening_start(user_id: str = "1"):
         user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
-        session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+        session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
         if session:
             page = session.get("page")
             siri_orb = session.get("siri_orb")
@@ -1537,7 +1550,7 @@ def configurar_rutas_fastapi(app):
         try:
             print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
-            session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+            session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
             print(f"DEBUG: active_sessions keys={list(active_sessions.keys())}, session encontrada={'Sí' if session else 'No'}")
             if session and text:
                 cambiar_vista = session.get("cambiar_vista")
@@ -1611,7 +1624,7 @@ def configurar_rutas_fastapi(app):
         if uploaded_file:
             audio_bytes = await uploaded_file.read()
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
-            session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+            session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
             if session and session.get("cambiar_vista"):
                 try:
                     session["cambiar_vista"]("chat")
@@ -1652,7 +1665,7 @@ def configurar_rutas_fastapi(app):
                     print("Notice optimizar_archivo_multimedia:", ex_opt)
                 
                 user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
-                session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id)) or active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+                session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
                 if session and session.get("active_file_callback") and session["active_file_callback"][0]:
                     cb = session["active_file_callback"][0]
                     try:
@@ -4719,7 +4732,15 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         page.clean()
         
-        # Restaurar estado del botón de acceso
+        # Restaurar estado del botón de acceso y limpiar inputs
+        try:
+            txt_user.value = ""
+            txt_pass.value = ""
+            login_message.value = ""
+            login_error_box.visible = False
+        except:
+            pass
+            
         btn_acceder.disabled = False
         btn_acceder.content.value = "ACCEDER"
 
@@ -6789,8 +6810,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         }
         if user_info.get("id"):
             active_sessions[user_info["id"]] = sess_data
-        active_sessions["1"] = sess_data
-        active_sessions[1] = sess_data
+
 
         # =================================
         # VISTAS DEL PANEL DINÁMICO
@@ -6993,7 +7013,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             playBeep();
                                             window.showLuxoSiriOrb(5000);
                                             setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                            fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
+                                            fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                             window.luxoIsListeningAlertSent = false;
                                             window.luxoManualDictating = false;
                                             setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
@@ -7007,7 +7027,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         playBeep();
                                         window.showLuxoSiriOrb(5000);
                                         setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                        fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
+                                        fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                         window.luxoManualDictating = false;
                                         setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
                                         try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
@@ -7096,7 +7116,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             r.onresult = function(ev) {
                                 const txt = ev.results[0][0].transcript;
                                 if (txt) {
-                                    fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
                             r.onerror = function(ev) { 
@@ -18642,6 +18662,7 @@ Ejemplo:
                     """
                     SELECT
                     ID_Usuario,
+                    Usuario,
                     Nombre_Completo,
                     Rol,
                     Tienda,
