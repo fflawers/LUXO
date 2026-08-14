@@ -4356,7 +4356,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     }};
                 }})();
                 """
-                js_inline = "javascript:" + js_code.replace('\n', ' ')
+                import urllib.parse
+                js_inline = "javascript:" + urllib.parse.quote(js_code)
                 await page.launch_url(js_inline)
             except Exception as ex_launch:
                 print("Error abriendo upload widget:", ex_launch)
