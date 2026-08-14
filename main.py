@@ -3946,7 +3946,8 @@ def main(page: ft.Page):
             dlg_h = min(int(ph * 0.85), 650)
 
             def close_dlg(e):
-                try: page.close(dialog)
+                dialog.open = False
+                try: page.update()
                 except: pass
 
             dialog = ft.AlertDialog(
@@ -3957,7 +3958,8 @@ def main(page: ft.Page):
                 content=ft.Container(content_viewer, width=dlg_w, height=dlg_h),
                 bgcolor="#1A1A24"
             )
-            page.open(dialog)
+            page.dialog = dialog
+            dialog.open = True
             try: page.update()
             except: pass
         except Exception as ex:
@@ -9876,7 +9878,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 bgcolor="#1a1a1a",
                                 shape=ft.RoundedRectangleBorder(radius=12)
                             )
-                            page.open(dlg)
+                            page.dialog = dlg
+                            dlg.open = True
+                            page.update()
 
                         def on_liberar_click(e, fn=hacer_liberar):
                             fn()
