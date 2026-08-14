@@ -19110,7 +19110,14 @@ Ejemplo:
     page.vertical_alignment = "center"
     page.horizontal_alignment = "center"
     page.controls.clear()
-    page.add(full_screen_background)
+    
+    # Pantalla de carga inicial mientras se verifica la sesión
+    loading_indicator = ft.Container(
+        content=ft.ProgressRing(color="#00FFFF", stroke_width=3),
+        alignment=ft.alignment.Alignment(0, 0),
+        expand=True
+    )
+    page.add(loading_indicator)
     page.update()
 
     async def intentar_restaurar_sesion():
@@ -19159,8 +19166,17 @@ Ejemplo:
                             }
                             print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']}")
                             cargar_chat()
+                            return # Termina sin mostrar login
         except Exception as ex_r:
             print("Notice auto-restore session:", ex_r)
+            
+        # Si no hay sesión o hubo error, mostramos el login
+        page.controls.clear()
+        page.add(full_screen_background)
+        try:
+            page.update()
+        except:
+            pass
 
     page.run_task(intentar_restaurar_sesion)
     
