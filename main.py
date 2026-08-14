@@ -3946,24 +3946,29 @@ def main(page: ft.Page):
             dlg_h = min(int(ph * 0.85), 650)
 
             def close_dlg(e):
-                dialog.open = False
-                try: page.update()
-                except: pass
+                if hasattr(page, "visor_dialog"):
+                    page.visor_dialog.open = False
+                    try: page.update()
+                    except: pass
 
-            dialog = ft.AlertDialog(
-                title=ft.Row([
-                    ft.Text(titulo_modal, weight="bold", size=14, color="white", expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                    ft.IconButton(ft.Icons.CLOSE, on_click=close_dlg)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                content=ft.Container(content_viewer, width=dlg_w, height=dlg_h),
-                bgcolor="#1A1A24"
-            )
-            if dialog not in page.overlay:
-                page.overlay.append(dialog)
-            page.dialog = dialog
-            dialog.open = True
+            if not hasattr(page, "visor_dialog"):
+                page.visor_dialog = ft.AlertDialog(
+                    bgcolor="#1A1A24"
+                )
+                page.overlay.append(page.visor_dialog)
+
+            page.visor_dialog.title = ft.Row([
+                ft.Text(titulo_modal, weight="bold", size=14, color="white", expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                ft.IconButton(ft.Icons.CLOSE, on_click=close_dlg)
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            
+            page.visor_dialog.content = ft.Container(content_viewer, width=dlg_w, height=dlg_h)
+            
+            page.dialog = page.visor_dialog
+            page.visor_dialog.open = True
             try: page.update()
             except: pass
+            
         except Exception as ex:
             import traceback
             print("Error al abrir visor modal global:", ex)
