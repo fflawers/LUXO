@@ -4295,22 +4295,23 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         elif "media" in str(extensiones).lower() or "foto" in str(titulo).lower() or "imagen" in str(titulo).lower() or "ticket" in str(titulo).lower():
             upload_type = "media"
 
-        async def _launch_widget():
-            try:
-                await page.launch_url(f"/upload_widget?type={upload_type}&user_id={user_id_key}")
-            except Exception as ex_launch:
-                print("Error abriendo upload widget:", ex_launch)
-
-        if getattr(page, "web", True) or captureMode:
-            page.run_task(_launch_widget)
-        else:
-            try:
-                file_picker_app.pick_files(
-                    dialog_title=titulo,
-                    allow_multiple=False
-                )
-            except Exception:
-                page.run_task(_launch_widget)
+        try:
+            allowed_exts = None
+            if upload_type == "media":
+                allowed_exts = ["png", "jpg", "jpeg", "webp", "gif", "mp4", "mov"]
+            elif upload_type == "pdf":
+                allowed_exts = ["pdf"]
+            elif upload_type == "excel":
+                allowed_exts = ["xlsx", "xls"]
+                
+            file_picker_app.pick_files(
+                dialog_title=titulo,
+                allow_multiple=False,
+                allowed_extensions=allowed_exts
+            )
+        except Exception as ex:
+            print("Error abriendo file picker nativo:", ex)
+            mostrar_snack("Error al abrir seleccionador de archivos.", color="red")
 
     def procesar_cargar_pdf(ruta_pdf):
         mostrar_snack("Procesando e insertando PDF...", color="#D8B4FE")
