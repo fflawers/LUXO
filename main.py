@@ -1847,7 +1847,11 @@ def configurar_rutas_fastapi(app):
                             msg.style.color = '#7CFC00';
                             msg.innerText = '✅ ¡Éxito! Archivo cargado correctamente.';
                             setTimeout(() => {{
-                                window.close();
+                                if (window.parent && window.parent.closeOverlay) {{
+                                    window.parent.closeOverlay();
+                                }} else {{
+                                    window.close();
+                                }}
                             }}, 800);
                         }} else {{
                             msg.style.color = '#FF4500';
@@ -4297,25 +4301,77 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         elif "media" in str(extensiones).lower() or "foto" in str(titulo).lower() or "imagen" in str(titulo).lower() or "ticket" in str(titulo).lower():
             upload_type = "media"
 
-        try:
-            allowed_exts = None
-            if upload_type == "media":
-                allowed_exts = ["png", "jpg", "jpeg", "webp", "gif", "mp4", "mov"]
-            elif upload_type == "pdf":
-                allowed_exts = ["pdf"]
-            elif upload_type == "excel":
-                allowed_exts = ["xlsx", "xls"]
-                
-            async def _run_picker():
-                await file_picker_app.pick_files(
+        async def _launch_widget():
+            try:
+                js_code = f"""
+                (function() {{
+                    var existing = document.getElementById('luxo-upload-overlay');
+                    if(existing) document.body.removeChild(existing);
+                    
+                    var overlay = document.createElement('div');
+                    overlay.id = 'luxo-upload-overlay';
+                    overlay.style.position = 'fixed';
+                    overlay.style.top = '0';
+                    overlay.style.left = '0';
+                    overlay.style.width = '100vw';
+                    overlay.style.height = '100vh';
+                    overlay.style.backgroundColor = 'rgba(0,0,0,0.85)';
+                    overlay.style.zIndex = '999999';
+                    overlay.style.display = 'flex';
+                    overlay.style.justifyContent = 'center';
+                    overlay.style.alignItems = 'center';
+                    overlay.style.backdropFilter = 'blur(5px)';
+
+                    var iframe = document.createElement('iframe');
+                    iframe.src = '/upload_widget?type={upload_type}&user_id={user_id_key}';
+                    iframe.style.width = '90%';
+                    iframe.style.maxWidth = '500px';
+                    iframe.style.height = '85%';
+                    iframe.style.maxHeight = '700px';
+                    iframe.style.border = '2px solid #D8B4FE';
+                    iframe.style.borderRadius = '20px';
+                    iframe.style.backgroundColor = '#181828';
+
+                    var closeBtn = document.createElement('button');
+                    closeBtn.innerText = '✕ Cerrar';
+                    closeBtn.style.position = 'absolute';
+                    closeBtn.style.top = '20px';
+                    closeBtn.style.right = '20px';
+                    closeBtn.style.background = 'rgba(255,69,0,0.8)';
+                    closeBtn.style.color = 'white';
+                    closeBtn.style.border = 'none';
+                    closeBtn.style.padding = '8px 15px';
+                    closeBtn.style.borderRadius = '10px';
+                    closeBtn.style.fontSize = '16px';
+                    closeBtn.style.fontWeight = 'bold';
+                    closeBtn.style.cursor = 'pointer';
+                    closeBtn.onclick = function() {{ document.body.removeChild(overlay); }};
+
+                    overlay.appendChild(iframe);
+                    overlay.appendChild(closeBtn);
+                    document.body.appendChild(overlay);
+                    
+                    window.closeOverlay = function() {{
+                        if(document.body.contains(overlay)) document.body.removeChild(overlay);
+                    }};
+                }})();
+                """
+                js_inline = "javascript:" + js_code.replace('\n', ' ')
+                await page.launch_url(js_inline)
+            except Exception as ex_launch:
+                print("Error abriendo upload widget:", ex_launch)
+
+        if getattr(page, "web", True) or captureMode:
+            page.run_task(_launch_widget)
+        else:
+            try:
+                file_picker_app.pick_files(
                     dialog_title=titulo,
                     allow_multiple=False,
-                    allowed_extensions=allowed_exts
+                    allowed_extensions=None
                 )
-            page.run_task(_run_picker)
-        except Exception as ex:
-            print("Error abriendo file picker nativo:", ex)
-            mostrar_snack("Error al abrir seleccionador de archivos.", color="red")
+            except Exception:
+                page.run_task(_launch_widget)
 
     def procesar_cargar_pdf(ruta_pdf):
         mostrar_snack("Procesando e insertando PDF...", color="#D8B4FE")
