@@ -649,15 +649,15 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
                 ap_estado = reg["Estado_Apertura"]
                 ap_color = "#7CFC00" if ap_estado == "Puntual" else "#FF4500"
                 
-                # Para evitar problemas de scope en el callback
                 def make_foto_click(path_val, name_val):
                     def ver_foto_click(e):
                         def cerrar_dialog(ev):
                             page.pop_dialog()
+                        fixed_path = "/" + path_val.lstrip("/") if path_val else None
                         dlg = ft.AlertDialog(
                             title=ft.Text(f"Foto de Apertura - {name_val}", color="#00FFFF", weight="bold"),
                             content=ft.Container(
-                                content=ft.Image(src=path_val, fit=ft.BoxFit.CONTAIN),
+                                content=ft.Image(src=fixed_path, fit=ft.BoxFit.CONTAIN),
                                 width=600,
                                 height=500
                             ),
