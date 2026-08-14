@@ -502,10 +502,10 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/api/download_excel/{day}")
-    async def download_excel_route(day: str):
+    async def download_excel_route(day: str, user_id: str = "invitado"):
         try:
             import enfoque_diario
-            enfoque_diario.generar_excel_enfoque(day)
+            enfoque_diario.generar_excel_enfoque(day, user_id)
             filename = f"Enfoque_Diario_{day}_SGH_2026.xlsx"
             file_path = os.path.join(BASE_PATH, "uploads", filename)
             if not os.path.exists(file_path):
@@ -530,12 +530,12 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/print_enfoque/{day}")
-    async def print_enfoque_route(day: str):
+    async def print_enfoque_route(day: str, user_id: str = "invitado"):
         try:
             import enfoque_diario
-            calc = enfoque_diario.calcular_dia(day)
-            data = enfoque_diario.store_state[day]
-            meta = enfoque_diario.global_meta
+            calc = enfoque_diario.calcular_dia(day, user_id)
+            data = enfoque_diario.user_states.get(user_id, {}).get("store_state", {}).get(day, {})
+            meta = enfoque_diario.user_states.get(user_id, {}).get("global_meta", {})
 
             html = f"""
             <!DOCTYPE html>
@@ -3851,6 +3851,7 @@ def main(page: ft.Page):
 
             if ext == ".pdf":
                 import pymupdf
+                import base64
                 doc = pymupdf.open(r_pdf)
                 total_pages = len(doc)
                 pages_to_render = min(total_pages, 50)
@@ -3864,21 +3865,29 @@ def main(page: ft.Page):
                     page_img_path = os.path.join(img_dir, f"page_{i}.jpg")
                     if not os.path.exists(page_img_path):
                         page_pdf = doc.load_page(i)
-                        pix = page_pdf.get_pixmap(matrix=pymupdf.Matrix(2.0, 2.0))
+                        pix = page_pdf.get_pixmap(matrix=pymupdf.Matrix(1.5, 1.5))
                         pix.save(page_img_path)
 
+                    with open(page_img_path, "rb") as img_f:
+                        img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
+
                     images_col.controls.append(
-                        ft.Image(src=f"/custom_assets/temp_pdfs/img_cache/{cache_folder}/page_{i}.jpg", fit="contain")
+                        ft.Image(src=f"data:image/jpeg;base64,{img_b64}", fit="contain", expand=True)
                     )
                 doc.close()
                 content_viewer.content = images_col
 
             elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+                import base64
+                mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else f"image/{ext[1:]}"
+                with open(r_pdf, "rb") as img_f:
+                    img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
                 content_viewer.content = ft.Image(
-                    src=f"/custom_assets/temp_pdfs/{safe_name}",
+                    src=f"data:{mime};base64,{img_b64}",
                     fit="contain",
                     expand=True
                 )
+
 
             elif ext in [".mp4", ".mov", ".avi"]:
                 video_url = f"/temp_pdfs/{safe_name}"
@@ -11299,7 +11308,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             ft.Row([
                                                 ft.Column([
                                                     ft.Text("FOTO GUÍA DE MONTAJE", size=9, color="#aaaaaa", weight="bold"),
-                                                    ft.Image(src=f"data:image/jpeg;base64,{img_guia_b64}", width=180, height=135, fit=ft.ImageFit.CONTAIN)
+                                                    ft.Image(src=f"data:image/jpeg;base64,{img_guia_b64}", width=180, height=135, fit="contain")
                                                 ], horizontal_alignment="center"),
                                                 ft.Column([
                                                     ft.Text("FOTO REAL DE TU TIENDA", size=9, color="#aaaaaa", weight="bold"),

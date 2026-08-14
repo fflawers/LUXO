@@ -66,110 +66,124 @@ MAPEO_TIENDAS_SGH = {
 }
 MAPEO_NOMBRE_A_NUMERO_SGH = {v.upper(): k for k, v in MAPEO_TIENDAS_SGH.items()}
 
-global_meta = {
-    "semana": "30",
-    "tienda": "Vallejo",
-    "num_tienda": "3645"
-}
-
-# Inicialización de estado diario por tienda y semana
-store_state = {}
-for d in DIAS:
-    store_state[d] = {
-        "meta_diaria": 4758.0,
-        "trafico_esperado": 8,
-        "conversion_target": 0.13,
-        "vta_ly": 4758.0,
-        "wearables_pct": 0.15,
-        "kids_pct": 0.05,
-        "carekits_pct": 0.30,
-        "atv_dia": 3620.0,
-        "aur_dia": 3620.0,
-        "atv_mtd": 7597.0,
-        "aur_mtd": 3362.0,
-        "estrellas_logro": 5,
-        "trafico_bloques": [4, 2, 2, 0, 0],
-        "colaboradores": [
-            {"nombre": "VIVIANA", "horas": 10.0},
-            {"nombre": "moises", "horas": 8.0},
-            {"nombre": "diego", "horas": 8.0},
-            {"nombre": "", "horas": 0.0},
-            {"nombre": "", "horas": 0.0},
-            {"nombre": "", "horas": 0.0},
-            {"nombre": "", "horas": 0.0},
-            {"nombre": "", "horas": 0.0}
-        ],
-        "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
-        "logros_hoy": "Excelente retención de clientes y venta cruzada.",
-        "plan_accion": [
-            {"colaborador": "VIVIANA", "compromiso": "Asegurar 1 Wearable y 1 Carekit en el turno de Apertura."},
-            {"colaborador": "moises", "compromiso": "Abordar el 100% del tráfico en hora pico (3pm-5pm)."},
-            {"colaborador": "diego", "compromiso": "Ofrecer limpiadores en cada cierre de venta."}
-        ]
+def default_global_meta():
+    return {
+        "semana": "30",
+        "tienda": "Vallejo",
+        "num_tienda": "3645"
     }
 
-active_tab = ["DOMINGO"]
+def default_store_state():
+    state = {}
+    for d in DIAS:
+        state[d] = {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.30,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [4, 2, 2, 0, 0],
+            "colaboradores": [
+                {"nombre": "", "horas": 0.0, "interacciones": 0, "convertidos": 0, "vta_cierre": 0.0, "ana_cierre": 0, "wea_demos": 0, "wea_cierre": 0, "kid_cierre": 0}
+                for _ in range(8)
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {"colaborador": "", "compromiso": ""} for _ in range(3)
+            ]
+        }
+    return state
 
-# Histórico de semanas guardadas (Semanas 1-52)
-historico_semanal_state = {}
+user_states = {}
+
+def get_state_file(user_id):
+    return os.path.join(BASE_PATH, f"enfoque_diario_state_{user_id}.json")
+
+def init_user_state(user_id):
+    if user_id not in user_states:
+        user_states[user_id] = {
+            "global_meta": default_global_meta(),
+            "store_state": default_store_state(),
+            "historico_semanal_state": {},
+            "active_tab": ["DOMINGO"]
+        }
+        cargar_estado_persistente(user_id)
 
 import json
 
-STATE_FILE = os.path.join(BASE_PATH, "enfoque_diario_state.json")
-
-def guardar_estado_persistente():
+def guardar_estado_persistente(user_id):
     try:
+        if user_id not in user_states: return
         payload = {
-            "global_meta": global_meta,
-            "store_state": store_state,
-            "historico_semanal_state": historico_semanal_state
+            "global_meta": user_states[user_id]["global_meta"],
+            "store_state": user_states[user_id]["store_state"],
+            "historico_semanal_state": user_states[user_id]["historico_semanal_state"]
         }
-        with open(STATE_FILE, "w", encoding="utf-8") as f:
+        with open(get_state_file(user_id), "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=4)
     except Exception as ex:
-        print("Error al guardar estado de enfoque diario:", ex)
+        print(f"Error al guardar estado de enfoque diario para {user_id}:", ex)
 
-def cargar_estado_persistente():
-    global store_state, global_meta, historico_semanal_state
+def cargar_estado_persistente(user_id):
     try:
-        if os.path.exists(STATE_FILE):
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
+        sf = get_state_file(user_id)
+        if os.path.exists(sf):
+            with open(sf, "r", encoding="utf-8") as f:
                 payload = json.load(f)
                 if "store_state" in payload:
-                    store_state.update(payload["store_state"])
+                    for d in DIAS:
+                        if d in payload["store_state"]:
+                            user_states[user_id]["store_state"][d].update(payload["store_state"][d])
                 if "global_meta" in payload:
-                    global_meta.update(payload["global_meta"])
+                    user_states[user_id]["global_meta"].update(payload["global_meta"])
                 if "historico_semanal_state" in payload:
-                    historico_semanal_state.update(payload["historico_semanal_state"])
+                    user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
         else:
-            guardar_estado_persistente()
+            guardar_estado_persistente(user_id)
     except Exception as ex:
-        print("Error al cargar estado de enfoque diario:", ex)
+        print(f"Error al cargar estado de enfoque diario para {user_id}:", ex)
 
-# Cargar al importar
-cargar_estado_persistente()
-
-def guardar_semana_historico():
-    key = f"S{global_meta['semana']}_{global_meta['num_tienda']}_{global_meta['tienda']}"
+def guardar_semana_historico(user_id):
+    g_meta = user_states[user_id]["global_meta"]
+    s_state = user_states[user_id]["store_state"]
+    h_state = user_states[user_id]["historico_semanal_state"]
+    key = f"S{g_meta['semana']}_{g_meta['num_tienda']}_{g_meta['tienda']}"
     import copy
-    historico_semanal_state[key] = copy.deepcopy(store_state)
-    guardar_estado_persistente()
+    h_state[key] = copy.deepcopy(s_state)
+    guardar_estado_persistente(user_id)
 
-def cargar_semana_historico(num_semana):
-    global_meta["semana"] = str(num_semana)
-    key = f"S{num_semana}_{global_meta['num_tienda']}_{global_meta['tienda']}"
-    if key in historico_semanal_state:
+def cargar_semana_historico(user_id, num_semana):
+    g_meta = user_states[user_id]["global_meta"]
+    s_state = user_states[user_id]["store_state"]
+    h_state = user_states[user_id]["historico_semanal_state"]
+    g_meta["semana"] = str(num_semana)
+    key = f"S{num_semana}_{g_meta['num_tienda']}_{g_meta['tienda']}"
+    if key in h_state:
         import copy
-        global store_state
-        store_state.clear()
-        store_state.update(copy.deepcopy(historico_semanal_state[key]))
-    guardar_estado_persistente()
+        s_state.clear()
+        s_state.update(copy.deepcopy(h_state[key]))
+    guardar_estado_persistente(user_id)
 
-def sincronizar_colaboradores_db(user_info=None, tienda_name=None):
+def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None):
     """Consulta los colaboradores registrados en la base de datos de Configuración de Tienda y los auto-llena en Enfoque Diario 2026."""
+    if not user_id: return
+    g_meta = user_states[user_id]["global_meta"]
+    s_state = user_states[user_id]["store_state"]
     db_names = []
     try:
-        target_t = tienda_name or global_meta.get("tienda", "Vallejo")
+        target_t = tienda_name or g_meta.get("tienda", "Vallejo")
         from main import conectar_db
         db = conectar_db()
         if db:
@@ -199,17 +213,19 @@ def sincronizar_colaboradores_db(user_info=None, tienda_name=None):
         for d in DIAS:
             for i in range(8):
                 if i < len(db_names):
-                    store_state[d]["colaboradores"][i]["nombre"] = db_names[i]
-                    if store_state[d]["colaboradores"][i]["horas"] <= 0:
-                        store_state[d]["colaboradores"][i]["horas"] = 10.0 if i == 0 else 8.0
+                    s_state[d]["colaboradores"][i]["nombre"] = db_names[i]
+                    if s_state[d]["colaboradores"][i]["horas"] <= 0:
+                        s_state[d]["colaboradores"][i]["horas"] = 10.0 if i == 0 else 8.0
                 else:
-                    store_state[d]["colaboradores"][i]["nombre"] = ""
-                    store_state[d]["colaboradores"][i]["horas"] = 0.0
-        guardar_estado_persistente()
+                    s_state[d]["colaboradores"][i]["nombre"] = ""
+                    s_state[d]["colaboradores"][i]["horas"] = 0.0
+        guardar_estado_persistente(user_id)
 
 # --- FUNCIONES MATEMÁTICAS EXPORTADAS AL MÓDULO ---
-def calcular_dia(d_name):
-    data = store_state[d_name]
+def calcular_dia(d_name, user_id):
+    if user_id not in user_states: init_user_state(user_id)
+    s_state = user_states[user_id]["store_state"]
+    data = s_state[d_name]
     m_diaria = data["meta_diaria"]
     analogos = m_diaria * 0.85
     wearables = m_diaria * 0.15
@@ -238,10 +254,27 @@ def calcular_dia(d_name):
         hrs = c["horas"]
         if hrs > 0 and tot_horas > 0:
             m_vta = (m_diaria / tot_horas) * hrs
-            m_ana = max(math.ceil((analogos / tot_horas) * hrs), 1)
-            m_wea = max(math.ceil((wearables / tot_horas) * hrs), 1)
-            m_kid = max(math.ceil(((data["kids_pct"] * m_diaria) / tot_horas) * hrs), 1)
-            m_ck = max(math.ceil(((data["carekits_pct"] * m_diaria) / tot_horas) * hrs), 1)
+            
+            tot_wea_unid = total_unidades * data.get("wearables_pct", 0.15)
+            tot_kids_unid = total_unidades * data.get("kids_pct", 0.05)
+            tot_ck_unid = total_unidades * data.get("carekits_pct", 0.30)
+            
+            calc_kid = math.ceil(max((tot_kids_unid / tot_horas) * hrs, 1))
+            calc_ck = math.ceil(max((tot_ck_unid / tot_horas) * hrs, 1))
+            calc_ana = math.ceil(max(((total_unidades - tot_wea_unid) / tot_horas) * hrs, 1))
+            calc_wea = math.ceil(max((tot_wea_unid / tot_horas) * hrs, 1))
+            
+            def get_manual_or_calc(key, default_calc):
+                val = c.get(key, "")
+                if val != "":
+                    try: return int(val)
+                    except ValueError: return default_calc
+                return default_calc
+
+            m_ana = get_manual_or_calc("meta_ana", calc_ana)
+            m_wea = get_manual_or_calc("meta_wea", calc_wea)
+            m_kid = get_manual_or_calc("meta_kid", calc_kid)
+            m_ck = get_manual_or_calc("meta_ck", calc_ck)
         else:
             m_vta = 0.0
             m_ana = 0
@@ -256,9 +289,52 @@ def calcular_dia(d_name):
             "meta_ana": m_ana,
             "meta_wea": m_wea,
             "meta_kid": m_kid,
-            "meta_ck": m_ck
+            "meta_ck": m_ck,
+            # CÓMO VAMOS (Bottom Half)
+            "interacciones": c.get("interacciones", 0),
+            "convertidos": c.get("convertidos", 0),
+            "vta_cierre": c.get("vta_cierre", 0.0),
+            "ana_cierre": c.get("ana_cierre", 0),
+            "wea_demos": c.get("wea_demos", 0),
+            "wea_cierre": c.get("wea_cierre", 0),
+            "kid_cierre": c.get("kid_cierre", 0),
+            "ck_cierre": c.get("ck_cierre", 0),
+            "conversion_cierre": (c.get("convertidos", 0) / c.get("interacciones", 1)) if c.get("interacciones", 0) > 0 else 0.0,
+            "conversion_wea": (c.get("wea_cierre", 0) / c.get("wea_demos", 1)) if c.get("wea_demos", 0) > 0 else 0.0
         })
 
+    # Cálculos globales de CÓMO VAMOS
+    tot_interacciones = sum(r["interacciones"] for r in colab_rows)
+    tot_convertidos = sum(r["convertidos"] for r in colab_rows)
+    tot_vta_cierre = sum(r["vta_cierre"] for r in colab_rows)
+    tot_ana_cierre = sum(r["ana_cierre"] for r in colab_rows)
+    tot_wea_demos = sum(r["wea_demos"] for r in colab_rows)
+    tot_wea_cierre = sum(r["wea_cierre"] for r in colab_rows)
+    tot_kid_cierre = sum(r["kid_cierre"] for r in colab_rows)
+    tot_ck_cierre = sum(r["ck_cierre"] for r in colab_rows)
+    
+    venta_neta_dia = data.get("venta_neta_dia", 0.0)
+    venta_unidades_dia = data.get("venta_unidades_dia", 0)
+    
+    conversion_dia = (venta_unidades_dia / tot_interacciones) if tot_interacciones > 0 else 0.0
+    crecimiento_conversion = conversion_dia - conv
+    
+    # User overrideable Wearables/Kids %
+    def get_pct_override(key, default_calc):
+        val = data.get(key, "")
+        if val != "":
+            try: return float(val) / 100.0 if "%" not in str(val) else float(str(val).replace("%","")) / 100.0
+            except ValueError: return default_calc
+        return default_calc
+        
+    calc_wearables_pct = (tot_wea_cierre / venta_unidades_dia) if venta_unidades_dia > 0 else 0.0
+    calc_kids_pct = (tot_kid_cierre / venta_unidades_dia) if venta_unidades_dia > 0 else 0.0
+    
+    cv_wearables_pct = get_pct_override("cv_wearables_pct", calc_wearables_pct)
+    cv_kids_pct = get_pct_override("cv_kids_pct", calc_kids_pct)
+    
+    cv_carekits_pct = (tot_ck_cierre / venta_unidades_dia) if venta_unidades_dia > 0 else 0.0
+    
     return {
         "meta_diaria": m_diaria,
         "analogos": analogos,
@@ -273,15 +349,33 @@ def calcular_dia(d_name):
         "b_pesos": b_pesos,
         "b_metas": b_metas,
         "tot_horas": tot_horas,
-        "colab_rows": colab_rows
+        "colab_rows": colab_rows,
+        # CÓMO VAMOS
+        "tot_interacciones": tot_interacciones,
+        "tot_convertidos": tot_convertidos,
+        "tot_vta_cierre": tot_vta_cierre,
+        "tot_ana_cierre": tot_ana_cierre,
+        "tot_wea_demos": tot_wea_demos,
+        "tot_wea_cierre": tot_wea_cierre,
+        "tot_kid_cierre": tot_kid_cierre,
+        "tot_ck_cierre": tot_ck_cierre,
+        "venta_neta_dia": venta_neta_dia,
+        "venta_unidades_dia": venta_unidades_dia,
+        "conversion_dia": conversion_dia,
+        "crecimiento_conversion": crecimiento_conversion,
+        "wearables_pct": cv_wearables_pct,
+        "kids_pct": cv_kids_pct,
+        "carekits_pct": cv_carekits_pct
     }
 
 # --- GENERADOR DE EXCEL OFICIAL SGH (.xlsx) ---
-def generar_excel_enfoque(d_name, page=None):
+def generar_excel_enfoque(d_name, user_id, page=None):
     try:
         import openpyxl
-        calc = calcular_dia(d_name)
-        data = store_state[d_name]
+        calc = calcular_dia(d_name, user_id)
+        g_meta = user_states[user_id]["global_meta"]
+        s_state = user_states[user_id]["store_state"]
+        data = s_state[d_name]
 
         template_path = os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx")
         if not os.path.exists(template_path):
@@ -296,11 +390,11 @@ def generar_excel_enfoque(d_name, page=None):
             for d in DIAS:
                 if d in wb.sheetnames:
                     ws = wb[d]
-                    d_data = store_state[d]
+                    d_data = s_state[d]
 
-                    ws['I1'] = int(global_meta['semana']) if str(global_meta['semana']).isdigit() else global_meta['semana']
+                    ws['I1'] = int(g_meta['semana']) if str(g_meta['semana']).isdigit() else g_meta['semana']
                     ws['K1'] = datetime.datetime.now()
-                    ws['M1'] = global_meta['tienda']
+                    ws['M1'] = g_meta['tienda']
 
                     ws['C5'] = d_data['meta_diaria']
                     ws['F5'] = d_data['trafico_esperado']
@@ -324,12 +418,32 @@ def generar_excel_enfoque(d_name, page=None):
                         if r_idx <= 24:
                             ws[f'B{r_idx}'] = c['nombre']
                             ws[f'D{r_idx}'] = c['horas']
+                            if c.get("meta_ana", "") != "": ws[f'F{r_idx}'] = int(c["meta_ana"])
+                            if c.get("meta_wea", "") != "": ws[f'G{r_idx}'] = int(c["meta_wea"])
+                            if c.get("meta_kid", "") != "": ws[f'H{r_idx}'] = int(c["meta_kid"])
+                            if c.get("meta_ck", "") != "": ws[f'I{r_idx}'] = int(c["meta_ck"])
+                            
+                        # CÓMO VAMOS (Colaboradores, a partir de fila 33)
+                        r_cv_idx = 33 + i
+                        if r_cv_idx <= 40:
+                            ws[f'E{r_cv_idx}'] = c.get('interacciones', 0)
+                            ws[f'G{r_cv_idx}'] = c.get('convertidos', 0)
+                            ws[f'J{r_cv_idx}'] = c.get('vta_cierre', 0.0)
+                            ws[f'K{r_cv_idx}'] = c.get('ana_cierre', 0)
+                            ws[f'L{r_cv_idx}'] = c.get('wea_demos', 0)
+                            ws[f'M{r_cv_idx}'] = c.get('wea_cierre', 0)
+                            ws[f'O{r_cv_idx}'] = c.get('kid_cierre', 0)
+                            ws[f'P{r_cv_idx}'] = c.get('ck_cierre', 0)
+
+                    # CÓMO VAMOS (Globales)
+                    ws['E30'] = d_data.get('venta_neta_dia', 0.0)
+                    ws['G30'] = d_data.get('venta_unidades_dia', 0)
         else:
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = f"Enfoque {d_name}"
             ws['A1'] = "SUNGLASS HUT (SGH) - ENFOQUE DIARIO 2026"
-            ws['A2'] = f"DÍA: {d_name} | SEMANA: {global_meta['semana']} | TIENDA: {global_meta['tienda']}"
+            ws['A2'] = f"DÍA: {d_name} | SEMANA: {g_meta['semana']} | TIENDA: {g_meta['tienda']}"
             ws['A4'] = f"Meta Diaria: ${calc['meta_diaria']:,.2f}"
 
         excel_filename = f"Enfoque_Diario_{d_name}_SGH_2026.xlsx"
@@ -431,12 +545,14 @@ def generar_excel_enfoque(d_name, page=None):
         return None
 
 # --- GENERADOR DE REPORTES EN PDF ---
-def generar_pdf_enfoque_file(d_name):
+def generar_pdf_enfoque_file(d_name, user_id):
     if not REPORTLAB_AVAILABLE:
         return None
     try:
-        calc = calcular_dia(d_name)
-        data = store_state[d_name]
+        calc = calcular_dia(d_name, user_id)
+        g_meta = user_states[user_id]["global_meta"]
+        s_state = user_states[user_id]["store_state"]
+        data = s_state[d_name]
 
         pdf_filename = f"Enfoque_Diario_{d_name}_SGH_2026.pdf"
 
@@ -467,7 +583,7 @@ def generar_pdf_enfoque_file(d_name):
 
         story = []
         story.append(Paragraph(f"<b>SUNGLASS HUT (SGH) - ENFOQUE DIARIO 2026</b>", title_style))
-        story.append(Paragraph(f"<b>DÍA:</b> {d_name} | <b>SEMANA:</b> {global_meta['semana']} | <b>TIENDA:</b> {global_meta['tienda']} | <b>FECHA EMISIÓN:</b> {datetime.date.today().strftime('%d/%m/%Y')}", sub_title_style))
+        story.append(Paragraph(f"<b>DÍA:</b> {d_name} | <b>SEMANA:</b> {g_meta['semana']} | <b>TIENDA:</b> {g_meta['tienda']} | <b>FECHA EMISIÓN:</b> {datetime.date.today().strftime('%d/%m/%Y')}", sub_title_style))
         story.append(Spacer(1, 6))
 
         story.append(Paragraph("<b>1. META DEL DÍA Y NO NEGOCIABLES (RESUMEN OPERATIVO)</b>", h2_style))
@@ -550,7 +666,52 @@ def generar_pdf_enfoque_file(d_name):
         story.append(t_colab)
         story.append(Spacer(1, 8))
 
-        story.append(Paragraph("<b>4. PLAN DE ACCIÓN, LOS 5 SECRETOS Y CUSTOMER JOURNEY</b>", h2_style))
+        story.append(Paragraph("<b>4. ¿CÓMO VAMOS? (RESULTADOS AL CIERRE)</b>", h2_style))
+        
+        cv_hdr1 = [Paragraph(h, black_hdr_style) for h in ["META", "VTA NETA", "META UNID", "VTA UNID", "CONVERSIÓN", "CRECIM.", "WEARABLES %", "KIDS %", "CAREKITS %"]]
+        cv_row1 = [
+            f"${calc['meta_diaria']:,.2f}", f"${calc['venta_neta_dia']:,.2f}", str(calc['total_unidades']),
+            str(calc['venta_unidades_dia']), f"{calc['conversion_dia']*100:.1f}%", f"{calc['crecimiento_conversion']*100:.1f}%",
+            f"{calc['wearables_pct']*100:.1f}%", f"{calc['kids_pct']*100:.1f}%", f"{calc['carekits_pct']*100:.1f}%"
+        ]
+        t_cv1 = Table([cv_hdr1, cv_row1], colWidths=[60, 60, 60, 60, 60, 50, 70, 50, 70])
+        t_cv1.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F59E0B')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
+            ('BACKGROUND', (0,1), (-1,1), colors.HexColor('#FEF3C7')),
+            ('PADDING', (0,0), (-1,-1), 5),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER')
+        ]))
+        story.append(t_cv1)
+        story.append(Spacer(1, 6))
+
+        cv_colab_hdr = [Paragraph(h, black_hdr_style) for h in ["COLABORADOR", "INT.", "CONV.", "CONV.%", "VTA CIERRE", "WEA.C.", "KIDS C.", "CK C."]]
+        cv_colab_data = [cv_colab_hdr]
+        for r in calc["colab_rows"]:
+            if r["nombre"]:
+                cv_colab_data.append([
+                    r["nombre"], str(r["interacciones"]), str(r["convertidos"]), f"{r['conversion_cierre']*100:.1f}%",
+                    f"${r['vta_cierre']:,.2f}", str(r["wea_cierre"]), str(r["kid_cierre"]), str(r["ck_cierre"])
+                ])
+        cv_colab_data.append([
+            "TOTAL TIENDA", str(calc["tot_interacciones"]), str(calc["tot_convertidos"]), "",
+            f"${calc['tot_vta_cierre']:,.2f}", str(calc["tot_wea_cierre"]), str(calc["tot_kid_cierre"]), str(calc["tot_ck_cierre"])
+        ])
+        t_cv_colab = Table(cv_colab_data, colWidths=[100, 40, 40, 50, 70, 50, 50, 50])
+        t_cv_colab.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F59E0B')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
+            ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#D1D5DB')),
+            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+            ('PADDING', (0,0), (-1,-1), 5),
+            ('ALIGN', (1,0), (-1,-1), 'CENTER')
+        ]))
+        story.append(t_cv_colab)
+        story.append(Spacer(1, 8))
+
+        story.append(Paragraph("<b>5. PLAN DE ACCIÓN, LOS 5 SECRETOS Y CUSTOMER JOURNEY</b>", h2_style))
         story.append(Paragraph(f"<b>Los 5 Secretos:</b> 1. Pulir es poder | 2. Póntelos | 3. Diviértete más | 4. Cuídalos | 5. Ajuste perfecto", normal_style))
         story.append(Paragraph(f"<b>Customer Journey:</b> 1. Empieza una relación | 2. Gánate su confianza | 3. Interactúa y relaciona | 4. Descubre y aprende | 5. Ve más allá", normal_style))
         story.append(Spacer(1, 4))
@@ -588,7 +749,15 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     Construye la vista principal del Módulo Enfoque Diario 2026 SGH
     con navegación por pestañas (Resumen Semanal, Días y Planes de Acción).
     """
-    sincronizar_colaboradores_db(session_user)
+    if session_user is None:
+        session_user = {"user": "invitado"}
+    user_id = session_user.get("user", "invitado")
+    init_user_state(user_id)
+    g_meta = user_states[user_id]["global_meta"]
+    s_state = user_states[user_id]["store_state"]
+    h_state = user_states[user_id]["historico_semanal_state"]
+    
+    sincronizar_colaboradores_db(session_user, g_meta["tienda"], user_id)
 
     def generar_pdf_enfoque(target_day=None):
         if not REPORTLAB_AVAILABLE:
@@ -602,12 +771,12 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             if target_day:
                 d_name = target_day
             else:
-                curr_tab = active_tab[0]
+                curr_tab = user_states[user_id]['active_tab'][0]
                 d_name = curr_tab.replace("PLAN.ACCIÓN_", "")
                 code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
                 d_name = code_map.get(d_name, d_name if d_name in DIAS else "DOMINGO")
 
-            pdf_path = generar_pdf_enfoque_file(d_name)
+            pdf_path = generar_pdf_enfoque_file(d_name, user_id)
             pdf_filename = f"Enfoque_Diario_{d_name}_SGH_2026.pdf"
             pdf_url = f"/uploads/{pdf_filename}"
 
@@ -663,7 +832,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     # Re-renderizador del contenedor activo
     def update_active_view():
-        curr_tab = active_tab[0]
+        curr_tab = user_states[user_id]['active_tab'][0]
         if curr_tab == "SEMANAL":
             tab_content_container.content = build_semanal_ui()
         elif curr_tab.startswith("PLAN.ACCIÓN_"):
@@ -683,8 +852,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             elif d_name == "SEMANAL":
                 d_name = "DOMINGO"
 
-            btn_download_excel.url = f"/api/download_excel/{d_name}"
-            btn_download_pdf.url = f"/print_enfoque/{d_name}"
+            btn_download_excel.url = f"/api/download_excel/{d_name}?user_id={user_id}"
+            btn_download_pdf.url = f"/print_enfoque/{d_name}?user_id={user_id}"
             btn_download_excel.update()
             btn_download_pdf.update()
         except Exception:
@@ -695,17 +864,17 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # Callback al modificar celdas globales de Semana/Tienda
     def on_global_header_change(e):
         if e.control.data == "semana":
-            global_meta["semana"] = e.control.value
+            g_meta["semana"] = e.control.value
         elif e.control.data == "tienda":
-            global_meta["tienda"] = e.control.value
-        guardar_estado_persistente()
+            g_meta["tienda"] = e.control.value
+        guardar_estado_persistente(user_id)
 
     # --- CONSTRUCCIÓN DE INTERFAZ GRÁFICA DE HOJA DIARIA ---
     def build_sheet_ui(d_name):
-        calc = calcular_dia(d_name)
-        data = store_state[d_name]
+        calc = calcular_dia(d_name, user_id)
+        data = s_state[d_name]
         try:
-            generar_pdf_enfoque_file(d_name)
+            generar_pdf_enfoque_file(d_name, user_id)
         except Exception:
             pass
 
@@ -725,7 +894,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             )
 
         def sync_green_cells():
-            c = calcular_dia(d_name)
+            c = calcular_dia(d_name, user_id)
             if "analogos" in green_txts: green_txts["analogos"].value = f"${c['analogos']:,.2f}"
             if "wearables" in green_txts: green_txts["wearables"].value = f"${c['wearables']:,.2f}"
             if "total_unidades" in green_txts: green_txts["total_unidades"].value = f"{c['total_unidades']} Pza"
@@ -747,6 +916,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 if f"colab_wea_{idx}" in green_txts: green_txts[f"colab_wea_{idx}"].value = str(r['meta_wea'])
                 if f"colab_kid_{idx}" in green_txts: green_txts[f"colab_kid_{idx}"].value = str(r['meta_kid'])
                 if f"colab_ck_{idx}" in green_txts: green_txts[f"colab_ck_{idx}"].value = str(r['meta_ck'])
+                
+                # CÓMO VAMOS green cells
+                if f"colab_conv_cierre_{idx}" in green_txts: green_txts[f"colab_conv_cierre_{idx}"].value = f"{r['conversion_cierre']*100:.1f}%"
+                if f"colab_conv_wea_{idx}" in green_txts: green_txts[f"colab_conv_wea_{idx}"].value = f"{r['conversion_wea']*100:.1f}%"
 
             if "tot_colab_hrs" in green_txts: green_txts["tot_colab_hrs"].value = f"{c['tot_horas']:.1f} hrs"
             if "tot_colab_vta" in green_txts: green_txts["tot_colab_vta"].value = f"${c['meta_diaria']:,.2f}"
@@ -754,6 +927,23 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             if "tot_colab_wea" in green_txts: green_txts["tot_colab_wea"].value = str(sum(r["meta_wea"] for r in c["colab_rows"]))
             if "tot_colab_kid" in green_txts: green_txts["tot_colab_kid"].value = str(sum(r["meta_kid"] for r in c["colab_rows"]))
             if "tot_colab_ck" in green_txts: green_txts["tot_colab_ck"].value = str(sum(r["meta_ck"] for r in c["colab_rows"]))
+
+            # Global CÓMO VAMOS
+            if "tot_cv_meta" in green_txts: green_txts["tot_cv_meta"].value = f"${c['meta_diaria']:,.2f}"
+            if "tot_cv_meta_unidades" in green_txts: green_txts["tot_cv_meta_unidades"].value = str(c["total_unidades"])
+            if "tot_cv_conversion" in green_txts: green_txts["tot_cv_conversion"].value = f"{c['conversion_dia']*100:.1f}%"
+            if "tot_cv_crecimiento" in green_txts: green_txts["tot_cv_crecimiento"].value = f"{c['crecimiento_conversion']*100:.1f}%"
+            if "tot_cv_wearables_pct" in green_txts: green_txts["tot_cv_wearables_pct"].value = f"{c['wearables_pct']*100:.1f}%"
+            if "tot_cv_kids_pct" in green_txts: green_txts["tot_cv_kids_pct"].value = f"{c['kids_pct']*100:.1f}%"
+
+            # Sumas columna CÓMO VAMOS
+            if "sum_cv_interacciones" in green_txts: green_txts["sum_cv_interacciones"].value = str(c["tot_interacciones"])
+            if "sum_cv_convertidos" in green_txts: green_txts["sum_cv_convertidos"].value = str(c["tot_convertidos"])
+            if "sum_cv_vta_cierre" in green_txts: green_txts["sum_cv_vta_cierre"].value = f"${c['tot_vta_cierre']:,.2f}"
+            if "sum_cv_ana_cierre" in green_txts: green_txts["sum_cv_ana_cierre"].value = str(c["tot_ana_cierre"])
+            if "sum_cv_wea_demos" in green_txts: green_txts["sum_cv_wea_demos"].value = str(c["tot_wea_demos"])
+            if "sum_cv_wea_cierre" in green_txts: green_txts["sum_cv_wea_cierre"].value = str(c["tot_wea_cierre"])
+            if "sum_cv_kid_cierre" in green_txts: green_txts["sum_cv_kid_cierre"].value = str(c["tot_kid_cierre"])
 
         def on_white_cell_change(e):
             try:
@@ -774,6 +964,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     data["atv_mtd"] = float(v) if v else 0.0
                 elif e.control.data == "aur_mtd":
                     data["aur_mtd"] = float(v) if v else 0.0
+                elif e.control.data == "venta_neta_dia":
+                    data["venta_neta_dia"] = float(v) if v else 0.0
+                elif e.control.data == "venta_unidades_dia":
+                    data["venta_unidades_dia"] = int(v) if v else 0
+                elif e.control.data == "slp_dia":
+                    data["slp_dia"] = v
+                elif e.control.data == "onesight_dia":
+                    data["onesight_dia"] = v
                 elif e.control.data.startswith("trafico_b_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["trafico_bloques"][idx] = int(v) if v else 0
@@ -783,11 +981,45 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 elif e.control.data.startswith("colab_hrs_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["colaboradores"][idx]["horas"] = float(v) if v else 0.0
+                elif e.control.data.startswith("colab_int_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["interacciones"] = int(v) if v else 0
+                elif e.control.data.startswith("colab_conv_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["convertidos"] = int(v) if v else 0
+                elif e.control.data.startswith("colab_vtac_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["vta_cierre"] = float(v) if v else 0.0
+                elif e.control.data.startswith("colab_anac_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["ana_cierre"] = int(v) if v else 0
+                elif e.control.data.startswith("colab_wead_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["wea_demos"] = int(v) if v else 0
+                elif e.control.data.startswith("colab_weac_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["wea_cierre"] = int(v) if v else 0
+                elif e.control.data.startswith("colab_kidc_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["kid_cierre"] = int(v) if v else 0
+                elif e.control.data.startswith("colab_ckc_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["ck_cierre"] = int(v) if v else 0
+                elif e.control.data.startswith("colab_wea_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["meta_wea"] = str(v)
+                elif e.control.data.startswith("colab_kid_"):
+                    idx = int(e.control.data.split("_")[-1])
+                    data["colaboradores"][idx]["meta_kid"] = str(v)
+                elif e.control.data == "cv_wearables_pct":
+                    data["cv_wearables_pct"] = v
+                elif e.control.data == "cv_kids_pct":
+                    data["cv_kids_pct"] = v
             except Exception:
                 pass
             
             sync_green_cells()
-            guardar_estado_persistente()
+            guardar_estado_persistente(user_id)
             try: page.update()
             except Exception: pass
 
@@ -999,8 +1231,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             ft.Container(ft.Text("HORAS (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_hrs),
             ft.Container(ft.Text("META VTA (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_vta),
             ft.Container(ft.Text("ANÁLOGOS (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_ana),
-            ft.Container(ft.Text("WEARABLES (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_wea),
-            ft.Container(ft.Text("KIDS (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_kid),
+            ft.Container(ft.Text("WEARABLES (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_wea),
+            ft.Container(ft.Text("KIDS (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_kid),
             ft.Container(ft.Text("CAREKITS (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_ck),
         ], spacing=6)
 
@@ -1013,8 +1245,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     make_white_input(c["horas"], f"colab_hrs_{idx}", width=w_colab_hrs),
                     make_green_calc(f"colab_vta_{idx}", f"${r_calc['meta_vta']:,.2f}", width=w_colab_vta),
                     make_green_calc(f"colab_ana_{idx}", str(r_calc['meta_ana']), width=w_colab_ana),
-                    make_green_calc(f"colab_wea_{idx}", str(r_calc['meta_wea']), width=w_colab_wea),
-                    make_green_calc(f"colab_kid_{idx}", str(r_calc['meta_kid']), width=w_colab_kid),
+                    make_white_input(c.get("meta_wea", r_calc['meta_wea']), f"colab_wea_{idx}", width=w_colab_wea),
+                    make_white_input(c.get("meta_kid", r_calc['meta_kid']), f"colab_kid_{idx}", width=w_colab_kid),
                     make_green_calc(f"colab_ck_{idx}", str(r_calc['meta_ck']), width=w_colab_ck),
                 ], spacing=6)
             )
@@ -1053,25 +1285,125 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             shadow=[ft.BoxShadow(color="#2000FFFF", blur_radius=10, spread_radius=1)]
         )
 
+        # 4. TABLA CÓMO VAMOS (TOTAL DEL DÍA)
+        cv_hdr_ui = ft.Row([
+            ft.Container(ft.Text("META", weight="bold", color="#00FFFF", size=11), width=80),
+            ft.Container(ft.Text("VENTA NETA (⚪)", weight="bold", color="#00FFFF", size=11), width=100),
+            ft.Container(ft.Text("META UNID.", weight="bold", color="#00FFFF", size=11), width=80),
+            ft.Container(ft.Text("VENTA UNID. (⚪)", weight="bold", color="#00FFFF", size=11), width=110),
+            ft.Container(ft.Text("CONVERSIÓN (🟩)", weight="bold", color="#00FF88", size=11), width=110),
+            ft.Container(ft.Text("CRECIMIENTO (🟩)", weight="bold", color="#00FF88", size=11), width=110),
+            ft.Container(ft.Text("WEARABLES % (⚪)", weight="bold", color="#00FFFF", size=11), width=110),
+            ft.Container(ft.Text("KIDS % (⚪)", weight="bold", color="#00FFFF", size=11), width=90),
+            ft.Container(ft.Text("CAREKITS % (🟩)", weight="bold", color="#00FF88", size=11), width=110),
+        ], spacing=6)
+        
+        cv_row_ui = ft.Row([
+            make_green_calc("tot_cv_meta", f"${calc['meta_diaria']:,.2f}", width=80),
+            make_white_input(data.get("venta_neta_dia", 0.0), "venta_neta_dia", width=100),
+            make_green_calc("tot_cv_meta_unidades", str(calc["total_unidades"]), width=80),
+            make_white_input(data.get("venta_unidades_dia", 0), "venta_unidades_dia", width=110),
+            make_green_calc("tot_cv_conversion", f"{calc['conversion_dia']*100:.1f}%", width=110),
+            make_green_calc("tot_cv_crecimiento", f"{calc['crecimiento_conversion']*100:.1f}%", width=110),
+            make_white_input(f"{calc['wearables_pct']*100:.1f}%", "cv_wearables_pct", width=110),
+            make_white_input(f"{calc['kids_pct']*100:.1f}%", "cv_kids_pct", width=90),
+            make_green_calc("tot_cv_carekits_pct", f"{calc['carekits_pct']*100:.1f}%", width=110),
+        ], spacing=6)
+
+        # 5. TABLA CÓMO VAMOS (POR COLABORADOR AL CIERRE)
+        cv_colab_hdr = ft.Row([
+            ft.Container(ft.Text("COLABORADOR", weight="bold", color="#00FFFF", size=10), width=90),
+            ft.Container(ft.Text("HORAS", weight="bold", color="#00FFFF", size=10), width=50),
+            ft.Container(ft.Text("INTERACC. (⚪)", weight="bold", color="#00FFFF", size=10), width=90),
+            ft.Container(ft.Text("CONVERTIDOS (⚪)", weight="bold", color="#00FFFF", size=10), width=110),
+            ft.Container(ft.Text("CONVERSIÓN (🟩)", weight="bold", color="#00FF88", size=10), width=100),
+            ft.Container(ft.Text("VTA CIERRE (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
+            ft.Container(ft.Text("ANÁLOGAS (⚪)", weight="bold", color="#00FFFF", size=10), width=90),
+            ft.Container(ft.Text("DEMOS WEA. (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
+            ft.Container(ft.Text("UNID. WEA. (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
+            ft.Container(ft.Text("CONV. WEA (🟩)", weight="bold", color="#00FF88", size=10), width=90),
+            ft.Container(ft.Text("KIDS CIERRE (⚪)", weight="bold", color="#00FFFF", size=10), width=90),
+            ft.Container(ft.Text("CK CIERRE (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
+        ], spacing=6)
+
+        cv_colab_rows = [cv_colab_hdr]
+        for idx, c in enumerate(data["colaboradores"]):
+            r_calc = calc["colab_rows"][idx]
+            cv_colab_rows.append(
+                ft.Row([
+                    make_readonly_input(c["nombre"], width=90),
+                    make_readonly_input(c["horas"], width=50),
+                    make_white_input(c.get("interacciones", 0), f"colab_int_{idx}", width=90),
+                    make_white_input(c.get("convertidos", 0), f"colab_conv_{idx}", width=110),
+                    make_green_calc(f"colab_conv_cierre_{idx}", f"{r_calc['conversion_cierre']*100:.1f}%", width=100),
+                    make_white_input(c.get("vta_cierre", 0.0), f"colab_vtac_{idx}", width=100),
+                    make_white_input(c.get("ana_cierre", 0), f"colab_anac_{idx}", width=90),
+                    make_white_input(c.get("wea_demos", 0), f"colab_wead_{idx}", width=100),
+                    make_white_input(c.get("wea_cierre", 0), f"colab_weac_{idx}", width=100),
+                    make_green_calc(f"colab_conv_wea_{idx}", f"{r_calc['conversion_wea']*100:.1f}%", width=90),
+                    make_white_input(c.get("kid_cierre", 0), f"colab_kidc_{idx}", width=90),
+                    make_white_input(c.get("ck_cierre", 0), f"colab_ckc_{idx}", width=100),
+                ], spacing=6)
+            )
+
+        cv_colab_rows.append(
+            ft.Row([
+                ft.Container(ft.Text("TOTALES TIENDA", weight="bold", color="white", size=11), width=90),
+                make_green_calc("sum_cv_horas", f"{calc['tot_horas']:.1f}", width=50),
+                make_green_calc("sum_cv_interacciones", str(calc["tot_interacciones"]), width=90),
+                make_green_calc("sum_cv_convertidos", str(calc["tot_convertidos"]), width=110),
+                ft.Container(width=100), # Espacio para conversion global
+                make_green_calc("sum_cv_vta_cierre", f"${calc['tot_vta_cierre']:,.2f}", width=100),
+                make_green_calc("sum_cv_ana_cierre", str(calc["tot_ana_cierre"]), width=90),
+                make_green_calc("sum_cv_wea_demos", str(calc["tot_wea_demos"]), width=100),
+                make_green_calc("sum_cv_wea_cierre", str(calc["tot_wea_cierre"]), width=100),
+                ft.Container(width=90), # Espacio conv wea global
+                make_green_calc("sum_cv_kid_cierre", str(calc["tot_kid_cierre"]), width=90),
+                make_green_calc("sum_cv_ck_cierre", str(calc["tot_ck_cierre"]), width=100),
+            ], spacing=6)
+        )
+
+        card_como_vamos = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#F59E0B", size=18),
+                    ft.Text("¿CÓMO VAMOS? (RESULTADOS DE CIERRE)", color="white", weight="bold", size=13)
+                ], spacing=6),
+                ft.Divider(height=8, color="#374151"),
+                ft.Text("TOTAL DEL DÍA", weight="bold", color="#F59E0B", size=11),
+                ft.Row([ft.Column([cv_hdr_ui, cv_row_ui], spacing=5)], scroll=ft.ScrollMode.AUTO),
+                ft.Divider(height=8, color="#374151"),
+                ft.Text("RESULTADOS POR COLABORADOR AL CIERRE", weight="bold", color="#F59E0B", size=11),
+                ft.Row([ft.Column(cv_colab_rows, spacing=5)], scroll=ft.ScrollMode.AUTO),
+            ]),
+            bgcolor="#0B0E17",
+            padding=14,
+            border_radius=12,
+            border=ft.Border.all(1.5, "#F59E0B"),
+            shadow=[ft.BoxShadow(color="#20F59E0B", blur_radius=10, spread_radius=1)]
+        )
+
         return ft.Column([
             card_metas,
             ft.Container(height=8),
             card_horarios,
             ft.Container(height=8),
-            card_colabs
+            card_colabs,
+            ft.Container(height=8),
+            card_como_vamos
         ], scroll=ft.ScrollMode.AUTO)
 
     # --- INTERFAZ PLAN DE ACCIÓN ---
     def build_plan_accion_ui(d_name):
-        data = store_state[d_name]
+        data = s_state[d_name]
 
         def on_enfoque_change(e):
             data["enfoque_hoy"] = e.control.value
-            guardar_estado_persistente()
+            guardar_estado_persistente(user_id)
 
         def on_logros_change(e):
             data["logros_hoy"] = e.control.value
-            guardar_estado_persistente()
+            guardar_estado_persistente(user_id)
 
         # Tarjetas de Los 5 Secretos (Brandies SGH)
         card_secretos = ft.Container(
@@ -1086,7 +1418,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                             ft.Text(f"📊 Exportar Excel Plan ({d_name})", color="white", weight="bold", size=11)
                         ], spacing=4),
                         style=ft.ButtonStyle(bgcolor="#059669", shape=ft.RoundedRectangleBorder(radius=6)),
-                        url=f"/api/download_excel/{d_name}"
+                        url=f"/api/download_excel/{d_name}?user_id={user_id}"
                     ),
                     ft.Container(width=6),
                     ft.ElevatedButton(
@@ -1218,14 +1550,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # --- INTERFAZ RESUMEN SEMANAL ---
     def build_semanal_ui():
         rows_sem = []
-        tot_meta = sum(store_state[d]["meta_diaria"] for d in DIAS)
+        tot_meta = sum(s_state[d]["meta_diaria"] for d in DIAS)
         tot_ana = tot_meta * 0.85
         tot_wea = tot_meta * 0.15
         tot_horas_sem = 0.0
         tot_transac_sem = 0
 
         for d in DIAS:
-            c = calcular_dia(d)
+            c = calcular_dia(d, user_id)
             tot_horas_sem += c["tot_horas"]
             tot_transac_sem += c["transacciones"]
             rows_sem.append(
@@ -1243,7 +1575,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="#7C3AED", size=18),
-                    ft.Text(f"CONSOLIDADO DE ENFOQUE SEMANAL - SEMANA {global_meta['semana']} ({global_meta['tienda']})", color="white", weight="bold", size=13)
+                    ft.Text(f"CONSOLIDADO DE ENFOQUE SEMANAL - SEMANA {g_meta['semana']} ({g_meta['tienda']})", color="white", weight="bold", size=13)
                 ], spacing=6),
                 ft.Divider(height=8, color="#374151"),
                 ft.Row([
@@ -1277,7 +1609,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     tab_content_container = ft.Container(content=build_sheet_ui("DOMINGO"))
 
     def select_tab(tab_name):
-        active_tab[0] = tab_name
+        user_states[user_id]['active_tab'][0] = tab_name
         for btn, t_id in tab_buttons:
             is_sel = (t_id == tab_name)
             col_base = COLOR_TABS.get(t_id, "#00FFFF")
@@ -1309,7 +1641,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     tab_buttons = []
     tab_row_controls = []
     for label, t_id in TABS_LIST:
-        is_sel = (t_id == active_tab[0])
+        is_sel = (t_id == user_states[user_id]['active_tab'][0])
         col_base = COLOR_TABS.get(t_id, "#00FFFF")
         btn = ft.Container(
             content=ft.Text(label, color="white" if is_sel else "#CCCCCC", size=11, weight="bold"),
@@ -1339,25 +1671,25 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         u_user = session_user.get("usuario") or session_user.get("Usuario") or ""
         num_code = u_user.lower().replace("sgh", "").strip()
         if u_tienda and u_tienda != "Tienda Luxo":
-            global_meta["tienda"] = u_tienda
+            g_meta["tienda"] = u_tienda
             if num_code in MAPEO_TIENDAS_SGH:
-                global_meta["num_tienda"] = num_code
+                g_meta["num_tienda"] = num_code
             elif u_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
-                global_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[u_tienda.upper()]
+                g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[u_tienda.upper()]
 
     # Sincronizar colaboradores iniciales
-    sincronizar_colaboradores_db(session_user, global_meta["tienda"])
+    sincronizar_colaboradores_db(session_user, g_meta["tienda"])
 
     # 0. Selector de Año (2025, 2026, 2027, 2028)
-    global_meta.setdefault("anio", "2026")
+    g_meta.setdefault("anio", "2026")
 
     def on_anio_change(e):
-        global_meta["anio"] = e.control.value
-        guardar_estado_persistente()
+        g_meta["anio"] = e.control.value
+        guardar_estado_persistente(user_id)
         update_active_view()
 
     dd_anio = ft.Dropdown(
-        value=str(global_meta["anio"]),
+        value=str(g_meta["anio"]),
         options=[ft.dropdown.Option(str(y)) for y in [2026, 2025, 2027, 2028]],
         width=80,
         content_padding=6,
@@ -1371,10 +1703,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     # 1. Selector de Semana (1 a 52)
     def on_semana_change(e):
-        guardar_semana_historico()
+        guardar_semana_historico(user_id)
         n_sem = e.control.value
-        cargar_semana_historico(n_sem)
-        guardar_estado_persistente()
+        cargar_semana_historico(user_id, n_sem)
+        guardar_estado_persistente(user_id)
         update_active_view()
         if page:
             snack = ft.SnackBar(ft.Text(f"📅 Semana {n_sem} cargada.", color="white"), bgcolor="#059669")
@@ -1383,7 +1715,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             page.update()
 
     dd_semana = ft.Dropdown(
-        value=str(global_meta["semana"]),
+        value=str(g_meta["semana"]),
         options=[ft.dropdown.Option(str(w)) for w in range(1, 53)],
         width=75,
         content_padding=6,
@@ -1398,17 +1730,17 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # 2. Campo # TIENDA (Número de Tienda SGH)
     def on_num_tienda_change(e):
         val = e.control.value.strip()
-        global_meta["num_tienda"] = val
+        g_meta["num_tienda"] = val
         if val in MAPEO_TIENDAS_SGH:
             t_matched = MAPEO_TIENDAS_SGH[val]
-            global_meta["tienda"] = t_matched
+            g_meta["tienda"] = t_matched
             dd_tienda.value = t_matched
             sincronizar_colaboradores_db(session_user, t_matched)
-            guardar_estado_persistente()
+            guardar_estado_persistente(user_id)
             update_active_view()
 
     txt_num_tienda = ft.TextField(
-        value=global_meta["num_tienda"],
+        value=g_meta["num_tienda"],
         read_only=not es_admin,
         width=85,
         text_size=11,
@@ -1425,23 +1757,23 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     def on_store_select_change(e):
         selected_tienda = e.control.value
-        global_meta["tienda"] = selected_tienda
+        g_meta["tienda"] = selected_tienda
         if selected_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
             num_code = MAPEO_NOMBRE_A_NUMERO_SGH[selected_tienda.upper()]
-            global_meta["num_tienda"] = num_code
+            g_meta["num_tienda"] = num_code
             txt_num_tienda.value = num_code
 
         sincronizar_colaboradores_db(session_user, selected_tienda)
-        guardar_estado_persistente()
+        guardar_estado_persistente(user_id)
         update_active_view()
         if page:
-            snack = ft.SnackBar(ft.Text(f"🏢 Tienda cambiada a {selected_tienda} (# {global_meta['num_tienda']}).", color="white"), bgcolor="#059669")
+            snack = ft.SnackBar(ft.Text(f"🏢 Tienda cambiada a {selected_tienda} (# {g_meta['num_tienda']}).", color="white"), bgcolor="#059669")
             page.overlay.append(snack)
             snack.open = True
             page.update()
 
     dd_tienda = ft.Dropdown(
-        value=global_meta["tienda"],
+        value=g_meta["tienda"],
         options=options_tiendas,
         disabled=not es_admin,
         width=150,
@@ -1461,8 +1793,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             bgcolor="#059669",
             shape=ft.RoundedRectangleBorder(radius=8)
         ),
-        url="/api/download_excel/DOMINGO",
-        on_click=lambda e: generar_excel_enfoque(active_tab[0] if active_tab[0] in DIAS else "DOMINGO")
+        url=f"/api/download_excel/DOMINGO?user_id={user_id}",
+        on_click=lambda e: generar_excel_enfoque(user_states[user_id]['active_tab'][0] if user_states[user_id]['active_tab'][0] in DIAS else "DOMINGO", user_id)
     )
 
     btn_download_pdf = ft.ElevatedButton(
@@ -1471,22 +1803,22 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             bgcolor="#10B981",
             shape=ft.RoundedRectangleBorder(radius=8)
         ),
-        url="/print_enfoque/DOMINGO"
+        url=f"/print_enfoque/DOMINGO?user_id={user_id}"
     )
 
     # Master Refresh Button 🔄 (Flat Neon Green Outline Style)
     def on_master_refresh_click(e):
-        curr_tab = active_tab[0]
+        curr_tab = user_states[user_id]['active_tab'][0]
         d_name = curr_tab.replace("PLAN.ACCIÓN_", "")
         code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
         d_name = code_map.get(d_name, d_name if d_name in DIAS else "DOMINGO")
         
-        calcular_dia(d_name)
+        calcular_dia(d_name, user_id)
         update_active_view()
 
         if page:
             snack = ft.SnackBar(
-                content=ft.Text(f"🔄 LUXO: Datos de {d_name} ({global_meta['tienda']} #{global_meta['num_tienda']}) Sincronizados", color="white", weight="bold", size=12),
+                content=ft.Text(f"🔄 LUXO: Datos de {d_name} ({g_meta['tienda']} #{g_meta['num_tienda']}) Sincronizados", color="white", weight="bold", size=12),
                 bgcolor="#064E3B",
                 duration=2000
             )
