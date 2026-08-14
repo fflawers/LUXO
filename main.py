@@ -4303,62 +4303,10 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         async def _launch_widget():
             try:
-                js_code = f"""
-                (function() {{
-                    var existing = document.getElementById('luxo-upload-overlay');
-                    if(existing) document.body.removeChild(existing);
-                    
-                    var overlay = document.createElement('div');
-                    overlay.id = 'luxo-upload-overlay';
-                    overlay.style.position = 'fixed';
-                    overlay.style.top = '0';
-                    overlay.style.left = '0';
-                    overlay.style.width = '100vw';
-                    overlay.style.height = '100vh';
-                    overlay.style.backgroundColor = 'rgba(0,0,0,0.85)';
-                    overlay.style.zIndex = '999999';
-                    overlay.style.display = 'flex';
-                    overlay.style.justifyContent = 'center';
-                    overlay.style.alignItems = 'center';
-                    overlay.style.backdropFilter = 'blur(5px)';
-
-                    var iframe = document.createElement('iframe');
-                    iframe.src = '/upload_widget?type={upload_type}&user_id={user_id_key}';
-                    iframe.style.width = '90%';
-                    iframe.style.maxWidth = '500px';
-                    iframe.style.height = '85%';
-                    iframe.style.maxHeight = '700px';
-                    iframe.style.border = '2px solid #D8B4FE';
-                    iframe.style.borderRadius = '20px';
-                    iframe.style.backgroundColor = '#181828';
-
-                    var closeBtn = document.createElement('button');
-                    closeBtn.innerText = '✕ Cerrar';
-                    closeBtn.style.position = 'absolute';
-                    closeBtn.style.top = '20px';
-                    closeBtn.style.right = '20px';
-                    closeBtn.style.background = 'rgba(255,69,0,0.8)';
-                    closeBtn.style.color = 'white';
-                    closeBtn.style.border = 'none';
-                    closeBtn.style.padding = '8px 15px';
-                    closeBtn.style.borderRadius = '10px';
-                    closeBtn.style.fontSize = '16px';
-                    closeBtn.style.fontWeight = 'bold';
-                    closeBtn.style.cursor = 'pointer';
-                    closeBtn.onclick = function() {{ document.body.removeChild(overlay); }};
-
-                    overlay.appendChild(iframe);
-                    overlay.appendChild(closeBtn);
-                    document.body.appendChild(overlay);
-                    
-                    window.closeOverlay = function() {{
-                        if(document.body.contains(overlay)) document.body.removeChild(overlay);
-                    }};
-                }})();
-                """
-                import urllib.parse
-                js_inline = "javascript:" + urllib.parse.quote(js_code)
-                await page.launch_url(js_inline)
+                # Flutter blocks javascript: URLs, so we must use the actual URL.
+                # To avoid a full new tab where possible, we request a popup window.
+                target_url = f"/upload_widget?type={upload_type}&user_id={user_id_key}"
+                await page.launch_url(target_url, web_popup_window=True, web_popup_window_width=450, web_popup_window_height=700)
             except Exception as ex_launch:
                 print("Error abriendo upload widget:", ex_launch)
 
