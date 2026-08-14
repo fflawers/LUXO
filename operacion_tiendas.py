@@ -380,7 +380,8 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         label="Venta con IVA ($)",
         border_color="#00FFFF",
         color="white",
-        keyboard_type=ft.KeyboardType.NUMBER,
+        keyboard_type=ft.KeyboardType.TEXT,
+        input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9\.]", replacement_string=""),
         width=200
     )
     piezas_input = ft.TextField(

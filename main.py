@@ -815,7 +815,7 @@ def configurar_rutas_fastapi(app):
                             r.onresult = function(ev) {
                                 const txt = ev.results[0][0].transcript;
                                 if (txt) {
-                                    fetch('/text_input?user_id=1&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
                             r.onerror = function(ev) { 
@@ -1021,7 +1021,7 @@ def configurar_rutas_fastapi(app):
                                                 lastSentTime = now;
                                                 playBeep();
                                                 setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                                fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                                fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                                 // Ocultar orbe flotante tras procesar/enviar
                                                 setTimeout(function(){ window.hideLuxoSiriOrb(); }, 2000);
                                                 window.luxoManualDictating = false;
@@ -1034,7 +1034,7 @@ def configurar_rutas_fastapi(app):
                                             lastSentText = query;
                                             playBeep();
                                             setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                            fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                            fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                             window.luxoManualDictating = false;
                                             // Ocultar orbe flotante al finalizar de hablar
                                             setTimeout(function(){ window.hideLuxoSiriOrb(); }, 2000);
@@ -1426,7 +1426,7 @@ def configurar_rutas_fastapi(app):
                                         status.innerText = "🚀 Enviado a la IA: " + query;
                                         status.style.color = "#7CFC00";
                                         status.style.borderColor = "#7CFC00";
-                                        fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                        fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                         setTimeout(() => {
                                             status.innerText = "🎤 Presiona el micrófono para hablar";
                                             status.style.color = "#00FFFF";
@@ -3919,15 +3919,19 @@ def main(page: ft.Page):
             dlg_w = min(int(pw * 0.92), 850)
             dlg_h = min(int(ph * 0.85), 650)
 
+            def close_dlg(e):
+                try: page.close(dialog)
+                except: pass
+
             dialog = ft.AlertDialog(
                 title=ft.Row([
                     ft.Text(titulo_modal, weight="bold", size=14, color="white", expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                    ft.IconButton(ft.Icons.CLOSE, on_click=lambda e: page.pop_dialog())
+                    ft.IconButton(ft.Icons.CLOSE, on_click=close_dlg)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 content=ft.Container(content_viewer, width=dlg_w, height=dlg_h),
                 bgcolor="#1A1A24"
             )
-            page.show_dialog(dialog)
+            page.open(dialog)
             try: page.update()
             except: pass
         except Exception as ex:
@@ -4714,6 +4718,10 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         page.floating_action_button = None
 
         page.clean()
+        
+        # Restaurar estado del botón de acceso
+        btn_acceder.disabled = False
+        btn_acceder.content.value = "ACCEDER"
 
         page.add(full_screen_background)
 
@@ -4948,6 +4956,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         )
         try: page.update()
         except: pass
+        try: page.launch_url(f"javascript:window.luxoUserId = '{user_info.get('id', '1')}'; void(0);")
+        except: pass
         import time
         time.sleep(0.01)
         
@@ -4984,7 +4994,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         alignment=ft.alignment.Alignment(0, 0),
                         border=ft.Border.all(1.5, "#D8B4FE"),
                     ),
-                    ft.Text("LUXO: ¡Bienvenido! Soy LUXO, tu asistente virtual.", color="white", weight="bold", expand=True, selectable=True),
+                    ft.Text(f"LUXO: ¡Bienvenido {user_info.get('nombre', '').split(' ')[0]}! Soy LUXO, tu asistente virtual.", color="white", weight="bold", expand=True, selectable=True),
                 ], vertical_alignment="start", spacing=10),
                 bgcolor="#1E1E2E",
                 padding=12,
@@ -5396,7 +5406,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 # =======================================================
                 # 3. INTENT ROUTING: Descarga directa de archivos
                 # =======================================================
-                palabras_descarga = {"pdf", "archivo", "formato", "documento", "descargar", "manual"}
+                palabras_descarga = {"pdf", "archivo", "formato", "documento", "descargar", "manual", "video", "imagen", "excel", "foto"}
                 user_words = set(user_text_norm.split())
                 intencion_descarga = bool(user_words.intersection(palabras_descarga))
                 
@@ -5762,8 +5772,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                 cur_h.execute("""
                                     INSERT INTO historial_conversaciones 
                                     (ID_Usuario, ID_Manual, Pregunta_Usuario, Respuesta_IA, Fue_Respondida_Con_Manual, Fecha_Hora) 
-                                    VALUES (%s, %s, %s, %s, %s, NOW())
-                                """, (user_info["id"], mejor_fila["id_manual"], user_text, respuesta_texto_plano, 1))
+                                    VALUES (%s, %s, %s, %s, %s, %s)
+                                """, (user_info["id"], mejor_fila["id_manual"], user_text, respuesta_texto_plano, 1, datetime.now()))
                                 db_h.commit()
                                 db_h.close()
                         except Exception as e:
@@ -6330,7 +6340,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             Fecha_Hora,
                             Fue_Respondida_Con_Manual
                         )
-                        VALUES (%s, %s, %s, %s, NOW(), %s)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                         """
                         cursor.execute(
                             sql_historial,
@@ -6339,6 +6349,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 id_manual,
                                 user_text,
                                 respuesta,
+                                datetime.now(),
                                 1 if id_manual and "no cuento con" not in respuesta.lower() else 0,
                             )
                         )
@@ -6982,7 +6993,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             playBeep();
                                             window.showLuxoSiriOrb(5000);
                                             setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                            fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                            fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                             window.luxoIsListeningAlertSent = false;
                                             window.luxoManualDictating = false;
                                             setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
@@ -6996,7 +7007,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         playBeep();
                                         window.showLuxoSiriOrb(5000);
                                         setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                        fetch('/text_input?user_id=1&text=' + encodeURIComponent(query), { method: 'POST' });
+                                        fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(query), { method: 'POST' });
                                         window.luxoManualDictating = false;
                                         setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
                                         try { rec.abort(); } catch(e){} // Reinicia el buffer del microfono
@@ -7085,7 +7096,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             r.onresult = function(ev) {
                                 const txt = ev.results[0][0].transcript;
                                 if (txt) {
-                                    fetch('/text_input?user_id=1&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    fetch('/text_input?user_id=' + (window.luxoUserId || '1') + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
                             r.onerror = function(ev) { 
@@ -13274,12 +13285,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             ], spacing=4, expand=True)
                         ], spacing=10),
                         ft.Container(height=5),
-                        ft.Text("Hitos: Meses logrados", size=12, color="#aaaaaa"),
-                        ft.Container(
-                            content=ft.Row([chk_meses[i] for i in range(12)], wrap=True, spacing=10),
-                            padding=5,
-                            border_radius=5,
-                            bgcolor="#1c1c1c"
+                        ft.ExpansionTile(
+                            title=ft.Text("Hitos: Meses logrados", size=12, color="#aaaaaa"),
+                            controls=[
+                                ft.Container(
+                                    content=ft.Row([chk_meses[i] for i in range(12)], wrap=True, spacing=10),
+                                    padding=5,
+                                    border_radius=5,
+                                    bgcolor="#1c1c1c"
+                                )
+                            ]
                         ),
                         btn_guardar_anual
                     ], spacing=10),
