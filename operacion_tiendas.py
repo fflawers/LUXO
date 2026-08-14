@@ -55,7 +55,7 @@ def obtener_tiendas_activas(db):
         cursor = db.cursor(dictionary=True)
         cursor.execute("SELECT DISTINCT Tienda FROM usuarios WHERE Usuario LIKE 'sgh%' AND Tienda IS NOT NULL AND Tienda != '' ORDER BY Tienda ASC")
         rows = cursor.fetchall()
-        return [r["Tienda"] for r in rows]
+        return [r["Tienda"].strip() for r in rows if r.get("Tienda")]
     except Exception as e:
         print("Error obteniendo tiendas activas:", e)
         return []
@@ -274,7 +274,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
     mostrar_snack = mostrar_snack_fn
     tr = tr_fn
     
-    tienda_usuario = user_info.get("tienda")
+    tienda_usuario = (user_info.get("tienda") or "").strip()
     rol_usuario = user_info.get("rol")
     
     view_content = ft.Column(spacing=15, expand=True, scroll=ft.ScrollMode.AUTO)
@@ -312,9 +312,9 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Apertura, Foto_Apertura, Estado_Apertura)
                 VALUES (%s, CURRENT_DATE(), CURRENT_TIME(), %s, %s)
                 ON DUPLICATE KEY UPDATE 
-                    Hora_Apertura = CURRENT_TIME(), 
-                    Foto_Apertura = %s, 
-                    Estado_Apertura = %s
+                    Hora_Apertura = IF(Hora_Apertura IS NULL, CURRENT_TIME(), Hora_Apertura),
+                    Foto_Apertura = IF(Hora_Apertura IS NULL, %s, Foto_Apertura),
+                    Estado_Apertura = IF(Hora_Apertura IS NULL, %s, Estado_Apertura)
             """, (tienda_usuario, foto_rel_path, estado, foto_rel_path, estado))
             db.commit()
             db.close()
@@ -444,7 +444,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         if db:
             try:
                 cursor = db.cursor(dictionary=True)
-                cursor.execute("SELECT * FROM operacion_diaria_tiendas WHERE Numero_Tienda = %s AND Fecha = CURRENT_DATE()", (tienda_usuario,))
+                cursor.execute("SELECT * FROM operacion_diaria_tiendas WHERE TRIM(Numero_Tienda) = TRIM(%s) AND Fecha = CURRENT_DATE()", (tienda_usuario,))
                 reg = cursor.fetchone()
                 db.close()
             except Exception as ex:
@@ -622,7 +622,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
                     WHERE Fecha = %s
                 """, (fecha_consulta[0],))
                 rows = cursor.fetchall()
-                registros = {r["Numero_Tienda"]: r for r in rows}
+                registros = {str(r["Numero_Tienda"]).strip(): r for r in rows}
                 db.close()
             except Exception as ex:
                 print("Error al refrescar tabla admin:", ex)
