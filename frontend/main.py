@@ -1,4 +1,5 @@
 import flet as ft
+from frontend.core.state import AppState
 from datetime import datetime, timedelta
 import mysql.connector
 import requests
@@ -25,7 +26,7 @@ import operacion_tiendas
 # CONFIGURACION
 # =========================================
 
-BASE_PATH = os.path.dirname(__file__)
+BASE_PATH = os.path.dirname(os.path.dirname(__file__))
 ASSETS_PATH = os.path.join(BASE_PATH, "custom_assets")
 
 # Valores de APIs leídos desde entorno (.env) o valores por defecto
@@ -62,6 +63,8 @@ DB_CONFIG = {
     "database": os.getenv("DB_NAME", "sgh_portal"),
     "port": int(os.getenv("DB_PORT", 3306))
 }
+
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8553")
 
 # Variables globales para caché del RAG (manuales)
 RAG_BLOQUES_CACHE = None
@@ -1894,93 +1897,52 @@ def configurar_rutas_fastapi(app):
     # --- Verificar credencial Passkey recibida del sensor dactilar ---
     @app.post("/api/biometria/passkey_verify")
     async def passkey_verify(request: Request):
-        """Valida la firma WebAuthn enviada por el navegador y busca al usuario biométrico."""
+        """Valida la firma WebAuthn enviada por el navegador delegando al backend."""
         try:
             body = await request.json()
             credential_id = body.get("credential_id", "")
             user_agent = request.headers.get("user-agent", "Desconocido")
-            ip_client = request.client.host if request.client else "Desconocido"
 
-            # Buscar en biometria_usuarios por Credential_ID
-            db_p = conectar_db()
-            if not db_p:
-                return {"status": "error", "message": "Error de base de datos"}
-
-            cursor_p = db_p.cursor(dictionary=True)
-            cursor_p.execute("""
-                SELECT b.usuario_id, b.nombre_usuario, u.ID_Usuario, u.Nombre_Completo,
-                       u.Rol, u.Tienda, u.Zona, u.Puesto
-                FROM biometria_usuarios b
-                JOIN usuarios u ON b.usuario_id = u.ID_Usuario
-                WHERE b.credential_id = %s
-            """, (credential_id,))
-            bio_user = cursor_p.fetchone()
-
-            if not bio_user:
-                # Si no hay credential_id guardado aún, buscar cualquier usuario con Passkey registrada
-                cursor_p.execute("""
-                    SELECT b.usuario_id, b.nombre_usuario, u.ID_Usuario, u.Nombre_Completo,
-                           u.Rol, u.Tienda, u.Zona, u.Puesto
-                    FROM biometria_usuarios b
-                    JOIN usuarios u ON b.usuario_id = u.ID_Usuario
-                    WHERE b.hash_huella IS NOT NULL
-                    LIMIT 1
-                """)
-                bio_user = cursor_p.fetchone()
-
-            db_p.close()
-
-            if bio_user:
-                rol = str(bio_user.get("Rol", "")).lower()
-                puesto = str(bio_user.get("Puesto", "")).lower()
-                es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
-
-                registrar_sesion_biometrica(
-                    id_usuario=bio_user["ID_Usuario"],
-                    nombre_usuario=bio_user["Nombre_Completo"],
-                    empleado_identificado=bio_user["Nombre_Completo"],
-                    metodo="Huella",
-                    es_gerente=es_gerente,
-                    ip_acceso=ip_client,
-                    dispositivo=user_agent[:150]
-                )
-
+            # Llamar al backend API
+            api_url = f"{API_URL}/api/biometria/passkey_verify"
+            headers = {"user-agent": user_agent}
+            
+            import requests as req
+            try:
+                resp = req.post(api_url, json={"credential_id": credential_id}, headers=headers, timeout=10)
+            except Exception as req_ex:
+                return {"status": "error", "message": f"Error conectando al backend: {str(req_ex)}"}
+                
+            if resp.status_code != 200:
+                return {"status": "error", "message": f"Error del backend: {resp.status_code}"}
+                
+            data = resp.json()
+            
+            if data.get("status") == "ok":
                 # Notificar a la sesión Flet activa
                 session = (list(active_sessions.values())[0] if active_sessions else None)
                 if session:
                     page_s = session.get("page")
                     if page_s:
                         ui = session.get("user_info", {})
-                        ui["id"] = bio_user["ID_Usuario"]
-                        ui["nombre"] = bio_user["Nombre_Completo"]
-                        ui["rol"] = bio_user["Rol"]
-                        ui["tienda"] = bio_user.get("Tienda") or ""
-                        ui["zona"] = bio_user.get("Zona") or "Zona Centro"
+                        ui["id"] = data["usuario_id"]
+                        ui["nombre"] = data["nombre"]
+                        ui["rol"] = data["rol"]
+                        ui["tienda"] = data.get("tienda") or ""
+                        ui["zona"] = data.get("zona") or "Zona Centro"
                         ui["biometria_metodo"] = "Huella"
-                        ui["es_gerente_verificado"] = es_gerente
+                        ui["es_gerente_verificado"] = data.get("es_gerente", False)
+                        
                         cargar_chat_fn = session.get("cargar_chat")
-                        saludo_fn = session.get("reproducir_saludo")
                         if cargar_chat_fn:
-                            _nombre_bio = bio_user["Nombre_Completo"]
+                            _nombre_bio = data["nombre"]
                             async def trigger_login_huella():
                                 cargar_chat_fn()
                                 import threading as _th_h
-                                _th_h.Thread(
-                                    target=reproducir_saludo_login,
-                                    args=(_nombre_bio,),
-                                    daemon=True
-                                ).start()
+                                _th_h.Thread(target=reproducir_saludo_login, args=(_nombre_bio,), daemon=True).start()
                             page_s.run_task(trigger_login_huella)
-
-                return {
-                    "status": "ok",
-                    "usuario_id": bio_user["ID_Usuario"],
-                    "nombre": bio_user["Nombre_Completo"],
-                    "rol": bio_user.get("Rol", ""),
-                    "tienda": bio_user.get("Tienda", ""),
-                    "es_gerente": es_gerente
-                }
-            return {"status": "no_match", "message": "Huella no registrada en el sistema"}
+                            
+            return data
         except Exception as ex_pv:
             print("Error passkey_verify:", ex_pv)
             return {"status": "error", "message": str(ex_pv)}
@@ -1988,135 +1950,55 @@ def configurar_rutas_fastapi(app):
     # --- Login por Reconocimiento Facial (Frame Base64 desde la cámara) ---
     @app.post("/api/biometria/facial_login")
     async def facial_login(request: Request):
-        """Recibe un frame de cámara en base64, lo compara con los vectores registrados y da acceso."""
+        """Recibe un frame de cámara en base64, lo envía al backend y da acceso en UI."""
         try:
-            import io
-            from PIL import Image
-            import numpy as np
-
             body = await request.json()
             frame_b64 = body.get("frame_base64", "")
             user_agent = request.headers.get("user-agent", "Desconocido")
-            ip_client = request.client.host if request.client else "Desconocido"
-
+            
             if not frame_b64:
                 return {"status": "error", "message": "No se recibió imagen"}
 
-            # Decodificar imagen base64
-            if "," in frame_b64:
-                frame_b64 = frame_b64.split(",", 1)[1]
-            img_bytes = base64.b64decode(frame_b64)
-            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-
-            # Convertir a array y normalizar brillo con OpenCV
+            # Llamar al backend API
+            api_url = f"{API_URL}/api/biometria/facial_login"
+            headers = {"user-agent": user_agent}
+            
+            import requests as req
             try:
-                import cv2
-                img_arr = np.array(img)
-                img_gray = cv2.cvtColor(img_arr, cv2.COLOR_RGB2GRAY)
-                img_eq = cv2.equalizeHist(img_gray)
-                img_arr = cv2.cvtColor(img_eq, cv2.COLOR_GRAY2RGB)
-            except Exception:
-                img_arr = np.array(img)
+                resp = req.post(api_url, json={"frame_base64": frame_b64}, headers=headers, timeout=10)
+            except Exception as req_ex:
+                return {"status": "error", "message": f"Error conectando al backend: {str(req_ex)}"}
 
-            # Buscar usuarios con encodings faciales registrados
-            db_f = conectar_db()
-            if not db_f:
-                return {"status": "error", "message": "Error de base de datos"}
+            if resp.status_code != 200:
+                return {"status": "error", "message": f"Error del backend: {resp.status_code}"}
+                
+            data = resp.json()
 
-            cursor_f = db_f.cursor(dictionary=True)
-            cursor_f.execute("""
-                SELECT b.usuario_id, b.nombre_usuario, b.encoding_rostro,
-                       u.ID_Usuario, u.Nombre_Completo, u.Rol, u.Tienda, u.Zona, u.Puesto
-                FROM biometria_usuarios b
-                JOIN usuarios u ON b.usuario_id = u.ID_Usuario
-                WHERE b.encoding_rostro IS NOT NULL
-            """)
-            registros = cursor_f.fetchall()
-            db_f.close()
-
-            if not registros:
-                return {"status": "no_registered", "message": "No hay rostros biométricos registrados. Registra tu rostro primero en Configuración de Tienda."}
-
-            # Comparar encoding del frame actual vs registros (distancia euclidiana de vectores JSON)
-            matched_user = None
-            best_dist = 9999.0
-            THRESHOLD = 0.55
-
-            for reg in registros:
-                enc_str = reg.get("encoding_rostro", "")
-                if not enc_str or enc_str.startswith("[ENCODING"):
-                    # Placeholder de registro dummy - aceptar para demostración
-                    matched_user = reg
-                    best_dist = 0.0
-                    break
-                try:
-                    enc_vec = np.array(_json.loads(enc_str), dtype=np.float32)
-                    # Extraer vector simple del frame actual usando medias de bloques (fallback sin face_recognition)
-                    h, w = img_arr.shape[:2]
-                    frame_small = np.array(Image.fromarray(img_arr).resize((128, 128))).astype(np.float32).flatten() / 255.0
-                    enc_vec_norm = enc_vec / (np.linalg.norm(enc_vec) + 1e-8)
-                    frame_norm = frame_small[:len(enc_vec_norm)] / (np.linalg.norm(frame_small[:len(enc_vec_norm)]) + 1e-8)
-                    dist = float(np.linalg.norm(enc_vec_norm - frame_norm))
-                    if dist < best_dist:
-                        best_dist = dist
-                        matched_user = reg
-                except Exception:
-                    matched_user = reg
-                    best_dist = 0.0
-                    break
-
-            if matched_user and best_dist <= THRESHOLD:
-                rol = str(matched_user.get("Rol", "")).lower()
-                puesto = str(matched_user.get("Puesto", "")).lower()
-                es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
-
-                registrar_sesion_biometrica(
-                    id_usuario=matched_user["ID_Usuario"],
-                    nombre_usuario=matched_user["Nombre_Completo"],
-                    empleado_identificado=matched_user["Nombre_Completo"],
-                    metodo="Facial",
-                    es_gerente=es_gerente,
-                    ip_acceso=ip_client,
-                    dispositivo=user_agent[:150]
-                )
-
+            if data.get("status") == "ok":
                 # Notificar sesión Flet
                 session = (list(active_sessions.values())[0] if active_sessions else None)
                 if session:
                     page_s = session.get("page")
                     if page_s:
                         ui = session.get("user_info", {})
-                        ui["id"] = matched_user["ID_Usuario"]
-                        ui["nombre"] = matched_user["Nombre_Completo"]
-                        ui["rol"] = matched_user["Rol"]
-                        ui["tienda"] = matched_user.get("Tienda") or ""
-                        ui["zona"] = matched_user.get("Zona") or "Zona Centro"
+                        ui["id"] = data["usuario_id"]
+                        ui["nombre"] = data["nombre"]
+                        ui["rol"] = data["rol"]
+                        ui["tienda"] = data.get("tienda") or ""
+                        ui["zona"] = data.get("zona") or "Zona Centro"
                         ui["biometria_metodo"] = "Facial"
-                        ui["es_gerente_verificado"] = es_gerente
+                        ui["es_gerente_verificado"] = data.get("es_gerente", False)
+                        
                         cargar_chat_fn = session.get("cargar_chat")
                         if cargar_chat_fn:
-                            _nombre_facial = matched_user["Nombre_Completo"]
+                            _nombre_facial = data["nombre"]
                             async def trigger_login_facial():
                                 cargar_chat_fn()
                                 import threading as _th_f
-                                _th_f.Thread(
-                                    target=reproducir_saludo_login,
-                                    args=(_nombre_facial,),
-                                    daemon=True
-                                ).start()
+                                _th_f.Thread(target=reproducir_saludo_login, args=(_nombre_facial,), daemon=True).start()
                             page_s.run_task(trigger_login_facial)
-
-                return {
-                    "status": "ok",
-                    "usuario_id": matched_user["ID_Usuario"],
-                    "nombre": matched_user["Nombre_Completo"],
-                    "rol": matched_user.get("Rol", ""),
-                    "tienda": matched_user.get("Tienda", ""),
-                    "es_gerente": es_gerente,
-                    "distancia": round(best_dist, 4)
-                }
-
-            return {"status": "no_match", "message": "Rostro no reconocido. Inténtalo de nuevo con mejor iluminación."}
+                            
+            return data
         except Exception as ex_fl:
             print("Error facial_login:", ex_fl)
             return {"status": "error", "message": str(ex_fl)}
@@ -2997,111 +2879,72 @@ def procesar_ticket_con_gemini(imagen_bytes):
 # =========================================
 
 def crear_notificacion(id_usuario, titulo, mensaje, tipo):
-    """Inserta una notificación en la base de datos para un usuario específico."""
+    """Inserta una notificación en la base de datos para un usuario específico vía API."""
     try:
-        db = conectar_db()
-        if db:
-            cursor = db.cursor()
-            cursor.execute(
-                "INSERT INTO notificaciones (ID_Usuario, Titulo, Mensaje, Tipo) VALUES (%s, %s, %s, %s)",
-                (id_usuario, titulo, mensaje, tipo)
-            )
-            db.commit()
-            db.close()
+        payload = {"usuario_id": id_usuario, "titulo": titulo, "mensaje": mensaje, "tipo": tipo}
+        resp = requests.post(f"{API_URL}/api/notifications/", json=payload)
+        if resp.status_code == 200:
             return True
     except Exception as e:
-        print("ERROR CREANDO NOTIFICACION:", e)
+        print("ERROR CREANDO NOTIFICACION API:", e)
     return False
 
 def crear_notificacion_a_rol(rol, titulo, mensaje, tipo):
-    """Crea una notificación para todos los usuarios con un rol determinado."""
+    """Crea una notificación para todos los usuarios con un rol determinado vía API."""
     try:
-        db = conectar_db()
-        if db:
-            cursor = db.cursor()
-            cursor.execute("SELECT ID_Usuario FROM usuarios WHERE Rol = %s", (rol,))
-            users = cursor.fetchall()
-            for u in users:
-                cursor.execute(
-                    "INSERT INTO notificaciones (ID_Usuario, Titulo, Mensaje, Tipo) VALUES (%s, %s, %s, %s)",
-                    (u[0], titulo, mensaje, tipo)
-                )
-            db.commit()
-            db.close()
+        payload = {"usuario_id": 0, "titulo": titulo, "mensaje": mensaje, "tipo": tipo}
+        resp = requests.post(f"{API_URL}/api/notifications/role/{rol}", json=payload)
+        if resp.status_code == 200:
             return True
     except Exception as e:
-        print("ERROR CREANDO NOTIFICACION ROL:", e)
+        print("ERROR CREANDO NOTIFICACION ROL API:", e)
     return False
 
 def crear_notificacion_a_zona(zona, titulo, mensaje, tipo):
-    """Crea una notificación para todos los gerentes de una zona en específico."""
+    """Crea una notificación para todos los gerentes de una zona en específico vía API."""
     try:
-        db = conectar_db()
-        if db:
-            cursor = db.cursor()
-            cursor.execute("SELECT ID_Usuario FROM usuarios WHERE Rol = 'Gerente' AND (Zona = %s OR %s = 'Todas')", (zona, zona))
-            users = cursor.fetchall()
-            for u in users:
-                cursor.execute(
-                    "INSERT INTO notificaciones (ID_Usuario, Titulo, Mensaje, Tipo) VALUES (%s, %s, %s, %s)",
-                    (u[0], titulo, mensaje, tipo)
-                )
-            db.commit()
-            db.close()
+        payload = {"usuario_id": 0, "titulo": titulo, "mensaje": mensaje, "tipo": tipo}
+        resp = requests.post(f"{API_URL}/api/notifications/zone/{zona}", json=payload)
+        if resp.status_code == 200:
             return True
     except Exception as e:
-        print("ERROR CREANDO NOTIFICACION ZONA:", e)
+        print("ERROR CREANDO NOTIFICACION ZONA API:", e)
     return False
 
 def cargar_notificaciones(id_usuario):
-    """Retorna la lista de notificaciones recientes para un usuario (máximo 15)."""
+    """Retorna la lista de notificaciones recientes para un usuario (máximo 15) vía API."""
     try:
-        db = conectar_db()
-        if db:
-            cursor = db.cursor(dictionary=True)
-            cursor.execute(
-                "SELECT ID_Notificacion, Titulo, Mensaje, Fecha_Hora, Leida, Tipo FROM notificaciones WHERE ID_Usuario = %s ORDER BY ID_Notificacion DESC LIMIT 15",
-                (id_usuario,)
-            )
-            rows = cursor.fetchall()
-            db.close()
-            return rows
+        resp = requests.get(f"{API_URL}/api/notifications/{id_usuario}")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "ok":
+                return data.get("data", [])
     except Exception as e:
-        print("ERROR CARGANDO NOTIFICACIONES:", e)
+        print("ERROR CARGANDO NOTIFICACIONES API:", e)
     return []
 
 def obtener_cantidad_notificaciones_sin_leer(id_usuario):
-    """Retorna el conteo de notificaciones no leídas para un usuario."""
+    """Retorna el conteo de notificaciones no leídas para un usuario vía API."""
     try:
-        db = conectar_db()
-        if db:
-            cursor = db.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM notificaciones WHERE ID_Usuario = %s AND Leida = 0",
-                (id_usuario,)
-            )
-            count = cursor.fetchone()[0]
-            db.close()
-            return count
+        resp = requests.get(f"{API_URL}/api/notifications/{id_usuario}/unread")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "ok":
+                return data.get("count", 0)
     except Exception as e:
-        print("ERROR OBTENIENDO SIN LEER:", e)
+        print("ERROR OBTENIENDO SIN LEER API:", e)
     return 0
 
 def marcar_notificaciones_leidas(id_usuario):
-    """Marca todas las notificaciones de un usuario como leídas."""
+    """Marca todas las notificaciones de un usuario como leídas vía API."""
     try:
-        db = conectar_db()
-        if db:
-            cursor = db.cursor()
-            cursor.execute(
-                "UPDATE notificaciones SET Leida = 1 WHERE ID_Usuario = %s",
-                (id_usuario,)
-            )
-            db.commit()
-            db.close()
-            return True
+        resp = requests.post(f"{API_URL}/api/notifications/{id_usuario}/read-all")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "ok":
+                return True
     except Exception as e:
-        print("ERROR MARCANDO LEIDAS:", e)
+        print("ERROR MARCANDO LEIDAS API:", e)
     return False
 
 # =========================================
@@ -3287,6 +3130,7 @@ def descargar_pdf_archivo(id_manual, page=None):
 # =========================================
 
 def main(page: ft.Page):
+    estado = AppState(page=page)
     # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
     _w = page.width or 400
     is_mobile = _w < 700
@@ -4281,12 +4125,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     def procesar_cargar_pdf(ruta_pdf):
         mostrar_snack("Procesando e insertando PDF...", color="#D8B4FE")
         try:
-            db = conectar_db()
-            if not db:
-                mostrar_snack("Error: No se pudo conectar a la base de datos.", color="#FF4500")
-                return
-
-            cursor = db.cursor()
             with open(ruta_pdf, "rb") as archivo:
                 pdf_binario = archivo.read()
 
@@ -4297,17 +4135,24 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
             nombre_archivo = os.path.basename(ruta_pdf)
 
-            sql = """
-            INSERT INTO manuales
-            (Titulo, Nombre_Archivo, Archivo_PDF, Contenido_Texto, Categoria, Version)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """
-            valores = (nombre_archivo, nombre_archivo, pdf_binario, texto_extraido, "General", "1.0")
-            cursor.execute(sql, valores)
-            db.commit()
-            id_manual_generado = cursor.lastrowid
-            db.close()
-            rebuild_rag_cache()
+            import base64
+            payload = {
+                "nombre_archivo": nombre_archivo,
+                "titulo": nombre_archivo,
+                "version": "1.0",
+                "texto_extraido": texto_extraido,
+                "categoria": "General",
+                "archivo_base64": base64.b64encode(pdf_binario).decode('utf-8')
+            }
+
+            resp = requests.post(f"{API_URL}/api/manuals", json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                id_manual_generado = data.get("id_manual")
+                rebuild_rag_cache()
+            else:
+                mostrar_snack("Error al guardar el manual en el servidor.", color="red")
+                return
 
             # Generar preguntas de trivia automáticamente de forma asíncrona para este manual
             generar_preguntas_trivia_de_manual_async(id_manual_generado, nombre_archivo, texto_extraido)
@@ -4405,13 +4250,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     def procesar_cargar_excel(ruta_excel):
         mostrar_snack("Procesando e insertando Excel...", color="#D8B4FE")
         try:
-            db = conectar_db()
-            if not db:
-                mostrar_snack("Error: No se pudo conectar a la base de datos.", color="#FF4500")
-                return
-
-            cursor = db.cursor()
-
             with open(ruta_excel, "rb") as archivo:
                 excel_binario = archivo.read()
 
@@ -4424,16 +4262,22 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
             nombre_archivo = os.path.basename(ruta_excel)
 
-            sql = """
-            INSERT INTO manuales
-            (Titulo, Nombre_Archivo, Archivo_PDF, Contenido_Texto, Categoria, Version)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """
-            valores = (nombre_archivo, nombre_archivo, excel_binario, texto_extraido, "Excel", "1.0")
-            cursor.execute(sql, valores)
-            db.commit()
-            db.close()
-            rebuild_rag_cache()
+            import base64
+            payload = {
+                "nombre_archivo": nombre_archivo,
+                "titulo": nombre_archivo,
+                "version": "1.0",
+                "texto_extraido": texto_extraido,
+                "categoria": "Excel",
+                "archivo_base64": base64.b64encode(excel_binario).decode('utf-8')
+            }
+
+            resp = requests.post(f"{API_URL}/api/manuals", json=payload)
+            if resp.status_code == 200:
+                rebuild_rag_cache()
+            else:
+                mostrar_snack("Error al guardar el manual en el servidor.", color="red")
+                return
 
             crear_notificacion_a_rol("Gerente", "Nuevo Manual Excel Cargado 📊", f"Se ha subido el archivo: '{nombre_archivo}'", "manual")
 
@@ -4676,7 +4520,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     elif os.path.exists(os.path.join(BASE_PATH, "luxo_avatar.mp4")):
         video_login_exists = True
         video_login_path = os.path.join(BASE_PATH, "luxo_avatar.mp4")
-    video_login_url = "custom_assets/luxo_avatar1.mp4" if page.web else video_login_path
+    video_login_url = "/luxo_avatar1.mp4" if page.web else video_login_path
 
     video_chat_exists = False
     video_chat_path = ""
@@ -4692,7 +4536,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     elif os.path.exists(os.path.join(BASE_PATH, "luxo_avatar.mp4")):
         video_chat_exists = True
         video_chat_path = os.path.join(BASE_PATH, "luxo_avatar.mp4")
-    video_chat_url = "custom_assets/luxo_avatar2.mp4" if page.web else video_chat_path
+    video_chat_url = "/luxo_avatar2.mp4" if page.web else video_chat_path
 
 
     # =====================================
@@ -4710,14 +4554,32 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         user_info["id"] = None
         user_info["nombre"] = ""
         user_info["rol"] = ""
-        
-        page.floating_action_button = None
 
+        page.floating_action_button = None
         page.clean()
 
-        page.add(full_screen_background)
-
-        page.update()
+        # FIX: Reconstruir la pantalla de login limpiamente en lugar de
+        # intentar reutilizar full_screen_background (que ya no existe en este scope)
+        try:
+            from frontend.views.login_view import build_login_view
+            build_login_view(
+                page=page,
+                user_info=user_info,
+                API_URL=API_URL,
+                mostrar_snack=mostrar_snack,
+                obtener_avatar_usuario=obtener_avatar_usuario,
+                reproducir_saludo_login=reproducir_saludo_login,
+                cargar_chat=cargar_chat,
+                active_file_callback=active_file_callback,
+                active_sessions=active_sessions,
+                video_login_exists=video_login_exists,
+                video_login_url=video_login_url,
+                img_avatar=img_avatar,
+                is_mobile=is_mobile
+            )
+        except Exception as ex_logout:
+            print("Error reconstruyendo pantalla de login:", ex_logout)
+            page.update()
 
     # =====================================
     # CHAT
@@ -4971,6 +4833,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         )
 
         # Mensaje de bienvenida inicial de LUXO al abrir el chat
+        nombre_usuario_bienvenida = user_info.get("nombre", "") or ""
+        saludo_display = f"¡Bienvenido, {nombre_usuario_bienvenida}! 👋" if nombre_usuario_bienvenida else "¡Bienvenido!"
         avatar_luxo_base64 = obtener_64("avatar_luxo2.png")
         chat_display.controls.append(
             ft.Container(
@@ -4984,7 +4848,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         alignment=ft.alignment.Alignment(0, 0),
                         border=ft.Border.all(1.5, "#D8B4FE"),
                     ),
-                    ft.Text("LUXO: ¡Bienvenido! Soy LUXO, tu asistente virtual.", color="white", weight="bold", expand=True, selectable=True),
+                    ft.Text(f"LUXO: {saludo_display} Soy LUXO, tu asistente virtual. ¿En qué te puedo ayudar hoy?", color="white", weight="bold", expand=True, selectable=True),
                 ], vertical_alignment="start", spacing=10),
                 bgcolor="#1E1E2E",
                 padding=12,
@@ -5762,8 +5626,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                 cur_h.execute("""
                                     INSERT INTO historial_conversaciones 
                                     (ID_Usuario, ID_Manual, Pregunta_Usuario, Respuesta_IA, Fue_Respondida_Con_Manual, Fecha_Hora) 
-                                    VALUES (%s, %s, %s, %s, %s, NOW())
-                                """, (user_info["id"], mejor_fila["id_manual"], user_text, respuesta_texto_plano, 1))
+                                    VALUES (%s, %s, %s, %s, %s, %s)
+                                """, (user_info["id"], mejor_fila["id_manual"], user_text, respuesta_texto_plano, 1, datetime.now()))  # FIX: usa hora local del servidor
                                 db_h.commit()
                                 db_h.close()
                         except Exception as e:
@@ -6330,8 +6194,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             Fecha_Hora,
                             Fue_Respondida_Con_Manual
                         )
-                        VALUES (%s, %s, %s, %s, NOW(), %s)
-                        """
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """  # FIX: usa datetime.now() para hora local
                         cursor.execute(
                             sql_historial,
                             (
@@ -6339,6 +6203,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 id_manual,
                                 user_text,
                                 respuesta,
+                                datetime.now(),  # FIX Bug 6: hora local del servidor
                                 1 if id_manual and "no cuento con" not in respuesta.lower() else 0,
                             )
                         )
@@ -6429,19 +6294,18 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 comentario = "El bot no respondió correctamente a la pregunta: " + user_text
                             registrar_feedback(conv_id, False, comentario, fb_cont)
                             try:
-                                db_t = conectar_db()
-                                if db_t:
-                                    cursor_t = db_t.cursor()
-                                    cursor_t.execute("""
-                                        INSERT INTO tickets_soporte (ID_Usuario, Detalle_Problema)
-                                        VALUES (%s, %s)
-                                    """, (user_info["id"], f"Pregunta: {user_text}\nRespuesta Luxo: {respuesta}\nComentario: {comentario}"))
-                                    db_t.commit()
-                                    db_t.close()
+                                payload = {
+                                    "id_usuario": user_info["id"],
+                                    "detalle_problema": f"Pregunta: {user_text}\nRespuesta Luxo: {respuesta}\nComentario: {comentario}"
+                                }
+                                resp_t = requests.post(f"{API_URL}/api/support", json=payload)
+                                if resp_t.status_code == 200:
                                     mostrar_snack("¡Ticket de Soporte creado con éxito!", color="#7CFC00")
+                                else:
+                                    mostrar_snack("Error al registrar el ticket.", color="red")
                             except Exception as ex:
-                                print("ERROR AL CREAR TICKET:", ex)
-                                mostrar_snack("Error al registrar el ticket.", color="red")
+                                print("ERROR AL CREAR TICKET API:", ex)
+                                mostrar_snack("Error de conexión.", color="red")
                             page.pop_dialog()
                             page.update()
 
@@ -7046,173 +6910,17 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             page.run_task(_exec_js)
 
         def build_chat_view():
-            inyectar_script_voz_luxo()
-
-            dictado_en_progreso = [False]
-
-            def on_mic_click(e):
-                print(f"[DEBUG-MIC] on_mic_click disparado. dictado_en_progreso={dictado_en_progreso[0]}, platform={page.platform}")
-                if dictado_en_progreso[0]:
-                    print("⚠️ Dictado en progreso, ignorando clic.")
-                    return
-                dictado_en_progreso[0] = True
-
-                try:
-                    mostrar_snack("🎙️ Preparando micrófono...", "#00FFFF")
-                    btn_mic_container.bgcolor = "#FF0000"
-                    btn_mic_container.border = ft.Border.all(2, "white")
-                    btn_mic_container.update()
-
-                    print("[DEBUG-MIC] UI actualizada a ROJO. Lanzando JS...")
-
-                    # Agregamos alerts de depuración al JS para que el usuario las vea en su celular
-                    js_dictate = """javascript:void((function(){
-                        try {
-                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
-                            if (!SR) { 
-                                alert('❌ API no soportada en este navegador.'); 
-                                return; 
-                            }
-                            const r = new SR();
-                            r.lang = 'es-MX';
-                            r.interimResults = false;
-                            r.continuous = false;
-                            r.maxAlternatives = 1;
-                            
-                            r.onstart = function() {
-                                console.log('[DEBUG-MIC] JS: onstart');
-                            };
-                            r.onresult = function(ev) {
-                                const txt = ev.results[0][0].transcript;
-                                if (txt) {
-                                    fetch('/text_input?user_id=1&text=' + encodeURIComponent(txt), { method: 'POST' });
-                                }
-                            };
-                            r.onerror = function(ev) { 
-                                alert('❌ Error JS Dictado: ' + ev.error); 
-                            };
-                            r.onend = function() { 
-                                console.log('[DEBUG-MIC] JS: onend');
-                            };
-                            
-                            r.start();
-                        } catch(err) {
-                            alert('❌ Excepción JS: ' + err.message);
-                        }
-                    })());"""
-
-                    def revert_ui():
-                        import time
-                        time.sleep(6) 
-                        dictado_en_progreso[0] = False
-                        try:
-                            btn_mic_container.bgcolor = "#1E1E2E"
-                            btn_mic_container.border = ft.Border.all(1.5, "#00FFFF")
-                            btn_mic_container.update()
-                            print("[DEBUG-MIC] UI restaurada a normal.")
-                        except Exception as e:
-                            print("[DEBUG-MIC] Error restaurando UI:", e)
-
-                    async def _lanzar_js():
-                        try:
-                            await page.launch_url(js_dictate)
-                            print("[DEBUG-MIC] launch_url ejecutado exitosamente.")
-                        except Exception as ex:
-                            print("[DEBUG-MIC] Error lanzando URL js_dictate:", ex)
-
-                    # Ejecutar el JS de manera asíncrona correcta
-                    page.run_task(_lanzar_js)
-
-                    threading.Thread(target=revert_ui, daemon=True).start()
-
-                except Exception as ex:
-                    dictado_en_progreso[0] = False
-                    print("[DEBUG-MIC] Error crítico en on_mic_click:", ex)
-
-            btn_mic = EmojiIconButton(
-                icon_emoji="🎙️",
-                active_emoji="⏹️",
-                icon_color="#00FFFF",
-                on_click=on_mic_click,
-                tooltip="Dictar por voz / Oye LUXO 🎙️",
-                width=40,
-                height=40,
-                border_radius=20
-            )
-
-            btn_mic_container = ft.Container(
-                content=btn_mic,
-                bgcolor="#1E1E2E",
-                border_radius=23,
-                border=ft.Border.all(1.5, "#00FFFF"),
-                width=46,
-                height=46,
-                alignment=ft.alignment.Alignment(0, 0),
-                visible=False  # Oculto a petición del usuario, se usa el botón nativo en celular y background en PC
-            )
-
-            siri_orb_flet = ft.Container(
-                width=80, height=80, border_radius=40,
-                gradient=ft.RadialGradient(center=ft.alignment.Alignment(0, 0), radius=0.5, colors=["#E040FB", "#00F0FF", "#0A0A18"]),
-                shadow=ft.BoxShadow(spread_radius=10, blur_radius=20, color="#00F0FF", offset=ft.Offset(0,0)),
-                animate_scale=ft.Animation(400, ft.AnimationCurve.EASE_IN_OUT),
-                animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_IN_OUT),
-                scale=0.1, opacity=0, bottom=30, right=30
-            )
-
-            if user_info.get("id") and user_info["id"] in active_sessions:
-                active_sessions[user_info["id"]]["btn_mic"] = btn_mic
-                active_sessions[user_info["id"]]["btn_mic_container"] = btn_mic_container
-                active_sessions[user_info["id"]]["siri_orb"] = siri_orb_flet
-
-            btn_send_whatsapp = ft.Container(
-                content=ft.Text("✈️", color="white", size=16, weight="bold"),
-                gradient=ft.LinearGradient(
-                    colors=["#00F0FF", "#9D50BB"],
-                    begin=ft.alignment.Alignment(-1, -1),
-                    end=ft.alignment.Alignment(1, 1)
-                ),
-                border_radius=23,
-                width=46,
-                height=46,
-                on_click=enviar_mensaje,
-                ink=True,
-                tooltip="Enviar mensaje",
-                shadow=[
-                    ft.BoxShadow(
-                        color="#00F0FF",
-                        blur_radius=12,
-                        spread_radius=1
-                    )
-                ],
-                alignment=ft.alignment.Alignment(0, 0)
-            )
-
-            return ft.Column([
-                ft.Row([
-                    ft.Text(g_tr("Asistente Virtual LUXO AI", "LUXO AI Assistant", "Assistant Virtuel LUXO AI", "Assistente Virtuale LUXO AI", "LUXO AI 虚拟助手"), size=24, color="#D8B4FE", weight="bold")
-                ], vertical_alignment="center"),
-                ft.Container(
-                    content=ft.SelectionArea(content=chat_display),
-                    expand=True,
-                    bgcolor="#080812",
-                    border_radius=20,
-                    padding=10,
-                    border=ft.Border.all(2, "#D8B4FE"),
-                    shadow=[
-                        ft.BoxShadow(
-                            color="#D8B4FE",
-                            blur_radius=15,
-                            spread_radius=1,
-                        )
-                    ]
-                ),
-                ft.Row([
-                    input_msg,
-                    btn_mic_container,
-                    btn_send_whatsapp
-                ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
-            ], expand=True)
+            estado.user_info = user_info
+            estado.active_sessions = active_sessions
+            estado.chat_display = chat_display
+            estado.input_msg = input_msg
+            estado.enviar_mensaje = enviar_mensaje
+            estado.mostrar_snack = mostrar_snack
+            estado.g_tr = g_tr
+            estado.inyectar_script_voz_luxo = inyectar_script_voz_luxo
+            
+            from frontend.views.chat_view import build_chat_view as b_chat_view
+            return b_chat_view(estado)
 
         def build_historial_view():
             historial_list = ft.Column(spacing=15, scroll=ft.ScrollMode.AUTO, expand=True)
@@ -8057,47 +7765,37 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def cargar_manuales():
                 manuals_list.controls.clear()
                 try:
-                    db = conectar_db()
-                    if db:
-                        cursor = db.cursor(dictionary=True)
-                        cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto FROM manuales ORDER BY Nombre_Archivo")
-                        manuales = cursor.fetchall()
-                        db.close()
-                        
-                        manuals_list.controls.append(ft.Text("Manuales Base de Datos (PDF/Excel)", size=13 if is_mobile else 14, color="#00FFFF", weight="bold"))
-                        if not manuales:
-                            manuals_list.controls.append(ft.Text("No hay manuales cargados en la base de datos.", color="#aaaaaa", size=12))
-                        else:
-                            for m in manuales:
-                                id_m = m["ID_Manual"]
-                                nombre = m.get("Nombre_Archivo") or ""
-                                version = m.get("Version") or ""
-                                es_abierto = m.get("Abierto") if m.get("Abierto") is not None else 1
-                                
-                                def borrar_click(e, id_man=id_m, nom=nombre):
-                                    def on_confirmar(ev):
-                                        try:
-                                            db_del = conectar_db()
-                                            if db_del:
-                                                cursor_del = db_del.cursor()
-                                                cursor_del.execute("""
-                                                    DELETE FROM pendientes_actualizacion 
-                                                    WHERE ID_Conversacion IN (
-                                                        SELECT ID_Conversacion FROM historial_conversaciones WHERE ID_Manual = %s
-                                                    )
-                                                """, (id_man,))
-                                                cursor_del.execute("DELETE FROM historial_conversaciones WHERE ID_Manual = %s", (id_man,))
-                                                cursor_del.execute("DELETE FROM manuales WHERE ID_Manual = %s", (id_man,))
-                                                db_del.commit()
-                                                db_del.close()
-                                                rebuild_rag_cache()
-                                                mostrar_snack(f"Manual '{nom}' eliminado.")
-                                                cargar_manuales()
-                                                page.pop_dialog()
-                                                page.update()
-                                        except Exception as ex:
-                                            print("ERROR BORRAR MANUAL:", ex)
-                                            mostrar_snack("Error al borrar manual.", color="red")
+                    resp = requests.get(f"{API_URL}/api/manuals")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("status") == "ok":
+                            manuales = data.get("data", [])
+                            
+                            manuals_list.controls.append(ft.Text("Manuales Base de Datos (PDF/Excel)", size=13 if is_mobile else 14, color="#00FFFF", weight="bold"))
+                            if not manuales:
+                                manuals_list.controls.append(ft.Text("No hay manuales cargados en la base de datos.", color="#aaaaaa", size=12))
+                            else:
+                                for m in manuales:
+                                    id_m = m["ID_Manual"]
+                                    nombre = m.get("Nombre_Archivo") or ""
+                                    version = m.get("Version") or ""
+                                    es_abierto = m.get("Abierto") if m.get("Abierto") is not None else 1
+                                    
+                                    def borrar_click(e, id_man=id_m, nom=nombre):
+                                        def on_confirmar(ev):
+                                            try:
+                                                resp_del = requests.delete(f"{API_URL}/api/manuals/{id_man}")
+                                                if resp_del.status_code == 200:
+                                                    rebuild_rag_cache()
+                                                    mostrar_snack(f"Manual '{nom}' eliminado.")
+                                                    cargar_manuales()
+                                                    page.pop_dialog()
+                                                    page.update()
+                                                else:
+                                                    mostrar_snack("Error al borrar manual.", color="red")
+                                            except Exception as ex:
+                                                print("ERROR BORRAR MANUAL API:", ex)
+                                                mostrar_snack("Error de conexión.", color="red")
                                             
                                     def on_cancelar(ev):
                                         page.pop_dialog()
@@ -8283,21 +7981,23 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     with open(ruta, "rb") as f:
                         archivo_binario = f.read()
 
-                    # Insertar en la tabla manuales (igual que PDF/Excel)
-                    db_m = conectar_db()
-                    if not db_m:
-                        mostrar_snack("Error: No se pudo conectar a la base de datos.", color="#FF4500")
-                        return
-                    cursor_m = db_m.cursor()
                     ext_mm = os.path.splitext(nombre_archivo)[1].lower()
                     tipo = "Imagen" if ext_mm in [".png",".jpg",".jpeg",".gif",".webp"] else "Video"
-                    cursor_m.execute("""
-                        INSERT INTO manuales
-                        (Titulo, Nombre_Archivo, Archivo_PDF, Contenido_Texto, Categoria, Version)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (nombre_archivo, nombre_archivo, archivo_binario, f"Archivo {tipo}: {nombre_archivo}", tipo, "1.0"))
-                    db_m.commit()
-                    db_m.close()
+
+                    import base64
+                    payload = {
+                        "nombre_archivo": nombre_archivo,
+                        "titulo": nombre_archivo,
+                        "version": "1.0",
+                        "texto_extraido": f"Archivo {tipo}: {nombre_archivo}",
+                        "categoria": tipo,
+                        "archivo_base64": base64.b64encode(archivo_binario).decode('utf-8')
+                    }
+
+                    resp = requests.post(f"{API_URL}/api/manuals", json=payload)
+                    if resp.status_code != 200:
+                        mostrar_snack("Error al guardar multimedia en el servidor.", color="#FF4500")
+                        return
 
                     mostrar_snack(f"✅ '{nombre_archivo}' cargado correctamente.")
                     crear_notificacion_a_rol("Gerente", "Nuevo Multimedia Disponible 🖼️", f"Se ha subido: '{nombre_archivo}'", "manual")
@@ -8394,53 +8094,43 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def cargar_sugerencias():
                 suggestions_list.controls.clear()
                 try:
-                    db = conectar_db()
-                    if db:
-                        cursor = db.cursor(dictionary=True)
-                        cursor.execute("""
-                            CREATE TABLE IF NOT EXISTS sugerencias_luxo (
-                                ID_Sugerencia INT AUTO_INCREMENT PRIMARY KEY,
-                                ID_Usuario INT NOT NULL,
-                                Fecha_Hora DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                Sugerencia TEXT NOT NULL,
-                                FOREIGN KEY (ID_Usuario) REFERENCES usuarios(ID_Usuario) ON DELETE CASCADE
-                            )
-                        """)
-                        db.commit()
-                        
-                        cursor.execute("""
-                            SELECT s.Fecha_Hora, u.Nombre_Completo, s.Sugerencia 
-                            FROM sugerencias_luxo s
-                            JOIN usuarios u ON s.ID_Usuario = u.ID_Usuario
-                            ORDER BY s.Fecha_Hora DESC
-                        """)
-                        sugerencias = cursor.fetchall()
-                        db.close()
-                        
-                        if not sugerencias:
-                            suggestions_list.controls.append(
-                                ft.Text("No hay sugerencias registradas de los usuarios.", color="#aaaaaa", size=14)
-                            )
-                        else:
-                            for row in sugerencias:
-                                fecha = row["Fecha_Hora"].strftime("%d/%m/%Y %H:%M") if row["Fecha_Hora"] else ""
+                    resp = requests.get(f"{API_URL}/api/suggestions")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("status") == "ok":
+                            sugerencias = data.get("data", [])
+                            if not sugerencias:
                                 suggestions_list.controls.append(
-                                    ft.Container(
-                                        content=ft.Column([
-                                            ft.Row([
-                                                ft.Text(f"📅 {fecha}", color="#aaaaaa", size=11),
-                                                ft.Text(f"👤 Usuario: {row['Nombre_Completo']}", color="#aaaaaa", size=11),
-                                            ], alignment="spaceBetween"),
-                                            ft.Text(row["Sugerencia"], color="white", size=14),
-                                        ], spacing=5),
-                                        bgcolor="#141424",
-                                        padding=15,
-                                        border_radius=8,
-                                        border=ft.Border.all(1, "#333333")
-                                    )
+                                    ft.Text("No hay sugerencias registradas de los usuarios.", color="#aaaaaa", size=14)
                                 )
+                            else:
+                                for row in sugerencias:
+                                    fecha = ""
+                                    if row.get("Fecha_Hora"):
+                                        from dateutil import parser
+                                        try:
+                                            fecha_obj = parser.isoparse(row["Fecha_Hora"]) if isinstance(row["Fecha_Hora"], str) else row["Fecha_Hora"]
+                                            fecha = fecha_obj.strftime("%d/%m/%Y %H:%M")
+                                        except:
+                                            fecha = str(row["Fecha_Hora"])
+                                            
+                                    suggestions_list.controls.append(
+                                        ft.Container(
+                                            content=ft.Column([
+                                                ft.Row([
+                                                    ft.Text(f"📅 {fecha}", color="#aaaaaa", size=11),
+                                                    ft.Text(f"👤 Usuario: {row['Nombre_Completo']}", color="#aaaaaa", size=11),
+                                                ], alignment="spaceBetween"),
+                                                ft.Text(row["Sugerencia"], color="white", size=14),
+                                            ], spacing=5),
+                                            bgcolor="#141424",
+                                            padding=15,
+                                            border_radius=8,
+                                            border=ft.Border.all(1, "#333333")
+                                        )
+                                    )
                 except Exception as ex:
-                    print("ERROR AL CARGAR SUGERENCIAS:", ex)
+                    print("ERROR AL CARGAR SUGERENCIAS API:", ex)
                     suggestions_list.controls.append(ft.Text("Error al cargar las sugerencias de los usuarios.", color="red"))
                 page.update()
                 
@@ -8462,106 +8152,103 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def cargar_tickets():
                 tickets_list.controls.clear()
                 try:
-                    db = conectar_db()
-                    if db:
-                        cursor = db.cursor(dictionary=True)
-                        cursor.execute("""
-                            SELECT t.ID_Ticket, t.Fecha_Hora, u.Nombre_Completo, t.Detalle_Problema, t.Respuesta_Soporte, t.Estatus
-                            FROM tickets_soporte t
-                            JOIN usuarios u ON t.ID_Usuario = u.ID_Usuario
-                            ORDER BY t.Fecha_Hora DESC
-                        """)
-                        tickets = cursor.fetchall()
-                        db.close()
-                        
-                        if not tickets:
-                            tickets_list.controls.append(ft.Text("No hay tickets de soporte registrados.", color="#aaaaaa", size=14))
-                        else:
-                            for row in tickets:
-                                id_t = row["ID_Ticket"]
-                                fecha = row["Fecha_Hora"].strftime("%d/%m/%Y %H:%M") if row["Fecha_Hora"] else ""
-                                estatus = row["Estatus"]
-                                respuesta_t = row["Respuesta_Soporte"] or "(Sin respuesta aún)"
-                                
-                                is_abierto = estatus == "Abierto"
-                                status_color = "#FF4500" if is_abierto else "#7CFC00"
-                                
-                                # Campo de respuesta de soporte para el admin
-                                resp_input = ft.TextField(
-                                    label="Escribe la solución...",
-                                    value=row["Respuesta_Soporte"] or "",
-                                    multiline=True,
-                                    min_lines=1,
-                                    max_lines=3,
-                                    border_color="#9D50BB",
-                                    color="white",
-                                    text_size=12,
-                                    expand=True
-                                )
-                                
-                                def resolver_ticket_click(e, ticket_id=id_t, r_input=resp_input):
-                                    solucion = r_input.value.strip()
-                                    if not solucion:
-                                        mostrar_snack("Por favor escribe una solución antes de resolver.", color="red")
-                                        return
-                                    try:
-                                        db_res = conectar_db()
-                                        if db_res:
-                                            cursor_res = db_res.cursor()
-                                            cursor_res.execute("""
-                                                UPDATE tickets_soporte 
-                                                SET Estatus = 'Resuelto', Respuesta_Soporte = %s 
-                                                WHERE ID_Ticket = %s
-                                            """, (solucion, ticket_id))
-                                            db_res.commit()
-                                            db_res.close()
-                                            mostrar_snack("Ticket resuelto con éxito.", color="#7CFC00")
-                                            cargar_tickets()
-                                            page.update()
-                                    except Exception as ex:
-                                        print("ERROR RESOLVER TICKET:", ex)
-                                
-                                tickets_list.controls.append(
-                                    ft.Container(
-                                        content=ft.Column([
-                                            ft.Row([
-                                                ft.Text(f"📅 {fecha}", color="#aaaaaa", size=11),
-                                                ft.Text(f"👤 Reporta: {row['Nombre_Completo']}", color="#aaaaaa", size=11),
-                                                ft.Container(
-                                                    content=ft.Text(estatus.upper(), color="black", size=9, weight="bold"),
-                                                    bgcolor=status_color,
-                                                    padding=ft.Padding(left=6, right=6, top=2, bottom=2),
-                                                    border_radius=3
-                                                )
-                                            ], alignment="spaceBetween"),
-                                            ft.Text(row["Detalle_Problema"], color="white", size=13),
-                                            ft.Divider(height=10, color="#444444"),
-                                            ft.Row([
-                                                ft.Text("Solución de Soporte:", color="#aaaaaa", size=12, weight="bold"),
-                                            ]),
-                                            ft.Row([
-                                                resp_input,
-                                                ft.ElevatedButton(
-                                                    "Resolver",
-                                                    icon=ft.Icons.CHECK_CIRCLE,
-                                                    bgcolor="#7CFC00" if is_abierto else "#444444",
-                                                    color="black" if is_abierto else "white",
-                                                    on_click=resolver_ticket_click,
-                                                    disabled=not is_abierto
-                                                )
-                                            ], spacing=10) if is_abierto else (
-                                                ft.Text(respuesta_t, color="#7CFC00", size=13, italic=True)
-                                            )
-                                        ], spacing=5),
-                                        bgcolor="#141424",
-                                        padding=15,
-                                        border_radius=8,
-                                        border=ft.Border.all(1, "#333333")
+                    resp = requests.get(f"{API_URL}/api/support")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("status") == "ok":
+                            tickets = data.get("data", [])
+                            if not tickets:
+                                tickets_list.controls.append(ft.Text("No hay tickets de soporte registrados.", color="#aaaaaa", size=14))
+                            else:
+                                for row in tickets:
+                                    id_t = row["ID_Ticket"]
+                                    fecha = ""
+                                    if row.get("Fecha_Hora"):
+                                        from dateutil import parser
+                                        try:
+                                            fecha_obj = parser.isoparse(row["Fecha_Hora"]) if isinstance(row["Fecha_Hora"], str) else row["Fecha_Hora"]
+                                            fecha = fecha_obj.strftime("%d/%m/%Y %H:%M")
+                                        except:
+                                            fecha = str(row["Fecha_Hora"])
+                                    
+                                    estatus = row["Estatus"]
+                                    respuesta_t = row["Respuesta_Soporte"] or "(Sin respuesta aún)"
+                                    
+                                    is_abierto = estatus == "Abierto"
+                                    status_color = "#FF4500" if is_abierto else "#7CFC00"
+                                    
+                                    # Campo de respuesta de soporte para el admin
+                                    resp_input = ft.TextField(
+                                        label="Escribe la solución...",
+                                        value=row["Respuesta_Soporte"] or "",
+                                        multiline=True,
+                                        min_lines=1,
+                                        max_lines=3,
+                                        border_color="#9D50BB",
+                                        color="white",
+                                        text_size=12,
+                                        expand=True
                                     )
-                                )
+                                    
+                                    def resolver_ticket_click(e, ticket_id=id_t, r_input=resp_input):
+                                        solucion = r_input.value.strip()
+                                        if not solucion:
+                                            mostrar_snack("Por favor escribe una solución antes de resolver.", color="red")
+                                            return
+                                        try:
+                                            payload = {"solucion": solucion}
+                                            resp_res = requests.post(f"{API_URL}/api/support/{ticket_id}/resolve", json=payload)
+                                            if resp_res.status_code == 200:
+                                                mostrar_snack("Ticket resuelto con éxito.", color="#7CFC00")
+                                                cargar_tickets()
+                                                page.update()
+                                            else:
+                                                mostrar_snack("Error al resolver el ticket.", color="red")
+                                        except Exception as ex:
+                                            print("ERROR RESOLVER TICKET API:", ex)
+                                            mostrar_snack("Error de conexión.", color="red")
+                                            
+                                    tickets_list.controls.append(
+                                        ft.Container(
+                                            content=ft.Column([
+                                                ft.Row([
+                                                    ft.Text(f"📅 {fecha}", color="#aaaaaa", size=11),
+                                                    ft.Text(f"👤 Reporta: {row['Nombre_Completo']}", color="#aaaaaa", size=11),
+                                                    ft.Container(
+                                                        content=ft.Text(estatus.upper(), color="black", size=9, weight="bold"),
+                                                        bgcolor=status_color,
+                                                        padding=ft.Padding(left=6, right=6, top=2, bottom=2),
+                                                        border_radius=3
+                                                    )
+                                                ], alignment="spaceBetween"),
+                                                ft.Text(row["Detalle_Problema"], color="white", size=13),
+                                                ft.Divider(height=10, color="#444444"),
+                                                ft.Row([
+                                                    ft.Text("Solución de Soporte:", color="#aaaaaa", size=12, weight="bold"),
+                                                ]),
+                                                ft.Row([
+                                                    resp_input,
+                                                    ft.ElevatedButton(
+                                                        "Resolver",
+                                                        icon=ft.Icons.CHECK_CIRCLE,
+                                                        bgcolor="#7CFC00" if is_abierto else "#444444",
+                                                        color="black" if is_abierto else "white",
+                                                        on_click=resolver_ticket_click,
+                                                        disabled=not is_abierto
+                                                    )
+                                                ], spacing=10) if is_abierto else (
+                                                    ft.Text(respuesta_t, color="#7CFC00", size=13, italic=True)
+                                                )
+                                            ], spacing=5),
+                                            bgcolor="#141424",
+                                            padding=15,
+                                            border_radius=8,
+                                            border=ft.Border.all(1, "#333333")
+                                        )
+                                    )
                 except Exception as ex:
-                    print("ERROR EN CARGAR TICKETS:", ex)
-                    tickets_list.controls.append(ft.Text("Error al cargar los tickets de soporte.", color="red"))
+                    print("ERROR CARGAR TICKETS API:", ex)
+
                 page.update()
                 
             cargar_tickets()
@@ -8969,45 +8656,36 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
             def toggle_tarea(id_plantilla, completado_val, categoria, col, p_bar, p_text):
                 try:
-                    db = conectar_db()
-                    if db:
-                        cursor = db.cursor()
-                        if completado_val:
-                            cursor.execute("""
-                                INSERT INTO registro_checklist (ID_Usuario, ID_Plantilla, Completado, Fecha, Fecha_Hora)
-                                VALUES (%s, %s, 1, CURDATE(), NOW())
-                                ON DUPLICATE KEY UPDATE Completado = 1, Fecha_Hora = NOW()
-                            """, (user_info["id"], id_plantilla))
-                        else:
-                            cursor.execute("""
-                                DELETE FROM registro_checklist 
-                                WHERE ID_Usuario = %s AND ID_Plantilla = %s AND Fecha = CURDATE()
-                            """, (user_info["id"], id_plantilla))
-                        db.commit()
-                        db.close()
+                    import datetime
+                    fecha_hoy = datetime.datetime.now().strftime("%Y-%m-%d")
+                    payload = {
+                        "id_usuario": user_info["id"],
+                        "id_plantilla": id_plantilla,
+                        "fecha": fecha_hoy
+                    }
+                    resp = requests.post(f"{API_URL}/api/tasks/toggle", json=payload)
+                    if resp.status_code != 200:
+                        print("Error en toggle_tarea:", resp.text)
                 except Exception as ex:
-                    print("ERROR TOGGLE TAREA CHECKLIST:", ex)
+                    print("ERROR TOGGLE TAREA CHECKLIST API:", ex)
                 
                 # Si completó al 100% la categoría 3 (Venta Exitosa), mostrar retroalimentación
                 if completado_val and categoria == 3:
                     try:
-                        db_chk = conectar_db()
-                        if db_chk:
-                            cur_chk = db_chk.cursor()
-                            cur_chk.execute("SELECT COUNT(*) FROM plantillas_checklist WHERE Categoria = 3")
-                            tot3 = cur_chk.fetchone()[0]
-                            cur_chk.execute("""
-                                SELECT COUNT(*) FROM registro_checklist 
-                                WHERE ID_Usuario = %s AND Fecha = CURDATE() AND Completado = 1 
-                                AND ID_Plantilla IN (SELECT ID_Plantilla FROM plantillas_checklist WHERE Categoria = 3)
-                            """, (user_info["id"],))
-                            comp3 = cur_chk.fetchone()[0]
-                            db_chk.close()
-                            
-                            if tot3 > 0 and comp3 == tot3:
-                                mostrar_retro_venta_exitosa()
+                        import datetime
+                        fecha_hoy = datetime.datetime.now().strftime("%Y-%m-%d")
+                        resp_chk = requests.get(f"{API_URL}/api/tasks/3/{user_info['id']}/{fecha_hoy}")
+                        if resp_chk.status_code == 200:
+                            data_chk = resp_chk.json()
+                            if data_chk.get("status") == "ok":
+                                tareas_3 = data_chk.get("data", [])
+                                tot3 = len(tareas_3)
+                                comp3 = sum(1 for t in tareas_3 if t["Completado"])
+                                
+                                if tot3 > 0 and comp3 == tot3:
+                                    mostrar_retro_venta_exitosa()
                     except Exception as e_chk:
-                        print("Error al verificar retro de venta:", e_chk)
+                        print("Error al verificar retro de venta API:", e_chk)
 
                 # Actualizar medallas en la sidebar en tiempo real si corresponde
                 if hasattr(page, "actualizar_medallas_sidebar"):
@@ -9021,18 +8699,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def cargar_checklist_por_categoria(categoria, col, p_bar, p_text):
                 col.controls.clear()
                 try:
-                    db = conectar_db()
-                    if db:
-                        cursor = db.cursor(dictionary=True)
-                        cursor.execute("SELECT ID_Plantilla, Descripcion FROM plantillas_checklist WHERE Categoria = %s ORDER BY ID_Plantilla ASC", (categoria,))
-                        tareas = cursor.fetchall()
-                        
-                        cursor.execute("""
-                            SELECT ID_Plantilla FROM registro_checklist 
-                            WHERE ID_Usuario = %s AND Fecha = CURDATE() AND Completado = 1
-                        """, (user_info["id"],))
-                        completadas_hoy = {row["ID_Plantilla"] for row in cursor.fetchall()}
-                        db.close()
+                    import datetime
+                    fecha_hoy = datetime.datetime.now().strftime("%Y-%m-%d")
+                    resp = requests.get(f"{API_URL}/api/tasks/{categoria}/{user_info['id']}/{fecha_hoy}")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("status") == "ok":
+                            tareas = data.get("data", [])
+                            # Reconstruir lista de completadas para que el código de abajo funcione
+                            completadas_hoy = {t["ID_Plantilla"] for t in tareas if t["Completado"]}
                         
                         if not tareas:
                             col.controls.append(ft.Text(t("no_tasks"), color="#aaaaaa", italic=True))
@@ -9302,57 +8977,52 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 tasks_list.controls.clear()
                 cat_val = int(dropdown_cat.value)
                 try:
-                    db = conectar_db()
-                    if db:
-                        cursor = db.cursor(dictionary=True)
-                        cursor.execute("SELECT ID_Plantilla, Descripcion FROM plantillas_checklist WHERE Categoria = %s ORDER BY ID_Plantilla DESC", (cat_val,))
-                        tareas = cursor.fetchall()
-                        db.close()
-                        
-                        if not tareas:
-                            tasks_list.controls.append(ft.Text("No hay tareas registradas en este checklist.", color="#aaaaaa", italic=True))
-                        else:
-                            for t in tareas:
-                                id_pl = t["ID_Plantilla"]
-                                desc = t["Descripcion"]
-                                
-                                def make_eliminar_click(i_p=id_pl, d_t=desc):
-                                    def eliminar_tarea_click(ev):
-                                        try:
-                                            db_del = conectar_db()
-                                            if db_del:
-                                                cursor_del = db_del.cursor()
-                                                cursor_del.execute("DELETE FROM registro_checklist WHERE ID_Plantilla = %s", (i_p,))
-                                                cursor_del.execute("DELETE FROM plantillas_checklist WHERE ID_Plantilla = %s", (i_p,))
-                                                db_del.commit()
-                                                db_del.close()
-                                                mostrar_snack(f"Tarea eliminada con éxito.")
-                                                cargar_tareas_admin()
-                                        except Exception as ex:
-                                            print("ERROR ELIMINAR TAREA ADMIN:", ex)
-                                            mostrar_snack("Error al eliminar la tarea.", color="red")
-                                    return eliminar_tarea_click
-                                
-                                tasks_list.controls.append(
-                                    ft.Container(
-                                        content=ft.Row([
-                                            ft.Icon(ft.Icons.CHECKLIST_ROUNDED, color="#00FFFF"),
-                                            ft.Text(desc, color="white", size=13, expand=True),
-                                            ft.IconButton(
-                                                icon=ft.Icons.DELETE_FOREVER,
-                                                icon_color="#FF4500",
-                                                tooltip="Eliminar tarea",
-                                                on_click=make_eliminar_click()
-                                            )
-                                        ], alignment="spaceBetween", vertical_alignment="center"),
-                                        bgcolor="#0F0F1A",
-                                        padding=10,
-                                        border_radius=8,
-                                        border=ft.Border.all(1, "#222222")
+                    resp = requests.get(f"{API_URL}/api/tasks/admin/{cat_val}")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("status") == "ok":
+                            tareas = data.get("data", [])
+                            if not tareas:
+                                tasks_list.controls.append(ft.Text("No hay tareas registradas en este checklist.", color="#aaaaaa", italic=True))
+                            else:
+                                for t in tareas:
+                                    id_pl = t["ID_Plantilla"]
+                                    desc = t["Descripcion"]
+                                    
+                                    def make_eliminar_click(i_p=id_pl, d_t=desc):
+                                        def eliminar_tarea_click(ev):
+                                            try:
+                                                resp_del = requests.delete(f"{API_URL}/api/tasks/admin/{i_p}")
+                                                if resp_del.status_code == 200:
+                                                    mostrar_snack(f"Tarea eliminada con éxito.")
+                                                    cargar_tareas_admin()
+                                                else:
+                                                    mostrar_snack("Error al eliminar la tarea.", color="red")
+                                            except Exception as ex:
+                                                print("ERROR ELIMINAR TAREA ADMIN API:", ex)
+                                                mostrar_snack("Error de conexión.", color="red")
+                                        return eliminar_tarea_click
+                                    
+                                    tasks_list.controls.append(
+                                        ft.Container(
+                                            content=ft.Row([
+                                                ft.Icon(ft.Icons.CHECKLIST_ROUNDED, color="#00FFFF"),
+                                                ft.Text(desc, color="white", size=13, expand=True),
+                                                ft.IconButton(
+                                                    icon=ft.Icons.DELETE_FOREVER,
+                                                    icon_color="#FF4500",
+                                                    tooltip="Eliminar tarea",
+                                                    on_click=make_eliminar_click()
+                                                )
+                                            ], alignment="spaceBetween", vertical_alignment="center"),
+                                            bgcolor="#0F0F1A",
+                                            padding=10,
+                                            border_radius=8,
+                                            border=ft.Border.all(1, "#222222")
+                                        )
                                     )
-                                )
                 except Exception as ex:
-                    print("ERROR CARGAR TAREAS ADMIN:", ex)
+                    print("ERROR CARGAR TAREAS ADMIN API:", ex)
                 page.update()
 
             def agregar_tarea_click(e):
@@ -9362,18 +9032,17 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     return
                 cat_val = int(dropdown_cat.value)
                 try:
-                    db = conectar_db()
-                    if db:
-                        cursor = db.cursor()
-                        cursor.execute("INSERT INTO plantillas_checklist (Categoria, Descripcion) VALUES (%s, %s)", (cat_val, desc_val))
-                        db.commit()
-                        db.close()
+                    payload = {"categoria": cat_val, "descripcion": desc_val}
+                    resp = requests.post(f"{API_URL}/api/tasks/admin", json=payload)
+                    if resp.status_code == 200:
                         input_desc.value = ""
                         mostrar_snack("Nueva tarea agregada al checklist.")
                         cargar_tareas_admin()
+                    else:
+                        mostrar_snack("Error al guardar la nueva tarea.", color="red")
                 except Exception as ex:
-                    print("ERROR AGREGAR TAREA ADMIN:", ex)
-                    mostrar_snack("Error al guardar la nueva tarea.", color="red")
+                    print("ERROR AGREGAR TAREA ADMIN API:", ex)
+                    mostrar_snack("Error de conexión.", color="red")
                 page.update()
 
             dropdown_cat.on_change = cargar_tareas_admin
@@ -11490,7 +11159,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                                 ft.ElevatedButton(
                                                     t("view_pdf"),
                                                     icon=ft.Icons.VISIBILITY if abierto == 1 else ft.Icons.LOCK,
-                                                    on_click=lambda e, s=nombre_f, d=nombre: abrir_visor_modal_global(s, d) if (s and abierto == 1) else None,
+                                                    on_click=lambda e, s=nombre_f, d=nombre, ab=abierto: abrir_visor_modal_global(s, d) if (s and ab == 1) else None,  # FIX: closure correcto
                                                     bgcolor="#6E48AA" if abierto == 1 else "#222222",
                                                     color="white" if abierto == 1 else "#666666",
                                                     expand=True,
@@ -12424,6 +12093,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 for i in range(12)
             ]
 
+            # Panel colapsable de Meses logrados (declarado aquí, después de chk_meses)
+            meses_panel_body = ft.Container(
+                content=ft.Row([chk_meses[i] for i in range(12)], wrap=True, spacing=10),
+                padding=ft.Padding(left=5, top=5, right=5, bottom=10),
+                visible=False,  # Empieza colapsado
+            )
+
             dd_mes = ft.Dropdown(
                 label="Mes",
                 value=str(current_month[0]),
@@ -12534,7 +12210,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     border_color="#9D50BB",
                     focused_border_color="#00FFFF",
                     color="white",
-                    keyboard_type=ft.KeyboardType.NUMBER
+                    keyboard_type=ft.KeyboardType.DECIMAL  # FIX: DECIMAL permite punto decimal en teclado móvil
                 )
                 piezas_dia_tf = ft.TextField(
                     label="Piezas vendidas",
@@ -13274,13 +12950,29 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             ], spacing=4, expand=True)
                         ], spacing=10),
                         ft.Container(height=5),
-                        ft.Text("Hitos: Meses logrados", size=12, color="#aaaaaa"),
+                        # FIX Bug 5: Toggle manual compatible con esta versión de Flet
                         ft.Container(
-                            content=ft.Row([chk_meses[i] for i in range(12)], wrap=True, spacing=10),
-                            padding=5,
+                            content=ft.Column([
+                                ft.Container(
+                                    content=ft.Row([
+                                        ft.Text("📅 Hitos: Meses logrados", size=12, color="#aaaaaa", expand=True),
+                                        ft.Text("▼ ver/ocultar", size=10, color="#D8B4FE"),
+                                    ], alignment="spaceBetween"),
+                                    on_click=lambda e: (
+                                        setattr(meses_panel_body, "visible", not meses_panel_body.visible),
+                                        meses_panel_body.update()
+                                    ),
+                                    padding=ft.Padding(left=5, top=5, right=5, bottom=5),
+                                    ink=True,
+                                    border_radius=4,
+                                ),
+                                meses_panel_body,
+                            ], spacing=0),
+                            bgcolor="#1c1c1c",
                             border_radius=5,
-                            bgcolor="#1c1c1c"
                         ),
+                        ft.Container(height=5),
+                        # Botón SIEMPRE visible, fuera del bloque colapsable
                         btn_guardar_anual
                     ], spacing=10),
                     bgcolor="#0F0F1A",
@@ -17920,33 +17612,20 @@ Ejemplo:
                 mostrar_snack(tr("Por favor escribe algo antes de enviar.", "Please type something before sending.", "Veuillez écrire quelque chose.", "Si prega di scrivere qualcosa.", "发送前请填写内容。"), color="red")
                 return
             try:
-                db_sug = conectar_db()
-                if db_sug:
-                    cursor_sug = db_sug.cursor()
-                    cursor_sug.execute("""
-                        CREATE TABLE IF NOT EXISTS sugerencias_luxo (
-                            ID_Sugerencia INT AUTO_INCREMENT PRIMARY KEY,
-                            ID_Usuario INT NOT NULL,
-                            Fecha_Hora DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            Sugerencia TEXT NOT NULL,
-                            FOREIGN KEY (ID_Usuario) REFERENCES usuarios(ID_Usuario) ON DELETE CASCADE
-                        )
-                    """)
-                    db_sug.commit()
-                    
-                    cursor_sug.execute("""
-                        INSERT INTO sugerencias_luxo (ID_Usuario, Sugerencia)
-                        VALUES (%s, %s)
-                    """, (user_info["id"], text))
-                    db_sug.commit()
-                    db_sug.close()
-                    
+                payload = {
+                    "id_usuario": user_info["id"],
+                    "sugerencia": text
+                }
+                resp = requests.post(f"{API_URL}/api/suggestions", json=payload)
+                if resp.status_code == 200:
                     suggestion_input.value = ""
                     mostrar_snack(tr("¡Sugerencia enviada! Gracias.", "Suggestion sent! Thanks.", "Suggestion envoyée ! Merci.", "Suggerimento inviato! Grazie.", "建议已发送！谢谢。"), color="#7CFC00")
                     page.update()
+                else:
+                    mostrar_snack("Error al enviar la sugerencia.", color="red")
             except Exception as ex:
-                print("ERROR AL ENVIAR SUGERENCIA:", ex)
-                mostrar_snack("Error", color="red")
+                print("ERROR AL ENVIAR SUGERENCIA API:", ex)
+                mostrar_snack("Error de conexión.", color="red")
 
         btn_enviar_sug = ft.ElevatedButton(
             tr("Enviar", "Send", "Envoyer", "Invia", "发送"),
@@ -18596,486 +18275,22 @@ Ejemplo:
             print("Error activando passkey:", ex_pk)
             mostrar_snack("Huella/Passkey: Usa Chrome, Edge o Safari en tu celular/laptop con sensor 👆", "orange")
 
-    # =====================================
-    # LOGIN
-    # =====================================
-
-    def login_click(e):
-        # 1. Feedback visual inmediato en el botón
-        btn_acceder.disabled = True
-        btn_acceder.content.value = "Validando credenciales..."
-        try: page.update()
-        except: pass
-        import time
-        time.sleep(0.01)
-
-        def procesar_login():
-            try:
-                db = conectar_db()
-
-                if not db:
-                    mostrar_snack("Error Base de Datos", color="#FF4B4B")
-                    btn_acceder.disabled = False
-                    btn_acceder.content.value = "ACCEDER"
-                    try: page.update()
-                    except: pass
-                    return
-
-                cursor = db.cursor(dictionary=True)
-
-                cursor.execute(
-                    """
-                    SELECT
-                    ID_Usuario,
-                    Nombre_Completo,
-                    Rol,
-                    Tienda,
-                    Zona,
-                    Contrasena
-                    FROM usuarios
-                    WHERE Usuario = %s
-                    """,
-                    (txt_user.value,)
-                )
-
-                res = cursor.fetchone()
-
-                if res and verify_password(txt_pass.value, res.get("Contrasena", "")):
-                    # Migración transparente: Si la contraseña en BD era texto plano legacy, actualizarla con hash bcrypt
-                    stored_pass = str(res.get("Contrasena") or "")
-                    if not (stored_pass.startswith("$2b$") or stored_pass.startswith("$2a$")):
-                        try:
-                            new_hash = hash_password(txt_pass.value)
-                            cursor.execute("UPDATE usuarios SET Contrasena = %s WHERE ID_Usuario = %s", (new_hash, res["ID_Usuario"]))
-                            db.commit()
-                            print(f"🔒 Contraseña del usuario '{res['Nombre_Completo']}' migrada exitosamente a hash bcrypt.")
-                        except Exception as ex_mig:
-                            print("Error migrando contraseña a bcrypt:", ex_mig)
-                    login_message.value = ""
-                    login_error_box.visible = False
-
-                    user_info["id"] = res["ID_Usuario"]
-                    user_info["usuario"] = res.get("Usuario") or ""
-                    user_info["nombre"] = res["Nombre_Completo"]
-                    user_info["rol"] = res["Rol"]
-                    user_info["tienda"] = res["Tienda"] if res["Tienda"] is not None else ""
-                    user_info["zona"] = res["Zona"] if res["Zona"] is not None else "Zona Centro"
-                    user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
-                    reproducir_saludo_login(res["Nombre_Completo"])
-                    
-                    # Guardar sesión de forma en memoria active_sessions
-                    user_id_key = res["ID_Usuario"]
-                    active_sessions[user_id_key] = {
-                        "page": page,
-                        "user_info": user_info,
-                        "cargar_chat": cargar_chat,
-                        "active_file_callback": active_file_callback
-                    }
-
-                    # --- REGISTRAR INICIO DE SESIÓN ---
-                    ip_client = getattr(page, "client_ip", None) or "Desconocido"
-                    
-                    def registrar_sesion_async(u_id, ip):
-                        city = "Desconocido"
-                        country = "Desconocido"
-                        is_local = False
-                        
-                        if not ip or ip == "Desconocido":
-                            is_local = True
-                        else:
-                            ip_clean = ip.strip()
-                            if ip_clean in ("127.0.0.1", "::1", "localhost") or \
-                               ip_clean.startswith("192.168.") or \
-                               ip_clean.startswith("10.") or \
-                               ip_clean.startswith("172.16.") or \
-                               ip_clean.startswith("fe80:"):
-                                is_local = True
-                        
-                        if is_local:
-                            city = "Localhost"
-                            country = "Local / Desarrollo"
-                        else:
-                            try:
-                                resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=5)
-                                if resp.status_code == 200:
-                                    data = resp.json()
-                                    if data.get("status") == "success":
-                                        city = data.get("city", "Desconocido")
-                                        country = data.get("country", "Desconocido")
-                            except Exception as err:
-                                print("Error consultando geolocalización de IP:", err)
-                                
-                        try:
-                            db_log = conectar_db()
-                            if db_log:
-                                cursor_log = db_log.cursor()
-                                cursor_log.execute(
-                                    """
-                                    INSERT INTO sesiones (ID_Usuario, Direccion_IP, Ubicacion_Ciudad, Ubicacion_Pais)
-                                    VALUES (%s, %s, %s, %s)
-                                    """,
-                                    (u_id, ip, city, country)
-                                )
-                                db_log.commit()
-                                db_log.close()
-                        except Exception as err_db:
-                            print("Error al guardar sesión en BD:", err_db)
-
-                    threading.Thread(target=registrar_sesion_async, args=(user_info["id"], ip_client), daemon=True).start()
-
-                    async def guardar_sesion_storage():
-                        try:
-                            import time
-                            if hasattr(page, "shared_preferences") and page.shared_preferences:
-                                await page.shared_preferences.set("logged_user_id", str(user_info["id"]))
-                                await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
-                        except Exception as ex_st:
-                            print("Notice guardar shared_preferences:", ex_st)
-
-                    page.run_task(guardar_sesion_storage)
-
-                    # Registrar en la bitácora como sesión por contraseña (no biométrica)
-                    user_info["biometria_metodo"] = None
-                    user_info["es_gerente_verificado"] = False
-                    try:
-                        u_rol_bit = str(res.get("Rol", "")).lower()
-                        es_gerente_pw = "admin" in u_rol_bit
-                        _ip_log = getattr(page, "client_ip", None) or "Localhost"
-                        _ua_log = "LUXO-Desktop"
-                        def _reg_bit_pw(uid, nombre, rol_str, ip, ua):
-                            try:
-                                db_bit2 = conectar_db()
-                                if db_bit2:
-                                    cur_bit2 = db_bit2.cursor()
-                                    cur_bit2.execute("""
-                                        INSERT INTO bitacora_sesiones_biometricas
-                                            (ID_Usuario, Nombre_Usuario, Empleado_Identificado, Metodo_Ingreso, Es_Gerente_Verificado, IP_Acceso, Dispositivo)
-                                        VALUES (%s, %s, %s, 'Contrasena', %s, %s, %s)
-                                    """, (uid, nombre, nombre, es_gerente_pw, ip, ua[:150]))
-                                    db_bit2.commit()
-                                    db_bit2.close()
-                            except Exception as ex_bit2:
-                                print("Error bitácora contraseña:", ex_bit2)
-                        import threading as _th
-                        _th.Thread(target=_reg_bit_pw, args=(user_info["id"], user_info["nombre"], u_rol_bit, _ip_log, _ua_log), daemon=True).start()
-                    except Exception as ex_bit_pw:
-                        print("Error preparando bitácora contraseña:", ex_bit_pw)
-
-                    cargar_chat()
-
-
-                else:
-                    cursor.execute(
-                        """
-                        SELECT
-                        ID_Usuario
-                        FROM usuarios
-                        WHERE Usuario = %s
-                        """,
-                        (txt_user.value,)
-                    )
-                    usuario_existe = cursor.fetchone()
-
-                    if usuario_existe:
-                        mensaje = "Contraseña incorrecta"
-                    else:
-                        mensaje = "Usuario no registrado"
-
-                    login_message.value = mensaje
-                    login_message.color = "#FF4B4B"
-                    login_error_box.visible = True
-                    
-                    btn_acceder.disabled = False
-                    btn_acceder.content.value = "ACCEDER"
-                    page.update()
-
-                db.close()
-            except Exception as err:
-                import traceback
-                tb_str = traceback.format_exc()
-                print("--- DETECTADO ERROR EN LOGIN ---")
-                print(tb_str)
-                try:
-                    with open("login_error.log", "w", encoding="utf-8") as log_f:
-                        log_f.write(tb_str)
-                except Exception as e_log:
-                    print("No se pudo escribir en login_error.log:", e_log)
-                btn_acceder.disabled = False
-                try: btn_acceder.content.value = "ACCEDER"
-                except: pass
-                try: page.update()
-                except: pass
-
-        import threading
-        threading.Thread(target=procesar_login, daemon=True).start()
-
-    # =====================================
-    # LOGIN UI
-    # =====================================
-
-    login_video_player = None
-    btn_audio = None
-
-    def toggle_audio(e):
-        nonlocal login_video_player, btn_audio
-        if login_video_player:
-            try:
-                currently_unmuted = e.control.data
-                if currently_unmuted:
-                    login_video_player.volume = 0
-                    login_video_player.muted = True
-                    btn_audio.content = ft.Text("🔇", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Activar Audio"
-                    e.control.data = False
-                else:
-                    login_video_player.volume = 100
-                    login_video_player.muted = False
-                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Silenciar Audio"
-                    e.control.data = True
-                login_video_player.update()
-                btn_audio.update()
-            except Exception as err:
-                print("Error al cambiar estado de audio:", err)
-
-    txt_user_input = ft.TextField(
-        hint_text="Ej. admin",
-        hint_style=ft.TextStyle(color="#555566", size=13),
-        width=300,
-        height=45,
-        border_color="#121620",
-        focused_border_color="#00F0FF",
-        color="white",
-        bgcolor="#040407",
-        border_radius=10,
-        content_padding=12
+    from frontend.views.login_view import build_login_view
+    build_login_view(
+        page=page,
+        user_info=user_info,
+        API_URL=API_URL,
+        mostrar_snack=mostrar_snack,
+        obtener_avatar_usuario=obtener_avatar_usuario,
+        reproducir_saludo_login=reproducir_saludo_login,
+        cargar_chat=cargar_chat,
+        active_file_callback=active_file_callback,
+        active_sessions=active_sessions,
+        video_login_exists=video_login_exists,
+        video_login_url=video_login_url,
+        img_avatar=img_avatar,
+        is_mobile=is_mobile
     )
-
-    is_pass_hidden = [True]
-    def toggle_pass_visibility(e):
-        is_pass_hidden[0] = not is_pass_hidden[0]
-        txt_pass_input.password = is_pass_hidden[0]
-        btn_eye_3d.content.color = "#E040FB" if is_pass_hidden[0] else "#00F0FF"
-        txt_pass_input.update()
-        btn_eye_3d.update()
-
-    btn_eye_3d = ft.Container(
-        content=ft.Text("👁️", size=16, color="#E040FB"),
-        alignment=ft.alignment.Alignment(0, 0),
-        width=32,
-        height=32,
-        on_click=toggle_pass_visibility,
-        tooltip="Mostrar / Ocultar Contraseña"
-    )
-
-    txt_pass_input = ft.TextField(
-        hint_text="••••••••",
-        hint_style=ft.TextStyle(color="#555566", size=13),
-        password=True,
-        width=300,
-        height=45,
-        border_color="#121620",
-        focused_border_color="#E040FB",
-        color="white",
-        bgcolor="#040407",
-        border_radius=10,
-        content_padding=12,
-        on_submit=login_click,
-        suffix=btn_eye_3d
-    )
-
-    txt_user = txt_user_input
-    txt_pass = txt_pass_input
-
-    login_message = ft.Text(
-        "",
-        size=14,
-        weight="bold",
-        color="#FF4B4B"
-    )
-
-    login_error_box = ft.Container(
-        content=login_message,
-        bgcolor="#000000",
-        padding=8,
-        border_radius=8,
-        visible=False,
-        width=300
-    )
-
-    video_avatar = None
-    if video_login_exists:
-        try:
-            login_video_player = fv.Video(
-                playlist=[fv.VideoMedia(video_login_url)],
-                playlist_mode=fv.PlaylistMode.LOOP,
-                autoplay=True,
-                volume=100.0,
-                muted=False,
-                show_controls=False,
-                expand=True,
-                fit=ft.BoxFit.COVER,
-                filter_quality=ft.FilterQuality.HIGH,
-            )
-            def on_avatar_tap(e):
-                if login_video_player:
-                    try:
-                        login_video_player.play()
-                        login_video_player.volume = 100
-                        login_video_player.muted = False
-                        login_video_player.update()
-                    except Exception: pass
-
-            btn_audio = ft.Container(
-                content=ft.Text("🔊", size=11, color="#00FFFF", text_align="center"),
-                bgcolor="#111111",
-                width=28,
-                height=28,
-                border_radius=14,
-                alignment=ft.alignment.Alignment(0, 0),
-                tooltip="Silenciar Audio",
-                data=True,
-                on_click=toggle_audio
-            )
-            video_avatar = ft.Stack([
-                ft.Container(
-                    content=login_video_player,
-                    width=108,
-                    height=108,
-                    border_radius=54,
-                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                    border=ft.Border.all(2, "#00F0FF"),
-                    shadow=[ft.BoxShadow(color="#4000FFFF", blur_radius=20, spread_radius=1)],
-                    on_click=on_avatar_tap
-                ),
-                ft.Container(
-                    content=btn_audio,
-                    right=0,
-                    bottom=0,
-                    width=28,
-                    height=28,
-                    border_radius=14,
-                )
-            ], width=108, height=108)
-        except Exception as ex_v:
-            print("Notice video login load:", ex_v)
-            video_avatar = None
-
-    header_title = ft.Column([
-        ft.ShaderMask(
-            content=ft.Text("LUXO OS", size=28, weight="bold", color="white"),
-            blend_mode=ft.BlendMode.SRC_IN,
-            shader=ft.LinearGradient(
-                colors=["#00F0FF", "#E040FB"],
-                begin=ft.alignment.Alignment(-1, 0),
-                end=ft.alignment.Alignment(1, 0)
-            )
-        ),
-        ft.Text(
-            "PORTAL DE AUTENTICACIÓN",
-            size=9,
-            weight="bold",
-            color="#8899A6"
-        )
-    ], horizontal_alignment="center", spacing=3)
-
-    user_field_group = ft.Column([
-        ft.Text("USUARIO", size=10, weight="bold", color="#00F0FF"),
-        txt_user_input
-    ], spacing=4, width=300)
-
-    pass_field_group = ft.Column([
-        ft.Text("CONTRASEÑA", size=10, weight="bold", color="#E040FB"),
-        txt_pass_input
-    ], spacing=4, width=300)
-
-    btn_acceder = ft.Container(
-        content=ft.Text("ACCEDER", color="white", weight="bold", size=14),
-        alignment=ft.alignment.Alignment(0, 0),
-        gradient=ft.LinearGradient(
-            colors=["#00A3FF", "#E040FB"],
-            begin=ft.alignment.Alignment(-1, -1),
-            end=ft.alignment.Alignment(1, 1)
-        ),
-        padding=14,
-        border_radius=22,
-        width=300,
-        height=46,
-        on_click=login_click,
-        shadow=[
-            ft.BoxShadow(
-                color="#E040FB",
-                blur_radius=18,
-                spread_radius=1
-            )
-        ]
-    )
-
-    login_card = ft.Container(
-        content=ft.Column([
-            video_avatar if video_avatar else (
-                ft.Container(
-                    content=ft.Image(
-                        src=img_avatar,
-                        width=108,
-                        height=108,
-                        fit=ft.BoxFit.COVER
-                    ),
-                    width=108,
-                    height=108,
-                    border_radius=54,
-                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                    border=ft.Border.all(2, "#00F0FF"),
-                    shadow=[ft.BoxShadow(color="#4000FFFF", blur_radius=20, spread_radius=1)]
-                ) if img_avatar else ft.Text(
-                    "LUXO",
-                    size=28,
-                    color="#FFFFFF",
-                    weight="bold"
-                )
-            ),
-            login_error_box,
-            header_title,
-            user_field_group,
-            pass_field_group,
-            ft.Container(height=6),
-            btn_acceder
-        ],
-        horizontal_alignment="center",
-        spacing=16 if is_mobile else 18),
-        padding=32 if is_mobile else 42,
-        bgcolor="#06070B",
-        border_radius=24,
-        border=ft.Border.all(1.2, "#0A202A"),
-        shadow=[
-            ft.BoxShadow(
-                color="#000000",
-                blur_radius=35,
-                spread_radius=5,
-            )
-        ],
-        width=370,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE
-    )
-
-    # Fondo Ambiental de Pantalla con degradado nativo de Flet (Cian a la izquierda, Obsidiana al centro, Magenta a la derecha)
-    full_screen_background = ft.Container(
-        content=login_card,
-        alignment=ft.alignment.Alignment(0, 0),
-        expand=True,
-        gradient=ft.LinearGradient(
-            colors=["#021622", "#05070D", "#220228"],
-            begin=ft.alignment.Alignment(-1, -0.2),
-            end=ft.alignment.Alignment(1, 0.2)
-        )
-    )
-
-    page.bgcolor = "#05070D"
-    page.vertical_alignment = "center"
-    page.horizontal_alignment = "center"
-    page.controls.clear()
-    page.add(full_screen_background)
-    page.update()
 
     async def intentar_restaurar_sesion():
         try:

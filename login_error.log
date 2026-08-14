@@ -1,5 +1,14 @@
 Traceback (most recent call last):
-  File "C:\Users\MOISES\Desktop\luxo6.0\main.py", line 17646, in login_click
-    "cambiar_vista": cambiar_vista,
-                     ^^^^^^^^^^^^^
-NameError: name 'cambiar_vista' is not defined
+  File "/Users/nandoflores/Documents/luxo6.0/frontend/views/login_view.py", line 83, in procesar_login
+    cargar_chat()
+    ~~~~~~~~~~~^^
+  File "/Users/nandoflores/Documents/luxo6.0/frontend/main.py", line 17767, in cargar_chat
+    sidebar = build_sidebar(
+        page=page,
+    ...<17 lines>...
+        btn_logout=btn_logout
+    )
+  File "/Users/nandoflores/Documents/luxo6.0/frontend/components/sidebar.py", line 47, in build_sidebar
+    return sidebar
+           ^^^^^^^
+NameError: name 'sidebar' is not defined

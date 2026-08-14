@@ -40,8 +40,18 @@ services:
     environment:
       - API_URL=http://api:8553
       - USE_SSL=false
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=los4valtierra
+      - DB_NAME=sgh_portal
     depends_on:
       - api
+    volumes:
+      - luxo_uploads:/app/uploads
+      - luxo_temp_pdfs:/app/custom_assets/temp_pdfs
 
 volumes:
   mysql_data:
+  luxo_uploads:
+  luxo_temp_pdfs:

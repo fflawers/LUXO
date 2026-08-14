@@ -16,7 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Para mantener la voz intacta, usamos el frontend modificado
-COPY frontend/ /app/
+COPY frontend/ /app/frontend/
 # Archivos necesarios en la raíz como .env si se requiere
 COPY .env /app/.env
 COPY run_web.py /app/run_web.py

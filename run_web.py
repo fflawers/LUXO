@@ -2,7 +2,7 @@ import flet as ft
 import uvicorn
 import os
 import socket
-from main import main, configurar_rutas_fastapi
+from frontend.main import main, configurar_rutas_fastapi
 
 def obtener_ip_local():
     try:
@@ -40,6 +40,7 @@ if __name__ == "__main__":
     flet_asgi_app = ft.app(
         target=main, 
         upload_dir="uploads", 
+        assets_dir="custom_assets",
         view=ft.AppView.WEB_BROWSER,
         export_asgi_app=True
     )
