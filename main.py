@@ -3996,7 +3996,7 @@ def main(page: ft.Page):
             
         current_speak_is_paused = False
 
-    def start_speak(text, btn_speaker, btn_play_pause):
+    def start_speak(text, btn_speaker=None, btn_play_pause=None):
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         stop_current_speak()
         
@@ -4007,14 +4007,22 @@ def main(page: ft.Page):
         current_speak_btn_play_pause = btn_play_pause
         current_speak_is_paused = False
         
-        btn_speaker.icon = ft.Icons.VOLUME_OFF_ROUNDED
-        btn_speaker.tooltip = "Detener audio"
-        btn_speaker.update()
-        
-        btn_play_pause.disabled = False
-        btn_play_pause.icon = ft.Icons.PAUSE_ROUNDED
-        btn_play_pause.tooltip = "Pausar lectura"
-        btn_play_pause.update()
+        if btn_speaker:
+            btn_speaker.icon = ft.Icons.VOLUME_OFF_ROUNDED
+            btn_speaker.tooltip = "Detener audio"
+            try:
+                btn_speaker.update()
+            except:
+                pass
+            
+        if btn_play_pause:
+            btn_play_pause.disabled = False
+            btn_play_pause.icon = ft.Icons.PAUSE_ROUNDED
+            btn_play_pause.tooltip = "Pausar lectura"
+            try:
+                btn_play_pause.update()
+            except:
+                pass
 
         try:
             import re
@@ -5023,6 +5031,13 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 border=ft.Border.all(1, "#D8B4FE")
             )
         )
+        
+        # Reproducir el saludo inicial por voz
+        welcome_text_str = f"¡Bienvenido {user_info.get('nombre', '').split(' ')[0]}! Soy LUXO, tu asistente virtual."
+        try:
+            start_speak(welcome_text_str)
+        except Exception as e_speak:
+            print(f"No se pudo reproducir saludo inicial: {e_speak}")
 
         # Historial de conversación en memoria para enviar al LLM
         historial_sesion = []
