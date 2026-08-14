@@ -3958,6 +3958,8 @@ def main(page: ft.Page):
                 content=ft.Container(content_viewer, width=dlg_w, height=dlg_h),
                 bgcolor="#1A1A24"
             )
+            if dialog not in page.overlay:
+                page.overlay.append(dialog)
             page.dialog = dialog
             dialog.open = True
             try: page.update()
@@ -9878,6 +9880,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 bgcolor="#1a1a1a",
                                 shape=ft.RoundedRectangleBorder(radius=12)
                             )
+                            if dlg not in page.overlay:
+                                page.overlay.append(dlg)
                             page.dialog = dlg
                             dlg.open = True
                             page.update()
