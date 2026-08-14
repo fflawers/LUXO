@@ -3856,8 +3856,8 @@ def main(page: ft.Page):
             content_viewer = ft.Container(padding=5, expand=True)
 
             if ext == ".pdf":
+                print(f"[VISOR] Procesando PDF: {r_pdf}")
                 import pymupdf
-                import base64
                 doc = pymupdf.open(r_pdf)
                 total_pages = len(doc)
                 pages_to_render = min(total_pages, 50)
@@ -3874,26 +3874,24 @@ def main(page: ft.Page):
                         pix = page_pdf.get_pixmap(matrix=pymupdf.Matrix(1.5, 1.5))
                         pix.save(page_img_path)
 
-                    with open(page_img_path, "rb") as img_f:
-                        img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
+                    img_url = f"/temp_pdfs/img_cache/{cache_folder}/page_{i}.jpg"
+                    print(f"[VISOR] Generado render de pagina {i}: {img_url}")
 
                     images_col.controls.append(
-                        ft.Image(src=f"data:image/jpeg;base64,{img_b64}", fit="contain", expand=True)
+                        ft.Image(src=img_url, fit="contain", expand=True)
                     )
                 doc.close()
                 content_viewer.content = images_col
+                print(f"[VISOR] Column de {pages_to_render} imagenes generada con exito para PDF")
 
             elif ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
-                import base64
-                mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else f"image/{ext[1:]}"
-                with open(r_pdf, "rb") as img_f:
-                    img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
+                img_url = f"/temp_pdfs/{safe_name}"
+                print(f"[VISOR] Renderizando imagen directamente: {img_url}")
                 content_viewer.content = ft.Image(
-                    src=f"data:{mime};base64,{img_b64}",
+                    src=img_url,
                     fit="contain",
                     expand=True
                 )
-
 
             elif ext in [".mp4", ".mov", ".avi"]:
                 video_url = f"/temp_pdfs/{safe_name}"
@@ -3963,8 +3961,10 @@ def main(page: ft.Page):
             try: page.update()
             except: pass
         except Exception as ex:
+            import traceback
             print("Error al abrir visor modal global:", ex)
-            mostrar_snack("El archivo no se pudo previsualizar. Usa el botón 'Descargar'.", color="orange")
+            traceback.print_exc()
+            mostrar_snack("El archivo no se pudo previsualizar. Revisa la consola o usa el botón 'Descargar'.", color="orange")
 
     current_speak_btn_speaker = None
     current_speak_btn_play_pause = None
