@@ -2332,10 +2332,45 @@ def iniciar_hilo_escucha_luxo():
                                             os.system('afplay /System/Library/Sounds/Ping.aiff &')
                                     except Exception:
                                         pass
+
+                                    # Trigger visual loader INSTANTLY upon wake phrase
+                                    session = active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
+                                    if session:
+                                        siri_orb = session.get("siri_orb")
+                                        btn_mic_cont = session.get("btn_mic_container")
+                                        page_ref = session.get("page")
+                                        
+                                        if siri_orb:
+                                            try:
+                                                siri_orb.opacity = 1
+                                                siri_orb.scale = 1
+                                                if page_ref: page_ref.update()
+                                            except: pass
+
+                                        if btn_mic_cont:
+                                            try:
+                                                btn_mic_cont.bgcolor = "#9D50BB" # Morado brilloso
+                                                btn_mic_cont.border = ft.Border.all(3, "#00FFFF") # Borde Cyan grueso
+                                                if page_ref: page_ref.update()
+                                            except: pass
+
+                                        def revert_glow(bmc, orb, pref):
+                                            import time
+                                            time.sleep(3)
+                                            if bmc:
+                                                bmc.bgcolor = "#1E1E2E"
+                                                bmc.border = ft.Border.all(1.5, "#00FFFF")
+                                            if orb:
+                                                orb.opacity = 0
+                                                orb.scale = 0.1
+                                            try: 
+                                                if pref: pref.update()
+                                            except: pass
+                                            
+                                        threading.Thread(target=revert_glow, args=(btn_mic_cont, siri_orb, page_ref), daemon=True).start()
                                     
                                     query = re.sub(r"(oye|hola)\s+(luxo|lujo|luco|lux)", "", text, flags=re.IGNORECASE).strip()
                                     
-                                    session = active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
                                     if session:
                                         input_msg = session.get("input_msg")
                                         enviar_mensaje = session.get("enviar_mensaje")
@@ -2343,36 +2378,6 @@ def iniciar_hilo_escucha_luxo():
                                         if query:
                                             print(f"🚀 Enviando pregunta a LUXO IA: '{query}'")
                                             if input_msg and enviar_mensaje and page:
-                                                btn_mic_cont = session.get("btn_mic_container")
-                                                siri_orb = session.get("siri_orb")
-                                                
-                                                if siri_orb:
-                                                    try:
-                                                        siri_orb.opacity = 1
-                                                        siri_orb.scale = 1
-                                                        page.update()
-                                                    except: pass
-
-                                                if btn_mic_cont:
-                                                    try:
-                                                        btn_mic_cont.bgcolor = "#9D50BB" # Morado brilloso
-                                                        btn_mic_cont.border = ft.Border.all(3, "#00FFFF") # Borde Cyan grueso
-                                                        btn_mic_cont.update()
-                                                        def revert_glow(bmc, orb):
-                                                            import time
-                                                            time.sleep(3)
-                                                            bmc.bgcolor = "#1E1E2E"
-                                                            bmc.border = ft.Border.all(1.5, "#00FFFF")
-                                                            try: bmc.update()
-                                                            except: pass
-                                                            if orb:
-                                                                orb.opacity = 0
-                                                                orb.scale = 0.1
-                                                                try: orb.update()
-                                                                except: pass
-                                                        threading.Thread(target=revert_glow, args=(btn_mic_cont,siri_orb), daemon=True).start()
-                                                    except: pass
-                                                    
                                                 input_msg.value = query
                                                 try: page.update()
                                                 except: pass
@@ -7222,7 +7227,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 width=46,
                 height=46,
                 alignment=ft.alignment.Alignment(0, 0),
-                visible=False  # Oculto a petición del usuario, se usa el botón nativo en celular y background en PC
+                visible=is_mobile
             )
 
             siri_orb_flet = ft.Container(
@@ -7233,6 +7238,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_IN_OUT),
                 scale=0.1, opacity=0, bottom=30, right=30
             )
+            
+            if siri_orb_flet not in page.overlay:
+                page.overlay.append(siri_orb_flet)
 
             if user_info.get("id") and user_info["id"] in active_sessions:
                 active_sessions[user_info["id"]]["btn_mic"] = btn_mic
