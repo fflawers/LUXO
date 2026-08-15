@@ -2358,10 +2358,12 @@ def iniciar_hilo_escucha_luxo():
                                         
                                         if siri_orb:
                                             try:
+                                                print(f"🔥 [DEBUG] Activando SIRI ORB visualmente para session UID={uid}")
                                                 siri_orb.opacity = 1
                                                 siri_orb.scale = 1
                                                 siri_orb.update()
-                                            except: pass
+                                            except Exception as ex: 
+                                                print(f"❌ [DEBUG] Error al activar SIRI ORB visualmente: {ex}")
 
                                         if btn_mic_cont:
                                             try:
@@ -7258,9 +7260,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_IN_OUT),
                 scale=0.1, opacity=0, bottom=30, right=30
             )
-            
-            if siri_orb_flet not in page.overlay:
-                page.overlay.append(siri_orb_flet)
 
             if user_info.get("id") and user_info["id"] in active_sessions:
                 active_sessions[user_info["id"]]["btn_mic"] = btn_mic
