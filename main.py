@@ -2410,10 +2410,12 @@ def iniciar_hilo_escucha_luxo():
                                         else:
                                             print("👂 'Oye LUXO' captado sin pregunta. Esperando siguiente frase...")
                             except sr.UnknownValueError:
+                                print("⚠️ [DEBUG] Google SpeechRecognition recibió audio pero no entendió ninguna palabra (audio vacío o ininteligible).")
                                 pass
                             except sr.RequestError as req_err:
                                 print("Error en reconocimiento de voz online:", req_err)
                         except sr.WaitTimeoutError:
+                            print("⏳ [DEBUG] Tiempo de espera agotado para el micrófono. Reiniciando escucha...")
                             pass
                         except Exception as ex_inner:
                             print("Excepción en bucle de escucha interna:", ex_inner)
