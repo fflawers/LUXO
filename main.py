@@ -4131,22 +4131,14 @@ def main(page: ft.Page):
 
             if getattr(page, "web", False):
                 try:
+                    # Usar TTS nativo del navegador vía JS, no requiere librerías (gtts) ni generar MP3
+                    safe_text = clean_text.replace("'", "\\'").replace('"', '\\"')
+                    js_code = f"javascript:if('speechSynthesis' in window){{var msg = new SpeechSynthesisUtterance('{safe_text}'); msg.lang='es-MX'; window.speechSynthesis.speak(msg);}}void(0);"
                     import urllib.parse
-                    import hashlib
-                    os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
-                    text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
-                    filename = f"speak_{text_hash}.mp3"
-                    filepath = os.path.join(ASSETS_PATH, "temp_audio", filename)
-                    if not os.path.exists(filepath):
-                        from gtts import gTTS
-                        tts = gTTS(text=clean_text, lang="es")
-                        tts.save(filepath)
-                    url_url = f"/temp_audio/{urllib.parse.quote(filename)}"
-                    current_audio_player = ft.Audio(src=url_url, autoplay=True)
-                    page.overlay.append(current_audio_player)
-                    page.update()
+                    encoded = urllib.parse.quote(js_code[11:])
+                    page.launch_url(f"javascript:void(eval(decodeURIComponent('{encoded}')))")
                 except Exception as e_ft:
-                    print("Nota ft.Audio:", e_ft)
+                    print("Error lanzando TTS en JS:", e_ft)
             else:
                 t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
                 t_speak.start()
