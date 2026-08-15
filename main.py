@@ -1555,9 +1555,21 @@ def configurar_rutas_fastapi(app):
                     if siri_orb:
                         siri_orb.opacity = 1
                         siri_orb.scale = 1
+                        siri_orb.update()
                     page.snack_bar = ft.SnackBar(ft.Text("✨ ¡Oye LUXO detectado! Escuchando...", color="white", weight="bold"), bgcolor="#9D50BB", duration=3000)
                     page.snack_bar.open = True
                     page.update()
+
+                    if siri_orb:
+                        async def hide_orb():
+                            import asyncio
+                            await asyncio.sleep(5)
+                            try:
+                                siri_orb.opacity = 0
+                                siri_orb.scale = 0.1
+                                siri_orb.update()
+                            except: pass
+                        page.run_task(hide_orb)
                 except Exception as ex:
                     print(f"WARN Flet overlay error: {ex}")
         return {"status": "success"}
@@ -7068,7 +7080,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         .trim();
                                     if (!window.luxoIsListeningAlertSent) {
                                         window.luxoIsListeningAlertSent = true;
-                                        fetch('/luxo_listening_start?user_id=1', { method: 'POST' });
+                                        fetch('/luxo_listening_start?user_id=' + window.getLuxoUserId(), { method: 'POST' });
                                     }
                                     
                                     // Activar orbe flotante en la esquina inferior derecha al detectar frase clave (5 segundos de visualización)
