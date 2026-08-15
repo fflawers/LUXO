@@ -758,8 +758,26 @@ def configurar_rutas_fastapi(app):
                     if (isMobile) {
                         let mobileMicBtn = document.createElement("div");
                         mobileMicBtn.innerHTML = "🎙️";
-                        mobileMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 64px; z-index: 9999999; font-size: 20px; background: #1E1E2E; border: 1.5px solid #00FFFF; border-radius: 23px; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;";
+                        mobileMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 64px; z-index: 9999999; font-size: 20px; background: #1E1E2E; border: 1.5px solid #00FFFF; border-radius: 23px; width: 46px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;";
                         mobileMicBtn.id = "native-mobile-mic";
+
+                        setInterval(function() {
+                            let isLoggedIn = false;
+                            try {
+                                for (let i = 0; i < localStorage.length; i++) {
+                                    let key = localStorage.key(i);
+                                    if (key && key.includes('logged_user_id')) {
+                                        isLoggedIn = true;
+                                        break;
+                                    }
+                                }
+                            } catch(e) {}
+                            if(isLoggedIn && mobileMicBtn.style.display === "none") {
+                                mobileMicBtn.style.display = "flex";
+                            } else if (!isLoggedIn && mobileMicBtn.style.display === "flex") {
+                                mobileMicBtn.style.display = "none";
+                            }
+                        }, 1000);
                         
                         let isDragging = false;
                         let startX, startY, initialX, initialY;
@@ -2334,40 +2352,42 @@ def iniciar_hilo_escucha_luxo():
                                         pass
 
                                     # Trigger visual loader INSTANTLY upon wake phrase
-                                    session = active_sessions.get(1) or active_sessions.get("1") or (list(active_sessions.values())[0] if active_sessions else None)
-                                    if session:
+                                    for uid, session in list(active_sessions.items()):
                                         siri_orb = session.get("siri_orb")
                                         btn_mic_cont = session.get("btn_mic_container")
-                                        page_ref = session.get("page")
                                         
                                         if siri_orb:
                                             try:
                                                 siri_orb.opacity = 1
                                                 siri_orb.scale = 1
-                                                if page_ref: page_ref.update()
+                                                siri_orb.update()
                                             except: pass
 
                                         if btn_mic_cont:
                                             try:
                                                 btn_mic_cont.bgcolor = "#9D50BB" # Morado brilloso
                                                 btn_mic_cont.border = ft.Border.all(3, "#00FFFF") # Borde Cyan grueso
-                                                if page_ref: page_ref.update()
+                                                btn_mic_cont.update()
                                             except: pass
 
-                                        def revert_glow(bmc, orb, pref):
-                                            import time
-                                            time.sleep(3)
+                                    def revert_glow():
+                                        import time
+                                        time.sleep(3)
+                                        for uid, session in list(active_sessions.items()):
+                                            bmc = session.get("btn_mic_container")
+                                            orb = session.get("siri_orb")
                                             if bmc:
                                                 bmc.bgcolor = "#1E1E2E"
                                                 bmc.border = ft.Border.all(1.5, "#00FFFF")
+                                                try: bmc.update()
+                                                except: pass
                                             if orb:
                                                 orb.opacity = 0
                                                 orb.scale = 0.1
-                                            try: 
-                                                if pref: pref.update()
-                                            except: pass
-                                            
-                                        threading.Thread(target=revert_glow, args=(btn_mic_cont, siri_orb, page_ref), daemon=True).start()
+                                                try: orb.update()
+                                                except: pass
+                                                
+                                    threading.Thread(target=revert_glow, daemon=True).start()
                                     
                                     query = re.sub(r"(oye|hola)\s+(luxo|lujo|luco|lux)", "", text, flags=re.IGNORECASE).strip()
                                     
