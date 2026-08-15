@@ -1552,10 +1552,17 @@ def configurar_rutas_fastapi(app):
             siri_orb = session.get("siri_orb")
             if page:
                 try:
+                    # Forzar el encendido visual del Orbe Javascript inyectado
+                    target_url = "javascript:if(typeof window.showLuxoSiriOrb === 'function'){ window.showLuxoSiriOrb(5000); } void(0);"
+                    import urllib.parse
+                    encoded = urllib.parse.quote(target_url[11:])
+                    page.launch_url(f"javascript:void(eval(decodeURIComponent('{encoded}')))")
+
                     if siri_orb:
                         siri_orb.opacity = 1
                         siri_orb.scale = 1
                         siri_orb.update()
+
                     page.snack_bar = ft.SnackBar(ft.Text("✨ ¡Oye LUXO detectado! Escuchando...", color="white", weight="bold"), bgcolor="#9D50BB", duration=3000)
                     page.snack_bar.open = True
                     page.update()
@@ -1598,6 +1605,15 @@ def configurar_rutas_fastapi(app):
                 if input_msg and enviar_mensaje and page:
                     btn_mic_cont = session.get("btn_mic_container")
                     siri_orb = session.get("siri_orb")
+                    
+                    # Forzar el encendido visual del Orbe Javascript inyectado (mucho más robusto en Mac/Desktop)
+                    try:
+                        target_url = "javascript:if(typeof window.showLuxoSiriOrb === 'function'){ window.showLuxoSiriOrb(5000); } void(0);"
+                        import urllib.parse
+                        encoded = urllib.parse.quote(target_url[11:])
+                        page.launch_url(f"javascript:void(eval(decodeURIComponent('{encoded}')))")
+                    except Exception as e_js:
+                        print(f"WARN No se pudo lanzar JS orb: {e_js}")
                     
                     if siri_orb:
                         try:
