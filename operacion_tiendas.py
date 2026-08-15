@@ -107,7 +107,7 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
         
         limit_str = obtener_hora_limite_apertura()
         limit_time = datetime.strptime(limit_str, "%H:%M").time()
-        now_time = datetime.now().time()
+        now_time = datetime.now(ZoneInfo("America/Mexico_City")).time()
         
         total_tiendas = len(tiendas)
         total_reportadas = len(reportados)
@@ -228,7 +228,7 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
 def verificar_alertas_apertura_incumplida(conectar_db_fn=None):
     limit_str = obtener_hora_limite_apertura()
     limit_time = datetime.strptime(limit_str, "%H:%M").time()
-    now_time = datetime.now().time()
+    now_time = datetime.now(ZoneInfo("America/Mexico_City")).time()
     
     if now_time <= limit_time:
         return
@@ -542,7 +542,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         5: "Sábado",
         6: "Domingo"
     }
-    ahora = datetime.now()
+    ahora = datetime.now(ZoneInfo("America/Mexico_City"))
     dia_nombre = dias_semana[ahora.weekday()]
     hoy_str = f"{dia_nombre} {ahora.strftime('%d/%m/%Y')}"
 
@@ -606,7 +606,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
         )
     ], alignment=ft.MainAxisAlignment.START, vertical_alignment="center", spacing=10 if is_mobile_w else 15, wrap=True)
     
-    hoy_date = datetime.now().date()
+    hoy_date = datetime.now(ZoneInfo("America/Mexico_City")).date()
     fecha_consulta = [hoy_date]
     
     fecha_text = ft.Text(
