@@ -3,6 +3,7 @@ import os
 import re
 import json
 from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -303,12 +304,12 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         try:
             limit_str = obtener_hora_limite_apertura()
             limit_time = datetime.strptime(limit_str, "%H:%M").time()
-            now_time = datetime.now().time()
+            now_time = datetime.now(ZoneInfo("America/Mexico_City")).time()
             
             estado = "Puntual" if now_time <= limit_time else "Tarde"
             
             # Usar hora local de Python, no CURRENT_TIME() de MySQL (que puede ser UTC)
-            now_dt = datetime.now()
+            now_dt = datetime.now(ZoneInfo("America/Mexico_City"))
             now_str = now_dt.strftime("%H:%M:%S")
             fecha_str = now_dt.strftime("%Y-%m-%d")
             
@@ -356,7 +357,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 dest_dir = os.path.join(BASE_PATH, "uploads", "aperturas")
                 os.makedirs(dest_dir, exist_ok=True)
                 t_num = str(user_info.get("tienda") or "tienda").replace(" ", "_")
-                f_name = f"apertura_{t_num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                f_name = f"apertura_{t_num}_{datetime.now(ZoneInfo('America/Mexico_City')).strftime('%Y%m%d_%H%M%S')}.jpg"
                 dest_path = os.path.join(dest_dir, f_name)
                 
                 with open(path, "rb") as f_in:
@@ -418,15 +419,19 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
             return
             
         try:
+            now_dt = datetime.now(ZoneInfo("America/Mexico_City"))
+            now_str = now_dt.strftime("%H:%M:%S")
+            fecha_str = now_dt.strftime("%Y-%m-%d")
+            
             cursor = db.cursor()
             cursor.execute("""
                 INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Cierre, Venta_Con_Iva, Piezas_Vendidas)
-                VALUES (%s, CURRENT_DATE(), CURRENT_TIME(), %s, %s)
+                VALUES (%s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
-                    Hora_Cierre = CURRENT_TIME(), 
+                    Hora_Cierre = %s, 
                     Venta_Con_Iva = %s, 
                     Piezas_Vendidas = %s
-            """, (tienda_usuario, venta, piezas, venta, piezas))
+            """, (tienda_usuario, fecha_str, now_str, venta, piezas, now_str, venta, piezas))
             db.commit()
             db.close()
             
