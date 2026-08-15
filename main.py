@@ -4047,7 +4047,7 @@ def main(page: ft.Page):
 
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
-        run_js("javascript:if(window.stopTtsAudio){window.stopTtsAudio();} void(0);")
+        run_js("javascript:if('speechSynthesis' in window){window.speechSynthesis.cancel();} void(0);")
         
         if active_sapi_instance[0]:
             try:
@@ -4132,11 +4132,9 @@ def main(page: ft.Page):
             if getattr(page, "web", False):
                 try:
                     # Usar TTS nativo del navegador vía JS, no requiere librerías (gtts) ni generar MP3
-                    safe_text = clean_text.replace("'", "\\'").replace('"', '\\"')
-                    js_code = f"javascript:if('speechSynthesis' in window){{var msg = new SpeechSynthesisUtterance('{safe_text}'); msg.lang='es-MX'; window.speechSynthesis.speak(msg);}}void(0);"
-                    import urllib.parse
-                    encoded = urllib.parse.quote(js_code[11:])
-                    page.launch_url(f"javascript:void(eval(decodeURIComponent('{encoded}')))")
+                    safe_text = clean_text.replace("'", "\\'").replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
+                    js_code = f"javascript:if('speechSynthesis' in window){{window.speechSynthesis.cancel(); var msg = new SpeechSynthesisUtterance('{safe_text}'); msg.lang='es-MX'; window.speechSynthesis.speak(msg);}}void(0);"
+                    ejecutar_js_flet(page, js_code)
                 except Exception as e_ft:
                     print("Error lanzando TTS en JS:", e_ft)
             else:
@@ -4151,7 +4149,7 @@ def main(page: ft.Page):
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
         if current_speak_btn_play_pause:
             try:
-                run_js("javascript:if(window.togglePauseTtsAudio){window.togglePauseTtsAudio();} void(0);")
+                run_js("javascript:if('speechSynthesis' in window){if(window.speechSynthesis.paused){window.speechSynthesis.resume();}else{window.speechSynthesis.pause();}} void(0);")
                 if active_sapi_instance[0]:
                     try:
                         if current_speak_is_paused:
