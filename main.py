@@ -984,6 +984,31 @@ def configurar_rutas_fastapi(app):
                             if (isDragging) {
                                 return; // Was a drag, do not trigger click
                             }
+
+                            function playBeep(count) {
+                                try {
+                                    const cnt = count || 1;
+                                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                    function emitTone(freq, duration, delay) {
+                                        setTimeout(function() {
+                                            try {
+                                                const osc = ctx.createOscillator();
+                                                const gain = ctx.createGain();
+                                                osc.type = 'sine';
+                                                osc.frequency.value = freq;
+                                                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                                                osc.connect(gain);
+                                                gain.connect(ctx.destination);
+                                                osc.start();
+                                                osc.stop(ctx.currentTime + duration);
+                                            } catch(err){}
+                                        }, delay);
+                                    }
+                                    if (cnt === 1) { emitTone(880, 0.12, 0); } 
+                                    else { emitTone(1046, 0.1, 0); emitTone(1318, 0.15, 100); }
+                                } catch(err) {}
+                            }
                             
                             // Was a click/tap
                             const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
@@ -992,7 +1017,6 @@ def configurar_rutas_fastapi(app):
                                 return; 
                             }
                             const r = new SR();
-                            r.lang = 'es-MX';
                             r.interimResults = false;
                             r.continuous = false;
                             r.maxAlternatives = 1;
@@ -7660,7 +7684,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         try {
                             if (rec) try { rec.stop(); } catch(e){}
                             let r = new SR();
-                            r.lang = 'es-MX';
                             r.interimResults = false;
                             r.continuous = false;
                             window.luxoMobileDictating = true;
@@ -7736,7 +7759,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 return; 
                             }
                             const r = new SR();
-                            r.lang = 'es-MX';
                             r.interimResults = false;
                             r.continuous = false;
                             r.maxAlternatives = 1;
