@@ -2638,50 +2638,64 @@ def iniciar_hilo_escucha_luxo():
                                     
                                     query = re.sub(r"(oye|hola)\s+(luxo|lujo|luco|lux)", "", text, flags=re.IGNORECASE).strip()
                                     
-                                    # Buscar la sesión del usuario actual
-                                    user_session = list(active_sessions.values())[-1] if active_sessions else None
+                                    # Buscar la sesión activa del usuario para enviar la pregunta de voz
+                                    user_session = None
+                                    for s in reversed(list(active_sessions.values())):
+                                        if s.get("input_msg") and s.get("enviar_mensaje"):
+                                            user_session = s
+                                            break
+                                            
                                     if user_session:
                                         input_msg = user_session.get("input_msg")
                                         enviar_mensaje_fn = user_session.get("enviar_mensaje")
+                                        page_obj = user_session.get("page")
                                         if query and input_msg and enviar_mensaje_fn:
                                             print(f"🚀 Enviando pregunta a LUXO IA desde voz: '{query}'")
                                             input_msg.value = query
-                                            # 2. Segundos Beeps (2 Beeps "beep-beep") INMEDIATOS al captar el mensaje (sin retraso)
                                             if platform.system() == "Windows":
                                                 try:
                                                     winsound.Beep(1500, 100)
                                                     time.sleep(0.05)
                                                     winsound.Beep(1500, 100)
-                                                except Exception:
-                                                    pass
+                                                except Exception: pass
                                             try:
-                                                enviar_mensaje_fn(None)
+                                                if page_obj and hasattr(page_obj, "run_thread"):
+                                                    page_obj.run_thread(enviar_mensaje_fn, None)
+                                                else:
+                                                    enviar_mensaje_fn(None)
                                             except Exception as ex_send:
                                                 print("Notice enviar_mensaje_fn:", ex_send)
                                         else:
                                             user_session["esperando_pregunta"] = True
                                             print("👂 'Oye LUXO' captado sin pregunta. Esperando siguiente frase...")
-                                elif active_sessions and list(active_sessions.values())[-1].get("esperando_pregunta"):
-                                    user_session = list(active_sessions.values())[-1]
-                                    user_session["esperando_pregunta"] = False
-                                    query = text.strip()
-                                    input_msg = user_session.get("input_msg")
-                                    enviar_mensaje_fn = user_session.get("enviar_mensaje")
-                                    if query and input_msg and enviar_mensaje_fn:
-                                        print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
-                                        input_msg.value = query
-                                        # 2. Segundos Beeps (2 Beeps "beep-beep") INMEDIATOS al captar la pregunta
-                                        if platform.system() == "Windows":
+                                elif active_sessions:
+                                    target_sess = None
+                                    for s in reversed(list(active_sessions.values())):
+                                        if s.get("esperando_pregunta") and s.get("input_msg") and s.get("enviar_mensaje"):
+                                            target_sess = s
+                                            break
+                                    if target_sess:
+                                        target_sess["esperando_pregunta"] = False
+                                        query = text.strip()
+                                        input_msg = target_sess.get("input_msg")
+                                        enviar_mensaje_fn = target_sess.get("enviar_mensaje")
+                                        page_obj = target_sess.get("page")
+                                        if query and input_msg and enviar_mensaje_fn:
+                                            print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
+                                            input_msg.value = query
+                                            if platform.system() == "Windows":
+                                                try:
+                                                    winsound.Beep(1500, 100)
+                                                    time.sleep(0.05)
+                                                    winsound.Beep(1500, 100)
+                                                except Exception: pass
                                             try:
-                                                winsound.Beep(1500, 100)
-                                                time.sleep(0.05)
-                                                winsound.Beep(1500, 100)
-                                            except Exception:
-                                                pass
-                                        try:
-                                            enviar_mensaje_fn(None)
-                                        except Exception as ex_send:
-                                            print("Notice enviar_mensaje_fn:", ex_send)
+                                                if page_obj and hasattr(page_obj, "run_thread"):
+                                                    page_obj.run_thread(enviar_mensaje_fn, None)
+                                                else:
+                                                    enviar_mensaje_fn(None)
+                                            except Exception as ex_send:
+                                                print("Notice enviar_mensaje_fn:", ex_send)
                             except sr.UnknownValueError:
                                 print("⚠️ [DEBUG] Google SpeechRecognition recibió audio pero no entendió ninguna palabra (audio vacío o ininteligible).")
                                 pass
