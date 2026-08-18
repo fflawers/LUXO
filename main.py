@@ -2078,10 +2078,12 @@ def configurar_rutas_fastapi(app):
                             setTimeout(() => {{
                                 if (window.parent && window.parent.closeOverlay) {{
                                     window.parent.closeOverlay();
+                                }} else if (window.history.length > 1) {{
+                                    window.history.back();
                                 }} else {{
                                     window.close();
                                 }}
-                            }}, 800);
+                            }}, 600);
                         }} else {{
                             msg.style.color = '#FF4500';
                             msg.innerText = '❌ Error: ' + (data.message || 'Error al subir');
