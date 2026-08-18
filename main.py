@@ -2659,10 +2659,7 @@ def iniciar_hilo_escucha_luxo():
                                                     winsound.Beep(1500, 100)
                                                 except Exception: pass
                                             try:
-                                                if page_obj and hasattr(page_obj, "run_thread"):
-                                                    page_obj.run_thread(enviar_mensaje_fn, None)
-                                                else:
-                                                    enviar_mensaje_fn(None)
+                                                threading.Thread(target=enviar_mensaje_fn, args=(None,), daemon=True).start()
                                             except Exception as ex_send:
                                                 print("Notice enviar_mensaje_fn:", ex_send)
                                         else:
@@ -2679,7 +2676,6 @@ def iniciar_hilo_escucha_luxo():
                                         query = text.strip()
                                         input_msg = target_sess.get("input_msg")
                                         enviar_mensaje_fn = target_sess.get("enviar_mensaje")
-                                        page_obj = target_sess.get("page")
                                         if query and input_msg and enviar_mensaje_fn:
                                             print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
                                             input_msg.value = query
@@ -2690,10 +2686,7 @@ def iniciar_hilo_escucha_luxo():
                                                     winsound.Beep(1500, 100)
                                                 except Exception: pass
                                             try:
-                                                if page_obj and hasattr(page_obj, "run_thread"):
-                                                    page_obj.run_thread(enviar_mensaje_fn, None)
-                                                else:
-                                                    enviar_mensaje_fn(None)
+                                                threading.Thread(target=enviar_mensaje_fn, args=(None,), daemon=True).start()
                                             except Exception as ex_send:
                                                 print("Notice enviar_mensaje_fn:", ex_send)
                             except sr.UnknownValueError:
@@ -7730,11 +7723,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             console.log("Error iniciando micrófono móvil:", err);
                         }
                     } else {
-                        // window.initLuxoMicPermission(); // Desactivado inicio automático
+                        window.initLuxoMicPermission();
                     }
                 };
 
-                // window.initLuxoMicPermission(); // Desactivado inicio automático
+                window.initLuxoMicPermission();
             })(); void(0);"""
 
             async def _exec_js():
