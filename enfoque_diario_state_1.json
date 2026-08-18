@@ -1,0 +1,927 @@
+{
+    "global_meta": {
+        "semana": "30",
+        "tienda": "Vallejo",
+        "num_tienda": "3645"
+    },
+    "store_state": {
+        "DOMINGO": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "Moisés",
+                    "horas": 10.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "romo",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "susana",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "pedro",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                }
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                }
+            ]
+        },
+        "LUNES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "Moisés",
+                    "horas": 10.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "romo",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "susana",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "pedro",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                }
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                }
+            ]
+        },
+        "MARTES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "Moisés",
+                    "horas": 10.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "romo",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "susana",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "pedro",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                }
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                }
+            ]
+        },
+        "MIÉRCOLES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "Moisés",
+                    "horas": 10.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "romo",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "susana",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "pedro",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                }
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                }
+            ]
+        },
+        "JUEVES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "Moisés",
+                    "horas": 10.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "romo",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "susana",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "pedro",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                }
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                }
+            ]
+        },
+        "VIERNES": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "Moisés",
+                    "horas": 10.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "romo",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "susana",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "pedro",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                }
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                }
+            ]
+        },
+        "SÁBADO": {
+            "meta_diaria": 4758.0,
+            "trafico_esperado": 8,
+            "conversion_target": 0.13,
+            "vta_ly": 4758.0,
+            "wearables_pct": 0.15,
+            "kids_pct": 0.05,
+            "carekits_pct": 0.3,
+            "atv_dia": 3620.0,
+            "aur_dia": 3620.0,
+            "atv_mtd": 7597.0,
+            "aur_mtd": 3362.0,
+            "estrellas_logro": 5,
+            "trafico_bloques": [
+                4,
+                2,
+                2,
+                0,
+                0
+            ],
+            "colaboradores": [
+                {
+                    "nombre": "Moisés",
+                    "horas": 10.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "romo",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "susana",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "pedro",
+                    "horas": 8.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                },
+                {
+                    "nombre": "",
+                    "horas": 0.0,
+                    "interacciones": 0,
+                    "convertidos": 0,
+                    "vta_cierre": 0.0,
+                    "ana_cierre": 0,
+                    "wea_demos": 0,
+                    "wea_cierre": 0,
+                    "kid_cierre": 0
+                }
+            ],
+            "venta_neta_dia": 0.0,
+            "venta_unidades_dia": 0,
+            "slp_dia": "",
+            "onesight_dia": "",
+            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "plan_accion": [
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                },
+                {
+                    "colaborador": "",
+                    "compromiso": ""
+                }
+            ]
+        }
+    },
+    "historico_semanal_state": {}
+}

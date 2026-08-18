@@ -34,7 +34,7 @@ GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")
 GROQ_API_KEY_3 = os.getenv("GROQ_API_KEY_3", "")
 GROQ_KEYS = [k for k in [GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3] if k]  # lista de llaves activas
 _groq_key_index = 0  # índice de la llave activa actual
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "groq/compound-mini")
 URL_GROQ = "https://api.groq.com/openai/v1/chat/completions"
 
 def get_groq_key():
@@ -533,9 +533,168 @@ def configurar_rutas_fastapi(app):
     async def print_enfoque_route(day: str, user_id: str = "invitado"):
         try:
             import enfoque_diario
-            calc = enfoque_diario.calcular_dia(day, user_id)
-            data = enfoque_diario.user_states.get(user_id, {}).get("store_state", {}).get(day, {})
+            s_state = enfoque_diario.user_states.get(user_id, {}).get("store_state", {})
             meta = enfoque_diario.user_states.get(user_id, {}).get("global_meta", {})
+
+            if day == "SEMANAL":
+                h_state = enfoque_diario.user_states.get(user_id, {}).get("historico_semanal_state", {})
+                tot_meta_sem = sum(s_state[d]["meta_diaria"] for d in enfoque_diario.DIAS if d in s_state)
+                tot_ana_sem = sum(s_state[d]["meta_diaria"] * 0.85 for d in enfoque_diario.DIAS if d in s_state)
+                tot_wea_sem = sum(s_state[d]["meta_diaria"] * 0.15 for d in enfoque_diario.DIAS if d in s_state)
+                tot_horas_sem = sum(enfoque_diario.calcular_dia(d, user_id).get("tot_horas", 0.0) for d in enfoque_diario.DIAS)
+                
+                meta_conversion = float(h_state.get("meta_conversion", 0.16))
+                comply_sem = float(h_state.get("comply_sem", 22519.0))
+                atv_sem = float(h_state.get("atv_sem", 7500.0))
+                aur_sem = float(h_state.get("aur_sem", 4617.0))
+                
+                colabs_list = s_state.get("DOMINGO", {}).get("colaboradores", [])
+                
+                colab_html_rows = ""
+                for c in colabs_list:
+                    c_name = c.get('nombre','').strip()
+                    if not c_name: continue
+                    h_p = h_state.get('horas_colab',{}).get(c_name, 0.0)
+                    m_colab = (tot_meta_sem / (tot_horas_sem or 1)) * h_p
+                    ana_c = max(1, int(((tot_meta_sem / (aur_sem or 4617)) / (tot_horas_sem or 1)) * h_p)) if h_p > 0 else 0
+                    wea_c = h_state.get('wea_colab_manual',{}).get(c_name, 1)
+                    colab_html_rows += f"<tr><td style='text-align:left; font-weight:bold;'>{c_name}</td><td>{h_p:.1f} hrs</td><td>${m_colab:,.2f}</td><td>{ana_c}</td><td>{wea_c}</td><td>1</td><td>1</td></tr>"
+
+                dias_html_rows = ""
+                for d in enfoque_diario.DIAS:
+                    c = enfoque_diario.calcular_dia(d, user_id)
+                    dias_html_rows += f"<tr><td style='font-weight:bold;'>{d}</td><td>${c['meta_diaria']:,.2f}</td><td>${c['analogos']:,.2f}</td><td>${c['wearables']:,.2f}</td><td>{c['tot_horas']:.1f} hrs</td></tr>"
+
+                html = f"""
+                <!DOCTYPE html>
+                <html lang="es">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>2026 SGH ENFOQUE SEMANAL - {meta.get('tienda', '')}</title>
+                    <style>
+                        @page {{ size: landscape; margin: 8mm; }}
+                        body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 10px; color: #000; background: #fff; font-size: 11px; }}
+                        .top-header {{ display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }}
+                        .logo-brand {{ font-size: 16px; font-weight: 900; letter-spacing: -0.5px; }}
+                        .tag-green {{ background: #C6EFCE; color: #006100; font-weight: bold; border: 1px solid #10B981; padding: 4px 10px; border-radius: 4px; font-size: 10px; }}
+                        .title-banner {{ background: #000; color: #fff; font-size: 13px; font-weight: bold; text-align: center; padding: 6px; letter-spacing: 1px; margin-bottom: 10px; text-transform: uppercase; }}
+                        .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }}
+                        .kpi-box {{ border: 1px solid #000; font-size: 10px; }}
+                        .kpi-title {{ background: #000; color: #fff; font-weight: bold; padding: 4px; text-align: center; font-size: 10px; text-transform: uppercase; }}
+                        .kpi-body {{ padding: 6px; background: #fff; }}
+                        .kpi-row {{ display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed #eee; }}
+                        .kpi-row:last-child {{ border-bottom: none; }}
+                        .green-bg {{ background: #C6EFCE !important; color: #006100; font-weight: bold; }}
+                        table {{ width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }}
+                        th {{ background: #000; color: #fff; border: 1px solid #000; padding: 5px; text-align: center; }}
+                        td {{ border: 1px solid #666; padding: 5px; text-align: center; }}
+                        .sec-title {{ font-size: 11px; font-weight: bold; margin-top: 10px; margin-bottom: 4px; text-transform: uppercase; background: #f3f4f6; padding: 4px; border-left: 4px solid #000; }}
+                        .btn-print {{ position: fixed; top: 12px; right: 12px; background: #10B981; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; z-index: 9999; }}
+                        @media print {{ .btn-print {{ display: none; }} body {{ padding: 0; }} }}
+                    </style>
+                </head>
+                <body>
+                    <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+
+                    <div class="top-header">
+                        <div>
+                            <span class="logo-brand">🕶️ sunglass hut</span>
+                            <span style="font-size:14px; font-weight:bold; margin-left:8px;">RESUMEN Y ENFOQUE SEMANAL</span>
+                        </div>
+                        <div style="display:flex; gap:15px; align-items:center;">
+                            <span><b>Semana:</b> {meta.get('semana', '')}</span>
+                            <span><b>Tienda:</b> {meta.get('tienda', '')}</span>
+                            <span class="tag-green">OFICIAL SGH SEMANAL</span>
+                        </div>
+                    </div>
+
+                    <div class="title-banner">RESUMEN GENERAL SEMANAL</div>
+
+                    <div class="kpi-grid">
+                        <div class="kpi-box">
+                            <div class="kpi-title">SEMANAL</div>
+                            <div class="kpi-body">
+                                <div class="kpi-row"><span>META SEMANAL</span><b>${tot_meta_sem:,.2f}</b></div>
+                                <div class="kpi-row green-bg"><span>ANÁLOGOS</span><b>${tot_ana_sem:,.2f}</b></div>
+                                <div class="kpi-row green-bg"><span>WEARABLES</span><b>${tot_wea_sem:,.2f}</b></div>
+                            </div>
+                        </div>
+
+                        <div class="kpi-box">
+                            <div class="kpi-title">CONVERSIÓN SEMANAL</div>
+                            <div class="kpi-body">
+                                <div class="kpi-row"><span>META CONVERSIÓN</span><b>{meta_conversion*100:.1f}%</b></div>
+                                <div class="kpi-row green-bg"><span>META IDEAL 110%</span><b>${tot_meta_sem*1.10:,.2f}</b></div>
+                            </div>
+                        </div>
+
+                        <div class="kpi-box">
+                            <div class="kpi-title">OTROS NO NEGOCIABLES</div>
+                            <div class="kpi-body">
+                                <div class="kpi-row green-bg"><span>WEARABLES</span><b>15%</b></div>
+                                <div class="kpi-row green-bg"><span>KIDS</span><b>5%</b></div>
+                                <div class="kpi-row green-bg"><span>CAREKITS</span><b>30%</b></div>
+                            </div>
+                        </div>
+
+                        <div class="kpi-box">
+                            <div class="kpi-title">COMPLY E INDICADORES</div>
+                            <div class="kpi-body">
+                                <div class="kpi-row green-bg"><span>COMPLY SEMANAL</span><b>${comply_sem:,.2f}</b></div>
+                                <div class="kpi-row"><span>ATV SEMANAL</span><b>${atv_sem:,.2f}</b></div>
+                                <div class="kpi-row"><span>AUR SEMANAL</span><b>${aur_sem:,.2f}</b></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sec-title">DISTRIBUCIÓN DE METAS POR COLABORADOR</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>COLABORADOR</th>
+                                <th>HORAS PROG.</th>
+                                <th>META VENTA</th>
+                                <th>ANÁLOGOS</th>
+                                <th>WEARABLES</th>
+                                <th>KIDS</th>
+                                <th>CAREKITS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {colab_html_rows}
+                        </tbody>
+                    </table>
+
+                    <div class="sec-title">CONSOLIDADO POR DÍAS</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>DÍA</th>
+                                <th>META DIARIA</th>
+                                <th>ANÁLOGOS</th>
+                                <th>WEARABLES</th>
+                                <th>HORAS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {dias_html_rows}
+                            <tr style="font-weight:bold; background:#e5e7eb;">
+                                <td>TOTAL SEMANAL</td>
+                                <td>${tot_meta_sem:,.2f}</td>
+                                <td>${tot_ana_sem:,.2f}</td>
+                                <td>${tot_wea_sem:,.2f}</td>
+                                <td>{tot_horas_sem:.1f} hrs</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </body>
+                </html>
+                """
+                from fastapi.responses import HTMLResponse
+                return HTMLResponse(content=html)
+
+            calc = enfoque_diario.calcular_dia(day, user_id)
+            data = s_state.get(day, {})
 
             html = f"""
             <!DOCTYPE html>
@@ -839,6 +998,8 @@ def configurar_rutas_fastapi(app):
                             r.maxAlternatives = 1;
                             
                             r.onstart = function() {
+                                console.log("[LUXO MIC] ACTIVANDO MICROFONO", { source: "floating_mic_button", mobile: true, timestamp: Date.now() });
+                                playBeep(1);
                                 mobileMicBtn.style.background = "#FF0000";
                                 mobileMicBtn.style.borderColor = "#FFFFFF";
                                 mobileMicBtn.style.boxShadow = "0 0 25px #FF0000";
@@ -846,21 +1007,18 @@ def configurar_rutas_fastapi(app):
                             r.onresult = function(ev) {
                                 const txt = ev.results[0][0].transcript;
                                 if (txt) {
+                                    playBeep(2);
                                     fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
                             r.onerror = function(ev) { 
                                 console.log("Speech recognition error:", ev.error);
-                                if (ev.error === 'aborted') {
-                                    alert('❌ Error: El micrófono fue abortado. Asegúrate de dar permisos en tu navegador.');
-                                } else {
-                                    alert('❌ Error micrófono: ' + ev.error); 
-                                }
                                 mobileMicBtn.style.background = "#1E1E2E";
                                 mobileMicBtn.style.borderColor = "#00FFFF";
                                 mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
                             };
                             r.onend = function() { 
+                                console.log("[LUXO MIC] DETENIENDO MICROFONO", { source: "floating_mic_button", timestamp: Date.now() });
                                 mobileMicBtn.style.background = "#1E1E2E";
                                 mobileMicBtn.style.borderColor = "#00FFFF";
                                 mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
@@ -869,7 +1027,7 @@ def configurar_rutas_fastapi(app):
                             try { 
                                 r.start(); 
                             } catch(e) { 
-                                alert("❌ Error iniciando: " + e.message); 
+                                console.log("Error iniciando micrófono:", e); 
                             }
                         };
                         
@@ -967,8 +1125,33 @@ def configurar_rutas_fastapi(app):
 
                     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-                    function playBeep() {
-                        // Sonido desactivado
+                    function playBeep(count) {
+                        try {
+                            const cnt = count || 1;
+                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                            function emitTone(freq, duration, delay) {
+                                setTimeout(function() {
+                                    try {
+                                        const osc = ctx.createOscillator();
+                                        const gain = ctx.createGain();
+                                        osc.type = 'sine';
+                                        osc.frequency.value = freq;
+                                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                                        osc.connect(gain);
+                                        gain.connect(ctx.destination);
+                                        osc.start();
+                                        osc.stop(ctx.currentTime + duration);
+                                    } catch(e){}
+                                }, delay);
+                            }
+                            if (cnt === 1) {
+                                emitTone(880, 0.12, 0);
+                            } else if (cnt >= 2) {
+                                emitTone(1050, 0.08, 0);
+                                emitTone(1320, 0.12, 120);
+                            }
+                        } catch(e){}
                     }
 
 
@@ -978,7 +1161,7 @@ def configurar_rutas_fastapi(app):
                     let lastSentTime = 0;
 
                     // Detección de dispositivo móvil para evitar loop de SpeechRecognition
-                    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
+                    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) || ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
 
                     window.initLuxoMicPermission = function() {
                         // En celulares/tablets: NO activar reconocimiento continuo "Oye LUXO"
@@ -1008,6 +1191,7 @@ def configurar_rutas_fastapi(app):
                     };
 
                     function startRecognition() {
+                        if (isMobileDevice) return;
                         if (!SpeechRecognition) {
                             setStatus("❌ Usa Chrome o Edge para 'Oye LUXO'", "#FF0000", "❌");
                             return;
@@ -1030,11 +1214,10 @@ def configurar_rutas_fastapi(app):
                                     const transcript = e.results[i][0].transcript;
                                     const lower = transcript.toLowerCase();
                                     
-                                    if (lower.includes("oye luxo") || lower.includes("oye lujo") || lower.includes("hola luxo") || lower.includes("hey luxo")) {
+                                    if (lower.includes("oye luxo") || lower.includes("oye lux")) {
                                         const now = Date.now();
                                         let query = transcript
                                             .replace(/oye luxo/gi, '')
-                                            .replace(/oye lujo/gi, '')
                                             .replace(/hola luxo/gi, '')
                                             .replace(/hey luxo/gi, '')
                                             .trim();
@@ -1084,7 +1267,7 @@ def configurar_rutas_fastapi(app):
 
                             rec.onend = function() {
                                 window.luxoSpeechRecognitionActive = false;
-                                if (isListening) {
+                                if (isListening && !isMobileDevice) {
                                     setTimeout(function() { try { rec.start(); } catch(e){} }, 300);
                                 }
                             };
@@ -1291,7 +1474,7 @@ def configurar_rutas_fastapi(app):
                             }
                         }
                     };
-                    window.initLuxoMicPermission();
+                    // window.initLuxoMicPermission(); // Desactivado inicio automático
                 })();
                 </script>
                 """
@@ -2348,6 +2531,7 @@ def iniciar_hilo_escucha_luxo():
         r.dynamic_energy_threshold = True
         r.pause_threshold = 1.0
         r.non_speaking_duration = 0.8
+        last_cleanup_time = time.time()
         
         while True:
             try:
@@ -2358,6 +2542,14 @@ def iniciar_hilo_escucha_luxo():
                     print("👂 Escuchando micrófono de Windows en segundo plano... Di 'Oye LUXO'")
                     
                     while True:
+                        if time.time() - last_cleanup_time > 600:
+                            print("🧹 [LUXO VOZ] Limpieza de buffer de voz nativo Python (cada 10 min)...")
+                            last_cleanup_time = time.time()
+                            r = sr.Recognizer()
+                            r.dynamic_energy_threshold = True
+                            r.pause_threshold = 1.0
+                            r.non_speaking_duration = 0.8
+                            break
                         try:
                             audio = r.listen(source, timeout=6, phrase_time_limit=25)
                             try:
@@ -2365,19 +2557,18 @@ def iniciar_hilo_escucha_luxo():
                                 print(f"🎙️ Voz captada en micrófono de Windows: '{text}'")
                                 lower = text.lower()
                                 
-                                wake_phrases = ["oye luxo", "oye lujo", "oye luco", "oye lux", "hola luxo", "hola lujo", "hola luco", "hola lux"]
+                                wake_phrases = ["oye luxo", "oye lujo", "oye luco", "oye lux"]
                                 matched_phrase = next((w for w in wake_phrases if w in lower), None)
                                 
                                 if matched_phrase:
                                     print(f"⚡ ¡PALABRA CLAVE '{matched_phrase.upper()}' DETECTADA EN HILO PYTHON!")
-                                    try:
-                                        if platform.system() == "Windows":
-                                            winsound.Beep(1200, 250)
-                                        elif platform.system() == "Darwin":
-                                            import os
-                                            os.system('afplay /System/Library/Sounds/Ping.aiff &')
-                                    except Exception:
-                                        pass
+                                    
+                                    # 1. Primer Beep (1 Beep) indicando que escuchó "Oye LUXO"
+                                    if platform.system() == "Windows":
+                                        try:
+                                            winsound.Beep(1200, 200)
+                                        except Exception:
+                                            pass
 
                                     # Trigger visual loader INSTANTLY upon wake phrase
                                     for uid, session in list(active_sessions.items()):
@@ -2421,22 +2612,50 @@ def iniciar_hilo_escucha_luxo():
                                     
                                     query = re.sub(r"(oye|hola)\s+(luxo|lujo|luco|lux)", "", text, flags=re.IGNORECASE).strip()
                                     
-                                    if session:
-                                        input_msg = session.get("input_msg")
-                                        enviar_mensaje = session.get("enviar_mensaje")
-                                        page = session.get("page")
-                                        if query:
-                                            print(f"🚀 Enviando pregunta a LUXO IA: '{query}'")
-                                            if input_msg and enviar_mensaje and page:
-                                                input_msg.value = query
-                                                try: page.update()
-                                                except: pass
-                                                
-                                                async def trigger_send():
-                                                    enviar_mensaje(None)
-                                                page.run_task(trigger_send)
+                                    # Buscar la sesión del usuario actual
+                                    user_session = list(active_sessions.values())[-1] if active_sessions else None
+                                    if user_session:
+                                        input_msg = user_session.get("input_msg")
+                                        enviar_mensaje_fn = user_session.get("enviar_mensaje")
+                                        if query and input_msg and enviar_mensaje_fn:
+                                            print(f"🚀 Enviando pregunta a LUXO IA desde voz: '{query}'")
+                                            input_msg.value = query
+                                            # 2. Segundos Beeps (2 Beeps "beep-beep") INMEDIATOS al captar el mensaje (sin retraso)
+                                            if platform.system() == "Windows":
+                                                try:
+                                                    winsound.Beep(1500, 100)
+                                                    time.sleep(0.05)
+                                                    winsound.Beep(1500, 100)
+                                                except Exception:
+                                                    pass
+                                            try:
+                                                enviar_mensaje_fn(None)
+                                            except Exception as ex_send:
+                                                print("Notice enviar_mensaje_fn:", ex_send)
                                         else:
+                                            user_session["esperando_pregunta"] = True
                                             print("👂 'Oye LUXO' captado sin pregunta. Esperando siguiente frase...")
+                                elif active_sessions and list(active_sessions.values())[-1].get("esperando_pregunta"):
+                                    user_session = list(active_sessions.values())[-1]
+                                    user_session["esperando_pregunta"] = False
+                                    query = text.strip()
+                                    input_msg = user_session.get("input_msg")
+                                    enviar_mensaje_fn = user_session.get("enviar_mensaje")
+                                    if query and input_msg and enviar_mensaje_fn:
+                                        print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
+                                        input_msg.value = query
+                                        # 2. Segundos Beeps (2 Beeps "beep-beep") INMEDIATOS al captar la pregunta
+                                        if platform.system() == "Windows":
+                                            try:
+                                                winsound.Beep(1500, 100)
+                                                time.sleep(0.05)
+                                                winsound.Beep(1500, 100)
+                                            except Exception:
+                                                pass
+                                        try:
+                                            enviar_mensaje_fn(None)
+                                        except Exception as ex_send:
+                                            print("Notice enviar_mensaje_fn:", ex_send)
                             except sr.UnknownValueError:
                                 print("⚠️ [DEBUG] Google SpeechRecognition recibió audio pero no entendió ninguna palabra (audio vacío o ininteligible).")
                                 pass
@@ -2801,7 +3020,27 @@ def rebuild_rag_cache():
                     "abierto": abierto_man
                 })
             else:
-                bloques_manual = dividir_texto_en_bloques(texto_m)
+                # Intento de extracción de texto gráfico via PyMuPDF (fitz) si el texto es muy corto
+                if len(texto_m.strip()) < 30 and (nombre_m.lower().endswith(".pdf")):
+                    try:
+                        import fitz
+                        ruta_pdf_local = os.path.join("uploads", nombre_m)
+                        if not os.path.exists(ruta_pdf_local):
+                            ruta_pdf_local = os.path.join("manuales", nombre_m)
+                        if os.path.exists(ruta_pdf_local):
+                            doc_fitz = fitz.open(ruta_pdf_local)
+                            texto_ocr_acum = ""
+                            for page in doc_fitz:
+                                texto_ocr_acum += page.get_text() + "\n"
+                            if len(texto_ocr_acum.strip()) > 10:
+                                texto_m = texto_ocr_acum
+                    except Exception as ex_ocr:
+                        print("Notice OCR extraction:", ex_ocr)
+
+                texto_con_titulo = f"DOCUMENTO / TITULO: {nombre_m}\n\n{texto_m}".strip()
+                bloques_manual = dividir_texto_en_bloques(texto_con_titulo)
+                if not bloques_manual:
+                    bloques_manual = [f"DOCUMENTO / TITULO: {nombre_m}"]
                 for blk in bloques_manual:
                     norm_blk = normalizar_texto(blk)
                     words_blk = [w for w in re.findall(r"\w+", norm_blk) if w not in stopwords]
@@ -2960,111 +3199,168 @@ def auditar_foto_con_gemini(guia_bytes, tienda_bytes, instrucciones):
         return f"Error de conexión con Gemini: {str(e)}"
 
 GLOBAL_OCR_READER = None
+
 def get_ocr_reader():
-    return None
+    global GLOBAL_OCR_READER
+    if GLOBAL_OCR_READER is None:
+        try:
+            import easyocr
+            GLOBAL_OCR_READER = easyocr.Reader(['es', 'en'], gpu=False)
+            print("✅ [OCR Engine]: EasyOCR inicializado con éxito en memoria.")
+        except Exception as ex:
+            print("⚠️ [OCR Engine]: EasyOCR no disponible:", ex)
+            GLOBAL_OCR_READER = False
+    return GLOBAL_OCR_READER if GLOBAL_OCR_READER else None
+
+def parsear_ticket_texto_local(texto_raw):
+    """Parsea el texto OCR localmente usando expresiones regulares (0 tokens)."""
+    import re
+    datos = {
+        "transaccion": "",
+        "fecha_compra": "",
+        "nombre_cliente": "",
+        "vendedor": "",
+        "upc": "",
+        "precio": 0.0,
+        "notas": "Escaneado vía OCR Local",
+        "items": []
+    }
+    # Folio / Transacción
+    trx_m = re.search(r'(transacci[oó]n|trx|ticket|folio|nro|no\.?)\s*[:#]?\s*([A-Za-z0-9\-]+)', texto_raw, re.IGNORECASE)
+    if trx_m:
+        datos["transaccion"] = trx_m.group(2)
+        
+    # Fecha YYYY-MM-DD o DD/MM/YYYY
+    fecha_m = re.search(r'(\d{2,4}[\/\-]\d{1,2}[\/\-]\d{2,4})', texto_raw)
+    if fecha_m:
+        datos["fecha_compra"] = fecha_m.group(1)
+        
+    # Vendedor
+    vend_m = re.search(r'(vendedor|atendi[oó]|cajero|vta)\s*[:#]?\s*([A-Za-z0-9\s]+)', texto_raw, re.IGNORECASE)
+    if vend_m:
+        datos["vendedor"] = vend_m.group(2).strip()[:40]
+        
+    # Precios y UPCs
+    precios = re.findall(r'\$?\s*(\d{1,6}\.\d{2})', texto_raw)
+    if precios:
+        nums = [float(p) for p in precios]
+        datos["precio"] = max(nums)
+        
+    upcs = re.findall(r'\b(\d{11,14})\b', texto_raw)
+    if upcs:
+        datos["upc"] = ", ".join(list(set(upcs)))
+        for u in set(upcs):
+            datos["items"].append({"upc": u, "modelo": "Lentes / Artículo", "precio": datos["precio"]})
+            
+    return datos
 
 def procesar_ticket_con_gemini(imagen_bytes):
     import base64
     import json
     import requests
     import io
-    from PIL import Image
+    from PIL import Image, ImageEnhance
 
     ocr_text = ""
     try:
-        reader = get_ocr_reader()
         img = Image.open(io.BytesIO(imagen_bytes))
         if img.mode != 'RGB':
             img = img.convert('RGB')
+            
+        # Aumentar contraste y nitidez para tickets térmicos borrosos
+        enhancer = ImageEnhance.Contrast(img)
+        img_contrasted = enhancer.enhance(2.0)
         
-        # Redimensionar a máximo 1280px para máxima nitidez y precisión de lectura de datos
-        max_dim = 1280
-        if img.width > max_dim or img.height > max_dim:
-            img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+        max_dim = 1600
+        if img_contrasted.width > max_dim or img_contrasted.height > max_dim:
+            img_contrasted.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
-        import numpy as np
-        img_np = np.array(img)
+        # 1. Intentar con EasyOCR local
+        reader = get_ocr_reader()
         if reader:
-            results = reader.readtext(img_np, detail=0)
+            import numpy as np
+            results = reader.readtext(np.array(img_contrasted), detail=0)
             ocr_text = "\n".join(results)
             print("--- TEXTO OCR OBTENIDO (EASYOCR) ---")
             print(ocr_text[:500] if ocr_text else "[Sin texto]")
             print("-----------------------------------")
     except Exception as ex_ocr:
-        print("Error en EasyOCR ticket scanner:", ex_ocr)
+        print("Notice EasyOCR:", ex_ocr)
 
-    if not ocr_text.strip():
-        global GEMINI_API_KEY
-        if GEMINI_API_KEY:
+    # 2. Intentar con Pytesseract si EasyOCR no extrajo suficiente texto
+    if len(ocr_text.strip()) < 10:
+        try:
+            import pytesseract
+            import cv2
+            import numpy as np
+            gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
+            _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            tess_text = pytesseract.image_to_string(thresh, lang='spa+eng')
+            if not tess_text.strip():
+                tess_text = pytesseract.image_to_string(gray, lang='spa+eng')
+            if tess_text.strip():
+                ocr_text = tess_text.strip()
+                print("--- TEXTO OCR OBTENIDO (PYTESSERACT) ---")
+                print(ocr_text[:500])
+        except Exception as ex_tess:
+            print("Notice Pytesseract fallback:", ex_tess)
+
+    # 3. Si se extrajo texto localmente via OCR (0 tokens)
+    if ocr_text.strip():
+        # Intentar estructurarlo con Groq si la API Key está disponible
+        global GROQ_API_KEY
+        if GROQ_API_KEY:
             try:
-                img_b64 = base64.b64encode(imagen_bytes).decode('utf-8')
                 prompt = (
-                    "Actúa como un sistema OCR inteligente de escaneo de tickets de compra de tiendas de lentes / retail.\n"
-                    "Analiza detalladamente la imagen del ticket proporcionado y extrae los datos principales.\n"
-                    "Responde ÚNICAMENTE en formato JSON válido con claves exactas: transaccion, fecha_compra, nombre_cliente, vendedor, upc, precio, notas, items."
+                    "Actúa como un estructurador JSON de tickets de compra de tiendas de lentes / retail (Sunglass Hut / Ray-Ban / Oakley / Luxottica).\n"
+                    "A continuación se proporciona el texto escaneado vía OCR de un ticket de compra:\n\n"
+                    f"--- TEXTO OCR DEL TICKET ---\n{ocr_text}\n-----------------------------\n\n"
+                    "Analiza el texto y extrae todos los datos que logres identificar.\n"
+                    "Responde ÚNICAMENTE en formato JSON válido con las claves: transaccion, fecha_compra, nombre_cliente, vendedor, upc, precio, notas, items."
                 )
+                headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
                 payload = {
-                    "contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": img_b64}}]}],
-                    "generationConfig": {"temperature": 0.1}
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1
                 }
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
-                res = requests.post(url, json=payload, timeout=20)
+                res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=20)
                 if res.status_code == 200:
-                    cand = res.json().get("candidates", [])
-                    if cand:
-                        parts = cand[0].get("content", {}).get("parts", [])
-                        if parts:
-                            clean_text = parts[0].get("text", "").replace("```json", "").replace("```", "").strip()
-                            return json.loads(clean_text), None
-            except Exception: pass
-        return None, "No se pudo extraer texto legible de la imagen del ticket."
+                    out_str = res.json()["choices"][0]["message"]["content"]
+                    clean_str = out_str.replace("```json", "").replace("```", "").strip()
+                    return json.loads(clean_str), None
+            except Exception as ex_g:
+                print("Notice Groq JSON Structuring:", ex_g)
+                
+        # Parseo Local Regex (0 Tokens)
+        local_parsed = parsear_ticket_texto_local(ocr_text)
+        return local_parsed, None
 
-    try:
-        prompt = (
-            "Actúa como un estructurador JSON de tickets de compra de tiendas de lentes / retail (Sunglass Hut / Ray-Ban / Oakley / Luxottica).\n"
-            "A continuación se proporciona el texto escaneado vía OCR de un ticket de compra:\n\n"
-            f"--- TEXTO OCR DEL TICKET ---\n{ocr_text}\n-----------------------------\n\n"
-            "Analiza el texto y extrae todos los datos que logres identificar.\n"
-            "REGLA DE VENDEDOR(ES): Extrae el código y nombre del vendedor o de los vendedores si la venta fue compartida (ej: \"MX142471 ALEJANDRO, MX998822 JUAN\").\n"
-            "REGLA DE ARTÍCULOS/UPCs: Extrae la lista de todos los productos del ticket en el arreglo \"items\". Para cada producto incluye: \"upc\" (código UPC/SKU), \"modelo\" (código/descripción del modelo de lentes), \"precio\" (monto numérico pagado por ese artículo).\n"
-            "Responde ÚNICAMENTE en formato JSON válido (sin marcas markdown extras ni explicaciones fuera del JSON) con la siguiente estructura de claves exactas:\n"
-            "{\n"
-            '  "transaccion": "número o folio de transacción (ej: 1057892, TRX-104829)",\n'
-            '  "fecha_compra": "fecha en formato YYYY-MM-DD",\n'
-            '  "nombre_cliente": "nombre completo del cliente si aparece, de lo contrario \"\"",\n'
-            '  "vendedor": "vendedor o vendedores separados por coma (ej: MX142471 ALEJANDRO)",\n'
-            '  "items": [\n'
-            '    {\n'
-            '      "upc": "código UPC/SKU del artículo",\n'
-            '      "modelo": "modelo o descripción del artículo",\n'
-            '      "precio": 6152.64\n'
-            '    }\n'
-            '  ],\n'
-            '  "upc": "todos los UPCs separados por coma",\n'
-            '  "precio": "monto gran total pagado numérico (ej: 10254.40)",\n'
-            '  "notas": "descuentos, promociones u observaciones del ticket"\n'
-            "}"
-        )
+    # 4. Gemini API Fallback si se cuenta con clave
+    global GEMINI_API_KEY
+    if GEMINI_API_KEY:
+        try:
+            img_b64 = base64.b64encode(imagen_bytes).decode('utf-8')
+            prompt = (
+                "Actúa como un sistema OCR inteligente de escaneo de tickets de compra de tiendas de lentes / retail.\n"
+                "Analiza la imagen del ticket y responde ÚNICAMENTE en formato JSON válido con claves: transaccion, fecha_compra, nombre_cliente, vendedor, upc, precio, notas, items."
+            )
+            payload = {
+                "contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "image/jpeg", "data": img_b64}}]}],
+                "generationConfig": {"temperature": 0.1}
+            }
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={GEMINI_API_KEY}"
+            res = requests.post(url, json=payload, timeout=20)
+            if res.status_code == 200:
+                cand = res.json().get("candidates", [])
+                if cand:
+                    parts = cand[0].get("content", {}).get("parts", [])
+                    if parts:
+                        clean_text = parts[0].get("text", "").replace("```json", "").replace("```", "").strip()
+                        return json.loads(clean_text), None
+        except Exception: pass
 
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1
-        }
-        res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=25)
-        if res.status_code == 200:
-            out_str = res.json()["choices"][0]["message"]["content"]
-            clean_str = out_str.replace("```json", "").replace("```", "").strip()
-            parsed = json.loads(clean_str)
-            return parsed, None
-        else:
-            return None, f"Respuesta Groq OCR ({res.status_code}): No se completó la lectura."
-    except Exception as ex_groq:
-        return None, f"Error al estructurar ticket con OCR: {str(ex_groq)}"
+    return None, "No se pudo extraer texto legible de la imagen del ticket."
 
 # =========================================
 # NOTIFICACIONES BACKEND
@@ -5667,35 +5963,40 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 vocabulario_valido = list(RAG_IDF_CACHE.keys()) if RAG_IDF_CACHE else []
                 
                 for r in query_roots_raw:
-                    # Si la raíz ya es válida o es muy corta, se deja igual
-                    if not vocabulario_valido or r in vocabulario_valido or len(r) <= 3:
-                        query_roots.append(r)
-                    else:
-                        # Buscar la palabra más parecida en los manuales (corrige faltas ortográficas o dedazos)
-                        matches = difflib.get_close_matches(r, vocabulario_valido, n=1, cutoff=0.75)
+                    # Corrección ortográfica difusa (Fuzzy spell check) universal para cualquier falta de ortografía o dedazo
+                    if vocabulario_valido and r not in vocabulario_valido:
+                        matches = difflib.get_close_matches(r, vocabulario_valido, n=1, cutoff=0.60)
                         if matches:
                             query_roots.append(matches[0])
                         else:
                             query_roots.append(r)
+                    else:
+                        query_roots.append(r)
 
                 core_roots = list(query_roots)
                 
-                # Diccionario de sinónimos a nivel de raíces (Incluyendo Mexicanismos y Abreviaciones)
+                # Diccionario de sinónimos a nivel de raíces (Incluyendo Mexicanismos, Dialecto y Abreviaciones)
                 SINONIMOS_RAICES = {
-                    "rob": ["3r", "siniestr", "perd", "asalto"],
-                    "caj": ["cierr", "arqu", "morrall", "feri", "lan", "dinero", "efectiv"],
-                    "cierr": ["caj", "finaliz", "cort"],
-                    "cambi": ["devoluc", "garanti", "reemplaz"],
-                    "devoluc": ["cambi", "garanti", "dev"],
-                    "impresor": ["epson", "papel", "ticket", "tkt", "tck", "recib"],
-                    "papel": ["roll", "impresor"],
-                    "terminal": ["caj", "pinpad", "clip", "banam", "banc", "tarjet", "tj"],
-                    "sistem": ["sys", "plataform", "lux", "portal"],
-                    "inform": ["info", "ayud", "doc", "manual"],
-                    "telefon": ["cel", "movil", "llama"],
-                    "trabaj": ["chamb", "labor", "tare"],
-                    "revis": ["chec", "verific", "valid"],
-                    "necesit": ["ocup", "requier", "quier"],
+                    "rob": ["3r", "siniestr", "perd", "asalto", "hurt", "robaron", "asaltaron"],
+                    "caj": ["cierr", "arqu", "morrall", "feri", "lan", "dinero", "efectiv", "tpv", "remis", "balance", "cuadr", "caja", "kaja", "kxa"],
+                    "cort": ["caj", "cierr", "arqu", "tpv", "remis", "balance", "cuadr", "cort", "kort", "korte", "kortes", "cortes", "cortss"],
+                    "cierr": ["caj", "finaliz", "cort", "arqu", "tpv", "balance", "cerrar", "kierre", "cierre"],
+                    "porqu": ["xq", "xki", "porq", "por k", "x k", "por ke"],
+                    "por": ["x", "por", "pa"],
+                    "para": ["pa", "para", "x"],
+                    "tambien": ["tmb", "tambn", "tmbn"],
+                    "porfavor": ["porfa", "porfis", "pls", "plz", "xfa", "xfis"],
+                    "tienda": ["tiend", "pto", "sucursal", "jale", "chamba", "local"],
+                    "cambi": ["devoluc", "garanti", "reemplaz", "cambio", "kambio"],
+                    "devoluc": ["cambi", "garanti", "dev", "devolucion", "devolusion"],
+                    "impresor": ["epson", "papel", "ticket", "tkt", "tck", "recib", "impresora"],
+                    "terminal": ["caj", "pinpad", "clip", "banam", "banc", "tarjet", "tj", "terminal", "pos"],
+                    "sistem": ["sys", "plataform", "lux", "portal", "sistema"],
+                    "inform": ["info", "ayud", "doc", "manual", "inf", "informacion"],
+                    "telefon": ["cel", "movil", "llama", "phone"],
+                    "trabaj": ["chamb", "labor", "tare", "jale"],
+                    "revis": ["chec", "verific", "valid", "checar"],
+                    "necesit": ["ocup", "requier", "quier", "nesesito", "ocupo"],
                     "punt": ["pto", "sucursal", "tiend"]
                 }
                 
@@ -5711,12 +6012,23 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "descargar pdf", "descarga el manual", "descargar manual", 
                     "bajar pdf", "bajar el manual", "descargar archivo",
                     "pasa el pdf", "pasar el pdf", "dame el pdf", "quiero el pdf",
-                    "mandame el pdf", "enviar pdf", "imprimir pdf", "imprimir manual"
+                    "mandame el pdf", "enviar pdf", "imprimir pdf", "imprimir manual",
+                    "tienes el pdf", "tienes el manual", "tendras el pdf", "tendras el manual",
+                    "tienen el pdf", "tienen el manual", "existe el pdf", "hay pdf"
                 ]
                 lista_keywords = ["listar manuales", "lista de manuales", "mostrar manuales disponibles", "que manuales tienes", "manuales cargados", "cuales son los manuales", "listar los pdf"]
+                
+                verbos_solicitud_pdf = [
+                    "tienes", "tendras", "tienen", "existe", "hay", "dame", "quiero", 
+                    "pasa", "pasame", "mandame", "manda", "bajar", "descargar", "ver", 
+                    "mostrar", "imprimir", "obtener", "buscar", "ubicar", "donde esta",
+                    "cual es", "compartir", "enviar"
+                ]
+                menciones_pdf = ["pdf", "manual", "documento", "archivo", "caratula", "portada"]
+
                 ask_for_pdf = any(phrase in user_text_expandido.lower() for phrase in descarga_keywords) or (
-                    ("pdf" in user_text_expandido.lower() or "manual" in user_text_expandido.lower()) and 
-                    any(p in user_text_expandido.lower() for p in ["dame", "quiero", "pasa", "descargar", "bajar", "ver", "mostrar", "imprimir", "obtener"])
+                    any(m in user_text_expandido.lower() for m in menciones_pdf) and 
+                    (any(v in user_text_expandido.lower() for v in verbos_solicitud_pdf) or len(query_palabras) <= 2)
                 )
                 ask_for_list = any(phrase in user_text_expandido.lower() for phrase in lista_keywords)
 
@@ -5929,14 +6241,13 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                             
                         score_b_scaled = score_b * 100
                         
-                        # Boost por título
+                        # Boost por título del manual (Máxima prioridad)
                         nombre_archivo_norm = normalizar_texto(b["nombre"])
-                        nombre_palabras = re.findall(r"\w+", nombre_archivo_norm)
-                        nombre_roots = [obtener_raiz_espanol(w) for w in nombre_palabras if w not in stopwords]
-                        for qr in q_roots:
-                            if qr in nombre_roots:
-                                score_b_scaled += 150
-                                break
+                        nombre_palabras = [w for w in re.findall(r"\w+", nombre_archivo_norm) if w not in stopwords and len(w) >= 2]
+                        nombre_roots = [obtener_raiz_espanol(w) for w in nombre_palabras]
+                        matches_titulo = sum(1 for qr in q_roots if qr in nombre_roots)
+                        if matches_titulo > 0:
+                            score_b_scaled += 1500 * matches_titulo  # Super boost por coincidencia con el título del PDF
                                 
                         # Boost por coincidencia exacta de frases (N-gramas)
                         texto_doc_norm = normalizar_texto(b["texto"])
@@ -5945,13 +6256,56 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                             if bigram in texto_doc_norm:
                                 score_b_scaled += 200 # Gran boost por frase exacta
                         
+                        # Penalizar menciones aisladas secundarias (solo 1 coincidencia en cuerpo largo sin título)
+                        count_b = sum(b["roots"].count(qr) for qr in q_roots) if "roots" in b else 0
+                        if count_b == 1 and not any(qr in nombre_roots for qr in q_roots):
+                            score_b_scaled *= 0.3
+                            
                         # Penalización por cobertura baja
                         if len(attention_weights) > 2 and matches < 2:
                             score_b_scaled *= 0.2
                         
                         if score_b_scaled >= 30: # Aumentar umbral
                             candidatos.append((score_b_scaled, b["nombre"], b["texto"], b))
+
+                    # Buscar coincidencias directas en la base de datos por Nombre_Archivo con Fuzzy Matching (Tolerancia a errores ortográficos y dedazos)
+                    import difflib as _difflib
+                    db_man = conectar_db()
+                    if db_man:
+                        try:
+                            cursor_m = db_man.cursor(dictionary=True)
+                            cursor_m.execute("SELECT ID_Manual, Nombre_Archivo, Abierto FROM manuales")
+                            todos_manuales_db = cursor_m.fetchall()
+                            db_man.close()
                             
+                            for m in todos_manuales_db:
+                                m_nombre = m.get("Nombre_Archivo") or ""
+                                m_norm = normalizar_texto(m_nombre)
+                                m_words = [w for w in re.findall(r"\w+", m_norm) if w not in stopwords and len(w) >= 2]
+                                m_roots = [obtener_raiz_espanol(w) for w in m_words]
+                                
+                                m_matches = 0
+                                for qr in q_roots:
+                                    if qr in m_roots:
+                                        m_matches += 1
+                                    else:
+                                        # Comparación aproximada (Fuzzy matching) para errores de escritura (ej. kortes -> cortes)
+                                        for mw in m_words:
+                                            if _difflib.SequenceMatcher(None, qr, obtener_raiz_espanol(mw)).ratio() >= 0.70:
+                                                m_matches += 1
+                                                break
+
+                                if m_matches > 0:
+                                    sc_direct = 2500 * m_matches
+                                    if not any(c[1] == m_nombre for c in candidatos):
+                                        candidatos.append((sc_direct, m_nombre, f"DOCUMENTO / TITULO: {m_nombre}", {
+                                            "id": m["ID_Manual"],
+                                            "nombre": m_nombre,
+                                            "abierto": m.get("Abierto", 1)
+                                        }))
+                        except Exception as ex_db_search:
+                            print("Notice DB manual search:", ex_db_search)
+
                     return candidatos
 
                 # --- DETECCIÓN DE SONDEO EN PYTHON (PREVENTIVO) ---
@@ -5992,13 +6346,17 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         ya_respondio_sondeo = True
 
                 es_pregunta_trivia = "duda sobre la pregunta de trivia" in user_text_expandido.lower() or "pregunta de trivia:" in user_text_expandido.lower()
-                es_sondeo_forzado = es_corta_o_ambigua and not ya_respondio_sondeo and not es_pregunta_trivia
 
-                # Buscar candidatos usando la consulta actual (si no es sondeo forzado)
-                if es_sondeo_forzado:
-                    bloques_candidatos = []
+                # Buscar candidatos usando la consulta actual FIRST para verificar si hay coincidencia directa por título o contenido
+                bloques_candidatos = buscar_candidatos(query_roots, expanded_roots, user_text_expandido)
+
+                # Si el usuario pide un PDF o si hay coincidencias con score alto, NUNCA forzamos sondeo genérico
+                if ask_for_pdf or (bloques_candidatos and max(b[0] for b in bloques_candidatos) >= 80):
+                    es_sondeo_forzado = False
                 else:
-                    bloques_candidatos = buscar_candidatos(query_roots, expanded_roots, user_text_expandido)
+                    es_sondeo_forzado = es_corta_o_ambigua and not ya_respondio_sondeo and not es_pregunta_trivia
+                    if es_sondeo_forzado:
+                        bloques_candidatos = []
                 
                 # Si no se encontraron candidatos y hay historial, re-intentar con la pregunta previa integrada para dar contexto
                 ultimos_mensajes_usuario = [m["content"] for m in historial_sesion if m["role"] == "user"]
@@ -6042,7 +6400,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     candidatos.sort(key=lambda x: x[0], reverse=True)
                     if candidatos:
                         modo_sugerencia = True
-                        sugerencias_nombres = list(dict.fromkeys([name for sc, name in candidatos[:3]]))
+                        # Tomar exactamente los 2 manuales candidatos más probables de la base de datos
+                        sugerencias_nombres = list(dict.fromkeys([name for sc, name in candidatos[:2]]))
 
                 # Si venimos forzados de la trivia con un manual específico de origen
                 if manual_forzado_trivia[0] is not None:
@@ -6065,6 +6424,48 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 bloques_por_doc = {}
                 manuales_con_score = []
                 
+                # Si el usuario solicitó explícitamente un PDF / Archivo, seleccionar el Top 1 por Nombre_Archivo directamente de la BD
+                if ask_for_pdf:
+                    db_f = conectar_db()
+                    m_top = None
+                    if db_f:
+                        try:
+                            cursor_f = db_f.cursor(dictionary=True)
+                            cursor_f.execute("SELECT ID_Manual, Nombre_Archivo, Abierto FROM manuales")
+                            rows_db = cursor_f.fetchall()
+                            db_f.close()
+                            
+                            best_sc = -1
+                            import difflib as _difflib
+                            for m in rows_db:
+                                m_name = m.get("Nombre_Archivo") or ""
+                                m_norm = normalizar_texto(m_name)
+                                m_words = [w for w in re.findall(r"\w+", m_norm) if w not in stopwords and len(w) >= 2]
+                                m_roots = [obtener_raiz_espanol(w) for w in m_words]
+                                sc = 0
+                                for qr in query_roots:
+                                    if qr in m_roots:
+                                        sc += 1000
+                                    else:
+                                        for mw in m_words:
+                                            if _difflib.SequenceMatcher(None, qr, obtener_raiz_espanol(mw)).ratio() >= 0.65:
+                                                sc += 500
+                                                break
+                                if sc > best_sc:
+                                    best_sc = sc
+                                    m_top = m
+                        except Exception as ex_f:
+                            print("Error fetching top manual for ask_for_pdf:", ex_f)
+                    
+                    if m_top:
+                        m_top_obj = {
+                            "id": m_top["ID_Manual"],
+                            "nombre": m_top["Nombre_Archivo"],
+                            "abierto": m_top.get("Abierto", 1)
+                        }
+                        manuales_con_score = [(2500, m_top_obj)]
+                        bloques_filtrados = [(2500.0, m_top["Nombre_Archivo"], f"DOCUMENTO SOLICITADO: {m_top['Nombre_Archivo']}", m_top_obj)]
+
                 for score_val, doc_nombre, blk_texto, b_obj in bloques_filtrados[:3]:
                     if doc_nombre not in bloques_por_doc:
                         bloques_por_doc[doc_nombre] = []
@@ -6077,7 +6478,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
                 manuales_texto = ""
                 total_chars = 0
-                max_total_chars = 12000  # Límite de seguridad de caracteres para evitar error 413
+                max_total_chars = 4500  # Límite de seguridad de caracteres para evitar error 413
                 
                 for doc_nombre, lista_blks in bloques_por_doc.items():
                     if total_chars >= max_total_chars:
@@ -6113,10 +6514,14 @@ CONTENIDO DE REFERENCIA:
                 id_manual = None
                 nombre_pdf = ""
                 es_pdf_abierto = True
-                if manuales_con_score and manuales_con_score[0][0] >= 45:
-                    id_manual = manuales_con_score[0][1]["id"]
-                    nombre_pdf = manuales_con_score[0][1]["nombre"]
-                    es_pdf_abierto = manuales_con_score[0][1].get("abierto", 1) == 1
+
+                # REGLA ESTRICTA DE TARJETAS DE PDF: Solo mostrar tarjeta cuando amerite (solicitud explícita de PDF o coincidencia directa >80%)
+                # Si estamos presentando opciones (modo_sugerencia) o haciendo sondeo, NUNCA adjuntamos tarjetas innecesarias
+                if not (modo_sugerencia or es_sondeo_forzado):
+                    if ask_for_pdf or (manuales_con_score and manuales_con_score[0][0] >= 80):
+                        id_manual = manuales_con_score[0][1]["id"]
+                        nombre_pdf = manuales_con_score[0][1]["nombre"]
+                        es_pdf_abierto = manuales_con_score[0][1].get("abierto", 1) == 1
 
                 def score_chat(chat_item):
                     import difflib
@@ -6232,22 +6637,53 @@ CRITICAL LANGUAGE MATCHING RULE (HIGH PRIORITY):
 """
                         }
                     elif modo_sugerencia:
-                        mensaje_sistema = {
-                            "role": "system",
-                            "content": f"""Eres LUXO, asistente operativo de Sunglass Hut.
+                        # Si el usuario solicitó un PDF explícitamente (Flujo PLUS)
+                        if ask_for_pdf:
+                            candidatos_pct = []
+                            for i, nombre in enumerate(sugerencias_nombres[:2]):
+                                # Buscar score estimado
+                                sc_est = 85 if i == 0 else 70
+                                candidatos_pct.append(f"• **{nombre}** ({sc_est}% de coincidencia)")
+                            candidatos_txt = "\n".join(candidatos_pct)
                             
-El usuario realizó una consulta, pero no logramos identificar con certeza un manual relacionado en nuestro sistema.
-Sin embargo, se encontraron estos documentos candidatos:
-{', '.join(sugerencias_nombres)}
+                            mensaje_sistema = {
+                                "role": "system",
+                                "content": f"""Eres LUXO, asistente operativo inteligente de Sunglass Hut.
 
-Por favor, responde de manera muy natural y amable. Pregúntale si su duda se refiere a alguno de estos temas. Usa la frase "¿Quizás quisiste decir...?" y presenta las opciones de forma clara (ej. viñetas con los nombres de los manuales sugeridos) para que el usuario pueda elegir o reformular su pregunta.
-No inventes información sobre el contenido de los manuales.
+FLUJO DE PETICIÓN DE PDF CON PORCENTAJES (%):
+El usuario solicitó un PDF o manual, pero no se encontró un archivo con ese nombre exacto en el título.
+Sin embargo, se encontraron estos documentos con información relevante:
+{candidatos_txt}
+
+REGLA OBLIGATORIA DE RESPUESTA:
+Responde exactamente con la estructura amigable:
+"No encontré un manual con ese nombre exacto, pero encontré estos documentos que contienen información relacionada con tu consulta:
+
+{candidatos_txt}
+
+¿Alguno de estos te sirve?
+Si ninguno te sirve, por favor marca esta respuesta con el pulgar abajo (👎) para darle solución y cargar el manual correspondiente."
+"""
+                            }
+                        else:
+                            opciones_str = "\n".join([f"{i+1}. {nombre}" for i, nombre in enumerate(sugerencias_nombres[:2])])
+                            mensaje_sistema = {
+                                "role": "system",
+                                "content": f"""Eres LUXO, asistente operativo inteligente de Sunglass Hut.
+                                
+La consulta del usuario se relaciona con los siguientes manuales/procesos de nuestra base de datos:
+{opciones_str}
+
+REGLA OBLIGATORIA (TOP 2 OPCIONES REALES):
+Responde amablemente preguntando a cuál de estas 2 opciones de la empresa se refiere.
+Presenta ÚNICAMENTE estas 2 opciones de forma limpia (ej. 1. {sugerencias_nombres[0] if len(sugerencias_nombres) > 0 else ""} / 2. {sugerencias_nombres[1] if len(sugerencias_nombres) > 1 else ""}).
+Queda ESTRICTAMENTE PROHIBIDO inventar u ofrecer opciones genéricas (como "cortes de lentes" o "materiales"). Usa EXCLUSIVAMENTE los 2 nombres de los manuales anteriores.
 
 CRITICAL LANGUAGE MATCHING RULE (HIGH PRIORITY):
 - Analyze the user's message: "{user_text}".
-- Reply in the EXACT same language as the user's input (English -> English, French -> French, etc.). Never force Spanish if the user spoke in English.
+- Reply in the EXACT same language as the user's input.
 """
-                        }
+                            }
                     else:
                         instruccion_trivia = ""
                         if es_pregunta_trivia:
@@ -6289,15 +6725,25 @@ Debes responder de manera directa, concisa y profesional. Queda estrictamente pr
 ══════════════════════════════════════════════════════════
 INSTRUCCIÓN CRÍTICA DE SEGURIDAD (CERO ALUCINACIONES)
 ══════════════════════════════════════════════════════════
-1. Debes responder basándote ÚNICAMENTE en la información provista en la sección "DOCUMENTOS / MANUALES". Está terminantemente PROHIBIDO usar tu conocimiento general o inventar procedimientos para resolver consultas operativas.
-2. No agregues pasos, consejos ni sugieras personas a contactar que no estén indicados textualmente en el manual provisto.
-3. Si el manual establece condiciones o requisitos específicos para una acción, enuméralos exactamente como aparecen en el texto. No resumas ni generalices.
-4. Para consultas operativas: Si la respuesta no está detallada textualmente en los manuales proporcionados y ya hiciste el sondeo necesario, responde únicamente: "Por el momento no cuento con esta información."
-5. EXCEPCIÓN: Los saludos, despedidas y comentarios de cortesía respóndelos de forma natural, amable y profesional sin consultar documentos.
-6. Está estrictamente PROHIBIDO comenzar tu respuesta con muletillas como "Según el manual...", "De acuerdo con el documento..." — da la respuesta de forma directa y profesional.
-7. Para respuestas basadas en manuales (excluyendo saludos/cortesías), al final cita la fuente exacta en el idioma del usuario (ej: "You can find this information in the manual [Manual Name], section [Section Name]").
-8. Para fórmulas matemáticas usa "entre" o "dividido entre" para divisiones, nunca "dividido por".
-9. NO traduzcas siglas (como AUR) si la traducción no está textualmente en el manual.
+1. CLASIFICACIÓN Y RESPUESTAS OBLIGATORIAS:
+
+   A) PREGUNTAS NO RELACIONADAS CON LA EMPRESA SUNGLASS HUT:
+      - Si la consulta del usuario NO está relacionada con Sunglass Hut, sus productos, tiendas u operación (ejemplos: cultura general, chistes, deportes, ciencia, política, recetas, preguntas personales, etc.):
+      - DEBES RESPONDER ÚNICAMENTE Y DE FORMA EXACTA:
+        "No puedo contestar preguntas que no están relacionadas con la empresa."
+
+   B) PREGUNTAS SOBRE LA EMPRESA O OPERACIÓN NO ENCONTRADAS EN LOS MANUALES:
+      - Si la consulta del usuario trata sobre Sunglass Hut o la operación de la tienda, pero la respuesta NO se encuentra detallada de forma textual en la sección "DOCUMENTOS / MANUALES PROPORCIONADOS":
+      - DEBES RESPONDER ÚNICAMENTE Y DE FORMA EXACTA:
+        "Esta pregunta no se encuentra en los manuales."
+
+2. Debes responder basándote ÚNICAMENTE en la información provista en la sección "DOCUMENTOS / MANUALES". Está terminantemente PROHIBIDO usar tu conocimiento general o inventar procedimientos para resolver consultas operativas.
+3. No agregues pasos, consejos ni sugieras personas a contactar que no estén indicados textualmente en el manual provisto.
+4. EXCEPCIÓN DE CORTESÍA: Únicamente los saludos, despedidas y agradecimientos de cortesía ("hola", "buenos días", "gracias", "hasta luego") respóndelos de forma natural, amable y profesional sin aplicar las reglas de restricción.
+5. Está estrictamente PROHIBIDO comenzar tu respuesta con muletillas como "Según el manual...", "De acuerdo con el documento..." — da la respuesta de forma directa y profesional.
+6. Para respuestas basadas en manuales (excluyendo saludos/cortesías), al final cita la fuente exacta en el idioma del usuario (ej: "Puedes encontrar esta información en el manual [Nombre Manual], sección [Sección]").
+7. Para fórmulas matemáticas usa "entre" o "dividido entre" para divisiones, nunca "dividido por".
+8. NO traduzcas siglas (como AUR) si la traducción no está textualmente en el manual.
 
 ══════════════════════════════════════════════════════════
 INSTRUCCIÓN DE INTERPRETACIÓN Y ORTOGRAFÍA (OBLIGATORIO)
@@ -6338,7 +6784,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                     payload = {
                         "model": GROQ_MODEL,
-                        "messages": mensajes_api
+                        "messages": mensajes_api,
+                        "temperature": 0.0
                     }
 
 
@@ -6349,6 +6796,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         if res.status_code == 429 and rotate_groq_key():
                             headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
                             res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
+                        elif res.status_code == 404:
+                            # Si el modelo guardado no existe en Groq, probamos con modelos estándar activos
+                            for fallback_model in ["groq/compound", "groq/compound-mini", "qwen/qwen3.6-27b"]:
+                                payload["model"] = fallback_model
+                                res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
+                                if res.status_code == 200:
+                                    break
                         if res.status_code == 200:
                             try:
                                 data = res.json()
@@ -6375,20 +6829,33 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 nombre_pdf_rag = nombre_pdf
                 es_pdf_abierto_rag = es_pdf_abierto
 
-                # Resetear id_manual por defecto para NO mostrar tarjetas adjuntas en saludos o pláticas generales
+                # Resetear id_manual por defecto para NO mostrar tarjetas adjuntas en saludos, sondeos o respuestas de no-encontrado
                 id_manual = None
                 nombre_pdf = ""
                 es_pdf_abierto = False
 
-                if ask_for_list:
+                # Frases de respuestas negativas en las que NUNCA se debe adjuntar tarjeta de PDF
+                frases_no_adjuntar = [
+                    "no cuento con", "esta pregunta no se encuentra", "no puedo contestar",
+                    "error de conexión", "ocurrió un error",
+                    "¿alguno de estos te sirve?", "marca esta respuesta con el pulgar abajo"
+                ]
+                es_respuesta_negativa = any(f in respuesta.lower() for f in frases_no_adjuntar)
+
+                if ask_for_list or es_respuesta_negativa or modo_sugerencia:
                     id_manual = None
                     nombre_pdf = ""
                     es_pdf_abierto = False
+                elif ask_for_pdf and manuales_con_score:
+                    # Si el usuario solicitó un PDF y tenemos una coincidencia de manual (por título o score)
+                    id_manual = manuales_con_score[0][1]["id"]
+                    nombre_pdf = manuales_con_score[0][1]["nombre"]
+                    es_pdf_abierto = manuales_con_score[0][1].get("abierto", 1) == 1
                 elif manual_forzado_trivia[0] is not None:
                     id_manual = id_manual_rag
                     nombre_pdf = nombre_pdf_rag
                     es_pdf_abierto = es_pdf_abierto_rag
-                elif respuesta and "no cuento con" not in respuesta.lower() and "error de conexión" not in respuesta.lower() and "ocurrió un error" not in respuesta.lower():
+                elif respuesta:
                     respuesta_lower = respuesta.lower()
                     encontrado = False
                     for m in manuales:
@@ -6402,20 +6869,17 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             break
                     
                     # Si la IA citó el manual en la respuesta se adjunta.
-                    # Si no lo citó explícitamente, pero es una consulta operativa extensa con alto score RAG (>=80), adjuntar el documento RAG
+                    # Si no lo citó explícitamente, pero es una consulta operativa extensa con alto score RAG (>=100) y NO es respuesta negativa/sondeo, adjuntar el documento RAG
                     palabras_usuario = user_text.lower().split()
                     es_saludo_conversacion = any(w in ["hi", "hello", "hola", "hey", "buenos", "dias", "tardes", "noches", "saludos", "quien", "eres", "nombre", "name"] for w in palabras_usuario)
-                    if not encontrado and not es_saludo_conversacion and len(palabras_usuario) >= 4 and manuales_con_score and manuales_con_score[0][0] >= 80:
+                    if not encontrado and not es_saludo_conversacion and len(palabras_usuario) >= 4 and manuales_con_score and manuales_con_score[0][0] >= 100:
                         id_manual = id_manual_rag
                         nombre_pdf = nombre_pdf_rag
                         es_pdf_abierto = es_pdf_abierto_rag
 
                 # --- DETECTAR SI LA RESPUESTA ES DE SONDEO (solo preguntas) ---
-                # Si la respuesta contiene 2+ signos de interrogación de cierre, es sondeo
-                # En ese caso NO se mostrará el manual ni se dará información adicional
                 import re as _re_sondeo
                 signos_pregunta = len(_re_sondeo.findall(r'\?', respuesta))
-                # Palabras clave que indican que el AI está haciendo preguntas de sondeo
                 frases_sondeo = [
                     "me puedes decir", "podrías indicarme", "podrías decirme",
                     "para orientarte mejor", "para darte la información más precisa",
@@ -6429,7 +6893,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         any(frase in respuesta.lower() for frase in frases_sondeo)
                     )
                 )
-                # Si es sondeo, anular el manual para que no se muestre la tarjeta
                 if es_respuesta_sondeo:
                     id_manual = None
                     nombre_pdf = ""
@@ -6896,7 +7359,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         sess_data = {
             "input_msg": input_msg,
             "enviar_mensaje": enviar_mensaje,
-            "page": page
+            "page": page,
+            "is_mobile": is_mobile_w
         }
         if user_info.get("id"):
             active_sessions[user_info["id"]] = sess_data
@@ -7006,8 +7470,33 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                 
-                function playBeep() {
-                    // Sonido desactivado
+                function playBeep(count) {
+                    try {
+                        const cnt = count || 1;
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        function emitTone(freq, duration, delay) {
+                            setTimeout(function() {
+                                try {
+                                    const osc = ctx.createOscillator();
+                                    const gain = ctx.createGain();
+                                    osc.type = 'sine';
+                                    osc.frequency.value = freq;
+                                    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.start();
+                                    osc.stop(ctx.currentTime + duration);
+                                } catch(e){}
+                            }, delay);
+                        }
+                        if (cnt === 1) {
+                            emitTone(880, 0.12, 0);
+                        } else if (cnt >= 2) {
+                            emitTone(1050, 0.08, 0);
+                            emitTone(1320, 0.12, 120);
+                        }
+                    } catch(e){}
                 }
 
 
@@ -7016,13 +7505,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 let lastSentText = "";
                 let lastSentTime = 0;
 
-                // Detección de dispositivo móvil
-                const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
+                // Detección de dispositivo móvil/tablet
+                const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) || ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
 
                 window.initLuxoMicPermission = function() {
-                    // En celulares/tablets: NO activar escucha continua "Oye LUXO"
+                    // En celulares/tablets: NO activar escucha continua en segundo plano
                     if (isMobileDevice) {
-                        console.log("📱 [Luxo Chat Mic]: Dispositivo móvil. 'Oye LUXO' continuo desactivado.");
+                        console.log("📱 [Luxo Chat Mic]: Dispositivo móvil/tablet. Micrófono automático desactivado.");
                         return;
                     }
                     if (window.luxoSpeechRecognitionActive) {
@@ -7050,6 +7539,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 };
 
                 function startRecognition() {
+                    if (isMobileDevice) return;
                     if (!SpeechRecognition) {
                         setStatus("❌ Usa Chrome o Edge para 'Oye LUXO'", "#FF0000", "❌");
                         return;
@@ -7076,13 +7566,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 const lower = transcript.toLowerCase();
                                 console.log("🎙️ [Luxo Chat Mic]:", transcript, "isFinal:", e.results[i].isFinal);
                                 
-                                if (lower.includes("oye luxo") || lower.includes("hola luxo") || lower.includes("hey luxo") || lower.includes("oye lujo")) {
+                                if (lower.includes("oye luxo") || lower.includes("oye lujo") || lower.includes("oye lux")) {
                                     const now = Date.now();
                                     let query = transcript
                                         .replace(/oye luxo/gi, '')
-                                        .replace(/hola luxo/gi, '')
-                                        .replace(/hey luxo/gi, '')
                                         .replace(/oye lujo/gi, '')
+                                        .replace(/oye lux/gi, '')
                                         .trim();
                                     if (!window.luxoIsListeningAlertSent) {
                                         window.luxoIsListeningAlertSent = true;
@@ -7135,7 +7624,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                         rec.onend = function() {
                             window.luxoSpeechRecognitionActive = false;
-                            if (isListening) {
+                            if (isListening && !isMobileDevice) {
                                 setTimeout(function() {
                                     try { rec.start(); } catch(e){}
                                 }, 300);
@@ -7148,15 +7637,74 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     }
                 }
 
+                // Limpieza de buffer de voz cada 10 minutos (600,000 ms) en PC para evitar saturación
+                if (!window.luxo10MinCleanupTimer && !isMobileDevice) {
+                    window.luxo10MinCleanupTimer = setInterval(function() {
+                        console.log("🧹 [Luxo Web Mic]: Limpieza de memoria y buffer de voz de 10 minutos.");
+                        if (rec && isListening && !isMobileDevice) {
+                            try { rec.abort(); } catch(e){}
+                        }
+                    }, 600000);
+                }
+
                 banner.onclick = function() {
-                    window.initLuxoMicPermission();
+                    window.toggleLuxoDictate();
                 };
                 
                 window.toggleLuxoDictate = function() {
-                    window.initLuxoMicPermission();
+                    if (isMobileDevice) {
+                        let SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+                        if (!SR) {
+                            alert('❌ Reconocimiento de voz no soportado en este navegador.');
+                            return;
+                        }
+                        if (window.luxoMobileDictating) {
+                            window.luxoMobileDictating = false;
+                            window.hideLuxoSiriOrb();
+                            if (rec) try { rec.stop(); } catch(e){}
+                            return;
+                        }
+                        try {
+                            if (rec) try { rec.stop(); } catch(e){}
+                            let r = new SR();
+                            r.lang = 'es-MX';
+                            r.interimResults = false;
+                            r.continuous = false;
+                            window.luxoMobileDictating = true;
+                            window.showLuxoSiriOrb(6000);
+                            
+                            r.onstart = function() {
+                                console.log("[LUXO MIC] ACTIVANDO MICROFONO", { source: "toggleLuxoDictate", mobile: isMobileDevice, timestamp: Date.now() });
+                                playBeep(1);
+                            };
+                            r.onresult = function(ev) {
+                                const txt = ev.results[0][0].transcript;
+                                if (txt) {
+                                    playBeep(2);
+                                    fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(txt.trim()), { method: 'POST' });
+                                    window.showLuxoSiriOrb(3000);
+                                }
+                            };
+                            r.onerror = function(ev) {
+                                console.log("📱 [Luxo Mobile Mic Error]:", ev.error);
+                                window.luxoMobileDictating = false;
+                                window.hideLuxoSiriOrb();
+                            };
+                            r.onend = function() {
+                                console.log("[LUXO MIC] DETENIENDO MICROFONO", { source: "toggleLuxoDictate", timestamp: Date.now() });
+                                window.luxoMobileDictating = false;
+                                window.hideLuxoSiriOrb();
+                            };
+                            r.start();
+                        } catch(err) {
+                            console.log("Error iniciando micrófono móvil:", err);
+                        }
+                    } else {
+                        // window.initLuxoMicPermission(); // Desactivado inicio automático
+                    }
                 };
 
-                window.initLuxoMicPermission();
+                // window.initLuxoMicPermission(); // Desactivado inicio automático
             })(); void(0);"""
 
             async def _exec_js():
@@ -7210,7 +7758,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 }
                             };
                             r.onerror = function(ev) { 
-                                alert('❌ Error JS Dictado: ' + ev.error); 
+                                console.log('[DEBUG-MIC] Error JS Dictado:', ev.error);
+                                if (ev.error === 'not-allowed') {
+                                    alert('⚠️ Permiso de micrófono denegado. Permítelo en tu navegador.');
+                                }
                             };
                             r.onend = function() { 
                                 console.log('[DEBUG-MIC] JS: onend');
@@ -7269,7 +7820,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 width=46,
                 height=46,
                 alignment=ft.alignment.Alignment(0, 0),
-                visible=is_mobile
+                visible=False
             )
 
             siri_orb_flet = ft.Container(
@@ -11556,6 +12107,26 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
         def build_manuals_view():
             manuals_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+            categoria_activa = ["pdf"]
+
+            def set_categoria(cat):
+                categoria_activa[0] = cat
+                btn_tab_pdf.bgcolor = "#6E48AA" if cat == "pdf" else "#222222"
+                btn_tab_pdf.color = "white" if cat == "pdf" else "#aaaaaa"
+                btn_tab_excel.bgcolor = "#1f6f43" if cat == "excel" else "#222222"
+                btn_tab_excel.color = "white" if cat == "excel" else "#aaaaaa"
+                btn_tab_img.bgcolor = "#A100F2" if cat == "imagen" else "#222222"
+                btn_tab_img.color = "white" if cat == "imagen" else "#aaaaaa"
+                btn_tab_vid.bgcolor = "#FF6B35" if cat == "video" else "#222222"
+                btn_tab_vid.color = "white" if cat == "video" else "#aaaaaa"
+                cargar_manuales()
+
+            btn_tab_pdf = ft.ElevatedButton("📄 PDFs y Manuales", bgcolor="#6E48AA", color="white", on_click=lambda e: set_categoria("pdf"))
+            btn_tab_excel = ft.ElevatedButton("📊 Archivos Excel", bgcolor="#222222", color="#aaaaaa", on_click=lambda e: set_categoria("excel"))
+            btn_tab_img = ft.ElevatedButton("🖼️ Imágenes", bgcolor="#222222", color="#aaaaaa", on_click=lambda e: set_categoria("imagen"))
+            btn_tab_vid = ft.ElevatedButton("🎥 Videos", bgcolor="#222222", color="#aaaaaa", on_click=lambda e: set_categoria("video"))
+
+            tabs_row = ft.Row([btn_tab_pdf, btn_tab_excel, btn_tab_img, btn_tab_vid], spacing=8, wrap=True)
             
             def cargar_manuales():
                 manuals_list.controls.clear()
@@ -11563,13 +12134,30 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     db = conectar_db()
                     if db:
                         cursor = db.cursor(dictionary=True)
-                        cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto FROM manuales ORDER BY Nombre_Archivo")
-                        manuales = cursor.fetchall()
+                        # Filtrar ÚNICAMENTE archivos desbloqueados (Abierto = 1) y ordenados alfabéticamente A-Z
+                        cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto FROM manuales WHERE Abierto = 1 ORDER BY Nombre_Archivo ASC")
+                        raw_manuales = cursor.fetchall()
                         db.close()
 
-                        manuals_list.controls.append(ft.Text(t("manuals_db_title"), size=14, color="#00FFFF", weight="bold"))
+                        # Orden alfabético estricto A-Z
+                        raw_manuales = sorted(raw_manuales, key=lambda x: (x.get("Nombre_Archivo") or "").lower())
+
+                        cat_sel = categoria_activa[0]
+                        manuales = []
+                        for m in raw_manuales:
+                            nombre = m.get("Nombre_Archivo") or ""
+                            ext_m = os.path.splitext(nombre)[1].lower()
+                            if cat_sel == "excel" and ext_m in [".xlsx", ".xls", ".csv"]:
+                                manuales.append(m)
+                            elif cat_sel == "imagen" and ext_m in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]:
+                                manuales.append(m)
+                            elif cat_sel == "video" and ext_m in [".mp4", ".mov", ".avi", ".mkv", ".webm"]:
+                                manuales.append(m)
+                            elif cat_sel == "pdf" and ext_m not in [".xlsx", ".xls", ".csv", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".mp4", ".mov", ".avi", ".mkv", ".webm"]:
+                                manuales.append(m)
+
                         if not manuales:
-                            manuals_list.controls.append(ft.Text(t("no_manuals"), color="#aaaaaa", size=12))
+                            manuals_list.controls.append(ft.Text("No hay recursos disponibles en esta categoría.", color="#aaaaaa", size=12))
                         else:
                             for m in manuales:
                                 id_m = m["ID_Manual"]
@@ -11614,21 +12202,21 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             ft.Row([
                                                 ft.ElevatedButton(
                                                     t("view_pdf"),
-                                                    icon=ft.Icons.VISIBILITY if abierto == 1 else ft.Icons.LOCK,
-                                                    on_click=lambda e, s=nombre_f, d=nombre: abrir_visor_modal_global(s, d) if (s and abierto == 1) else None,
-                                                    bgcolor="#6E48AA" if abierto == 1 else "#222222",
-                                                    color="white" if abierto == 1 else "#666666",
+                                                    icon=ft.Icons.VISIBILITY,
+                                                    on_click=lambda e, s=nombre_f, d=nombre: abrir_visor_modal_global(s, d) if s else None,
+                                                    bgcolor="#6E48AA",
+                                                    color="white",
                                                     expand=True,
-                                                    disabled=(not nombre_f or abierto == 0)
+                                                    disabled=not nombre_f
                                                 ),
                                                 ft.ElevatedButton(
-                                                    t("download_pdf") if abierto == 1 else "🔒 Bloqueado",
-                                                    icon=ft.Icons.DOWNLOAD if abierto == 1 else ft.Icons.LOCK,
-                                                    url=url_dl if abierto == 1 else None,
-                                                    bgcolor="#204870" if abierto == 1 else "#222222",
-                                                    color="white" if abierto == 1 else "#666666",
+                                                    t("download_pdf"),
+                                                    icon=ft.Icons.DOWNLOAD,
+                                                    url=url_dl,
+                                                    bgcolor="#204870",
+                                                    color="white",
                                                     expand=True,
-                                                    disabled=(url_dl == "" or abierto == 0)
+                                                    disabled=(url_dl == "")
                                                 )
                                             ], spacing=5),
                                             ft.Text(
@@ -11646,7 +12234,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 )
                 except Exception as ex:
                     print("ERROR MANUALS VIEW LIST:", ex)
-                    manuals_list.controls.append(ft.Text("Error", color="red"))
+                    manuals_list.controls.append(ft.Text("Error al cargar la lista de documentos.", color="red"))
                 page.update()
                 
             cargar_manuales()
@@ -11657,6 +12245,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ft.IconButton(ft.Icons.REFRESH, on_click=lambda e: cargar_manuales(), icon_color="#00FFFF")
                 ], alignment="spaceBetween", vertical_alignment="center"),
                 ft.Text(t("manuals_desc"), color="#aaaaaa", size=13),
+                ft.Divider(height=10, color="transparent"),
+                tabs_row,
                 ft.Divider(height=15, color="#333333"),
                 manuals_list
             ], expand=True)
@@ -12659,7 +13249,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     border_color="#9D50BB",
                     focused_border_color="#00FFFF",
                     color="white",
-                    keyboard_type=ft.KeyboardType.NUMBER
+                    keyboard_type=ft.KeyboardType.TEXT
                 )
                 piezas_dia_tf = ft.TextField(
                     label="Piezas vendidas",
@@ -12672,7 +13262,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 
                 def guardar_dia_click(e):
                     try:
-                        v_con_iva = float(venta_dia_tf.value.strip() or 0.0)
+                        val_str = venta_dia_tf.value.strip().replace(",", ".")
+                        v_con_iva = float(val_str or 0.0)
                         p_dia = int(piezas_dia_tf.value.strip() or 0)
                     except ValueError:
                         mostrar_snack("Por favor ingresa números válidos.", color="red")
@@ -18943,28 +19534,31 @@ Ejemplo:
     # LOGIN UI
     # =====================================
 
+    is_mobile_w = (page.width < 768) if (page.width and page.width > 0) else False
+
     login_video_player = None
     btn_audio = None
 
-    def toggle_audio(e):
+    def toggle_audio(e=None):
         nonlocal login_video_player, btn_audio
         if login_video_player:
             try:
-                currently_unmuted = e.control.data
-                if currently_unmuted:
-                    login_video_player.volume = 0
-                    login_video_player.muted = True
-                    btn_audio.content = ft.Text("🔇", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Activar Audio"
-                    e.control.data = False
-                else:
-                    login_video_player.volume = 100
+                if login_video_player.muted:
                     login_video_player.muted = False
-                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Silenciar Audio"
-                    e.control.data = True
+                    login_video_player.volume = 100.0
+                    login_video_player.play()
+                    if btn_audio:
+                        btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                        btn_audio.tooltip = "Silenciar Audio"
+                else:
+                    login_video_player.muted = True
+                    login_video_player.volume = 0.0
+                    if btn_audio:
+                        btn_audio.content = ft.Text("🔇", size=11, color="#00FFFF", text_align="center")
+                        btn_audio.tooltip = "Activar Audio"
                 login_video_player.update()
-                btn_audio.update()
+                if btn_audio:
+                    btn_audio.update()
             except Exception as err:
                 print("Error al cambiar estado de audio:", err)
 
@@ -19041,30 +19635,24 @@ Ejemplo:
                 playlist_mode=fv.PlaylistMode.LOOP,
                 autoplay=True,
                 volume=100.0,
-                muted=False,
+                muted=True,
                 show_controls=False,
                 expand=True,
                 fit=ft.BoxFit.COVER,
                 filter_quality=ft.FilterQuality.HIGH,
             )
             def on_avatar_tap(e):
-                if login_video_player:
-                    try:
-                        login_video_player.play()
-                        login_video_player.volume = 100
-                        login_video_player.muted = False
-                        login_video_player.update()
-                    except Exception: pass
+                toggle_audio(e)
 
             btn_audio = ft.Container(
-                content=ft.Text("🔊", size=11, color="#00FFFF", text_align="center"),
+                content=ft.Text("🔇", size=11, color="#00FFFF", text_align="center"),
                 bgcolor="#111111",
                 width=28,
                 height=28,
                 border_radius=14,
                 alignment=ft.alignment.Alignment(0, 0),
-                tooltip="Silenciar Audio",
-                data=True,
+                tooltip="Activar Audio",
+                data=False,
                 on_click=toggle_audio
             )
             video_avatar = ft.Stack([

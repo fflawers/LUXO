@@ -2,8 +2,15 @@ import flet as ft
 import os
 import re
 import json
-from datetime import datetime, timedelta, time
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, time, timezone
+
+def get_now_mexico_city():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/Mexico_City"))
+    except Exception:
+        return datetime.now(timezone(timedelta(hours=-6)))
+
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -107,7 +114,7 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
         
         limit_str = obtener_hora_limite_apertura()
         limit_time = datetime.strptime(limit_str, "%H:%M").time()
-        now_time = datetime.now(ZoneInfo("America/Mexico_City")).time()
+        now_time = get_now_mexico_city().time()
         
         total_tiendas = len(tiendas)
         total_reportadas = len(reportados)
@@ -228,7 +235,7 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
 def verificar_alertas_apertura_incumplida(conectar_db_fn=None):
     limit_str = obtener_hora_limite_apertura()
     limit_time = datetime.strptime(limit_str, "%H:%M").time()
-    now_time = datetime.now(ZoneInfo("America/Mexico_City")).time()
+    now_time = get_now_mexico_city().time()
     
     if now_time <= limit_time:
         return
@@ -304,12 +311,12 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         try:
             limit_str = obtener_hora_limite_apertura()
             limit_time = datetime.strptime(limit_str, "%H:%M").time()
-            now_time = datetime.now(ZoneInfo("America/Mexico_City")).time()
+            now_time = get_now_mexico_city().time()
             
             estado = "Puntual" if now_time <= limit_time else "Tarde"
             
             # Usar hora local de Python, no CURRENT_TIME() de MySQL (que puede ser UTC)
-            now_dt = datetime.now(ZoneInfo("America/Mexico_City"))
+            now_dt = get_now_mexico_city()
             now_str = now_dt.strftime("%H:%M:%S")
             fecha_str = now_dt.strftime("%Y-%m-%d")
             
@@ -357,7 +364,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 dest_dir = os.path.join(BASE_PATH, "uploads", "aperturas")
                 os.makedirs(dest_dir, exist_ok=True)
                 t_num = str(user_info.get("tienda") or "tienda").replace(" ", "_")
-                f_name = f"apertura_{t_num}_{datetime.now(ZoneInfo('America/Mexico_City')).strftime('%Y%m%d_%H%M%S')}.jpg"
+                f_name = f"apertura_{t_num}_{get_now_mexico_city().strftime('%Y%m%d_%H%M%S')}.jpg"
                 dest_path = os.path.join(dest_dir, f_name)
                 
                 with open(path, "rb") as f_in:
@@ -419,7 +426,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
             return
             
         try:
-            now_dt = datetime.now(ZoneInfo("America/Mexico_City"))
+            now_dt = get_now_mexico_city()
             now_str = now_dt.strftime("%H:%M:%S")
             fecha_str = now_dt.strftime("%Y-%m-%d")
             
@@ -542,7 +549,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         5: "Sábado",
         6: "Domingo"
     }
-    ahora = datetime.now(ZoneInfo("America/Mexico_City"))
+    ahora = get_now_mexico_city()
     dia_nombre = dias_semana[ahora.weekday()]
     hoy_str = f"{dia_nombre} {ahora.strftime('%d/%m/%Y')}"
 
@@ -606,7 +613,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
         )
     ], alignment=ft.MainAxisAlignment.START, vertical_alignment="center", spacing=10 if is_mobile_w else 15, wrap=True)
     
-    hoy_date = datetime.now(ZoneInfo("America/Mexico_City")).date()
+    hoy_date = get_now_mexico_city().date()
     fecha_consulta = [hoy_date]
     
     fecha_text = ft.Text(

@@ -28,7 +28,7 @@ BASE_PATH = os.path.dirname(__file__)
 # --- ESTADO GLOBAL Y MATRIZ DE DATOS ---
 DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"]
 COLOR_TABS = {
-    "SEMANAL": "#7C3AED",
+    "SEMANAL": "#A100F2",
     "DOMINGO": "#10B981",
     "PLAN.ACCIÓN_D": "#F59E0B",
     "LUNES": "#EF4444",
@@ -372,10 +372,12 @@ def calcular_dia(d_name, user_id):
 def generar_excel_enfoque(d_name, user_id, page=None):
     try:
         import openpyxl
-        calc = calcular_dia(d_name, user_id)
+        d_real = "DOMINGO" if d_name == "SEMANAL" else d_name
+        calc = calcular_dia(d_real, user_id)
         g_meta = user_states[user_id]["global_meta"]
         s_state = user_states[user_id]["store_state"]
-        data = s_state[d_name]
+        h_state = user_states[user_id]["historico_semanal_state"]
+        data = s_state.get(d_real, s_state["DOMINGO"])
 
         template_path = os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx")
         if not os.path.exists(template_path):
@@ -549,10 +551,11 @@ def generar_pdf_enfoque_file(d_name, user_id):
     if not REPORTLAB_AVAILABLE:
         return None
     try:
-        calc = calcular_dia(d_name, user_id)
+        d_real = "DOMINGO" if d_name == "SEMANAL" else d_name
+        calc = calcular_dia(d_real, user_id)
         g_meta = user_states[user_id]["global_meta"]
         s_state = user_states[user_id]["store_state"]
-        data = s_state[d_name]
+        data = s_state.get(d_real, s_state["DOMINGO"])
 
         pdf_filename = f"Enfoque_Diario_{d_name}_SGH_2026.pdf"
 
@@ -844,16 +847,18 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             tab_content_container.content = build_sheet_ui(curr_tab)
             
         try:
-            d_name = curr_tab
-            if d_name.startswith("PLAN.ACCIÓN_"):
-                d_code = d_name.replace("PLAN.ACCIÓN_", "")
-                code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
-                d_name = code_map.get(d_code, "DOMINGO")
-            elif d_name == "SEMANAL":
-                d_name = "DOMINGO"
+            if curr_tab == "SEMANAL":
+                btn_download_excel.url = f"/api/download_excel/SEMANAL?user_id={user_id}"
+                btn_download_pdf.url = f"/print_enfoque/SEMANAL?user_id={user_id}"
+            else:
+                d_name = curr_tab
+                if d_name.startswith("PLAN.ACCIÓN_"):
+                    d_code = d_name.replace("PLAN.ACCIÓN_", "")
+                    code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
+                    d_name = code_map.get(d_code, "DOMINGO")
+                btn_download_excel.url = f"/api/download_excel/{d_name}?user_id={user_id}"
+                btn_download_pdf.url = f"/print_enfoque/{d_name}?user_id={user_id}"
 
-            btn_download_excel.url = f"/api/download_excel/{d_name}?user_id={user_id}"
-            btn_download_pdf.url = f"/print_enfoque/{d_name}?user_id={user_id}"
             btn_download_excel.update()
             btn_download_pdf.update()
         except Exception:
@@ -1547,66 +1552,473 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             card_logros_texto
         ], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    # --- INTERFAZ RESUMEN SEMANAL ---
+    # --- INTERFAZ RESUMEN SEMANAL (RÉPLICA EXACTA DE HOJA EXCEL SGH DE 3 SECCIONES) ---
     def build_semanal_ui():
-        rows_sem = []
-        tot_meta = sum(s_state[d]["meta_diaria"] for d in DIAS)
-        tot_ana = tot_meta * 0.85
-        tot_wea = tot_meta * 0.15
-        tot_horas_sem = 0.0
-        tot_transac_sem = 0
+        is_mobile_w = (page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False
 
+        # Valores por defecto en h_state (semanal)
+        h_state.setdefault("meta_conversion", 0.16)
+        h_state.setdefault("wea_pct", 0.15)
+        h_state.setdefault("kids_pct", 0.05)
+        h_state.setdefault("ck_pct", 0.30)
+        h_state.setdefault("comply_sem", 22519.0)
+        h_state.setdefault("atv_sem", 7500.0)
+        h_state.setdefault("aur_sem", 4617.0)
+        h_state.setdefault("horas_colab", {})
+        h_state.setdefault("cierre_semanal", {})
+        h_state.setdefault("vta_neta_sem", 0.0)
+        h_state.setdefault("vta_unid_sem", 0)
+
+        # Totales agregados de las pestañas diarias
+        tot_meta_sem = sum(s_state[d]["meta_diaria"] for d in DIAS)
+        tot_ana_sem = sum(s_state[d]["meta_diaria"] * 0.85 for d in DIAS)
+        tot_wea_sem = sum(s_state[d]["meta_diaria"] * 0.15 for d in DIAS)
+        
+        tot_trafico_sem = 0
+        tot_transac_sem = 0
+        tot_horas_sem = 0.0
+        
+        dias_calc = {}
         for d in DIAS:
             c = calcular_dia(d, user_id)
-            tot_horas_sem += c["tot_horas"]
-            tot_transac_sem += c["transacciones"]
-            rows_sem.append(
-                ft.Row([
-                    ft.Container(ft.Text(d, weight="bold", color="white", size=11), width=110),
-                    ft.Container(ft.Text(f"${c['meta_diaria']:,.2f}", color="#00FF88", size=11, weight="bold"), width=120),
-                    ft.Container(ft.Text(f"${c['analogos']:,.2f}", color="#00FF88", size=11), width=120),
-                    ft.Container(ft.Text(f"${c['wearables']:,.2f}", color="#00FF88", size=11), width=120),
-                    ft.Container(ft.Text(str(c['transacciones']), color="white", size=11), width=100),
-                    ft.Container(ft.Text(f"{c['tot_horas']:.1f} hrs", color="white", size=11), width=100),
-                ], spacing=8)
+            dias_calc[d] = c
+            tot_trafico_sem += c.get("trafico", 0)
+            tot_transac_sem += c.get("transacciones", 0)
+            tot_horas_sem += c.get("tot_horas", 0.0)
+
+        meta_conversion = float(h_state.get("meta_conversion", 0.16))
+        meta_transacciones_sem = int(tot_trafico_sem * meta_conversion)
+        meta_ideal_sem = tot_meta_sem * 1.10
+        total_unidades_sem = int(tot_meta_sem / h_state["aur_sem"]) if h_state.get("aur_sem", 4617.0) > 0 else (int(tot_meta_sem / 4617) if tot_meta_sem > 0 else 0)
+
+        wea_pct = float(h_state.get("wea_pct", 0.15))
+        unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 1
+
+        kids_pct = float(h_state.get("kids_pct", 0.05))
+        unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if total_unidades_sem > 0 else 1
+
+        ck_pct = float(h_state.get("ck_pct", 0.30))
+        unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
+
+        comply_sem = float(h_state.get("comply_sem", 22519.0))
+        atv_sem = float(h_state.get("atv_sem", 7500.0))
+        aur_sem = float(h_state.get("aur_sem", 4617.0))
+
+        # Callbacks para guardar cambios al editar cuadros blancos de entrada
+        def on_param_change(field_key, val_str, is_pct=False):
+            try:
+                val = float(val_str.replace("$", "").replace(",", "").replace("%", "").strip() or 0)
+                if is_pct:
+                    val = val / 100.0 if val > 1.0 else val
+                h_state[field_key] = val
+                guardar_estado_persistente(user_id)
+                update_active_view()
+            except Exception as ex:
+                print(f"Error on_param_change {field_key}:", ex)
+
+        # Helper para crear celda editable blanca/oscura con borde cyan
+        def make_input_field(value_str, on_change_fn, width=80, suffix=""):
+            return ft.Container(
+                content=ft.TextField(
+                    value=value_str,
+                    width=width,
+                    on_change=on_change_fn,
+                    text_size=11,
+                    text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
+                    bgcolor="#1F2937",
+                    border_color="#00FFFF",
+                    focused_border_color="#00FF88",
+                    content_padding=5,
+                    suffix=ft.Text(suffix, color="#AAAAAA", size=10) if suffix else None
+                ),
+                width=width
             )
 
-        card_sem = ft.Container(
+        # --- SECCIÓN 1: TARJETAS DE ENCABEZADO Y METAS ---
+        card_w = 240 if is_mobile_w else 270
+
+        card_metas = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="#7C3AED", size=18),
-                    ft.Text(f"CONSOLIDADO DE ENFOQUE SEMANAL - SEMANA {g_meta['semana']} ({g_meta['tienda']})", color="white", weight="bold", size=13)
-                ], spacing=6),
-                ft.Divider(height=8, color="#374151"),
-                ft.Row([
-                    ft.Container(ft.Text("DÍA", weight="bold", color="#7C3AED", size=11), width=110),
-                    ft.Container(ft.Text("META DIARIA", weight="bold", color="#00FF88", size=11), width=120),
-                    ft.Container(ft.Text("ANÁLOGOS", weight="bold", color="#00FF88", size=11), width=120),
-                    ft.Container(ft.Text("WEARABLES", weight="bold", color="#00FF88", size=11), width=120),
-                    ft.Container(ft.Text("TRANSAC.", weight="bold", color="white", size=11), width=100),
-                    ft.Container(ft.Text("HORAS", weight="bold", color="white", size=11), width=100),
-                ], spacing=8),
-                ft.Column(rows_sem, spacing=6),
-                ft.Divider(height=8, color="#374151"),
-                ft.Row([
-                    ft.Container(ft.Text("TOTAL SEMANAL", weight="bold", color="white", size=12), width=110),
-                    ft.Container(ft.Text(f"${tot_meta:,.2f}", weight="bold", color="#00FF88", size=12), width=120),
-                    ft.Container(ft.Text(f"${tot_ana:,.2f}", weight="bold", color="#00FF88", size=12), width=120),
-                    ft.Container(ft.Text(f"${tot_wea:,.2f}", weight="bold", color="#00FF88", size=12), width=120),
-                    ft.Container(ft.Text(str(tot_transac_sem), weight="bold", color="white", size=12), width=100),
-                    ft.Container(ft.Text(f"{tot_horas_sem:.1f} hrs", weight="bold", color="white", size=12), width=100),
-                ], spacing=8)
-            ], scroll=ft.ScrollMode.AUTO),
-            bgcolor="#0B0E17",
-            padding=14,
-            border_radius=12,
-            border=ft.Border.all(1.5, "#7C3AED")
+                    ft.Icon(ft.Icons.STAR_ROUNDED, color="#A100F2", size=16),
+                    ft.Text("SEMANAL", color="#A100F2", weight="bold", size=12)
+                ]),
+                ft.Row([ft.Text("Meta Semanal:", color="#aaaaaa", size=11), ft.Text(f"${tot_meta_sem:,.2f}", color="#00FF88", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Análogos:", color="#aaaaaa", size=11), ft.Text(f"${tot_ana_sem:,.2f}", color="#00FF88", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Wearables:", color="#aaaaaa", size=11), ft.Text(f"${tot_wea_sem:,.2f}", color="#00FF88", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Total de Unidades:", color="#aaaaaa", size=11), ft.Text(str(total_unidades_sem), color="white", weight="bold", size=11)], alignment="spaceBetween"),
+            ], spacing=6),
+            bgcolor="#111827", padding=12, border_radius=10, border=ft.Border.all(1.5, "#A100F2"), width=card_w
         )
 
-        return card_sem
+        card_conversion = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.SHOW_CHART_ROUNDED, color="#00FF88", size=16),
+                    ft.Text("CONVERSIÓN SEMANAL", color="#00FF88", weight="bold", size=12)
+                ]),
+                ft.Row([ft.Text("Tráfico Esperado:", color="#aaaaaa", size=11), ft.Text(str(tot_trafico_sem), color="white", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([
+                    ft.Text("Meta Conversión:", color="#aaaaaa", size=11),
+                    make_input_field(f"{meta_conversion*100:.1f}", lambda e: on_param_change("meta_conversion", e.control.value, is_pct=True), width=70, suffix="%")
+                ], alignment="spaceBetween"),
+                ft.Row([ft.Text("Meta Transacciones:", color="#aaaaaa", size=11), ft.Text(str(meta_transacciones_sem), color="white", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Meta Ideal ($ NS):", color="#aaaaaa", size=11), ft.Text(f"${meta_ideal_sem:,.2f}", color="#00FFFF", weight="bold", size=11)], alignment="spaceBetween"),
+            ], spacing=6),
+            bgcolor="#111827", padding=12, border_radius=10, border=ft.Border.all(1.5, "#00FF88"), width=card_w
+        )
+
+        # OTROS NO NEGOCIABLES: SOLO LECTURA (NO EDITABLE)
+        card_otros = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE_OUTLINE, color="#00FFFF", size=16),
+                    ft.Text("OTROS NO NEGOCIABLES", color="#00FFFF", weight="bold", size=12)
+                ]),
+                ft.Row([ft.Text("Wearables (15%):", color="#aaaaaa", size=11), ft.Text(f"{unidades_wea_sem} unid.", color="#00FFFF", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Kids (5%):", color="#aaaaaa", size=11), ft.Text(f"{unidades_kids_sem} unid.", color="#00FFFF", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Carekits (30%):", color="#aaaaaa", size=11), ft.Text(f"{unidades_ck_sem} unid.", color="#00FFFF", weight="bold", size=11)], alignment="spaceBetween"),
+            ], spacing=6),
+            bgcolor="#111827", padding=12, border_radius=10, border=ft.Border.all(1.5, "#00FFFF"), width=card_w
+        )
+
+        card_comply = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.VERIFIED_ROUNDED, color="#FF8C00", size=16),
+                    ft.Text("COMPLY E INDICADORES", color="#FF8C00", weight="bold", size=12)
+                ]),
+                ft.Row([
+                    ft.Text("Comply Semanal:", color="#aaaaaa", size=11),
+                    make_input_field(f"{comply_sem:.2f}", lambda e: on_param_change("comply_sem", e.control.value), width=95)
+                ], alignment="spaceBetween"),
+                ft.Row([
+                    ft.Text("ATV Semanal:", color="#aaaaaa", size=11),
+                    make_input_field(f"{atv_sem:.2f}", lambda e: on_param_change("atv_sem", e.control.value), width=90)
+                ], alignment="spaceBetween"),
+                ft.Row([
+                    ft.Text("AUR Semanal:", color="#aaaaaa", size=11),
+                    make_input_field(f"{aur_sem:.2f}", lambda e: on_param_change("aur_sem", e.control.value), width=90)
+                ], alignment="spaceBetween"),
+            ], spacing=6),
+            bgcolor="#111827", padding=12, border_radius=10, border=ft.Border.all(1.5, "#FF8C00"), width=card_w
+        )
+
+        grid_cards = ft.Row([card_metas, card_conversion, card_otros, card_comply], spacing=10, wrap=True)
+
+        # --- SECCIÓN 2: TABLA DE COLABORADORES Y METAS INDIVIDUALES (DESDE COLABORADORES DB) ---
+        h_state.setdefault("wea_colab_manual", {})
+
+        w_colab_name = 110 if is_mobile_w else 130
+        w_colab_hrs = 80 if is_mobile_w else 100
+        w_colab_vta = 95 if is_mobile_w else 110
+        w_colab_ana = 75 if is_mobile_w else 90
+        w_colab_wea = 75 if is_mobile_w else 90
+        w_colab_kid = 65 if is_mobile_w else 80
+        w_colab_ck = 65 if is_mobile_w else 80
+
+        rows_colabs = []
+        colabs_list = s_state.get("DOMINGO", {}).get("colaboradores", [])
+        
+        tot_horas_plantilla = 0.0
+        horas_colab_map = {}
+        for colab in colabs_list:
+            if not isinstance(colab, dict):
+                continue
+            c_name = colab.get("nombre", "")
+            if not c_name.strip():
+                continue
+            h_acc = 0.0
+            for d in DIAS:
+                c_day_list = s_state.get(d, {}).get("colaboradores", [])
+                for p_item in c_day_list:
+                    if isinstance(p_item, dict) and p_item.get("nombre") == c_name:
+                        h_acc += float(p_item.get("horas", 0.0) or 0.0)
+            
+            if c_name in h_state["horas_colab"]:
+                h_acc = float(h_state["horas_colab"][c_name])
+
+            horas_colab_map[c_name] = h_acc
+            tot_horas_plantilla += h_acc
+
+        if tot_horas_plantilla <= 0:
+            tot_horas_plantilla = 1.0
+
+        tot_colab_meta_venta = 0.0
+        tot_colab_analogos = 0
+        tot_colab_wearables = 0
+        tot_colab_kids = 0
+        tot_colab_carekits = 0
+
+        def on_colab_hrs_change(c_name, val_str):
+            try:
+                h_val = float(val_str.strip() or 0)
+                h_state["horas_colab"][c_name] = h_val
+                guardar_estado_persistente(user_id)
+                update_active_view()
+            except Exception:
+                pass
+
+        def on_colab_wea_change(c_name, val_str):
+            try:
+                w_val = int(val_str.strip() or 0)
+                h_state["wea_colab_manual"][c_name] = w_val
+                guardar_estado_persistente(user_id)
+                update_active_view()
+            except Exception:
+                pass
+
+        for colab in colabs_list:
+            if not isinstance(colab, dict):
+                continue
+            c_name = colab.get("nombre", "")
+            if not c_name.strip():
+                continue
+            h_p = horas_colab_map.get(c_name, 0.0)
+            
+            m_venta_colab = (tot_meta_sem / tot_horas_plantilla) * h_p
+            ana_colab = max(1, int((total_unidades_sem / tot_horas_plantilla) * h_p)) if (tot_ana_sem > 0 and h_p > 0) else 0
+            
+            if c_name in h_state["wea_colab_manual"]:
+                wea_colab = int(h_state["wea_colab_manual"][c_name])
+            else:
+                wea_colab = max(1, int((unidades_wea_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+
+            kids_colab = max(1, int((unidades_kids_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+            ck_colab = max(1, int((unidades_ck_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+
+            tot_colab_meta_venta += m_venta_colab
+            tot_colab_analogos += ana_colab
+            tot_colab_wearables += wea_colab
+            tot_colab_kids += kids_colab
+            tot_colab_carekits += ck_colab
+
+            rows_colabs.append(
+                ft.Row([
+                    ft.Container(ft.Text(c_name, weight="bold", color="white", size=11), width=w_colab_name),
+                    make_input_field(f"{h_p:.1f}", lambda e, cn=c_name: on_colab_hrs_change(cn, e.control.value), width=w_colab_hrs, suffix="h"),
+                    ft.Container(ft.Text(f"${m_venta_colab:,.2f}", color="#00FF88", weight="bold", size=11), width=w_colab_vta),
+                    ft.Container(ft.Text(str(ana_colab), color="#00FF88", size=11), width=w_colab_ana),
+                    make_input_field(str(wea_colab), lambda e, cn=c_name: on_colab_wea_change(cn, e.control.value), width=w_colab_wea),
+                    ft.Container(ft.Text(str(kids_colab), color="#00FFFF", size=11), width=w_colab_kid),
+                    ft.Container(ft.Text(str(ck_colab), color="#00FFFF", size=11), width=w_colab_ck),
+                ], spacing=6)
+            )
+
+        tabla_colabs_content = ft.Column([
+            ft.Row([
+                ft.Container(ft.Text("COLABORADOR", weight="bold", color="#A100F2", size=11), width=w_colab_name),
+                ft.Container(ft.Text("HORAS PROG.", weight="bold", color="white", size=11), width=w_colab_hrs),
+                ft.Container(ft.Text("META VENTA", weight="bold", color="#00FF88", size=11), width=w_colab_vta),
+                ft.Container(ft.Text("ANÁLOGOS", weight="bold", color="#00FF88", size=11), width=w_colab_ana),
+                ft.Container(ft.Text("WEARABLES", weight="bold", color="#00FFFF", size=11), width=w_colab_wea),
+                ft.Container(ft.Text("KIDS", weight="bold", color="#00FFFF", size=11), width=w_colab_kid),
+                ft.Container(ft.Text("CAREKITS", weight="bold", color="#00FFFF", size=11), width=w_colab_ck),
+            ], spacing=6),
+            ft.Column(rows_colabs, spacing=6),
+            ft.Divider(height=8, color="#374151"),
+            ft.Row([
+                ft.Container(ft.Text("TOTAL", weight="bold", color="white", size=12), width=w_colab_name),
+                ft.Container(ft.Text(f"{tot_horas_plantilla:.1f} hrs", weight="bold", color="white", size=12), width=w_colab_hrs),
+                ft.Container(ft.Text(f"${tot_colab_meta_venta:,.2f}", weight="bold", color="#00FF88", size=12), width=w_colab_vta),
+                ft.Container(ft.Text(str(tot_colab_analogos), weight="bold", color="#00FF88", size=12), width=w_colab_ana),
+                ft.Container(ft.Text(str(tot_colab_wearables), weight="bold", color="#00FFFF", size=12), width=w_colab_wea),
+                ft.Container(ft.Text(str(tot_colab_kids), weight="bold", color="#00FFFF", size=12), width=w_colab_kid),
+                ft.Container(ft.Text(str(tot_colab_carekits), weight="bold", color="#00FFFF", size=12), width=w_colab_ck),
+            ], spacing=6)
+        ])
+
+        card_tabla_colabs = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.PEOPLE_ALT_ROUNDED, color="#A100F2", size=18),
+                    ft.Text("DISTRIBUCIÓN DE METAS POR COLABORADOR (SEMANAL)", color="white", weight="bold", size=13)
+                ], spacing=6),
+                ft.Divider(height=8, color="#374151"),
+                ft.Row([tabla_colabs_content], scroll=ft.ScrollMode.AUTO)
+            ]),
+            bgcolor="#0B0E17", padding=14, border_radius=12, border=ft.Border.all(1.5, "#A100F2")
+        )
+
+        # --- SECCIÓN 3: SEGUIMIENTO Y RESULTADOS AL CIERRE SEMANAL (EXCEL RÉPLICA FILAS 25-37) ---
+        w3_colab = 110 if is_mobile_w else 125
+        w3_hrs = 65 if is_mobile_w else 75
+        w3_num = 75 if is_mobile_w else 85
+        w3_vta = 90 if is_mobile_w else 105
+        w3_pct = 75 if is_mobile_w else 85
+        w3_demos = 80 if is_mobile_w else 95
+        w3_wea = 75 if is_mobile_w else 85
+        w3_kids = 65 if is_mobile_w else 75
+        w3_ck = 65 if is_mobile_w else 75
+
+        def on_cierre_val_change(c_name, field_name, val_str, is_float=False):
+            try:
+                val = float(val_str.replace("$", "").replace(",", "").strip() or 0) if is_float else int(val_str.strip() or 0)
+                h_state["cierre_semanal"].setdefault(c_name, {})[field_name] = val
+                guardar_estado_persistente(user_id)
+                update_active_view()
+            except Exception:
+                pass
+
+        rows_cierre_colabs = []
+        tot_cierre_hrs = 0.0
+        tot_cierre_inter = 0
+        tot_cierre_conv = 0
+        tot_cierre_vta = 0.0
+        tot_cierre_ana = 0
+        tot_cierre_demos = 0
+        tot_cierre_wea = 0
+        tot_cierre_kids = 0
+        tot_cierre_ck = 0
+
+        for colab in colabs_list:
+            if not isinstance(colab, dict):
+                continue
+            c_name = colab.get("nombre", "")
+            if not c_name.strip():
+                continue
+            
+            h_p = horas_colab_map.get(c_name, 0.0)
+            c_data = h_state["cierre_semanal"].get(c_name, {})
+
+            inter = int(c_data.get("interacciones", 0))
+            conv = int(c_data.get("convertidos", 0))
+            conv_pct = (conv / inter * 100.0) if inter > 0 else 0.0
+            vta_c = float(c_data.get("vta_cierre", 0.0))
+            ana_c = int(c_data.get("ana_cierre", 0))
+            wea_demos = int(c_data.get("wea_demos", 0))
+            wea_c = int(c_data.get("wea_cierre", 0))
+            wea_conv_pct = (wea_c / wea_demos * 100.0) if wea_demos > 0 else 0.0
+            kid_c = int(c_data.get("kid_cierre", 0))
+            ck_c = int(c_data.get("ck_cierre", 0))
+
+            tot_cierre_hrs += h_p
+            tot_cierre_inter += inter
+            tot_cierre_conv += conv
+            tot_cierre_vta += vta_c
+            tot_cierre_ana += ana_c
+            tot_cierre_demos += wea_demos
+            tot_cierre_wea += wea_c
+            tot_cierre_kids += kid_c
+            tot_cierre_ck += ck_c
+
+            rows_cierre_colabs.append(
+                ft.Row([
+                    ft.Container(ft.Text(c_name, weight="bold", color="white", size=11), width=w3_colab),
+                    ft.Container(ft.Text(f"{h_p:.1f}", color="#AAAAAA", size=11), width=w3_hrs),
+                    make_input_field(str(inter), lambda e, cn=c_name: on_cierre_val_change(cn, "interacciones", e.control.value), width=w3_num),
+                    make_input_field(str(conv), lambda e, cn=c_name: on_cierre_val_change(cn, "convertidos", e.control.value), width=w3_num),
+                    ft.Container(ft.Text(f"{conv_pct:.1f}%", color="#00FF88", size=11), width=w3_pct),
+                    make_input_field(f"{vta_c:.2f}", lambda e, cn=c_name: on_cierre_val_change(cn, "vta_cierre", e.control.value, is_float=True), width=w3_vta),
+                    make_input_field(str(ana_c), lambda e, cn=c_name: on_cierre_val_change(cn, "ana_cierre", e.control.value), width=w3_num),
+                    make_input_field(str(wea_demos), lambda e, cn=c_name: on_cierre_val_change(cn, "wea_demos", e.control.value), width=w3_demos),
+                    make_input_field(str(wea_c), lambda e, cn=c_name: on_cierre_val_change(cn, "wea_cierre", e.control.value), width=w3_wea),
+                    ft.Container(ft.Text(f"{wea_conv_pct:.1f}%", color="#00FFFF", size=11), width=w3_pct),
+                    make_input_field(str(kid_c), lambda e, cn=c_name: on_cierre_val_change(cn, "kid_cierre", e.control.value), width=w3_kids),
+                    make_input_field(str(ck_c), lambda e, cn=c_name: on_cierre_val_change(cn, "ck_cierre", e.control.value), width=w3_ck),
+                ], spacing=6)
+            )
+
+        tot_conv_pct_gen = (tot_cierre_conv / tot_cierre_inter * 100.0) if tot_cierre_inter > 0 else 0.0
+        tot_wea_conv_gen = (tot_cierre_wea / tot_cierre_demos * 100.0) if tot_cierre_demos > 0 else 0.0
+        crec_conv_gen = tot_conv_pct_gen - (meta_conversion * 100.0)
+        wea_pct_real = (tot_cierre_wea / (tot_cierre_ana + tot_cierre_wea) * 100.0) if (tot_cierre_ana + tot_cierre_wea) > 0 else 0.0
+        kids_pct_real = (tot_cierre_kids / (tot_cierre_ana + tot_cierre_wea) * 100.0) if (tot_cierre_ana + tot_cierre_wea) > 0 else 0.0
+        ck_pct_str = f"{(tot_cierre_ck / (tot_cierre_ana + tot_cierre_wea) * 100.0):.1f}%" if (tot_cierre_ana + tot_cierre_wea) > 0 else "#¡DIV/0!"
+
+        # TABLA EXCEL CABECERA SUPERIOR AL CIERRE (FILAS 25-26 EXCEL OFICIAL)
+        ex_header = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Container(ft.Text("META", weight="bold", color="white", size=10), width=95, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("VENTA NETA", weight="bold", color="white", size=10), width=105, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("META UNIDADES", weight="bold", color="white", size=10), width=110, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("VENTA UNIDADES", weight="bold", color="white", size=10), width=105, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("CONVERSION (%)", weight="bold", color="white", size=10), width=105, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("CRECIMIENTO CONVERSION (%)", weight="bold", color="white", size=9), width=140, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("WEARABLES %", weight="bold", color="white", size=10), width=100, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("KIDS%", weight="bold", color="white", size=10), width=85, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text("CAREKITS%", weight="bold", color="white", size=10), width=95, alignment=ft.alignment.Alignment(0, 0)),
+                ], spacing=4),
+                ft.Row([
+                    ft.Container(ft.Text(f"${tot_meta_sem:,.0f}", color="#00FF88", weight="bold", size=11), width=95, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                    make_input_field(f"{h_state['vta_neta_sem']:.2f}", lambda e: on_param_change("vta_neta_sem", e.control.value), width=105),
+                    ft.Container(ft.Text("SEMANAL", color="#00FF88", weight="bold", size=11), width=110, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                    make_input_field(str(int(h_state['vta_unid_sem'])), lambda e: on_param_change("vta_unid_sem", e.control.value), width=105),
+                    ft.Container(ft.Text(f"{tot_conv_pct_gen:.1f}%", color="#00FF88", weight="bold", size=11), width=105, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text(f"{crec_conv_gen:.1f}%", color="#00FFFF", weight="bold", size=11), width=140, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text(f"{wea_pct_real:.1f}%", color="white", size=11), width=100, bgcolor="#1F2937", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text(f"{kids_pct_real:.1f}%", color="white", size=11), width=85, bgcolor="#1F2937", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text(ck_pct_str, color="#FF8C00" if "DIV" in ck_pct_str else "#00FF88", weight="bold", size=11), width=95, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                ], spacing=4)
+            ]),
+            padding=8, bgcolor="#111827", border_radius=8, border=ft.Border.all(1, "#374151")
+        )
+
+        tabla_cierre_header = ft.Row([
+            ft.Container(ft.Text("COLABORADOR", weight="bold", color="#00FFFF", size=11), width=w3_colab),
+            ft.Container(ft.Text("HORAS", weight="bold", color="white", size=11), width=w3_hrs),
+            ft.Container(ft.Text("INTERACCIONES", weight="bold", color="#00FFFF", size=11), width=w3_num),
+            ft.Container(ft.Text("CONVERTIDOS", weight="bold", color="#00FF88", size=11), width=w3_num),
+            ft.Container(ft.Text("CONVERSIÓN", weight="bold", color="#00FF88", size=11), width=w3_pct),
+            ft.Container(ft.Text("VENTA NETA", weight="bold", color="#00FF88", size=11), width=w3_vta),
+            ft.Container(ft.Text("ANÁLOGOS", weight="bold", color="#00FF88", size=11), width=w3_num),
+            ft.Container(ft.Text("DEMOS WEAR.", weight="bold", color="#00FFFF", size=11), width=w3_demos),
+            ft.Container(ft.Text("WEARABLES", weight="bold", color="#00FFFF", size=11), width=w3_wea),
+            ft.Container(ft.Text("CONV. WEAR.", weight="bold", color="#00FFFF", size=11), width=w3_pct),
+            ft.Container(ft.Text("KIDS", weight="bold", color="#00FFFF", size=11), width=w3_kids),
+            ft.Container(ft.Text("CAREKITS", weight="bold", color="#00FFFF", size=11), width=w3_ck),
+        ], spacing=6)
+
+        tabla_cierre_totales = ft.Row([
+            ft.Container(ft.Text("TOTAL", weight="bold", color="white", size=12), width=w3_colab),
+            ft.Container(ft.Text(f"{tot_cierre_hrs:.1f}", weight="bold", color="white", size=12), width=w3_hrs),
+            ft.Container(ft.Text(str(tot_cierre_inter), weight="bold", color="#00FFFF", size=12), width=w3_num),
+            ft.Container(ft.Text(str(tot_cierre_conv), weight="bold", color="#00FF88", size=12), width=w3_num),
+            ft.Container(ft.Text(f"{tot_conv_pct_gen:.1f}%", weight="bold", color="#00FF88", size=12), width=w3_pct),
+            ft.Container(ft.Text(f"${tot_cierre_vta:,.2f}", weight="bold", color="#00FF88", size=12), width=w3_vta),
+            ft.Container(ft.Text(str(tot_cierre_ana), weight="bold", color="#00FF88", size=12), width=w3_num),
+            ft.Container(ft.Text(str(tot_cierre_demos), weight="bold", color="#00FFFF", size=12), width=w3_demos),
+            ft.Container(ft.Text(str(tot_cierre_wea), weight="bold", color="#00FFFF", size=12), width=w3_wea),
+            ft.Container(ft.Text(f"{tot_wea_conv_gen:.1f}%", weight="bold", color="#00FFFF", size=12), width=w3_pct),
+            ft.Container(ft.Text(str(tot_cierre_kids), weight="bold", color="#00FFFF", size=12), width=w3_kids),
+            ft.Container(ft.Text(str(tot_cierre_ck), weight="bold", color="#00FFFF", size=12), width=w3_ck),
+        ], spacing=6)
+
+        tabla_cierre_content = ft.Column([
+            ft.Row([ex_header], scroll=ft.ScrollMode.AUTO),
+            ft.Divider(height=10, color="#374151"),
+            tabla_cierre_header,
+            ft.Column(rows_cierre_colabs, spacing=6),
+            ft.Divider(height=8, color="#374151"),
+            tabla_cierre_totales
+        ])
+
+        card_cierre_semanal = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.ANALYTICS_ROUNDED, color="#00FFFF", size=18),
+                    ft.Text(f"SEGUIMIENTO DE RESULTADOS AL CIERRE SEMANAL - SEMANA {g_meta['semana']} ({g_meta['tienda']})", color="white", weight="bold", size=13)
+                ], spacing=6),
+                ft.Divider(height=8, color="#374151"),
+                ft.Row([tabla_cierre_content], scroll=ft.ScrollMode.AUTO)
+            ]),
+            bgcolor="#0B0E17", padding=14, border_radius=12, border=ft.Border.all(1.5, "#00FFFF")
+        )
+
+        return ft.Container(
+            content=ft.Column([
+                grid_cards,
+                ft.Container(height=10),
+                card_tabla_colabs,
+                ft.Container(height=10),
+                card_cierre_semanal
+            ], spacing=10),
+            padding=5
+        )
 
     # --- NAVEGACIÓN Y CAMBIO DE PESTAÑAS ---
-    tab_content_container = ft.Container(content=build_sheet_ui("DOMINGO"))
+    tab_content_container = ft.Container()
 
     def select_tab(tab_name):
         user_states[user_id]['active_tab'][0] = tab_name
@@ -1618,6 +2030,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             btn.border = ft.Border.all(1.5, col_base if is_sel else "#374151")
 
         update_active_view()
+        try:
+            page.update()
+        except Exception:
+            try:
+                tab_navigation_bar.update()
+                tab_content_container.update()
+            except Exception:
+                pass
 
     # Construcción de botones de pestañas
     TABS_LIST = [
@@ -1872,6 +2292,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         border_radius=10,
         border=ft.Border.all(1.5, "#1F2937")
     )
+
+    update_active_view()
 
     return ft.Column([
         header_module,
