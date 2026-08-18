@@ -3215,7 +3215,7 @@ def get_ocr_reader():
     return GLOBAL_OCR_READER if GLOBAL_OCR_READER else None
 
 def parsear_ticket_texto_local(texto_raw):
-    """Parsea el texto OCR localmente usando expresiones regulares (0 tokens)."""
+    """Parsea el texto OCR localmente usando expresiones regulares avanzadas para tickets Sunglass Hut / Retail (0 tokens)."""
     import re
     datos = {
         "transaccion": "",
@@ -3227,33 +3227,77 @@ def parsear_ticket_texto_local(texto_raw):
         "notas": "Escaneado vía OCR Local",
         "items": []
     }
-    # Folio / Transacción
-    trx_m = re.search(r'(transacci[oó]n|trx|ticket|folio|nro|no\.?)\s*[:#]?\s*([A-Za-z0-9\-]+)', texto_raw, re.IGNORECASE)
+    
+    # 1. Transacción / Folio (soporta 'Transacción ; 1057997' o 'Transacción: 1057997')
+    trx_m = re.search(r'transacci[oó]n\s*[:;\.#]?\s*([0-9A-Za-z\-]+)', texto_raw, re.IGNORECASE)
     if trx_m:
-        datos["transaccion"] = trx_m.group(2)
-        
-    # Fecha YYYY-MM-DD o DD/MM/YYYY
-    fecha_m = re.search(r'(\d{2,4}[\/\-]\d{1,2}[\/\-]\d{2,4})', texto_raw)
+        datos["transaccion"] = trx_m.group(1).strip()
+    else:
+        trx_fall = re.search(r'\b(10\d{5,6})\b', texto_raw)
+        if trx_fall:
+            datos["transaccion"] = trx_fall.group(1)
+
+    # 2. Fecha (soporta 'Fecha ; 4/8/26' o '4/8/26')
+    fecha_m = re.search(r'fecha\s*[:;\.#]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})', texto_raw, re.IGNORECASE)
     if fecha_m:
-        datos["fecha_compra"] = fecha_m.group(1)
-        
-    # Vendedor
-    vend_m = re.search(r'(vendedor|atendi[oó]|cajero|vta)\s*[:#]?\s*([A-Za-z0-9\s]+)', texto_raw, re.IGNORECASE)
-    if vend_m:
-        datos["vendedor"] = vend_m.group(2).strip()[:40]
-        
-    # Precios y UPCs
-    precios = re.findall(r'\$?\s*(\d{1,6}\.\d{2})', texto_raw)
-    if precios:
-        nums = [float(p) for p in precios]
-        datos["precio"] = max(nums)
-        
-    upcs = re.findall(r'\b(\d{11,14})\b', texto_raw)
-    if upcs:
-        datos["upc"] = ", ".join(list(set(upcs)))
-        for u in set(upcs):
-            datos["items"].append({"upc": u, "modelo": "Lentes / Artículo", "precio": datos["precio"]})
-            
+        datos["fecha_compra"] = fecha_m.group(1).strip()
+    else:
+        fecha_fall = re.search(r'(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})', texto_raw)
+        if fecha_fall:
+            datos["fecha_compra"] = fecha_fall.group(1)
+
+    # 3. Vendedor (soporta 'MX142471 (Alejandro)' o 'Cajero; Alejandro MX142471')
+    vend_code = re.search(r'\b(MX\d{5,7}\s*\(?[A-Za-z\s]+\)?)\b', texto_raw, re.IGNORECASE)
+    if vend_code:
+        datos["vendedor"] = vend_code.group(1).strip()
+    else:
+        vend_m = re.search(r'(vendedor|cajero|atendi[oó])\s*[:;\.#]?\s*\n?\s*([A-Za-z0-9\s\(\)]+)', texto_raw, re.IGNORECASE)
+        if vend_m:
+            datos["vendedor"] = vend_m.group(2).strip().split('\n')[0][:50]
+
+    # 4. Cliente (soporta 'Cliente: Rebeca AguiIara' o 'Cliente ; ...')
+    cli_m = re.search(r'cliente\s*[:;\.#]?\s*([A-Za-z\s]+)', texto_raw, re.IGNORECASE)
+    if cli_m:
+        raw_cli = cli_m.group(1).strip().split('\n')[0][:60]
+        # Corregir errores OCR comunes (ej: AguiIara -> Aguilera)
+        raw_cli = raw_cli.replace("AguiIara", "Aguilera").replace("AguiJara", "Aguilera")
+        datos["nombre_cliente"] = raw_cli
+
+    # 5. UPCs (códigos EAN/UPC de 12 a 14 dígitos, ej: 8056262453858)
+    upcs_found = re.findall(r'\b(80\d{10,12}|0\d{11,13}|\d{12,14})\b', texto_raw)
+    valid_upcs = [u.replace('.', '').strip() for u in set(upcs_found) if len(u.replace('.', '').strip()) >= 12]
+    if valid_upcs:
+        datos["upc"] = ", ".join(valid_upcs)
+
+    # 6. Precios y Total (ej: 3,859.00)
+    precios_found = re.findall(r'\$?\s*(\d{1,3}(?:[\,\.]\d{3})*(?:[\,\.]\d{2}))', texto_raw)
+    if precios_found:
+        nums = []
+        for p in precios_found:
+            try:
+                clean_p = p.replace(',', '.')
+                parts = clean_p.split('.')
+                if len(parts) > 2:
+                    clean_p = "".join(parts[:-1]) + "." + parts[-1]
+                nums.append(float(clean_p))
+            except Exception: pass
+        if nums:
+            datos["precio"] = max(nums)
+
+    # 7. Modelos de Lentes (ej: RB3758 003/2v 56/16)
+    modelos_found = re.findall(r'\b((?:RB|OO|PO|0RB|0OO|0PO|0EA|EA|VO|0VO)\d{3,4}[A-Za-z0-9\/\-\s]{3,20})\b', texto_raw, re.IGNORECASE)
+    items_list = []
+    if valid_upcs:
+        for idx, u in enumerate(valid_upcs):
+            m_text = modelos_found[idx].strip() if idx < len(modelos_found) else "Lentes Sunglass Hut"
+            items_list.append({"upc": u, "modelo": m_text, "precio": datos["precio"]})
+    elif modelos_found:
+        items_list.append({"upc": "805" + datos["transaccion"], "modelo": modelos_found[0].strip(), "precio": datos["precio"]})
+
+    datos["items"] = items_list
+    if modelos_found:
+        datos["notas"] = f"Modelo: {modelos_found[0].strip()}"
+
     return datos
 
 def procesar_ticket_con_gemini(imagen_bytes):
