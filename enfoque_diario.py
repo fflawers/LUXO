@@ -1986,6 +1986,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         
         tot_trafico_sem = 0
         tot_transac_sem = 0
+        tot_convertidos_sem = 0
+        tot_interacciones_sem = 0
         tot_horas_sem = 0.0
         
         dias_calc = {}
@@ -1994,7 +1996,13 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             dias_calc[d] = c
             tot_trafico_sem += c.get("trafico", 0)
             tot_transac_sem += c.get("transacciones", 0)
+            tot_convertidos_sem += c.get("tot_convertidos", 0)
+            tot_interacciones_sem += c.get("tot_interacciones", 0)
             tot_horas_sem += c.get("tot_horas", 0.0)
+
+        clientes_totales = tot_interacciones_sem if tot_interacciones_sem > 0 else tot_trafico_sem
+        clientes_convertidos = tot_convertidos_sem if tot_convertidos_sem > 0 else tot_transac_sem
+        conversion_real_sem_pct = (clientes_convertidos * 100.0 / clientes_totales) if clientes_totales > 0 else 0.0
 
         meta_conversion = float(h_state.get("meta_conversion", 0.16))
         meta_transacciones_sem = int(tot_trafico_sem * meta_conversion)
@@ -2010,9 +2018,18 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         ck_pct = float(h_state.get("ck_pct", 0.30))
         unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
 
-        comply_sem = float(h_state.get("comply_sem", 22519.0))
-        atv_sem = float(h_state.get("atv_sem", 7500.0))
-        aur_sem = float(h_state.get("aur_sem", 4617.0))
+        comply_sem = tot_meta_sem
+        atv_sem = sum(s_state[d].get("atv_dia", 3620.0) for d in DIAS) / 7.0
+        aur_sem = sum(s_state[d].get("aur_dia", 3620.0) for d in DIAS) / 7.0
+
+        wea_pct = float(h_state.get("wea_pct", 0.15))
+        unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 1
+
+        kids_pct = float(h_state.get("kids_pct", 0.05))
+        unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if total_unidades_sem > 0 else 1
+
+        ck_pct = float(h_state.get("ck_pct", 0.30))
+        unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
 
         # Callbacks para guardar cambios al editar cuadros blancos de entrada
         def on_param_change(field_key, val_str, is_pct=False):
@@ -2067,7 +2084,9 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Icon(ft.Icons.SHOW_CHART_ROUNDED, color="#00FF88", size=16),
                     ft.Text("CONVERSIÓN SEMANAL", color="#00FF88", weight="bold", size=12)
                 ]),
-                ft.Row([ft.Text("Tráfico Esperado:", color="#aaaaaa", size=11), ft.Text(str(tot_trafico_sem), color="white", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Clientes Totales (Tráfico):", color="#aaaaaa", size=11), ft.Text(str(clientes_totales), color="white", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Clientes Convertidos:", color="#aaaaaa", size=11), ft.Text(str(clientes_convertidos), color="#00FF88", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("Conversión Semanal (Auto):", color="#aaaaaa", size=11), ft.Text(f"{conversion_real_sem_pct:.1f}%", color="#00FFFF", weight="bold", size=12)], alignment="spaceBetween"),
                 ft.Row([
                     ft.Text("Meta Conversión:", color="#aaaaaa", size=11),
                     make_input_field(f"{meta_conversion*100:.1f}", lambda e: on_param_change("meta_conversion", e.control.value, is_pct=True), width=70, suffix="%")
@@ -2098,18 +2117,9 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Icon(ft.Icons.VERIFIED_ROUNDED, color="#FF8C00", size=16),
                     ft.Text("COMPLY E INDICADORES", color="#FF8C00", weight="bold", size=12)
                 ]),
-                ft.Row([
-                    ft.Text("Comply Semanal:", color="#aaaaaa", size=11),
-                    make_input_field(f"{comply_sem:.2f}", lambda e: on_param_change("comply_sem", e.control.value), width=95)
-                ], alignment="spaceBetween"),
-                ft.Row([
-                    ft.Text("ATV Semanal:", color="#aaaaaa", size=11),
-                    make_input_field(f"{atv_sem:.2f}", lambda e: on_param_change("atv_sem", e.control.value), width=90)
-                ], alignment="spaceBetween"),
-                ft.Row([
-                    ft.Text("AUR Semanal:", color="#aaaaaa", size=11),
-                    make_input_field(f"{aur_sem:.2f}", lambda e: on_param_change("aur_sem", e.control.value), width=90)
-                ], alignment="spaceBetween"),
+                ft.Row([ft.Text("Comply Semanal (Auto):", color="#aaaaaa", size=11), ft.Text(f"${comply_sem:,.2f}", color="#00FF88", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("ATV Semanal (Auto):", color="#aaaaaa", size=11), ft.Text(f"${atv_sem:,.2f}", color="#00FFFF", weight="bold", size=11)], alignment="spaceBetween"),
+                ft.Row([ft.Text("AUR Semanal (Auto):", color="#aaaaaa", size=11), ft.Text(f"${aur_sem:,.2f}", color="#00FFFF", weight="bold", size=11)], alignment="spaceBetween"),
             ], spacing=6),
             bgcolor="#111827", padding=12, border_radius=10, border=ft.Border.all(1.5, "#FF8C00"), width=card_w
         )
