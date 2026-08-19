@@ -2372,7 +2372,18 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     # 1. Selector de Semana (1 a 52)
     def on_semana_change(e):
+        # 1. Guardar primero los datos de la semana que se estaba visualizando
+        guardar_semana_historico(user_id)
         n_sem = e.control.value
+
+        # 2. Desvincular controles antiguos del DOM del navegador para forzar renderizado limpio
+        tab_content_container.content = None
+        try:
+            page.update()
+        except Exception:
+            pass
+
+        # 3. Mostrar indicador visual de carga
         tab_content_container.content = ft.Container(
             content=ft.Row([
                 ft.ProgressRing(color="#00FFFF", size=24),
@@ -2386,14 +2397,16 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         except Exception:
             pass
 
-        guardar_semana_historico(user_id)
+        # 4. Cargar el estado guardado de la nueva semana seleccionada
         cargar_semana_historico(user_id, n_sem)
         tab_view_cache.clear()
         actualizar_etiquetas_pestañas()
         guardar_estado_persistente(user_id)
+
+        # 5. Reconstruir controles UI totalmente frescos
         update_active_view()
         if page:
-            snack = ft.SnackBar(ft.Text(f"📅 Semana {n_sem} cargada.", color="white"), bgcolor="#059669")
+            snack = ft.SnackBar(ft.Text(f"📅 Semana {n_sem} cargada con éxito.", color="white"), bgcolor="#059669")
             page.overlay.append(snack)
             snack.open = True
             try:
