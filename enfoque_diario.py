@@ -221,10 +221,19 @@ def _db_save_worker(user_id, json_str, sem_str, tienda_id):
 def guardar_estado_persistente(user_id):
     try:
         if user_id not in user_states: return
+        g_meta = user_states[user_id]["global_meta"]
+        s_state = user_states[user_id]["store_state"]
+        h_state = user_states[user_id]["historico_semanal_state"]
+
+        sincronizar_baselines_domingo(s_state)
+        key = f"S{g_meta.get('semana', '30')}_{g_meta.get('num_tienda', '0')}_{g_meta.get('tienda', '')}"
+        import copy
+        h_state[key] = copy.deepcopy(s_state)
+
         payload = {
-            "global_meta": user_states[user_id]["global_meta"],
-            "store_state": user_states[user_id]["store_state"],
-            "historico_semanal_state": user_states[user_id]["historico_semanal_state"],
+            "global_meta": g_meta,
+            "store_state": s_state,
+            "historico_semanal_state": h_state,
             "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
         }
         json_str = json.dumps(payload, ensure_ascii=False)
