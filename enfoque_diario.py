@@ -24,6 +24,23 @@ except ImportError:
 
 BASE_PATH = os.path.dirname(__file__)
 
+import mysql.connector
+from dotenv import load_dotenv
+load_dotenv()
+
+def conectar_db():
+    try:
+        return mysql.connector.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'sgh_portal'),
+            port=int(os.getenv('DB_PORT', 3306))
+        )
+    except Exception as ex:
+        print("Notice conectar_db in enfoque_diario:", ex)
+        return None
+
 
 # --- ESTADO GLOBAL Y MATRIZ DE DATOS ---
 DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"]
@@ -65,6 +82,26 @@ MAPEO_TIENDAS_SGH = {
     "108024": "Plaza Satélite"
 }
 MAPEO_NOMBRE_A_NUMERO_SGH = {v.upper(): k for k, v in MAPEO_TIENDAS_SGH.items()}
+
+def cargar_mapeo_tiendas_db():
+    db = conectar_db()
+    if db:
+        try:
+            cur = db.cursor(dictionary=True)
+            cur.execute("SELECT Usuario, Tienda FROM usuarios WHERE Usuario LIKE 'sgh%' AND Tienda IS NOT NULL AND Tienda != ''")
+            for row in cur.fetchall():
+                u_str = str(row["Usuario"]).lower().replace("sgh", "").strip()
+                t_str = str(row["Tienda"]).strip()
+                if u_str and t_str:
+                    MAPEO_TIENDAS_SGH[u_str] = t_str
+                    MAPEO_NOMBRE_A_NUMERO_SGH[t_str.upper()] = u_str
+            db.close()
+        except Exception as ex:
+            print("Notice cargar_mapeo_tiendas_db:", ex)
+
+try:
+    cargar_mapeo_tiendas_db()
+except Exception: pass
 
 def default_global_meta():
     return {
@@ -122,6 +159,24 @@ def init_user_state(user_id):
         cargar_estado_persistente(user_id)
 
 import json
+import threading
+
+def _db_save_worker(user_id, json_str, sem_str, tienda_id):
+    db = conectar_db()
+    if db:
+        try:
+            cursor = db.cursor()
+            cursor.execute("""
+            INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE tienda_id=VALUES(tienda_id), estado_json=VALUES(estado_json), fecha_actualizacion=NOW()
+            """, (str(user_id), tienda_id, sem_str, json_str))
+            db.commit()
+        except Exception as ex_db:
+            print(f"Notice DB save enfoque_diario for user {user_id}:", ex_db)
+        finally:
+            try: db.close()
+            except: pass
 
 def guardar_estado_persistente(user_id):
     try:
@@ -129,29 +184,81 @@ def guardar_estado_persistente(user_id):
         payload = {
             "global_meta": user_states[user_id]["global_meta"],
             "store_state": user_states[user_id]["store_state"],
-            "historico_semanal_state": user_states[user_id]["historico_semanal_state"]
+            "historico_semanal_state": user_states[user_id]["historico_semanal_state"],
+            "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
         }
+        json_str = json.dumps(payload, ensure_ascii=False)
+
+        # 1. Guardar en archivo JSON local de respaldo (rápido en disco)
         with open(get_state_file(user_id), "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=4)
+            f.write(json_str)
+
+        # 2. Guardar en MySQL en segundo plano (Thread para NO congelar ni alentar la interfaz)
+        sem_str = str(user_states[user_id]["global_meta"].get("semana", "34"))
+        tienda_id = int(user_states[user_id]["global_meta"].get("num_tienda", 0))
+        t = threading.Thread(target=_db_save_worker, args=(user_id, json_str, sem_str, tienda_id), daemon=True)
+        t.start()
     except Exception as ex:
         print(f"Error al guardar estado de enfoque diario para {user_id}:", ex)
 
 def cargar_estado_persistente(user_id):
+    loaded_from_db = False
     try:
-        sf = get_state_file(user_id)
-        if os.path.exists(sf):
-            with open(sf, "r", encoding="utf-8") as f:
-                payload = json.load(f)
-                if "store_state" in payload:
-                    for d in DIAS:
-                        if d in payload["store_state"]:
-                            user_states[user_id]["store_state"][d].update(payload["store_state"][d])
-                if "global_meta" in payload:
-                    user_states[user_id]["global_meta"].update(payload["global_meta"])
-                if "historico_semanal_state" in payload:
-                    user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
-        else:
-            guardar_estado_persistente(user_id)
+        # 1. Intentar cargar prioritariamente desde MySQL
+        db = conectar_db()
+        if db:
+            try:
+                cursor = db.cursor(dictionary=True)
+                sem_str = str(user_states[user_id]["global_meta"].get("semana", "34"))
+                cursor.execute(
+                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                    (str(user_id), sem_str)
+                )
+                row = cursor.fetchone()
+                if not row:
+                    cursor.execute(
+                        "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s ORDER BY id DESC LIMIT 1",
+                        (str(user_id),)
+                    )
+                    row = cursor.fetchone()
+                if row and row.get("estado_json"):
+                    payload = json.loads(row["estado_json"])
+                    if "store_state" in payload:
+                        for d in DIAS:
+                            if d in payload["store_state"]:
+                                user_states[user_id]["store_state"][d].update(payload["store_state"][d])
+                    if "global_meta" in payload:
+                        user_states[user_id]["global_meta"].update(payload["global_meta"])
+                    if "historico_semanal_state" in payload:
+                        user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+                    if "active_tab" in payload:
+                        user_states[user_id]["active_tab"] = payload["active_tab"]
+                    loaded_from_db = True
+                    print(f"✅ Estado de Enfoque Diario para usuario {user_id} cargado desde MySQL con éxito.")
+            except Exception as ex_db:
+                print(f"Notice DB load enfoque_diario for user {user_id}:", ex_db)
+            finally:
+                try: db.close()
+                except: pass
+
+        # 2. Respaldo: Cargar desde archivo JSON local si no estaba en MySQL
+        if not loaded_from_db:
+            sf = get_state_file(user_id)
+            if os.path.exists(sf):
+                with open(sf, "r", encoding="utf-8") as f:
+                    payload = json.load(f)
+                    if "store_state" in payload:
+                        for d in DIAS:
+                            if d in payload["store_state"]:
+                                user_states[user_id]["store_state"][d].update(payload["store_state"][d])
+                    if "global_meta" in payload:
+                        user_states[user_id]["global_meta"].update(payload["global_meta"])
+                    if "historico_semanal_state" in payload:
+                        user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+                    if "active_tab" in payload:
+                        user_states[user_id]["active_tab"] = payload["active_tab"]
+            else:
+                guardar_estado_persistente(user_id)
     except Exception as ex:
         print(f"Error al cargar estado de enfoque diario para {user_id}:", ex)
 
@@ -184,7 +291,6 @@ def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None)
     db_names = []
     try:
         target_t = tienda_name or g_meta.get("tienda", "Vallejo")
-        from main import conectar_db
         db = conectar_db()
         if db:
             cursor = db.cursor(dictionary=True)
@@ -371,140 +477,101 @@ def calcular_dia(d_name, user_id):
 # --- GENERADOR DE EXCEL OFICIAL SGH (.xlsx) ---
 def generar_excel_enfoque(d_name, user_id, page=None):
     try:
-        import openpyxl
         d_real = "DOMINGO" if d_name == "SEMANAL" else d_name
         calc = calcular_dia(d_real, user_id)
         g_meta = user_states[user_id]["global_meta"]
         s_state = user_states[user_id]["store_state"]
-        h_state = user_states[user_id]["historico_semanal_state"]
-        data = s_state.get(d_real, s_state["DOMINGO"])
 
-        template_path = os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx")
+        template_path = os.path.abspath(os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx"))
         if not os.path.exists(template_path):
-            template_path = os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx")
-        if not os.path.exists(template_path):
-            downloads_template = os.path.join(os.path.expanduser("~"), "Downloads", "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx")
-            if os.path.exists(downloads_template):
-                template_path = downloads_template
-
-        if os.path.exists(template_path):
-            wb = openpyxl.load_workbook(template_path)
-            for d in DIAS:
-                if d in wb.sheetnames:
-                    ws = wb[d]
-                    d_data = s_state[d]
-
-                    ws['I1'] = int(g_meta['semana']) if str(g_meta['semana']).isdigit() else g_meta['semana']
-                    ws['K1'] = datetime.datetime.now()
-                    ws['M1'] = g_meta['tienda']
-
-                    ws['C5'] = d_data['meta_diaria']
-                    ws['F5'] = d_data['trafico_esperado']
-                    ws['F6'] = d_data['conversion_target']
-                    ws['E9'] = d_data['vta_ly']
-                    ws['I5'] = d_data['wearables_pct']
-                    ws['I6'] = d_data['kids_pct']
-                    ws['I7'] = d_data['carekits_pct']
-
-                    for i, val in enumerate(d_data['trafico_bloques']):
-                        col_letter = ['C', 'D', 'E', 'F', 'G'][i]
-                        ws[f'{col_letter}12'] = val
-
-                    ws['P7'] = d_data.get('atv_dia', 7500.0)
-                    ws['P9'] = d_data.get('aur_dia', 4617.0)
-                    ws['P13'] = d_data.get('atv_mtd', 6578.0)
-                    ws['P15'] = d_data.get('aur_mtd', 4312.0)
-
-                    for i, c in enumerate(d_data['colaboradores']):
-                        r_idx = 17 + i
-                        if r_idx <= 24:
-                            ws[f'B{r_idx}'] = c['nombre']
-                            ws[f'D{r_idx}'] = c['horas']
-                            if c.get("meta_ana", "") != "": ws[f'F{r_idx}'] = int(c["meta_ana"])
-                            if c.get("meta_wea", "") != "": ws[f'G{r_idx}'] = int(c["meta_wea"])
-                            if c.get("meta_kid", "") != "": ws[f'H{r_idx}'] = int(c["meta_kid"])
-                            if c.get("meta_ck", "") != "": ws[f'I{r_idx}'] = int(c["meta_ck"])
-                            
-                        # CÓMO VAMOS (Colaboradores, a partir de fila 33)
-                        r_cv_idx = 33 + i
-                        if r_cv_idx <= 40:
-                            ws[f'E{r_cv_idx}'] = c.get('interacciones', 0)
-                            ws[f'G{r_cv_idx}'] = c.get('convertidos', 0)
-                            ws[f'J{r_cv_idx}'] = c.get('vta_cierre', 0.0)
-                            ws[f'K{r_cv_idx}'] = c.get('ana_cierre', 0)
-                            ws[f'L{r_cv_idx}'] = c.get('wea_demos', 0)
-                            ws[f'M{r_cv_idx}'] = c.get('wea_cierre', 0)
-                            ws[f'O{r_cv_idx}'] = c.get('kid_cierre', 0)
-                            ws[f'P{r_cv_idx}'] = c.get('ck_cierre', 0)
-
-                    # CÓMO VAMOS (Globales)
-                    ws['E30'] = d_data.get('venta_neta_dia', 0.0)
-                    ws['G30'] = d_data.get('venta_unidades_dia', 0)
-        else:
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = f"Enfoque {d_name}"
-            ws['A1'] = "SUNGLASS HUT (SGH) - ENFOQUE DIARIO 2026"
-            ws['A2'] = f"DÍA: {d_name} | SEMANA: {g_meta['semana']} | TIENDA: {g_meta['tienda']}"
-            ws['A4'] = f"Meta Diaria: ${calc['meta_diaria']:,.2f}"
+            template_path = os.path.abspath(os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx"))
 
         excel_filename = f"Enfoque_Diario_{d_name}_SGH_2026.xlsx"
-        uploads_dir = os.path.join(BASE_PATH, "uploads")
+        uploads_dir = os.path.abspath(os.path.join(BASE_PATH, "uploads"))
         os.makedirs(uploads_dir, exist_ok=True)
-        web_excel_path = os.path.join(uploads_dir, excel_filename)
-        temp_saved_path = web_excel_path + ".tmp"
-        wb.save(temp_saved_path)
-        try:
-            wb.close()
-        except Exception:
-            pass
+        web_excel_path = os.path.abspath(os.path.join(uploads_dir, excel_filename))
 
-        # Realizar el cosido (stitching) para preservar las relaciones de dibujo originales y evitar duplicación de imágenes
-        if os.path.exists(template_path) and os.path.exists(temp_saved_path):
-            import zipfile
-            import re
+        if os.path.exists(template_path):
+            import shutil
+            shutil.copy(template_path, web_excel_path)
+
             try:
-                with zipfile.ZipFile(template_path, 'r') as z_orig, \
-                     zipfile.ZipFile(temp_saved_path, 'r') as z_temp, \
-                     zipfile.ZipFile(web_excel_path, 'w', zipfile.ZIP_DEFLATED) as z_final:
-                    
-                    orig_names = z_orig.namelist()
-                    temp_names = z_temp.namelist()
-                    
-                    copied_from_temp = [
-                        "xl/styles.xml",
-                        "xl/sharedStrings.xml",
-                        "xl/workbook.xml"
-                    ]
-                    
-                    for name in orig_names:
-                        is_worksheet = re.match(r"^xl/worksheets/sheet\d+\.xml$", name)
-                        if is_worksheet:
-                            if name in temp_names:
-                                z_final.writestr(name, z_temp.read(name))
-                            else:
-                                z_final.writestr(name, z_orig.read(name))
-                        elif name in copied_from_temp:
-                            if name in temp_names:
-                                z_final.writestr(name, z_temp.read(name))
-                            else:
-                                z_final.writestr(name, z_orig.read(name))
-                        else:
-                            z_final.writestr(name, z_orig.read(name))
-                
-                if os.path.exists(temp_saved_path):
-                    os.remove(temp_saved_path)
-            except Exception as e_stitch:
-                print("Error durante el stitching del Excel:", e_stitch)
-                if os.path.exists(temp_saved_path):
-                    if os.path.exists(web_excel_path):
-                        os.remove(web_excel_path)
-                    os.rename(temp_saved_path, web_excel_path)
-        else:
-            if os.path.exists(temp_saved_path):
-                if os.path.exists(web_excel_path):
-                    os.remove(web_excel_path)
-                os.rename(temp_saved_path, web_excel_path)
+                import win32com.client
+                excel = win32com.client.Dispatch("Excel.Application")
+                excel.Visible = False
+                excel.DisplayAlerts = False
+                excel.ScreenUpdating = False
+
+                wb = excel.Workbooks.Open(web_excel_path)
+                ws_names = [ws.Name for ws in wb.Worksheets]
+
+                for d in DIAS:
+                    if d in ws_names:
+                        ws = wb.Worksheets(d)
+                        d_data = s_state[d]
+
+                        ws.Range('I1').Value = int(g_meta['semana']) if str(g_meta['semana']).isdigit() else g_meta['semana']
+                        ws.Range('M1').Value = g_meta['tienda']
+
+                        ws.Range('C5').Value = d_data['meta_diaria']
+                        ws.Range('F5').Value = d_data['trafico_esperado']
+                        ws.Range('F6').Value = d_data['conversion_target']
+                        ws.Range('E9').Value = d_data['vta_ly']
+                        ws.Range('I5').Value = d_data['wearables_pct']
+                        ws.Range('I6').Value = d_data['kids_pct']
+                        ws.Range('I7').Value = d_data['carekits_pct']
+
+                        for i, val in enumerate(d_data['trafico_bloques']):
+                            col_letter = ['C', 'D', 'E', 'F', 'G'][i]
+                            ws.Range(f'{col_letter}12').Value = val
+
+                        ws.Range('P7').Value = d_data.get('atv_dia', 7500.0)
+                        ws.Range('P9').Value = d_data.get('aur_dia', 4617.0)
+                        ws.Range('P13').Value = d_data.get('atv_mtd', 6578.0)
+                        ws.Range('P15').Value = d_data.get('aur_mtd', 4312.0)
+
+                        for i, c in enumerate(d_data['colaboradores']):
+                            r_idx = 17 + i
+                            if r_idx <= 24:
+                                ws.Range(f'B{r_idx}').Value = c['nombre']
+                                ws.Range(f'D{r_idx}').Value = c['horas']
+                                if c.get("meta_ana", "") != "": ws.Range(f'F{r_idx}').Value = int(c["meta_ana"])
+                                if c.get("meta_wea", "") != "": ws.Range(f'G{r_idx}').Value = int(c["meta_wea"])
+                                if c.get("meta_kid", "") != "": ws.Range(f'H{r_idx}').Value = int(c["meta_kid"])
+                                if c.get("meta_ck", "") != "": ws.Range(f'I{r_idx}').Value = int(c["meta_ck"])
+                                
+                            r_cv_idx = 33 + i
+                            if r_cv_idx <= 40:
+                                ws.Range(f'E{r_cv_idx}').Value = c.get('interacciones', 0)
+                                ws.Range(f'G{r_cv_idx}').Value = c.get('convertidos', 0)
+                                ws.Range(f'J{r_cv_idx}').Value = c.get('vta_cierre', 0.0)
+                                ws.Range(f'K{r_cv_idx}').Value = c.get('ana_cierre', 0)
+                                ws.Range(f'L{r_cv_idx}').Value = c.get('wea_demos', 0)
+                                ws.Range(f'M{r_cv_idx}').Value = c.get('wea_cierre', 0)
+                                ws.Range(f'O{r_cv_idx}').Value = c.get('kid_cierre', 0)
+                                ws.Range(f'P{r_cv_idx}').Value = c.get('ck_cierre', 0)
+
+                        ws.Range('E30').Value = d_data.get('venta_neta_dia', 0.0)
+                        ws.Range('G30').Value = d_data.get('venta_unidades_dia', 0)
+
+                wb.Save()
+                wb.Close(False)
+                excel.Quit()
+                print(f"✅ Excel generado exitosamente vía win32com ({os.path.getsize(web_excel_path)/(1024*1024):.2f} MB)")
+                return web_excel_path
+            except Exception as ex_com:
+                print("Notice win32com excel save fallback:", ex_com)
+                import openpyxl
+                wb = openpyxl.load_workbook(template_path)
+                ws = wb[d_real if d_real in wb.sheetnames else "DOMINGO"]
+                ws['C5'] = s_state.get(d_real, {}).get('meta_diaria', 0.0)
+                wb.save(web_excel_path)
+                wb.close()
+                return web_excel_path
+        return web_excel_path
+    except Exception as ex:
+        print("Error en generar_excel_enfoque:", ex)
+        return None
 
         home_dir = os.path.expanduser("~")
         possible_desktops = [
@@ -548,41 +615,40 @@ def generar_excel_enfoque(d_name, user_id, page=None):
 
 # --- GENERADOR DE REPORTES EN PDF ---
 def generar_pdf_enfoque_file(d_name, user_id):
-    if not REPORTLAB_AVAILABLE:
-        return None
     try:
         d_real = "DOMINGO" if d_name == "SEMANAL" else d_name
-        calc = calcular_dia(d_real, user_id)
-        g_meta = user_states[user_id]["global_meta"]
-        s_state = user_states[user_id]["store_state"]
-        data = s_state.get(d_real, s_state["DOMINGO"])
+        excel_path = generar_excel_enfoque(d_real, user_id)
 
         pdf_filename = f"Enfoque_Diario_{d_name}_SGH_2026.pdf"
-
         uploads_dir = os.path.join(BASE_PATH, "uploads")
         os.makedirs(uploads_dir, exist_ok=True)
         web_pdf_path = os.path.join(uploads_dir, pdf_filename)
 
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            'TitleStyle', parent=styles['Heading1'], fontSize=16,
-            textColor=colors.HexColor('#000000'), fontName='Helvetica-Bold', spaceAfter=4
-        )
-        sub_title_style = ParagraphStyle(
-            'SubTitleStyle', parent=styles['Normal'], fontSize=10,
-            textColor=colors.HexColor('#333333'), fontName='Helvetica-Bold', spaceAfter=8
-        )
-        h2_style = ParagraphStyle(
-            'H2Style', parent=styles['Heading2'], fontSize=11,
-            textColor=colors.HexColor('#000000'), fontName='Helvetica-Bold', spaceBefore=8, spaceAfter=4
-        )
-        normal_style = ParagraphStyle(
-            'NormalStyle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#111111')
-        )
-        black_hdr_style = ParagraphStyle(
-            'BlackHdrStyle', parent=styles['Normal'], fontSize=8,
-            textColor=colors.HexColor('#FFFFFF'), fontName='Helvetica-Bold'
-        )
+        abs_excel = os.path.abspath(excel_path)
+        abs_pdf = os.path.abspath(web_pdf_path)
+
+        # Conversión directa del Excel Oficial a PDF via Windows Excel COM
+        try:
+            import win32com.client
+            excel = win32com.client.Dispatch("Excel.Application")
+            excel.Visible = False
+            excel.DisplayAlerts = False
+            wb = excel.Workbooks.Open(abs_excel)
+            sheet_name = d_real if d_real in [ws.Name for ws in wb.Worksheets] else "DOMINGO"
+            ws = wb.Worksheets(sheet_name)
+            ws.ExportAsFixedFormat(0, abs_pdf)
+            wb.Close(False)
+            excel.Quit()
+            if os.path.exists(abs_pdf):
+                print(f"✅ PDF convertido idéntico desde Excel oficial a través de win32com: {abs_pdf}")
+                return abs_pdf
+        except Exception as ex_com:
+            print("Notice win32com PDF conversion:", ex_com)
+
+        return web_pdf_path if os.path.exists(web_pdf_path) else None
+    except Exception as ex_gen:
+        print("Error en generar_pdf_enfoque_file:", ex_gen)
+        return None
 
         story = []
         story.append(Paragraph(f"<b>SUNGLASS HUT (SGH) - ENFOQUE DIARIO 2026</b>", title_style))
@@ -757,10 +823,22 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     user_id = session_user.get("user", "invitado")
     init_user_state(user_id)
     g_meta = user_states[user_id]["global_meta"]
+
+    # Sincronizar dinámicamente tienda y número de tienda según el usuario en sesión
+    if isinstance(session_user, dict):
+        s_tienda = session_user.get("tienda")
+        s_usuario = str(session_user.get("usuario", "")).lower()
+        if s_tienda and s_tienda != "Tienda Luxo":
+            g_meta["tienda"] = s_tienda
+            if s_usuario.startswith("sgh") and len(s_usuario) > 3:
+                g_meta["num_tienda"] = s_usuario.replace("sgh", "")
+            elif s_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
+                g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[s_tienda.upper()]
     s_state = user_states[user_id]["store_state"]
     h_state = user_states[user_id]["historico_semanal_state"]
     
-    sincronizar_colaboradores_db(session_user, g_meta["tienda"], user_id)
+    # Sincronización asíncrona de colaboradores para NO bloquear el cambio de pestaña
+    threading.Thread(target=sincronizar_colaboradores_db, args=(session_user, g_meta["tienda"], user_id), daemon=True).start()
 
     def generar_pdf_enfoque(target_day=None):
         if not REPORTLAB_AVAILABLE:
@@ -832,19 +910,23 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             print("Error en generar_pdf_enfoque:", ex)
 
     # --- COMPONENTES VISUALES ---
+    tab_view_cache = {}
 
     # Re-renderizador del contenedor activo
     def update_active_view():
         curr_tab = user_states[user_id]['active_tab'][0]
-        if curr_tab == "SEMANAL":
-            tab_content_container.content = build_semanal_ui()
-        elif curr_tab.startswith("PLAN.ACCIÓN_"):
-            d_code = curr_tab.replace("PLAN.ACCIÓN_", "")
-            code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
-            d_real = code_map.get(d_code, "DOMINGO")
-            tab_content_container.content = build_plan_accion_ui(d_real)
-        else:
-            tab_content_container.content = build_sheet_ui(curr_tab)
+        if curr_tab not in tab_view_cache:
+            if curr_tab == "SEMANAL":
+                tab_view_cache[curr_tab] = build_semanal_ui()
+            elif curr_tab.startswith("PLAN.ACCIÓN_"):
+                d_code = curr_tab.replace("PLAN.ACCIÓN_", "")
+                code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
+                d_real = code_map.get(d_code, "DOMINGO")
+                tab_view_cache[curr_tab] = build_plan_accion_ui(d_real)
+            else:
+                tab_view_cache[curr_tab] = build_sheet_ui(curr_tab)
+
+        tab_content_container.content = tab_view_cache[curr_tab]
             
         try:
             if curr_tab == "SEMANAL":
@@ -878,11 +960,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     def build_sheet_ui(d_name):
         calc = calcular_dia(d_name, user_id)
         data = s_state[d_name]
-        try:
-            generar_pdf_enfoque_file(d_name, user_id)
-        except Exception:
-            pass
-
         green_txts = {}
 
         def make_green_calc(key, val_str, width=120):
@@ -923,6 +1000,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 if f"colab_ck_{idx}" in green_txts: green_txts[f"colab_ck_{idx}"].value = str(r['meta_ck'])
                 
                 # CÓMO VAMOS green cells
+                if f"colab_cv_hrs_{idx}" in green_txts: green_txts[f"colab_cv_hrs_{idx}"].value = f"{r['horas']:.1f}"
                 if f"colab_conv_cierre_{idx}" in green_txts: green_txts[f"colab_conv_cierre_{idx}"].value = f"{r['conversion_cierre']*100:.1f}%"
                 if f"colab_conv_wea_{idx}" in green_txts: green_txts[f"colab_conv_wea_{idx}"].value = f"{r['conversion_wea']*100:.1f}%"
 
@@ -952,7 +1030,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         def on_white_cell_change(e):
             try:
-                v = e.control.value or ""
+                v_raw = e.control.value or ""
+                v = v_raw.replace(",", "").strip()
                 if e.control.data == "meta_diaria":
                     data["meta_diaria"] = float(v) if v else 0.0
                 elif e.control.data == "trafico_esperado":
@@ -960,29 +1039,54 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 elif e.control.data == "conversion_target":
                     data["conversion_target"] = (float(v) / 100.0) if v else 0.0
                 elif e.control.data == "vta_ly":
-                    data["vta_ly"] = float(v) if v else 0.0
+                    val_num = float(v) if v else 0.0
+                    data["vta_ly"] = val_num
+                    if d_name == "DOMINGO":
+                        for day_other in DIAS:
+                            if day_other in s_state:
+                                s_state[day_other]["vta_ly"] = val_num
                 elif e.control.data == "atv_dia":
-                    data["atv_dia"] = float(v) if v else 0.0
+                    val_num = float(v) if v else 0.0
+                    data["atv_dia"] = val_num
+                    if d_name == "DOMINGO":
+                        for day_other in DIAS:
+                            if day_other in s_state:
+                                s_state[day_other]["atv_dia"] = val_num
                 elif e.control.data == "aur_dia":
-                    data["aur_dia"] = float(v) if v else 0.0
+                    val_num = float(v) if v else 0.0
+                    data["aur_dia"] = val_num
+                    if d_name == "DOMINGO":
+                        for day_other in DIAS:
+                            if day_other in s_state:
+                                s_state[day_other]["aur_dia"] = val_num
                 elif e.control.data == "atv_mtd":
-                    data["atv_mtd"] = float(v) if v else 0.0
+                    val_num = float(v) if v else 0.0
+                    data["atv_mtd"] = val_num
+                    if d_name == "DOMINGO":
+                        for day_other in DIAS:
+                            if day_other in s_state:
+                                s_state[day_other]["atv_mtd"] = val_num
                 elif e.control.data == "aur_mtd":
-                    data["aur_mtd"] = float(v) if v else 0.0
+                    val_num = float(v) if v else 0.0
+                    data["aur_mtd"] = val_num
+                    if d_name == "DOMINGO":
+                        for day_other in DIAS:
+                            if day_other in s_state:
+                                s_state[day_other]["aur_mtd"] = val_num
                 elif e.control.data == "venta_neta_dia":
                     data["venta_neta_dia"] = float(v) if v else 0.0
                 elif e.control.data == "venta_unidades_dia":
                     data["venta_unidades_dia"] = int(v) if v else 0
                 elif e.control.data == "slp_dia":
-                    data["slp_dia"] = v
+                    data["slp_dia"] = v_raw
                 elif e.control.data == "onesight_dia":
-                    data["onesight_dia"] = v
+                    data["onesight_dia"] = v_raw
                 elif e.control.data.startswith("trafico_b_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["trafico_bloques"][idx] = int(v) if v else 0
                 elif e.control.data.startswith("colab_nom_"):
                     idx = int(e.control.data.split("_")[-1])
-                    data["colaboradores"][idx]["nombre"] = v
+                    data["colaboradores"][idx]["nombre"] = v_raw
                 elif e.control.data.startswith("colab_hrs_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["colaboradores"][idx]["horas"] = float(v) if v else 0.0
@@ -1012,14 +1116,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     data["colaboradores"][idx]["ck_cierre"] = int(v) if v else 0
                 elif e.control.data.startswith("colab_wea_"):
                     idx = int(e.control.data.split("_")[-1])
-                    data["colaboradores"][idx]["meta_wea"] = str(v)
+                    data["colaboradores"][idx]["meta_wea"] = str(v_raw)
                 elif e.control.data.startswith("colab_kid_"):
                     idx = int(e.control.data.split("_")[-1])
-                    data["colaboradores"][idx]["meta_kid"] = str(v)
+                    data["colaboradores"][idx]["meta_kid"] = str(v_raw)
                 elif e.control.data == "cv_wearables_pct":
-                    data["cv_wearables_pct"] = v
+                    data["cv_wearables_pct"] = v_raw
                 elif e.control.data == "cv_kids_pct":
-                    data["cv_kids_pct"] = v
+                    data["cv_kids_pct"] = v_raw
             except Exception:
                 pass
             
@@ -1030,11 +1134,35 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         # Componente Celda Blanca (Entrada editable ⚪)
         def make_white_input(val, data_id, width=110, suffix=""):
+            val_formatted = str(val)
+            try:
+                if isinstance(val, (int, float)) and val != 0:
+                    f_val = float(val)
+                    if f_val.is_integer():
+                        val_formatted = f"{int(f_val):,}"
+                    else:
+                        val_formatted = f"{f_val:,.2f}"
+            except Exception: pass
+
+            def on_blur_format_commas(e):
+                try:
+                    raw_txt = (e.control.value or "").replace(",", "").strip()
+                    if raw_txt:
+                        num = float(raw_txt)
+                        if num.is_integer():
+                            fmt = f"{int(num):,}"
+                        else:
+                            fmt = f"{num:,.2f}"
+                        e.control.value = fmt
+                        e.control.update()
+                except Exception: pass
+
             return ft.Container(
                 content=ft.TextField(
-                    value=str(val),
+                    value=val_formatted,
                     data=data_id,
                     on_change=on_white_cell_change,
+                    on_blur=on_blur_format_commas,
                     text_size=12,
                     text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
                     bgcolor="#1F2937",
@@ -1337,7 +1465,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             cv_colab_rows.append(
                 ft.Row([
                     make_readonly_input(c["nombre"], width=90),
-                    make_readonly_input(c["horas"], width=50),
+                    make_green_calc(f"colab_cv_hrs_{idx}", f"{r_calc['horas']:.1f}", width=50),
                     make_white_input(c.get("interacciones", 0), f"colab_int_{idx}", width=90),
                     make_white_input(c.get("convertidos", 0), f"colab_conv_{idx}", width=110),
                     make_green_calc(f"colab_conv_cierre_{idx}", f"{r_calc['conversion_cierre']*100:.1f}%", width=100),
@@ -2213,8 +2341,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             bgcolor="#059669",
             shape=ft.RoundedRectangleBorder(radius=8)
         ),
-        url=f"/api/download_excel/DOMINGO?user_id={user_id}",
-        on_click=lambda e: generar_excel_enfoque(user_states[user_id]['active_tab'][0] if user_states[user_id]['active_tab'][0] in DIAS else "DOMINGO", user_id)
+        url=f"/api/download_excel/DOMINGO?user_id={user_id}"
     )
 
     btn_download_pdf = ft.ElevatedButton(

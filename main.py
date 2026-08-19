@@ -721,7 +721,7 @@ def configurar_rutas_fastapi(app):
                     td {{ border: 1px solid #666; padding: 5px; text-align: center; }}
                     .sec-title {{ font-size: 11px; font-weight: bold; margin-top: 10px; margin-bottom: 4px; border-left: 4px solid #000; padding-left: 6px; text-transform: uppercase; }}
                     .btn-print {{ position: fixed; top: 12px; right: 12px; background: #10B981; color: white; border: none; padding: 10px 18px; font-size: 12px; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2); z-index: 9999; }}
-                    @media print {{ .btn-print {{ display: none; }} body {{ padding: 0; }} }}
+                    @media print {{ .btn-print {{ display: none !important; }} @page {{ margin: 5mm; }} body {{ padding: 0 !important; margin: 0 !important; }} }}
                 </style>
             </head>
             <body>
@@ -750,7 +750,7 @@ def configurar_rutas_fastapi(app):
                             <div class="kpi-row green-bg"><span>ANÁLOGOS (85%)</span><b>${calc['analogos']:,.2f}</b></div>
                             <div class="kpi-row green-bg"><span>WEARABLES (15%)</span><b>${calc['wearables']:,.2f}</b></div>
                             <div class="kpi-row"><span>TOTAL UNIDADES</span><b>{calc['total_unidades']}</b></div>
-                            <div class="kpi-row" style="margin-top:4px;"><span>EVALUACIÓN</span><b>{'⭐' * data['estrellas_logro']}</b></div>
+                            <div class="kpi-row" style="margin-top:4px;"><span>EVALUACIÓN</span><b>{'⭐' * data.get('estrellas_logro', 5)}</b></div>
                         </div>
                     </div>
 
@@ -852,10 +852,10 @@ def configurar_rutas_fastapi(app):
                     </tbody>
                 </table>
 
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
-                    <div style="border:1px solid #000; padding:8px; background:#fafafa;">
-                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:4px;">✨ LOS 5 SECRETOS Y PLAN DE ACCIÓN ({day})</div>
-                        <div style="font-size:9.5px; line-height:1.4;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-top:8px;">
+                    <div style="border:1px solid #000; padding:6px; background:#fafafa;">
+                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:3px; font-size:10px;">✨ LOS 5 SECRETOS Y PLAN DE ACCIÓN ({day})</div>
+                        <div style="font-size:9px; line-height:1.3;">
                             <b>1. Pulir es poder:</b> Ofrece limpiar sus lentes al iniciar.<br>
                             <b>2. Póntelos:</b> Invítalo a probar diferentes modelos en la bandeja.<br>
                             <b>3. Diviértete más:</b> Muestra 3 o 4 opciones adicionales.<br>
@@ -863,10 +863,19 @@ def configurar_rutas_fastapi(app):
                             <b>5. Ajuste perfecto:</b> Ajusta los armazones a su medida exacta.
                         </div>
                     </div>
-                    <div style="border:1px solid #000; padding:8px; background:#fafafa;">
-                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:4px;">🎯 TU ENFOQUE PARA HOY</div>
-                        <div style="font-size:10px; color:#111827; font-weight:600;">
-                            {data['enfoque_hoy'] or 'Seguimiento continuo al 100% de la Meta Diaria y cumplimiento del Customer Journey.'}
+                    <div style="border:1px solid #000; padding:6px; background:#fafafa;">
+                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:3px; font-size:10px;">🎯 TU ENFOQUE PARA HOY</div>
+                        <div style="font-size:9.5px; color:#111827; font-weight:600;">
+                            {data.get('enfoque_hoy') or 'Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.'}
+                        </div>
+                    </div>
+                    <div style="border:1px solid #000; padding:6px; background:#fafafa;">
+                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:3px; font-size:10px; display:flex; justify-content:space-between;">
+                            <span>🏆 LOGROS DE HOY Y OPORTUNIDADES</span>
+                            <span>{'⭐' * data.get('estrellas_logro', 5)}</span>
+                        </div>
+                        <div style="font-size:9.5px; color:#111827; font-weight:600;">
+                            {data.get('logros_hoy') or data.get('oportunidades_manana') or 'Excelente retención de clientes y venta cruzada.'}
                         </div>
                     </div>
                 </div>
@@ -1017,6 +1026,7 @@ def configurar_rutas_fastapi(app):
                                 return; 
                             }
                             const r = new SR();
+                            r.lang = 'es-MX';
                             r.interimResults = false;
                             r.continuous = false;
                             r.maxAlternatives = 1;
@@ -7668,7 +7678,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                         rec.onend = function() {
                             window.luxoSpeechRecognitionActive = false;
-                            if (isListening && !isMobileDevice) {
+                            if (!isMobileDevice) {
                                 setTimeout(function() {
                                     try { rec.start(); } catch(e){}
                                 }, 300);
@@ -7711,6 +7721,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         try {
                             if (rec) try { rec.stop(); } catch(e){}
                             let r = new SR();
+                            r.lang = 'es-MX';
                             r.interimResults = false;
                             r.continuous = false;
                             window.luxoMobileDictating = true;
@@ -8468,27 +8479,30 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 padding=16
             )
 
-            # Ranking de Uso por Tienda (TODAS LAS TIENDAS REGISTRADAS EN USUARIOS)
+            # Ranking de Uso por Tienda (Filtrado por Zona y Región Activas)
             store_usage_controls = []
             tiendas_uso = []
             try:
+                z_id = str(user_session.get("zona_activa_id", "0"))
+                r_id = str(user_session.get("region_activa_id", "0"))
+
                 db_st = conectar_db()
                 if db_st:
                     cur_st = db_st.cursor(dictionary=True)
                     cur_st.execute("""
                         SELECT 
-                            u.Tienda,
+                            t.nombre_tienda AS Tienda,
                             COUNT(h.ID_Conversacion) as Total_Consultas
-                        FROM (
-                            SELECT DISTINCT Tienda 
-                            FROM usuarios 
-                            WHERE Tienda IS NOT NULL AND Tienda != '' AND Tienda != 'Tienda Luxo'
-                        ) u
-                        LEFT JOIN usuarios usr ON usr.Tienda = u.Tienda
+                        FROM tiendas t
+                        JOIN regiones r ON t.region_id = r.id
+                        JOIN zonas z ON r.zona_id = z.id
+                        LEFT JOIN usuarios usr ON LOWER(usr.Tienda) = LOWER(t.nombre_tienda)
                         LEFT JOIN historial_conversaciones h ON h.ID_Usuario = usr.ID_Usuario
-                        GROUP BY u.Tienda
-                        ORDER BY Total_Consultas DESC, u.Tienda ASC
-                    """)
+                        WHERE (%s = '0' OR z.id = %s)
+                          AND (%s = '0' OR r.id = %s)
+                        GROUP BY t.id, t.nombre_tienda
+                        ORDER BY Total_Consultas DESC, t.nombre_tienda ASC
+                    """, (z_id, z_id, r_id, r_id))
                     tiendas_uso = cur_st.fetchall()
                     db_st.close()
 
@@ -13081,9 +13095,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             if selected_zona[0] not in tiendas_por_zona:
                 selected_zona[0] = list(tiendas_por_zona.keys())[0]
             
-            zona_tiendas = tiendas_por_zona.get(selected_zona[0], [])
-            if not selected_tienda[0] or selected_tienda[0] not in zona_tiendas:
-                selected_tienda[0] = zona_tiendas[0] if zona_tiendas else ""
+            if es_admin():
+                zona_tiendas = tiendas_por_zona.get(selected_zona[0], [])
+                if not selected_tienda[0] or selected_tienda[0] not in zona_tiendas:
+                    selected_tienda[0] = zona_tiendas[0] if zona_tiendas else ""
 
             meta_venta_tf = ft.TextField(
                 label="Meta Venta (Sin IVA) 💰",
@@ -13122,10 +13137,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             zona_title_txt = ft.Text("", size=12, color="#aaaaaa")
             period_title_txt = ft.Text("", size=16, color="white", weight="bold")
 
+            initial_user_str = str(user_info.get("usuario") or "").lower()
+            initial_num_str = initial_user_str.replace("sgh", "") if (initial_user_str.startswith("sgh") and len(initial_user_str) > 3) else ""
+
             # Rediseño: Tienda es ahora campo de texto
             txt_tienda = ft.TextField(
                 label="Tienda",
                 value=selected_tienda[0],
+                disabled=not es_admin(),
                 border_color="#00FFFF",
                 focused_border_color="#00FFFF",
                 color="white",
@@ -13136,7 +13155,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             )
             txt_num_tienda = ft.TextField(
                 label="Nº Tienda",
-                value="",
+                value=initial_num_str,
+                disabled=not es_admin(),
                 border_color="#00FFFF",
                 focused_border_color="#00FFFF",
                 color="white",
@@ -13759,13 +13779,19 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             cur = db.cursor()
                             cur.execute("SELECT Numero_Tienda FROM presupuesto_anual WHERE Tienda = %s LIMIT 1", (t_nombre,))
                             row = cur.fetchone()
+                            if not row or not row[0]:
+                                cur.execute("SELECT Usuario FROM usuarios WHERE LOWER(Tienda) = LOWER(%s) AND Usuario LIKE 'sgh%%' LIMIT 1", (t_nombre,))
+                                row = cur.fetchone()
+                                if row and row[0]:
+                                    row = (str(row[0]).lower().replace("sgh", ""),)
                             db.close()
                             if row and row[0]:
                                 txt_num_tienda.value = str(row[0])
                                 last_num_tienda[0] = str(row[0])
                             else:
-                                txt_num_tienda.value = ""
-                                last_num_tienda[0] = ""
+                                if initial_num_str:
+                                    txt_num_tienda.value = initial_num_str
+                                    last_num_tienda[0] = initial_num_str
                     except Exception as e:
                         print("Error buscando número:", e)
                     last_tienda[0] = t_nombre
@@ -18411,6 +18437,7 @@ Ejemplo:
 
         actualizar_campana_badge()
         active_view = ["chat"]
+        main_views_cache = {}
 
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista):
@@ -18432,81 +18459,66 @@ Ejemplo:
                     shape=ft.RoundedRectangleBorder(radius=8)
                 )
                 
-            full_screen_loader = None
-            if vista != "chat":
-                full_screen_loader = ft.Container(
-                    content=ft.Column([
-                        ft.ProgressRing(color="#00FFFF", stroke_width=5),
-                        ft.Text(f"Cargando {vista.replace('_', ' ').title()}...", color="white", weight="bold", size=16)
-                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    bgcolor="#D9000000",
-                    alignment=ft.alignment.Alignment(0, 0),
-                    left=0, right=0, top=0, bottom=0 # Flet overlay stretch
-                )
-                page.overlay.append(full_screen_loader)
-                try: page.update()
-                except: pass
-                import time
-                time.sleep(0.01) # Dar tiempo a pintar el loader en el cliente
-            
             def procesar_cambio():
                 try:
-                    if vista == "chat":
-                        content_area.content = build_chat_view()
-                    elif vista == "historial":
-                        content_area.content = build_historial_view()
-                    elif vista == "checklists":
-                        content_area.content = build_checklists_view()
-                    elif vista == "manuales":
-                        content_area.content = build_manuals_view()
-                    elif vista == "garantias":
-                        content_area.content = build_garantias_view()
-                    elif vista == "tareas":
-                        content_area.content = build_tareas_view()
-                    elif vista == "campanas":
-                        content_area.content = build_campanas_view()
-                    elif vista == "presupuesto":
-                        content_area.content = build_presupuesto_view()
-                    elif vista == "reto":
-                        content_area.content = build_reto_dia_view()
-                    elif vista == "dashboard":
-                        content_area.content = build_dashboard_view()
-                    elif vista == "vendedores":
-                        content_area.content = build_vendedores_view()
-                    elif vista == "simulador":
-                        content_area.content = build_simulador_view()
-                    elif vista == "crm":
-                        content_area.content = build_crm_view()
-                    elif vista == "meta_semanal":
-                        content_area.content = build_meta_semanal_view()
-                    elif vista == "weekly":
-                        content_area.content = build_weekly_view()
-                    elif vista == "enfoque_diario":
-                        import enfoque_diario
-                        content_area.content = enfoque_diario.build_enfoque_diario_view(page, user_info)
-                    elif vista == "operacion_diaria":
-                        if es_admin():
-                            content_area.content = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)
-                        else:
-                            content_area.content = operacion_tiendas.build_operacion_diaria_view(
-                                page, user_info, conectar_db, mostrar_snack, tr,
-                                seleccionar_archivo_async=seleccionar_archivo_async
-                            )
-                    elif vista == "admin_trivia":
-                        if not es_admin():
-                            mostrar_snack("Acceso denegado: Se requieren permisos de administrador.", color="red")
-                            # Revert to chat
-                            active_view[0] = "chat"
-                            content_area.content = build_chat_view()
-                        else:
-                            content_area.content = build_admin_trivia_view()
-                    elif vista == "bitacora":
-                        if not es_admin():
-                            mostrar_snack("Acceso denegado: Solo Administradores pueden ver la Bitácora de Seguridad.", color="red")
-                            active_view[0] = "chat"
-                            content_area.content = build_chat_view()
-                        else:
-                            content_area.content = build_bitacora_view()
+                    if vista not in main_views_cache or vista == "chat":
+                        if vista == "chat":
+                            main_views_cache["chat"] = build_chat_view()
+                        elif vista == "historial":
+                            main_views_cache["historial"] = build_historial_view()
+                        elif vista == "checklists":
+                            main_views_cache["checklists"] = build_checklists_view()
+                        elif vista == "manuales":
+                            main_views_cache["manuales"] = build_manuals_view()
+                        elif vista == "garantias":
+                            main_views_cache["garantias"] = build_garantias_view()
+                        elif vista == "tareas":
+                            main_views_cache["tareas"] = build_tareas_view()
+                        elif vista == "campanas":
+                            main_views_cache["campanas"] = build_campanas_view()
+                        elif vista == "presupuesto":
+                            main_views_cache["presupuesto"] = build_presupuesto_view()
+                        elif vista == "reto":
+                            main_views_cache["reto"] = build_reto_dia_view()
+                        elif vista == "dashboard":
+                            main_views_cache["dashboard"] = build_dashboard_view()
+                        elif vista == "vendedores":
+                            main_views_cache["vendedores"] = build_vendedores_view()
+                        elif vista == "simulador":
+                            main_views_cache["simulador"] = build_simulador_view()
+                        elif vista == "crm":
+                            main_views_cache["crm"] = build_crm_view()
+                        elif vista == "meta_semanal":
+                            main_views_cache["meta_semanal"] = build_meta_semanal_view()
+                        elif vista == "weekly":
+                            main_views_cache["weekly"] = build_weekly_view()
+                        elif vista == "enfoque_diario":
+                            import enfoque_diario
+                            main_views_cache["enfoque_diario"] = enfoque_diario.build_enfoque_diario_view(page, user_info)
+                        elif vista == "operacion_diaria":
+                            if es_admin():
+                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)
+                            else:
+                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_operacion_diaria_view(
+                                    page, user_info, conectar_db, mostrar_snack, tr,
+                                    seleccionar_archivo_async=seleccionar_archivo_async
+                                )
+                        elif vista == "admin_trivia":
+                            if not es_admin():
+                                mostrar_snack("Acceso denegado: Se requieren permisos de administrador.", color="red")
+                                active_view[0] = "chat"
+                                main_views_cache["chat"] = build_chat_view()
+                            else:
+                                main_views_cache["admin_trivia"] = build_admin_trivia_view()
+                        elif vista == "bitacora":
+                            if not es_admin():
+                                mostrar_snack("Acceso denegado: Solo Administradores pueden ver la Bitácora de Seguridad.", color="red")
+                                active_view[0] = "chat"
+                                main_views_cache["chat"] = build_chat_view()
+                            else:
+                                main_views_cache["bitacora"] = build_bitacora_view()
+
+                    content_area.content = main_views_cache[vista]
 
                     # Cerrar el menú lateral en móviles al cambiar de vista
                     if getattr(page, "width", None) and page.width < 800:
@@ -18516,8 +18528,6 @@ Ejemplo:
                     import traceback
                     traceback.print_exc()
                 finally:
-                    if full_screen_loader and full_screen_loader in page.overlay:
-                        page.overlay.remove(full_screen_loader)
                     try: page.update()
                     except: pass
 
@@ -19001,6 +19011,132 @@ Ejemplo:
             tooltip="Recargar y sincronizar el módulo activo actual"
         )
 
+        def obtener_opciones_zonas_db():
+            opciones = [ft.dropdown.Option(key="0", text="📍 Todas las Zonas (Nacional)")]
+            db = conectar_db()
+            if db:
+                try:
+                    cursor = db.cursor(dictionary=True)
+                    cursor.execute("SELECT id, nombre_zona FROM zonas ORDER BY nombre_zona")
+                    rows = cursor.fetchall()
+                    for r in rows:
+                        z_id = str(r["id"])
+                        z_nom = r["nombre_zona"]
+                        opciones.append(ft.dropdown.Option(key=z_id, text=f"📍 {z_nom}"))
+                except Exception as ex:
+                    print("Notice zonas db options:", ex)
+                finally:
+                    try: db.close()
+                    except: pass
+            return opciones
+
+        def obtener_opciones_regiones_db(zona_id="0"):
+            opciones = [ft.dropdown.Option(key="0", text="🗺️ Todas las Regiones")]
+            db = conectar_db()
+            if db:
+                try:
+                    cursor = db.cursor(dictionary=True)
+                    if str(zona_id) != "0":
+                        cursor.execute(
+                            "SELECT id, nombre_region, gerente_area FROM regiones WHERE zona_id=%s ORDER BY nombre_region",
+                            (zona_id,)
+                        )
+                    else:
+                        cursor.execute(
+                            "SELECT id, nombre_region, gerente_area FROM regiones ORDER BY nombre_region"
+                        )
+                    rows = cursor.fetchall()
+                    for r in rows:
+                        r_id = str(r["id"])
+                        r_nom = r["nombre_region"]
+                        opciones.append(ft.dropdown.Option(key=r_id, text=f"🗺️ Región: {r_nom}"))
+                except Exception as ex:
+                    print("Notice regiones db options:", ex)
+                finally:
+                    try: db.close()
+                    except: pass
+            return opciones
+
+        dd_zona_activa = ft.Dropdown(
+            options=obtener_opciones_zonas_db(),
+            value="0",
+            width=210,
+            height=36,
+            text_size=11,
+            color="#00FFFF",
+            bgcolor="#1E1E2E",
+            border_color="#00FFFF",
+            border_radius=6,
+            content_padding=6,
+            tooltip="Seleccionar Zona Activa de Trabajo"
+        )
+
+        dd_region_activa = ft.Dropdown(
+            options=obtener_opciones_regiones_db("0"),
+            value="0",
+            width=200,
+            height=36,
+            text_size=11,
+            color="#00FF88",
+            bgcolor="#1E1E2E",
+            border_color="#00FF88",
+            border_radius=6,
+            content_padding=6,
+            tooltip="Seleccionar Región Específica de Trabajo"
+        )
+
+        def on_region_activa_change(e):
+            r_val = dd_region_activa.value
+            user_session["region_activa_id"] = r_val
+            print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
+            main_views_cache.clear()
+            try:
+                txt_nom = "Todas las Regiones"
+                for opt in dd_region_activa.options:
+                    if opt.key == r_val:
+                        txt_nom = opt.text
+                        break
+                page.snack_bar = ft.SnackBar(
+                    content=ft.Text(f"🗺️ Región cambiada a: {txt_nom}", color="white"),
+                    bgcolor="#00CC66",
+                    duration=2500
+                )
+                page.snack_bar.open = True
+            except Exception: pass
+            cambiar_vista(active_view[0])
+
+        dd_region_activa.on_change = on_region_activa_change
+
+        def on_zona_activa_change(e):
+            z_val = dd_zona_activa.value
+            user_session["zona_activa_id"] = z_val
+            user_session["region_activa_id"] = "0"
+            print(f"📍 Zona Activa cambiada a ID={z_val} por usuario={user_info.get('id')}")
+            main_views_cache.clear()
+            
+            dd_region_activa.options = obtener_opciones_regiones_db(z_val)
+            dd_region_activa.value = "0"
+            try:
+                dd_region_activa.update()
+            except Exception: pass
+
+            try:
+                txt_nom = "Todas las Zonas"
+                for opt in dd_zona_activa.options:
+                    if opt.key == z_val:
+                        txt_nom = opt.text
+                        break
+                page.snack_bar = ft.SnackBar(
+                    content=ft.Text(f"📍 Zona cambiada a: {txt_nom}", color="white"),
+                    bgcolor="#00AAFF",
+                    duration=2500
+                )
+                page.snack_bar.open = True
+            except Exception: pass
+            cambiar_vista(active_view[0])
+
+        dd_zona_activa.on_change = on_zona_activa_change
+
         # Definir la cabecera superior permanente para toda la aplicación
         top_appbar = ft.Container(
             content=ft.Row([
@@ -19016,13 +19152,22 @@ Ejemplo:
                     ),
                     ft.Text("LUXO AI SYSTEM", color="white", weight="bold", size=15),
                 ], vertical_alignment="center", spacing=4),
-                btn_global_master_refresh
+                ft.Row([
+                    dd_zona_activa,
+                    dd_region_activa,
+                    btn_global_master_refresh
+                ], vertical_alignment="center", spacing=6)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             bgcolor="#0B0E17",
             padding=6,
             border=ft.Border(bottom=ft.BorderSide(1, "#1F2937")),
             visible=True
         )
+
+        # Ocultar desplegables de Zona y Región para usuarios de Tienda (Solo visibles para Admin)
+        is_adm = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
+        dd_zona_activa.visible = is_adm
+        dd_region_activa.visible = is_adm
 
         # Ocultar menú por defecto si la pantalla es de móvil y activar cabecera superior
         if getattr(page, "width", None) and page.width < 800:

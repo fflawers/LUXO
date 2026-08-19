@@ -17,15 +17,14 @@ BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 def conectar_db_local():
     import mysql.connector
     try:
-        from main import DB_CONFIG
-        return mysql.connector.connect(**DB_CONFIG)
-    except Exception:
         return mysql.connector.connect(
             host="localhost",
             user="root",
             password="los4valtierra",
             database="sgh_portal"
         )
+    except Exception:
+        return None
 
 def obtener_hora_limite_apertura():
     try:
@@ -335,8 +334,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
             mostrar_snack(f"Apertura registrada con éxito ({estado})!", "#7CFC00")
             
             try:
-                from main import star_icon_container
-                actualizar_estrella_aperturas(page, star_icon_container, db_fn)
+                actualizar_estrella_aperturas(page, None, db_fn)
             except Exception:
                 pass
                 
@@ -368,14 +366,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 dest_path = os.path.join(dest_dir, f_name)
                 
                 with open(path, "rb") as f_in:
-                    raw_bytes = f_in.read()
-                
-                try:
-                    from main import optimizar_imagen
-                    opt_bytes = optimizar_imagen(raw_bytes)
-                except Exception as ex_opt:
-                    print("Notice optimizar_imagen apertura:", ex_opt)
-                    opt_bytes = raw_bytes
+                    opt_bytes = f_in.read()
 
                 with open(dest_path, "wb") as f_out:
                     f_out.write(opt_bytes)
