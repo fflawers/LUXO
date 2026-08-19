@@ -209,8 +209,8 @@ def _db_save_worker(user_id, json_str, sem_str, tienda_id):
             cursor.execute("""
             INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json)
             VALUES (%s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE tienda_id=VALUES(tienda_id), estado_json=VALUES(estado_json), fecha_actualizacion=NOW()
-            """, (str(user_id), tienda_id, sem_str, json_str))
+            ON DUPLICATE KEY UPDATE estado_json=VALUES(estado_json), fecha_actualizacion=NOW()
+            """, (str(user_id), int(tienda_id), str(sem_str), json_str))
             db.commit()
         except Exception as ex_db:
             print(f"Notice DB save enfoque_diario for user {user_id}:", ex_db)
@@ -243,7 +243,7 @@ def guardar_estado_persistente(user_id):
             f.write(json_str)
 
         # 2. Guardar en MySQL en segundo plano (Thread para NO congelar ni alentar la interfaz)
-        sem_str = str(user_states[user_id]["global_meta"].get("semana", "34"))
+        sem_str = str(user_states[user_id]["global_meta"].get("semana", "30"))
         tienda_id = int(user_states[user_id]["global_meta"].get("num_tienda", 0))
         t = threading.Thread(target=_db_save_worker, args=(user_id, json_str, sem_str, tienda_id), daemon=True)
         t.start()
@@ -253,21 +253,22 @@ def guardar_estado_persistente(user_id):
 def cargar_estado_persistente(user_id):
     loaded_from_db = False
     try:
-        # 1. Intentar cargar prioritariamente desde MySQL
+        # 1. Intentar cargar prioritariamente desde MySQL por user_id, tienda_id y semana
         db = conectar_db()
         if db:
             try:
                 cursor = db.cursor(dictionary=True)
-                sem_str = str(user_states[user_id]["global_meta"].get("semana", "34"))
+                sem_str = str(user_states[user_id]["global_meta"].get("semana", "30"))
+                tienda_id = int(user_states[user_id]["global_meta"].get("num_tienda", 0))
                 cursor.execute(
-                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
-                    (str(user_id), sem_str)
+                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                    (str(user_id), tienda_id, sem_str)
                 )
                 row = cursor.fetchone()
                 if not row:
                     cursor.execute(
-                        "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s ORDER BY id DESC LIMIT 1",
-                        (str(user_id),)
+                        "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND tienda_id=%s ORDER BY id DESC LIMIT 1",
+                        (str(user_id), tienda_id)
                     )
                     row = cursor.fetchone()
                 if row and row.get("estado_json"):
@@ -283,7 +284,7 @@ def cargar_estado_persistente(user_id):
                     if "active_tab" in payload:
                         user_states[user_id]["active_tab"] = payload["active_tab"]
                     loaded_from_db = True
-                    print(f"✅ Estado de Enfoque Diario para usuario {user_id} cargado desde MySQL con éxito.")
+                    print(f"✅ Estado de Enfoque Diario para usuario {user_id} (tienda {tienda_id}, semana {sem_str}) cargado desde MySQL con éxito.")
             except Exception as ex_db:
                 print(f"Notice DB load enfoque_diario for user {user_id}:", ex_db)
             finally:
@@ -339,9 +340,10 @@ def cargar_semana_historico(user_id, num_semana):
         if db:
             try:
                 cursor = db.cursor(dictionary=True)
+                tienda_id = int(g_meta.get("num_tienda", 0))
                 cursor.execute(
-                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
-                    (str(user_id), str(num_semana))
+                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                    (str(user_id), tienda_id, str(num_semana))
                 )
                 row = cursor.fetchone()
                 if row and row.get("estado_json"):
