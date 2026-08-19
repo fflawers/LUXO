@@ -83,6 +83,46 @@ MAPEO_TIENDAS_SGH = {
 }
 MAPEO_NOMBRE_A_NUMERO_SGH = {v.upper(): k for k, v in MAPEO_TIENDAS_SGH.items()}
 
+import datetime
+
+MESES_ES = ['', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE']
+
+def obtener_fechas_semana(anio=2026, semana=30):
+    try:
+        a = int(anio)
+        s = int(semana)
+    except Exception:
+        a, s = 2026, 30
+
+    first_day = datetime.date(a, 1, 1)
+    offset_to_sun = (first_day.weekday() + 1) % 7
+    first_sunday = first_day - datetime.timedelta(days=offset_to_sun)
+    target_sunday = first_sunday + datetime.timedelta(weeks=(s - 1))
+
+    dias_nombres = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO']
+    fechas = {}
+    for i, nombre in enumerate(dias_nombres):
+        d_date = target_sunday + datetime.timedelta(days=i)
+        mes_txt = MESES_ES[d_date.month]
+        fechas[nombre] = {
+            'date': d_date,
+            'str_short': d_date.strftime('%d/%m'),
+            'str_full': d_date.strftime('%d/%m/%Y'),
+            'str_header': f"{d_date.day} DE {mes_txt} DE {d_date.year}"
+        }
+    return fechas
+
+def sincronizar_baselines_domingo(s_state):
+    if isinstance(s_state, dict) and "DOMINGO" in s_state:
+        dom_data = s_state["DOMINGO"]
+        fields = ["vta_ly", "atv_dia", "aur_dia", "atv_mtd", "aur_mtd"]
+        for field in fields:
+            val = dom_data.get(field)
+            if val is not None:
+                for d in DIAS:
+                    if d != "DOMINGO" and d in s_state:
+                        s_state[d][field] = val
+
 def cargar_mapeo_tiendas_db():
     db = conectar_db()
     if db:
@@ -263,24 +303,59 @@ def cargar_estado_persistente(user_id):
         print(f"Error al cargar estado de enfoque diario para {user_id}:", ex)
 
 def guardar_semana_historico(user_id):
+    if user_id not in user_states: return
     g_meta = user_states[user_id]["global_meta"]
     s_state = user_states[user_id]["store_state"]
     h_state = user_states[user_id]["historico_semanal_state"]
+    sincronizar_baselines_domingo(s_state)
     key = f"S{g_meta['semana']}_{g_meta['num_tienda']}_{g_meta['tienda']}"
     import copy
     h_state[key] = copy.deepcopy(s_state)
     guardar_estado_persistente(user_id)
 
 def cargar_semana_historico(user_id, num_semana):
+    if user_id not in user_states: return
     g_meta = user_states[user_id]["global_meta"]
     s_state = user_states[user_id]["store_state"]
     h_state = user_states[user_id]["historico_semanal_state"]
     g_meta["semana"] = str(num_semana)
     key = f"S{num_semana}_{g_meta['num_tienda']}_{g_meta['tienda']}"
+    import copy
     if key in h_state:
-        import copy
         s_state.clear()
         s_state.update(copy.deepcopy(h_state[key]))
+    else:
+        loaded_from_db = False
+        db = conectar_db()
+        if db:
+            try:
+                cursor = db.cursor(dictionary=True)
+                cursor.execute(
+                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                    (str(user_id), str(num_semana))
+                )
+                row = cursor.fetchone()
+                if row and row.get("estado_json"):
+                    payload = json.loads(row["estado_json"])
+                    if "store_state" in payload:
+                        s_state.clear()
+                        def_s = default_store_state()
+                        for d in DIAS:
+                            s_state[d] = copy.deepcopy(def_s[d])
+                            if d in payload["store_state"]:
+                                s_state[d].update(payload["store_state"][d])
+                        h_state[key] = copy.deepcopy(s_state)
+                        loaded_from_db = True
+            except Exception as ex_db:
+                print(f"Notice DB load semana {num_semana}:", ex_db)
+            finally:
+                try: db.close()
+                except: pass
+        if not loaded_from_db:
+            s_state.clear()
+            s_state.update(default_store_state())
+            h_state[key] = copy.deepcopy(s_state)
+    sincronizar_baselines_domingo(s_state)
     guardar_estado_persistente(user_id)
 
 def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None):
@@ -519,8 +594,12 @@ def generar_excel_enfoque(d_name, user_id, page=None):
                         ws = wb.Worksheets(d)
                         d_data = s_state[d]
 
+                        fechas_map_ex = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
                         ws.Range('I1').Value = int(g_meta['semana']) if str(g_meta['semana']).isdigit() else g_meta['semana']
                         ws.Range('M1').Value = g_meta['tienda']
+                        if d in fechas_map_ex:
+                            try: ws.Range('E1').Value = fechas_map_ex[d]['str_header']
+                            except Exception: pass
 
                         ws.Range('C5').Value = d_data['meta_diaria']
                         ws.Range('F5').Value = d_data['trafico_esperado']
@@ -1198,12 +1277,16 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             ) for i in range(1, 6)
         ], spacing=0)
 
+        fechas_map_u = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
+        fecha_full_txt = fechas_map_u.get(d_name, {}).get("str_full", "")
+        lbl_meta_dia = f"META DEL DÍA ({d_name} - {fecha_full_txt}) Y NO NEGOCIABLES" if fecha_full_txt else f"META DEL DÍA ({d_name}) Y NO NEGOCIABLES"
+
         # 1. TARJETA CABECERA DE METAS GENERATION (OFICIAL SGH)
         card_metas = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.FLAG_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text(f"META DEL DÍA ({d_name}) Y NO NEGOCIABLES", color="white", weight="bold", size=13),
+                    ft.Text(lbl_meta_dia, color="white", weight="bold", size=13),
                     ft.Container(expand=True),
                     ft.Text("Evaluación:", color="#AAAAAA", size=11),
                     star_row
@@ -2177,21 +2260,22 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 pass
 
     # Construcción de botones de pestañas
+    fechas_map = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
     TABS_LIST = [
         ("📊 SEMANAL", "SEMANAL"),
-        ("☀️ DOMINGO", "DOMINGO"),
+        (f"☀️ DOMINGO ({fechas_map['DOMINGO']['str_short']})", "DOMINGO"),
         ("📋 PLAN DOMINGO", "PLAN.ACCIÓN_D"),
-        ("🌙 LUNES", "LUNES"),
+        (f"🌙 LUNES ({fechas_map['LUNES']['str_short']})", "LUNES"),
         ("📋 PLAN LUNES", "PLAN.ACCIÓN_L"),
-        ("🔥 MARTES", "MARTES"),
+        (f"🔥 MARTES ({fechas_map['MARTES']['str_short']})", "MARTES"),
         ("📋 PLAN MARTES", "PLAN.ACCIÓN_MA"),
-        ("⚡ MIÉRCOLES", "MIÉRCOLES"),
+        (f"⚡ MIÉRCOLES ({fechas_map['MIÉRCOLES']['str_short']})", "MIÉRCOLES"),
         ("📋 PLAN MIÉRCOLES", "PLAN.ACCIÓN_MI"),
-        ("🚀 JUEVES", "JUEVES"),
+        (f"🚀 JUEVES ({fechas_map['JUEVES']['str_short']})", "JUEVES"),
         ("📋 PLAN JUEVES", "PLAN.ACCIÓN_J"),
-        ("💎 VIERNES", "VIERNES"),
+        (f"💎 VIERNES ({fechas_map['VIERNES']['str_short']})", "VIERNES"),
         ("📋 PLAN VIERNES", "PLAN.ACCIÓN_V"),
-        ("👑 SÁBADO", "SÁBADO"),
+        (f"👑 SÁBADO ({fechas_map['SÁBADO']['str_short']})", "SÁBADO"),
         ("📋 PLAN SÁBADO", "PLAN.ACCIÓN_S")
     ]
 
@@ -2263,6 +2347,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         guardar_semana_historico(user_id)
         n_sem = e.control.value
         cargar_semana_historico(user_id, n_sem)
+        tab_view_cache.clear()
         guardar_estado_persistente(user_id)
         update_active_view()
         if page:
