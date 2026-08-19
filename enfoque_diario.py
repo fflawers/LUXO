@@ -2154,9 +2154,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 for p_item in c_day_list:
                     if isinstance(p_item, dict) and p_item.get("nombre") == c_name:
                         h_acc += float(p_item.get("horas", 0.0) or 0.0)
-            
-            if c_name in h_state["horas_colab"]:
-                h_acc = float(h_state["horas_colab"][c_name])
 
             horas_colab_map[c_name] = h_acc
             tot_horas_plantilla += h_acc
@@ -2170,24 +2167,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         tot_colab_kids = 0
         tot_colab_carekits = 0
 
-        def on_colab_hrs_change(c_name, val_str):
-            try:
-                h_val = float(val_str.strip() or 0)
-                h_state["horas_colab"][c_name] = h_val
-                guardar_estado_persistente(user_id)
-                update_active_view()
-            except Exception:
-                pass
-
-        def on_colab_wea_change(c_name, val_str):
-            try:
-                w_val = int(val_str.strip() or 0)
-                h_state["wea_colab_manual"][c_name] = w_val
-                guardar_estado_persistente(user_id)
-                update_active_view()
-            except Exception:
-                pass
-
         for colab in colabs_list:
             if not isinstance(colab, dict):
                 continue
@@ -2198,12 +2177,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             
             m_venta_colab = (tot_meta_sem / tot_horas_plantilla) * h_p
             ana_colab = max(1, int((total_unidades_sem / tot_horas_plantilla) * h_p)) if (tot_ana_sem > 0 and h_p > 0) else 0
-            
-            if c_name in h_state["wea_colab_manual"]:
-                wea_colab = int(h_state["wea_colab_manual"][c_name])
-            else:
-                wea_colab = max(1, int((unidades_wea_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
-
+            wea_colab = max(1, int((unidades_wea_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
             kids_colab = max(1, int((unidades_kids_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
             ck_colab = max(1, int((unidades_ck_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
 
@@ -2216,10 +2190,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             rows_colabs.append(
                 ft.Row([
                     ft.Container(ft.Text(c_name, weight="bold", color="white", size=11), width=w_colab_name),
-                    make_input_field(f"{h_p:.1f}", lambda e, cn=c_name: on_colab_hrs_change(cn, e.control.value), width=w_colab_hrs, suffix="h"),
+                    ft.Container(ft.Text(f"{h_p:.1f} h", color="white", weight="bold", size=11), width=w_colab_hrs),
                     ft.Container(ft.Text(f"${m_venta_colab:,.2f}", color="#00FF88", weight="bold", size=11), width=w_colab_vta),
                     ft.Container(ft.Text(str(ana_colab), color="#00FF88", size=11), width=w_colab_ana),
-                    make_input_field(str(wea_colab), lambda e, cn=c_name: on_colab_wea_change(cn, e.control.value), width=w_colab_wea),
+                    ft.Container(ft.Text(str(wea_colab), color="#00FFFF", weight="bold", size=11), width=w_colab_wea),
                     ft.Container(ft.Text(str(kids_colab), color="#00FFFF", size=11), width=w_colab_kid),
                     ft.Container(ft.Text(str(ck_colab), color="#00FFFF", size=11), width=w_colab_ck),
                 ], spacing=6)
@@ -2260,7 +2234,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             bgcolor="#0B0E17", padding=14, border_radius=12, border=ft.Border.all(1.5, "#A100F2")
         )
 
-        # --- SECCIÓN 3: SEGUIMIENTO Y RESULTADOS AL CIERRE SEMANAL (EXCEL RÉPLICA FILAS 25-37) ---
+        # --- SECCIÓN 3: SEGUIMIENTO Y RESULTADOS AL CIERRE SEMANAL (AUTOMÁTICO DESDE HOJAS DIARIAS) ---
         w3_colab = 110 if is_mobile_w else 125
         w3_hrs = 65 if is_mobile_w else 75
         w3_num = 75 if is_mobile_w else 85
@@ -2270,15 +2244,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         w3_wea = 75 if is_mobile_w else 85
         w3_kids = 65 if is_mobile_w else 75
         w3_ck = 65 if is_mobile_w else 75
-
-        def on_cierre_val_change(c_name, field_name, val_str, is_float=False):
-            try:
-                val = float(val_str.replace("$", "").replace(",", "").strip() or 0) if is_float else int(val_str.strip() or 0)
-                h_state["cierre_semanal"].setdefault(c_name, {})[field_name] = val
-                guardar_estado_persistente(user_id)
-                update_active_view()
-            except Exception:
-                pass
 
         rows_cierre_colabs = []
         tot_cierre_hrs = 0.0
@@ -2299,18 +2264,32 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 continue
             
             h_p = horas_colab_map.get(c_name, 0.0)
-            c_data = h_state["cierre_semanal"].get(c_name, {})
+            
+            # Suma automática acumulada de la semana desde las pestañas diarias
+            inter = 0
+            conv = 0
+            vta_c = 0.0
+            ana_c = 0
+            wea_demos = 0
+            wea_c = 0
+            kid_c = 0
+            ck_c = 0
 
-            inter = int(c_data.get("interacciones", 0))
-            conv = int(c_data.get("convertidos", 0))
+            for d in DIAS:
+                c_day_list = s_state.get(d, {}).get("colaboradores", [])
+                for p_item in c_day_list:
+                    if isinstance(p_item, dict) and p_item.get("nombre") == c_name:
+                        inter += int(p_item.get("interacciones", 0) or 0)
+                        conv += int(p_item.get("convertidos", 0) or 0)
+                        vta_c += float(p_item.get("vta_cierre", 0.0) or 0.0)
+                        ana_c += int(p_item.get("ana_cierre", 0) or 0)
+                        wea_demos += int(p_item.get("wea_demos", 0) or 0)
+                        wea_c += int(p_item.get("wea_cierre", 0) or 0)
+                        kid_c += int(p_item.get("kid_cierre", 0) or 0)
+                        ck_c += int(p_item.get("ck_cierre", 0) or 0)
+
             conv_pct = (conv / inter * 100.0) if inter > 0 else 0.0
-            vta_c = float(c_data.get("vta_cierre", 0.0))
-            ana_c = int(c_data.get("ana_cierre", 0))
-            wea_demos = int(c_data.get("wea_demos", 0))
-            wea_c = int(c_data.get("wea_cierre", 0))
             wea_conv_pct = (wea_c / wea_demos * 100.0) if wea_demos > 0 else 0.0
-            kid_c = int(c_data.get("kid_cierre", 0))
-            ck_c = int(c_data.get("ck_cierre", 0))
 
             tot_cierre_hrs += h_p
             tot_cierre_inter += inter
@@ -2326,27 +2305,28 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 ft.Row([
                     ft.Container(ft.Text(c_name, weight="bold", color="white", size=11), width=w3_colab),
                     ft.Container(ft.Text(f"{h_p:.1f}", color="#AAAAAA", size=11), width=w3_hrs),
-                    make_input_field(str(inter), lambda e, cn=c_name: on_cierre_val_change(cn, "interacciones", e.control.value), width=w3_num),
-                    make_input_field(str(conv), lambda e, cn=c_name: on_cierre_val_change(cn, "convertidos", e.control.value), width=w3_num),
-                    ft.Container(ft.Text(f"{conv_pct:.1f}%", color="#00FF88", size=11), width=w3_pct),
-                    make_input_field(f"{vta_c:.2f}", lambda e, cn=c_name: on_cierre_val_change(cn, "vta_cierre", e.control.value, is_float=True), width=w3_vta),
-                    make_input_field(str(ana_c), lambda e, cn=c_name: on_cierre_val_change(cn, "ana_cierre", e.control.value), width=w3_num),
-                    make_input_field(str(wea_demos), lambda e, cn=c_name: on_cierre_val_change(cn, "wea_demos", e.control.value), width=w3_demos),
-                    make_input_field(str(wea_c), lambda e, cn=c_name: on_cierre_val_change(cn, "wea_cierre", e.control.value), width=w3_wea),
-                    ft.Container(ft.Text(f"{wea_conv_pct:.1f}%", color="#00FFFF", size=11), width=w3_pct),
-                    make_input_field(str(kid_c), lambda e, cn=c_name: on_cierre_val_change(cn, "kid_cierre", e.control.value), width=w3_kids),
-                    make_input_field(str(ck_c), lambda e, cn=c_name: on_cierre_val_change(cn, "ck_cierre", e.control.value), width=w3_ck),
+                    ft.Container(ft.Text(str(inter), color="white", size=11), width=w3_num),
+                    ft.Container(ft.Text(str(conv), color="#00FF88", size=11), width=w3_num),
+                    ft.Container(ft.Text(f"{conv_pct:.1f}%", color="#00FF88", weight="bold", size=11), width=w3_pct),
+                    ft.Container(ft.Text(f"${vta_c:,.2f}", color="#00FF88", weight="bold", size=11), width=w3_vta),
+                    ft.Container(ft.Text(str(ana_c), color="#00FF88", size=11), width=w3_num),
+                    ft.Container(ft.Text(str(wea_demos), color="#00FFFF", size=11), width=w3_demos),
+                    ft.Container(ft.Text(str(wea_c), color="#00FFFF", size=11), width=w3_wea),
+                    ft.Container(ft.Text(f"{wea_conv_pct:.1f}%", color="#00FFFF", weight="bold", size=11), width=w3_pct),
+                    ft.Container(ft.Text(str(kid_c), color="#00FFFF", size=11), width=w3_kids),
+                    ft.Container(ft.Text(str(ck_c), color="#00FFFF", size=11), width=w3_ck),
                 ], spacing=6)
             )
 
         tot_conv_pct_gen = (tot_cierre_conv / tot_cierre_inter * 100.0) if tot_cierre_inter > 0 else 0.0
         tot_wea_conv_gen = (tot_cierre_wea / tot_cierre_demos * 100.0) if tot_cierre_demos > 0 else 0.0
         crec_conv_gen = tot_conv_pct_gen - (meta_conversion * 100.0)
-        wea_pct_real = (tot_cierre_wea / (tot_cierre_ana + tot_cierre_wea) * 100.0) if (tot_cierre_ana + tot_cierre_wea) > 0 else 0.0
-        kids_pct_real = (tot_cierre_kids / (tot_cierre_ana + tot_cierre_wea) * 100.0) if (tot_cierre_ana + tot_cierre_wea) > 0 else 0.0
-        ck_pct_str = f"{(tot_cierre_ck / (tot_cierre_ana + tot_cierre_wea) * 100.0):.1f}%" if (tot_cierre_ana + tot_cierre_wea) > 0 else "#¡DIV/0!"
+        tot_unidades_cierre_sem = tot_cierre_ana + tot_cierre_wea + tot_cierre_kids + tot_cierre_ck
+        wea_pct_real = (tot_cierre_wea / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+        kids_pct_real = (tot_cierre_kids / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+        ck_pct_real = (tot_cierre_ck / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
 
-        # TABLA EXCEL CABECERA SUPERIOR AL CIERRE (FILAS 25-26 EXCEL OFICIAL)
+        # TABLA EXCEL CABECERA SUPERIOR AL CIERRE (AUTOMÁTICA)
         ex_header = ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -2362,14 +2342,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 ], spacing=4),
                 ft.Row([
                     ft.Container(ft.Text(f"${tot_meta_sem:,.0f}", color="#00FF88", weight="bold", size=11), width=95, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
-                    make_input_field(f"{h_state['vta_neta_sem']:.2f}", lambda e: on_param_change("vta_neta_sem", e.control.value), width=105),
+                    ft.Container(ft.Text(f"${tot_cierre_vta:,.2f}", color="#00FF88", weight="bold", size=11), width=105, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
                     ft.Container(ft.Text("SEMANAL", color="#00FF88", weight="bold", size=11), width=110, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
-                    make_input_field(str(int(h_state['vta_unid_sem'])), lambda e: on_param_change("vta_unid_sem", e.control.value), width=105),
+                    ft.Container(ft.Text(str(tot_unidades_cierre_sem), color="#00FF88", weight="bold", size=11), width=105, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
                     ft.Container(ft.Text(f"{tot_conv_pct_gen:.1f}%", color="#00FF88", weight="bold", size=11), width=105, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
                     ft.Container(ft.Text(f"{crec_conv_gen:.1f}%", color="#00FFFF", weight="bold", size=11), width=140, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
                     ft.Container(ft.Text(f"{wea_pct_real:.1f}%", color="white", size=11), width=100, bgcolor="#1F2937", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
                     ft.Container(ft.Text(f"{kids_pct_real:.1f}%", color="white", size=11), width=85, bgcolor="#1F2937", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
-                    ft.Container(ft.Text(ck_pct_str, color="#FF8C00" if "DIV" in ck_pct_str else "#00FF88", weight="bold", size=11), width=95, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
+                    ft.Container(ft.Text(f"{ck_pct_real:.1f}%", color="#00FF88", weight="bold", size=11), width=95, bgcolor="#065F46", padding=4, border_radius=4, alignment=ft.alignment.Alignment(0, 0)),
                 ], spacing=4)
             ]),
             padding=8, bgcolor="#111827", border_radius=8, border=ft.Border.all(1, "#374151")
