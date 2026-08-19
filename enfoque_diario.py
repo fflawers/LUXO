@@ -2324,8 +2324,25 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # 0. Selector de Año (2025, 2026, 2027, 2028)
     g_meta.setdefault("anio", "2026")
 
+    def actualizar_etiquetas_pestañas():
+        fechas_map_now = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
+        d_short = {
+            "DOMINGO": f"☀️ DOMINGO ({fechas_map_now['DOMINGO']['str_short']})",
+            "LUNES": f"🌙 LUNES ({fechas_map_now['LUNES']['str_short']})",
+            "MARTES": f"🔥 MARTES ({fechas_map_now['MARTES']['str_short']})",
+            "MIÉRCOLES": f"⚡ MIÉRCOLES ({fechas_map_now['MIÉRCOLES']['str_short']})",
+            "JUEVES": f"🚀 JUEVES ({fechas_map_now['JUEVES']['str_short']})",
+            "VIERNES": f"💎 VIERNES ({fechas_map_now['VIERNES']['str_short']})",
+            "SÁBADO": f"👑 SÁBADO ({fechas_map_now['SÁBADO']['str_short']})"
+        }
+        for btn, t_id in tab_buttons:
+            if t_id in d_short and hasattr(btn.content, "value"):
+                btn.content.value = d_short[t_id]
+
     def on_anio_change(e):
         g_meta["anio"] = e.control.value
+        tab_view_cache.clear()
+        actualizar_etiquetas_pestañas()
         guardar_estado_persistente(user_id)
         update_active_view()
 
@@ -2344,17 +2361,34 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     # 1. Selector de Semana (1 a 52)
     def on_semana_change(e):
-        guardar_semana_historico(user_id)
         n_sem = e.control.value
+        tab_content_container.content = ft.Container(
+            content=ft.Row([
+                ft.ProgressRing(color="#00FFFF", size=24),
+                ft.Text(f"⏳ Cargando datos de Semana {n_sem}...", color="#00FFFF", weight="bold", size=13)
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            padding=30,
+            alignment=ft.alignment.Alignment(0, 0)
+        )
+        try:
+            page.update()
+        except Exception:
+            pass
+
+        guardar_semana_historico(user_id)
         cargar_semana_historico(user_id, n_sem)
         tab_view_cache.clear()
+        actualizar_etiquetas_pestañas()
         guardar_estado_persistente(user_id)
         update_active_view()
         if page:
             snack = ft.SnackBar(ft.Text(f"📅 Semana {n_sem} cargada.", color="white"), bgcolor="#059669")
             page.overlay.append(snack)
             snack.open = True
-            page.update()
+            try:
+                page.update()
+            except Exception:
+                pass
 
     dd_semana = ft.Dropdown(
         value=str(g_meta["semana"]),
