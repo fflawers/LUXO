@@ -1795,6 +1795,10 @@ def configurar_rutas_fastapi(app):
             print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
             session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
+            if not session and active_sessions:
+                session = list(active_sessions.values())[-1]
+                print(f"DEBUG: Session fallback activado en /text_input -> usando UID={session.get('user_info', {}).get('id')}")
+
             print(f"DEBUG: active_sessions keys={list(active_sessions.keys())}, session encontrada={'Sí' if session else 'No'}")
             if session and text:
                 cambiar_vista = session.get("cambiar_vista")
@@ -7460,6 +7464,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 }
                 
                 let fadeTimer = null;
+                window.luxoUserId = "${user_info['id']}";
                 window.showLuxoSiriOrb = function(durationMs) {
                     const b = topDoc.getElementById("luxo-voice-banner") || banner;
                     if (!b) return;
