@@ -719,6 +719,7 @@ def calcular_dia(d_name, user_id):
         "wearables": wearables,
         "total_unidades": total_unidades,
         "transacciones": transacciones,
+        "trafico": trafico,
         "meta_ideal": meta_ideal,
         "vta_neta_prod": vta_neta_prod,
         "u_prod": u_prod,
