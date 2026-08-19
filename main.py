@@ -3653,13 +3653,17 @@ class DownloadHTTPHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"Archivo no encontrado")
             return
-        self.send_response(400)
+        self.send_response(302)
+        self.send_header("Location", "/")
         self.end_headers()
-        self.wfile.write(b"Peticion invalida")
+        return
 
 def iniciar_servidor_descargas():
     handler = DownloadHTTPHandler
-    for p in range(8552, 8560):
+    main_port = int(os.environ.get("PORT", 8550))
+    for p in range(8552, 8565):
+        if p == main_port:
+            continue
         try:
             httpd = socketserver.TCPServer(("", p), handler)
             print(f"Servidor de descargas directas iniciado en puerto {p}")
