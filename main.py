@@ -8491,12 +8491,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     cur_st = db_st.cursor(dictionary=True)
                     cur_st.execute("""
                         SELECT 
+                            t.id AS Tienda_ID,
                             t.nombre_tienda AS Tienda,
                             COUNT(h.ID_Conversacion) as Total_Consultas
                         FROM tiendas t
                         JOIN regiones r ON t.region_id = r.id
                         JOIN zonas z ON r.zona_id = z.id
-                        LEFT JOIN usuarios usr ON LOWER(usr.Tienda) = LOWER(t.nombre_tienda)
+                        LEFT JOIN usuarios usr ON (usr.Usuario LIKE CONCAT('%%', t.id, '%%') OR LOWER(usr.Tienda) LIKE CONCAT('%%', LOWER(t.nombre_tienda), '%%') OR LOWER(t.nombre_tienda) LIKE CONCAT('%%', LOWER(usr.Tienda), '%%'))
                         LEFT JOIN historial_conversaciones h ON h.ID_Usuario = usr.ID_Usuario
                         WHERE (%s = '0' OR z.id = %s)
                           AND (%s = '0' OR r.id = %s)
@@ -8506,6 +8507,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     tiendas_uso = cur_st.fetchall()
                     db_st.close()
 
+                    grand_total_consultas = sum(t["Total_Consultas"] for t in tiendas_uso)
                     max_tienda_consultas = max([t["Total_Consultas"] for t in tiendas_uso], default=1)
                     colors_palette = ["#FFD700", "#00FFFF", "#D8B4FE", "#7CFC00", "#FF69B4", "#FFA500", "#00FF7F", "#FF4500"]
 
@@ -8516,14 +8518,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         icon_prefix = "🏆 1° " if is_top_1 else (f"🏪 {idx_t+1}° " if t_cnt > 0 else "🏬 ")
                         col_bar = colors_palette[idx_t % len(colors_palette)] if t_cnt > 0 else "#444444"
 
+                        tot_ref = grand_total_consultas if grand_total_consultas > 0 else max_tienda_consultas
                         store_usage_controls.append(
-                            build_stats_bar(f"{icon_prefix}{t_nombre}", t_cnt, max_tienda_consultas, col_bar)
+                            build_stats_bar(f"{icon_prefix}{t_nombre}", t_cnt, tot_ref, col_bar)
                         )
             except Exception as ex_st:
                 print("Error calculando uso por tienda:", ex_st)
 
             if not store_usage_controls:
-                store_usage_controls.append(ft.Text("No hay datos de consultas por tienda registrados aún.", color="#aaaaaa", size=12))
+                store_usage_controls.append(ft.Text("No hay tiendas registradas para la Zona/Región seleccionada.", color="#aaaaaa", size=12))
 
             top_store_name = tiendas_uso[0]["Tienda"] if (tiendas_uso and len(tiendas_uso) > 0 and tiendas_uso[0]["Total_Consultas"] > 0) else "Ninguna activa aún"
 
