@@ -112,6 +112,175 @@ def obtener_fechas_semana(anio=2026, semana=30):
         }
     return fechas
 
+def obtener_semana_sgh_de_fecha(d_date):
+    y = d_date.year
+    first_day = datetime.date(y, 1, 1)
+    offset_to_sun = (first_day.weekday() + 1) % 7
+    first_sunday = first_day - datetime.timedelta(days=offset_to_sun)
+    if d_date < first_sunday:
+        y -= 1
+        first_day = datetime.date(y, 1, 1)
+        offset_to_sun = (first_day.weekday() + 1) % 7
+        first_sunday = first_day - datetime.timedelta(days=offset_to_sun)
+    week_num = ((d_date - first_sunday).days // 7) + 1
+    return y, week_num
+
+def crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_seleccionada):
+    hoy = datetime.date.today()
+    g_meta = user_states[user_id]["global_meta"]
+    try:
+        cur_year = int(g_meta.get("anio", hoy.year))
+    except Exception:
+        cur_year = hoy.year
+        
+    try:
+        cur_sem = int(g_meta.get("semana", 30))
+        fechas_sem = obtener_fechas_semana(cur_year, cur_sem)
+        active_date = fechas_sem.get("DOMINGO", {}).get("date", hoy)
+        cur_month = active_date.month
+    except Exception:
+        cur_month = hoy.month
+        active_date = hoy
+
+    month_state = {"year": cur_year, "month": cur_month}
+
+    dlg = ft.AlertDialog(bgcolor="#0A0D14")
+    
+    def cerrar_dialogo(e=None):
+        dlg.open = False
+        try: page.update()
+        except Exception: pass
+
+    cal_body = ft.Column(spacing=6)
+    header_text = ft.Text("", color="#00FFFF", weight="bold", size=13)
+
+    def render_calendar():
+        y = month_state["year"]
+        m = month_state["month"]
+        
+        mes_nombre = MESES_ES[m] if 1 <= m <= 12 else ""
+        header_text.value = f"📅 {mes_nombre} {y}"
+
+        first_of_month = datetime.date(y, m, 1)
+        start_date = first_of_month - datetime.timedelta(days=first_of_month.weekday())
+
+        cols_headers = [
+            ft.Container(
+                content=ft.Text("SEM", weight="bold", color="#F59E0B", size=10, text_align=ft.TextAlign.CENTER),
+                width=36, height=28, alignment=ft.alignment.Alignment(0, 0), bgcolor="#1F2937", border_radius=4,
+                tooltip="Número de Semana SGH"
+            )
+        ]
+        d_headers = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"]
+        for dh in d_headers:
+            cols_headers.append(
+                ft.Container(
+                    content=ft.Text(dh, weight="bold", color="#00FFFF", size=10, text_align=ft.TextAlign.CENTER),
+                    width=36, height=28, alignment=ft.alignment.Alignment(0, 0)
+                )
+            )
+
+        grid_rows = [ft.Row(cols_headers, spacing=4, alignment=ft.MainAxisAlignment.CENTER)]
+
+        for w in range(6):
+            row_date = start_date + datetime.timedelta(days=w * 7)
+            if w >= 4 and row_date.month != m and (row_date + datetime.timedelta(days=6)).month != m:
+                break
+            
+            mid_date = row_date + datetime.timedelta(days=3)
+            _, sem_num = obtener_semana_sgh_de_fecha(mid_date)
+
+            def make_sem_click(sn=sem_num, rd=row_date):
+                def _click(e):
+                    on_fecha_seleccionada(rd)
+                    cerrar_dialogo()
+                return _click
+
+            sem_cell = ft.Container(
+                content=ft.Text(f"{sem_num}", color="#F59E0B", weight="bold", size=11, text_align=ft.TextAlign.CENTER),
+                width=36, height=34, alignment=ft.alignment.Alignment(0, 0),
+                bgcolor="#111827", border=ft.Border.all(1, "#F59E0B88"), border_radius=6,
+                ink=True, on_click=make_sem_click(), tooltip=f"Cargar Semana SGH {sem_num}"
+            )
+
+            row_cells = [sem_cell]
+
+            for d_idx in range(7):
+                c_date = row_date + datetime.timedelta(days=d_idx)
+                in_month = (c_date.month == m)
+                is_today = (c_date == hoy)
+
+                def make_day_click(dt=c_date):
+                    def _click(e):
+                        on_fecha_seleccionada(dt)
+                        cerrar_dialogo()
+                    return _click
+
+                bg_col = "#1E1E2E" if in_month else "#0D0F17"
+                text_col = "white" if in_month else "#555555"
+                b_color = "#00FF88" if is_today else ("#00FFFF44" if in_month else "#222222")
+                b_width = 1.5 if is_today else 1
+
+                day_cell = ft.Container(
+                    content=ft.Text(str(c_date.day), color=text_col, weight="bold" if (in_month or is_today) else "normal", size=11, text_align=ft.TextAlign.CENTER),
+                    width=36, height=34, alignment=ft.alignment.Alignment(0, 0),
+                    bgcolor=bg_col, border=ft.Border.all(b_width, b_color), border_radius=6,
+                    ink=True, on_click=make_day_click(),
+                    tooltip=f"Ver/Editar {c_date.strftime('%d/%m/%Y')}"
+                )
+                row_cells.append(day_cell)
+
+            grid_rows.append(ft.Row(row_cells, spacing=4, alignment=ft.MainAxisAlignment.CENTER))
+
+        cal_body.controls = grid_rows
+        try: page.update()
+        except Exception: pass
+
+    def prev_month(e):
+        if month_state["month"] == 1:
+            month_state["month"] = 12
+            month_state["year"] -= 1
+        else:
+            month_state["month"] -= 1
+        render_calendar()
+
+    def next_month(e):
+        if month_state["month"] == 12:
+            month_state["month"] = 1
+            month_state["year"] += 1
+        else:
+            month_state["month"] += 1
+        render_calendar()
+
+    header_controls = ft.Row([
+        ft.IconButton(icon=ft.Icons.ARROW_BACK_IOS, icon_size=14, icon_color="#00FFFF", on_click=prev_month, tooltip="Mes anterior"),
+        header_text,
+        ft.IconButton(icon=ft.Icons.ARROW_FORWARD_IOS, icon_size=14, icon_color="#00FFFF", on_click=next_month, tooltip="Mes siguiente"),
+    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+    dlg.title = ft.Row([
+        ft.Text("📅 SELECTOR DE SEMANA Y DÍA SGH", color="white", weight="bold", size=13),
+    ], alignment=ft.MainAxisAlignment.CENTER)
+
+    dlg.content = ft.Container(
+        content=ft.Column([
+            header_controls,
+            ft.Divider(height=6, color="#1F2937"),
+            cal_body
+        ], tight=True, spacing=6),
+        width=340,
+        padding=6
+    )
+    dlg.actions = [
+        ft.TextButton("Cerrar", on_click=cerrar_dialogo)
+    ]
+    dlg.actions_alignment = "end"
+
+    render_calendar()
+    page.overlay.append(dlg)
+    dlg.open = True
+    page.update()
+
 def sincronizar_baselines_domingo(s_state):
     if isinstance(s_state, dict) and "DOMINGO" in s_state:
         dom_data = s_state["DOMINGO"]
@@ -144,8 +313,11 @@ try:
 except Exception: pass
 
 def default_global_meta():
+    hoy = datetime.date.today()
+    yr, sem = obtener_semana_sgh_de_fecha(hoy)
     return {
-        "semana": "30",
+        "semana": str(sem),
+        "anio": str(yr),
         "tienda": "Vallejo",
         "num_tienda": "3645"
     }
@@ -190,33 +362,44 @@ def get_state_file(user_id):
 
 def init_user_state(user_id):
     if user_id not in user_states:
+        hoy = datetime.date.today()
+        sgh_dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO']
+        day_now = sgh_dias[(hoy.weekday() + 1) % 7]
         user_states[user_id] = {
             "global_meta": default_global_meta(),
             "store_state": default_store_state(),
             "historico_semanal_state": {},
-            "active_tab": ["DOMINGO"]
+            "active_tab": [day_now]
         }
         cargar_estado_persistente(user_id)
 
 import json
 import threading
 
-def _db_save_worker(user_id, json_str, sem_str, tienda_id):
-    db = conectar_db()
-    if db:
-        try:
-            cursor = db.cursor()
-            cursor.execute("""
-            INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json)
-            VALUES (%s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE estado_json=VALUES(estado_json), fecha_actualizacion=NOW()
-            """, (str(user_id), int(tienda_id), str(sem_str), json_str))
-            db.commit()
-        except Exception as ex_db:
-            print(f"Notice DB save enfoque_diario for user {user_id}:", ex_db)
-        finally:
-            try: db.close()
-            except: pass
+def _async_save_worker(user_id, payload, sem_str, tienda_id):
+    try:
+        json_str = json.dumps(payload, ensure_ascii=False)
+        sf = get_state_file(user_id)
+        with open(sf, "w", encoding="utf-8") as f:
+            f.write(json_str)
+
+        db = conectar_db()
+        if db:
+            try:
+                cursor = db.cursor()
+                cursor.execute("""
+                INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE estado_json=VALUES(estado_json), fecha_actualizacion=NOW()
+                """, (str(user_id), int(tienda_id), str(sem_str), json_str))
+                db.commit()
+            except Exception as ex_db:
+                print(f"Notice DB save enfoque_diario for user {user_id}:", ex_db)
+            finally:
+                try: db.close()
+                except: pass
+    except Exception as ex:
+        print(f"Error en _async_save_worker para {user_id}:", ex)
 
 def guardar_estado_persistente(user_id):
     try:
@@ -236,16 +419,10 @@ def guardar_estado_persistente(user_id):
             "historico_semanal_state": h_state,
             "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
         }
-        json_str = json.dumps(payload, ensure_ascii=False)
+        sem_str = str(g_meta.get("semana", "30"))
+        tienda_id = int(g_meta.get("num_tienda", 0))
 
-        # 1. Guardar en archivo JSON local de respaldo (rápido en disco)
-        with open(get_state_file(user_id), "w", encoding="utf-8") as f:
-            f.write(json_str)
-
-        # 2. Guardar en MySQL en segundo plano (Thread para NO congelar ni alentar la interfaz)
-        sem_str = str(user_states[user_id]["global_meta"].get("semana", "30"))
-        tienda_id = int(user_states[user_id]["global_meta"].get("num_tienda", 0))
-        t = threading.Thread(target=_db_save_worker, args=(user_id, json_str, sem_str, tienda_id), daemon=True)
+        t = threading.Thread(target=_async_save_worker, args=(user_id, payload, sem_str, tienda_id), daemon=True)
         t.start()
     except Exception as ex:
         print(f"Error al guardar estado de enfoque diario para {user_id}:", ex)
@@ -933,6 +1110,9 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 g_meta["num_tienda"] = s_usuario.replace("sgh", "")
             elif s_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
                 g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[s_tienda.upper()]
+
+    # Cargar estado guardado en MySQL/JSON para la tienda y usuario específicos
+    cargar_estado_persistente(user_id)
     s_state = user_states[user_id]["store_state"]
     h_state = user_states[user_id]["historico_semanal_state"]
     
@@ -1011,21 +1191,20 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # --- COMPONENTES VISUALES ---
     tab_view_cache = {}
 
-    # Re-renderizador del contenedor activo
+    # Re-renderizador del contenedor activo (Vistas siempre frescas desde el estado guardado)
     def update_active_view():
         curr_tab = user_states[user_id]['active_tab'][0]
-        if curr_tab not in tab_view_cache:
-            if curr_tab == "SEMANAL":
-                tab_view_cache[curr_tab] = build_semanal_ui()
-            elif curr_tab.startswith("PLAN.ACCIÓN_"):
-                d_code = curr_tab.replace("PLAN.ACCIÓN_", "")
-                code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
-                d_real = code_map.get(d_code, "DOMINGO")
-                tab_view_cache[curr_tab] = build_plan_accion_ui(d_real)
-            else:
-                tab_view_cache[curr_tab] = build_sheet_ui(curr_tab)
+        if curr_tab == "SEMANAL":
+            view_ui = build_semanal_ui()
+        elif curr_tab.startswith("PLAN.ACCIÓN_"):
+            d_code = curr_tab.replace("PLAN.ACCIÓN_", "")
+            code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
+            d_real = code_map.get(d_code, "DOMINGO")
+            view_ui = build_plan_accion_ui(d_real)
+        else:
+            view_ui = build_sheet_ui(curr_tab)
 
-        tab_content_container.content = tab_view_cache[curr_tab]
+        tab_content_container.content = view_ui
             
         try:
             if curr_tab == "SEMANAL":
@@ -2252,6 +2431,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     tab_content_container = ft.Container()
 
     def select_tab(tab_name):
+        guardar_estado_persistente(user_id)
         user_states[user_id]['active_tab'][0] = tab_name
         for btn, t_id in tab_buttons:
             is_sel = (t_id == tab_name)
@@ -2414,18 +2594,63 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             except Exception:
                 pass
 
-    dd_semana = ft.Dropdown(
-        value=str(g_meta["semana"]),
-        options=[ft.dropdown.Option(str(w)) for w in range(1, 53)],
-        width=75,
-        content_padding=6,
-        text_size=11,
-        text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
-        bgcolor="#1F2937",
-        border_color="#374151",
-        border_radius=6
+    def on_fecha_calendario_seleccionada(d_date):
+        guardar_semana_historico(user_id)
+        n_year, n_sem = obtener_semana_sgh_de_fecha(d_date)
+        sgh_dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO']
+        sgh_idx = (d_date.weekday() + 1) % 7
+        target_day = sgh_dias[sgh_idx]
+
+        g_meta["semana"] = str(n_sem)
+        g_meta["anio"] = str(n_year)
+        try:
+            dd_anio.value = str(n_year)
+        except Exception: pass
+
+        cargar_semana_historico(user_id, n_sem)
+        user_states[user_id]["active_tab"][0] = target_day
+
+        actualizar_etiquetas_pestañas()
+        guardar_estado_persistente(user_id)
+        update_active_view()
+
+        try:
+            fechas_n = obtener_fechas_semana(n_year, n_sem)
+            lbl_f = fechas_n.get(target_day, {}).get("str_short", d_date.strftime("%d/%m"))
+            btn_calendar_txt.value = f"Sem {n_sem} ({target_day[:3]} {lbl_f}) ▾"
+            btn_calendar.update()
+        except Exception: pass
+
+        if page:
+            snack = ft.SnackBar(ft.Text(f"📅 Cargado: Sem {n_sem} - {target_day} ({d_date.strftime('%d/%m/%Y')})", color="white"), bgcolor="#059669")
+            page.overlay.append(snack)
+            snack.open = True
+            try: page.update()
+            except Exception: pass
+
+    def abrir_calendario(e):
+        crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_calendario_seleccionada)
+
+    btn_calendar_txt = ft.Text(
+        f"Sem {g_meta['semana']} ▾",
+        color="#00FFFF",
+        weight="bold",
+        size=11
     )
-    dd_semana.on_change = on_semana_change
+
+    btn_calendar = ft.Container(
+        content=ft.Row([
+            ft.Text("📅", size=12),
+            btn_calendar_txt
+        ], spacing=4),
+        border=ft.Border.all(1.5, "#00FFFF"),
+        border_radius=6,
+        padding=ft.Padding(8, 5, 8, 5),
+        bgcolor="#1E1E2E",
+        ink=True,
+        on_click=abrir_calendario,
+        tooltip="Abrir Calendario con Números de Semana y Días"
+    )
 
     # 2. Campo # TIENDA (Número de Tienda SGH)
     def on_num_tienda_change(e):
@@ -2555,8 +2780,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Text("AÑO:", color="white", weight="bold", size=11),
                     dd_anio,
                     ft.Container(width=2),
-                    ft.Text("SEMANA:", color="white", weight="bold", size=11),
-                    dd_semana,
+                    ft.Text("FECHA / SEMANA:", color="white", weight="bold", size=11),
+                    btn_calendar,
                     ft.Container(width=2),
                     ft.Text("# TIENDA:", color="white", weight="bold", size=11),
                     txt_num_tienda,

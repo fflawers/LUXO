@@ -19178,42 +19178,99 @@ Ejemplo:
 
         dd_zona_activa.on_change = on_zona_activa_change
 
-        # Definir la cabecera superior permanente para toda la aplicación
+        # Ocultar desplegables de Zona y Región para usuarios de Tienda (Solo visibles para Admin)
+        is_adm = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
+        dd_zona_activa.visible = is_adm
+        dd_region_activa.visible = is_adm
+
+        # Definir la cabecera superior permanente adaptativa para toda la aplicación
         top_appbar = ft.Container(
-            content=ft.Row([
-                ft.Row([
-                    ft.Container(
-                        content=ft.Text("☰", color="#00FFFF", size=18, weight="bold"),
-                        on_click=toggle_sidebar,
-                        tooltip="Mostrar/Ocultar Menú",
-                        padding=8,
-                        alignment=ft.alignment.Alignment(0, 0),
-                        ink=True,
-                        border_radius=4
-                    ),
-                    ft.Text("LUXO AI SYSTEM", color="white", weight="bold", size=15),
-                ], vertical_alignment="center", spacing=4),
-                ft.Row([
-                    dd_zona_activa,
-                    dd_region_activa,
-                    btn_global_master_refresh
-                ], vertical_alignment="center", spacing=6)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             bgcolor="#0B0E17",
             padding=6,
             border=ft.Border(bottom=ft.BorderSide(1, "#1F2937")),
             visible=True
         )
 
-        # Ocultar desplegables de Zona y Región para usuarios de Tienda (Solo visibles para Admin)
-        is_adm = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
-        dd_zona_activa.visible = is_adm
-        dd_region_activa.visible = is_adm
+        def actualizar_top_appbar_layout():
+            is_mob = (page.width < 768) if (page and page.width) else False
+            if is_mob:
+                dd_zona_activa.width = None
+                dd_zona_activa.expand = 1
+                dd_region_activa.width = None
+                dd_region_activa.expand = 1
+                
+                rows = [
+                    ft.Row([
+                        ft.Row([
+                            ft.Container(
+                                content=ft.Text("☰", color="#00FFFF", size=18, weight="bold"),
+                                on_click=toggle_sidebar,
+                                tooltip="Mostrar/Ocultar Menú",
+                                padding=6,
+                                alignment=ft.alignment.Alignment(0, 0),
+                                ink=True,
+                                border_radius=4
+                            ),
+                            ft.Text("LUXO AI SYSTEM", color="white", weight="bold", size=14),
+                        ], vertical_alignment="center", spacing=4),
+                        btn_global_master_refresh
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+                ]
+                if is_adm:
+                    rows.append(
+                        ft.Row([
+                            dd_zona_activa,
+                            dd_region_activa,
+                        ], spacing=6)
+                    )
+                top_appbar.content = ft.Column(rows, spacing=6)
+            else:
+                dd_zona_activa.width = 210
+                dd_zona_activa.expand = False
+                dd_region_activa.width = 200
+                dd_region_activa.expand = False
+                
+                ctrls = []
+                if is_adm:
+                    ctrls.extend([dd_zona_activa, dd_region_activa])
+                ctrls.append(btn_global_master_refresh)
+                
+                top_appbar.content = ft.Row([
+                    ft.Row([
+                        ft.Container(
+                            content=ft.Text("☰", color="#00FFFF", size=18, weight="bold"),
+                            on_click=toggle_sidebar,
+                            tooltip="Mostrar/Ocultar Menú",
+                            padding=8,
+                            alignment=ft.alignment.Alignment(0, 0),
+                            ink=True,
+                            border_radius=4
+                        ),
+                        ft.Text("LUXO AI SYSTEM", color="white", weight="bold", size=15),
+                    ], vertical_alignment="center", spacing=4),
+                    ft.Row(ctrls, vertical_alignment="center", spacing=6)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        actualizar_top_appbar_layout()
 
         # Ocultar menú por defecto si la pantalla es de móvil y activar cabecera superior
         if getattr(page, "width", None) and page.width < 800:
             sidebar.visible = False
             top_appbar.visible = True
+
+        prev_on_resize = page.on_resize
+        def on_page_resize_appbar(e):
+            actualizar_top_appbar_layout()
+            try:
+                top_appbar.update()
+            except Exception:
+                pass
+            if callable(prev_on_resize):
+                try:
+                    prev_on_resize(e)
+                except Exception:
+                    pass
+        page.on_resize = on_page_resize_appbar
 
         # Crear área derecha combinada con la cabecera y el área de contenido
         right_area = ft.Column([
