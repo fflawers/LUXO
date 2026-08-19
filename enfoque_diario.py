@@ -285,31 +285,40 @@ def cargar_semana_historico(user_id, num_semana):
 
 def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None):
     """Consulta los colaboradores registrados en la base de datos de Configuración de Tienda y los auto-llena en Enfoque Diario 2026."""
+    if not user_id and isinstance(user_info, dict):
+        user_id = user_info.get("id")
     if not user_id: return
+
+    if user_id not in user_states:
+        init_user_state(user_id)
+
     g_meta = user_states[user_id]["global_meta"]
     s_state = user_states[user_id]["store_state"]
     db_names = []
     try:
-        target_t = tienda_name or g_meta.get("tienda", "Vallejo")
+        target_t = tienda_name or g_meta.get("tienda", "")
         db = conectar_db()
         if db:
             cursor = db.cursor(dictionary=True)
+            # 1. Intentar por ID directo de la tienda asignada
             cursor.execute("""
-                SELECT v.Nombre_Completo 
-                FROM vendedores v
-                JOIN usuarios u ON v.ID_Usuario_Tienda = u.ID_Usuario
-                WHERE LOWER(u.Tienda) = LOWER(%s) AND v.Activo = 1
-                ORDER BY v.ID_Vendedor ASC
-            """, (target_t,))
+                SELECT Nombre_Completo FROM vendedores
+                WHERE ID_Usuario_Tienda = %s AND Activo = 1
+                ORDER BY ID_Vendedor ASC
+            """, (user_id,))
             rows = cursor.fetchall()
-            if not rows and isinstance(user_info, dict):
-                user_id = user_info.get("id", 1)
+
+            # 2. Si no hay por ID, intentar por nombre de tienda en usuarios
+            if not rows and target_t:
                 cursor.execute("""
-                    SELECT Nombre_Completo FROM vendedores
-                    WHERE (ID_Usuario_Tienda = %s OR ID_Usuario_Tienda = 1) AND Activo = 1
-                    ORDER BY ID_Vendedor ASC
-                """, (user_id,))
+                    SELECT v.Nombre_Completo
+                    FROM vendedores v
+                    JOIN usuarios u ON v.ID_Usuario_Tienda = u.ID_Usuario
+                    WHERE LOWER(TRIM(u.Tienda)) = LOWER(TRIM(%s)) AND v.Activo = 1
+                    ORDER BY v.ID_Vendedor ASC
+                """, (target_t,))
                 rows = cursor.fetchall()
+
             db.close()
             db_names = [r["Nombre_Completo"] for r in rows if r.get("Nombre_Completo")]
     except Exception as ex:
@@ -819,8 +828,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     con navegación por pestañas (Resumen Semanal, Días y Planes de Acción).
     """
     if session_user is None:
-        session_user = {"user": "invitado"}
-    user_id = session_user.get("user", "invitado")
+        session_user = {"id": "invitado", "usuario": "invitado"}
+    user_id = str(session_user.get("id") or session_user.get("usuario") or session_user.get("user") or "invitado")
     init_user_state(user_id)
     g_meta = user_states[user_id]["global_meta"]
 
@@ -2210,7 +2219,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     es_admin = False
     if session_user and isinstance(session_user, dict):
         u_rol = str(session_user.get("rol", "")).lower()
-        u_name = str(session_user.get("user", "")).lower()
+        u_name = str(session_user.get("usuario") or session_user.get("user") or session_user.get("nombre") or "").lower()
         if u_rol in ["admin", "administrador"] or u_name in ["mx204562", "clorio", "ricardo", "gerry", "cesar", "manuel"]:
             es_admin = True
 

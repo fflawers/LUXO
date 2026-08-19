@@ -13137,9 +13137,24 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             zona_title_txt = ft.Text("", size=12, color="#aaaaaa")
             period_title_txt = ft.Text("", size=16, color="white", weight="bold")
 
-            initial_user_str = str(user_info.get("usuario") or "").lower()
-            initial_num_str = initial_user_str.replace("sgh", "") if (initial_user_str.startswith("sgh") and len(initial_user_str) > 3) else ""
-
+            initial_num_str = ""
+            u_str = str(user_info.get("usuario") or "").lower().strip()
+            if u_str.startswith("sgh") and len(u_str) > 3:
+                initial_num_str = u_str.replace("sgh", "")
+            else:
+                t_nom = user_info.get("tienda") or ""
+                if t_nom:
+                    try:
+                        db_num = conectar_db()
+                        if db_num:
+                            cur_num = db_num.cursor()
+                            cur_num.execute("SELECT Usuario FROM usuarios WHERE LOWER(Tienda) = LOWER(%s) AND Usuario LIKE 'sgh%' LIMIT 1", (t_nom,))
+                            row_n = cur_num.fetchone()
+                            db_num.close()
+                            if row_n and row_n[0]:
+                                initial_num_str = str(row_n[0]).lower().replace("sgh", "")
+                    except Exception:
+                        pass
             # Rediseño: Tienda es ahora campo de texto
             txt_tienda = ft.TextField(
                 label="Tienda",
@@ -13763,16 +13778,28 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     mostrar_snack("Error al guardar la configuración anual.", color="red")
 
             last_tienda = [selected_tienda[0]]
-            last_num_tienda = [""]
+            last_num_tienda = [initial_num_str]
 
             def autorellenar_tienda():
+                if not es_admin():
+                    # Para usuarios de tienda: siempre fijo su nombre y número
+                    t_ses = user_info.get("tienda") or ""
+                    if t_ses:
+                        txt_tienda.value = t_ses
+                        selected_tienda[0] = t_ses
+                    if initial_num_str:
+                        txt_num_tienda.value = initial_num_str
+                        zona_title_txt.value = f"Nº Tienda: {initial_num_str}"
+                    return
+
+                # Para usuarios Admin: auto-completar bidireccional al buscar
                 t_nombre = txt_tienda.value.strip()
                 t_numero = txt_num_tienda.value.strip()
-                
+
                 cambio_nombre = (t_nombre != last_tienda[0])
                 cambio_numero = (t_numero != last_num_tienda[0])
-                
-                if cambio_nombre and not cambio_numero:
+
+                if cambio_nombre and t_nombre:
                     try:
                         db = conectar_db()
                         if db:
@@ -13780,7 +13807,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             cur.execute("SELECT Numero_Tienda FROM presupuesto_anual WHERE Tienda = %s LIMIT 1", (t_nombre,))
                             row = cur.fetchone()
                             if not row or not row[0]:
-                                cur.execute("SELECT Usuario FROM usuarios WHERE LOWER(Tienda) = LOWER(%s) AND Usuario LIKE 'sgh%%' LIMIT 1", (t_nombre,))
+                                cur.execute("SELECT Usuario FROM usuarios WHERE LOWER(Tienda) = LOWER(%s) AND Usuario LIKE 'sgh%' LIMIT 1", (t_nombre,))
                                 row = cur.fetchone()
                                 if row and row[0]:
                                     row = (str(row[0]).lower().replace("sgh", ""),)
@@ -13788,60 +13815,28 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             if row and row[0]:
                                 txt_num_tienda.value = str(row[0])
                                 last_num_tienda[0] = str(row[0])
-                            else:
-                                if initial_num_str:
-                                    txt_num_tienda.value = initial_num_str
-                                    last_num_tienda[0] = initial_num_str
                     except Exception as e:
                         print("Error buscando número:", e)
                     last_tienda[0] = t_nombre
-                elif cambio_numero and not cambio_nombre:
+
+                elif cambio_numero and t_numero:
                     try:
                         db = conectar_db()
                         if db:
                             cur = db.cursor()
                             cur.execute("SELECT Tienda FROM presupuesto_anual WHERE Numero_Tienda = %s LIMIT 1", (t_numero,))
                             row = cur.fetchone()
+                            if not row or not row[0]:
+                                cur.execute("SELECT Tienda FROM usuarios WHERE Usuario = %s OR Usuario LIKE %s LIMIT 1", (f"sgh{t_numero}", f"%{t_numero}%"))
+                                row = cur.fetchone()
                             db.close()
                             if row and row[0]:
                                 txt_tienda.value = str(row[0])
                                 selected_tienda[0] = str(row[0])
                                 last_tienda[0] = str(row[0])
-                            else:
-                                txt_tienda.value = ""
-                                selected_tienda[0] = ""
-                                last_tienda[0] = ""
                     except Exception as e:
                         print("Error buscando nombre:", e)
                     last_num_tienda[0] = t_numero
-                else:
-                    if t_nombre and not t_numero:
-                        try:
-                            db = conectar_db()
-                            if db:
-                                cur = db.cursor()
-                                cur.execute("SELECT Numero_Tienda FROM presupuesto_anual WHERE Tienda = %s LIMIT 1", (t_nombre,))
-                                row = cur.fetchone()
-                                db.close()
-                                if row and row[0]:
-                                    txt_num_tienda.value = str(row[0])
-                                    last_num_tienda[0] = str(row[0])
-                        except Exception:
-                            pass
-                    elif t_numero and not t_nombre:
-                        try:
-                            db = conectar_db()
-                            if db:
-                                cur = db.cursor()
-                                cur.execute("SELECT Tienda FROM presupuesto_anual WHERE Numero_Tienda = %s LIMIT 1", (t_numero,))
-                                row = cur.fetchone()
-                                db.close()
-                                if row and row[0]:
-                                    txt_tienda.value = str(row[0])
-                                    selected_tienda[0] = str(row[0])
-                                    last_tienda[0] = str(row[0])
-                        except Exception:
-                            pass
 
             def refresh_data():
                 autorellenar_tienda()
@@ -16621,34 +16616,80 @@ Ejemplo:
                         border_color="#9D50BB",
                         color="white",
                         bgcolor="#0F0F1A",
-                        expand=True
+                        width=250
+                    )
+
+                    txt_buscar_tienda_admin = ft.TextField(
+                        label="Escribe Nombre o Nº de Tienda (ej. ANTEA ó 8829)",
+                        hint_text="Escribe 'ANTEA' o '8829'...",
+                        border_color="#00FFFF",
+                        focused_border_color="#00FFFF",
+                        color="white",
+                        text_size=12,
+                        height=45,
+                        expand=True,
+                        on_submit=lambda e: ejecutar_cargar_tienda_admin()
                     )
 
                     def ejecutar_cargar_tienda_admin(e=None):
-                        if dd_tiendas_admin and dd_tiendas_admin.value:
+                        query = txt_buscar_tienda_admin.value.strip().lower()
+                        matched_id = None
+                        matched_name = ""
+
+                        if query:
+                            for opt in dd_tiendas_admin.options:
+                                if query in opt.text.lower() or query in str(opt.key):
+                                    matched_id = int(opt.key)
+                                    matched_name = opt.text
+                                    break
+
+                            if not matched_id:
+                                try:
+                                    db_s = conectar_db()
+                                    if db_s:
+                                        cur_s = db_s.cursor(dictionary=True)
+                                        cur_s.execute("""
+                                            SELECT ID_Usuario, Tienda, Nombre_Completo
+                                            FROM usuarios
+                                            WHERE LOWER(Tienda) LIKE %s OR LOWER(Usuario) LIKE %s OR Usuario = %s
+                                            LIMIT 1
+                                        """, (f"%{query}%", f"%{query}%", f"sgh{query}"))
+                                        row_s = cur_s.fetchone()
+                                        db_s.close()
+                                        if row_s:
+                                            matched_id = int(row_s["ID_Usuario"])
+                                            matched_name = f"{row_s['Tienda']} ({row_s['Nombre_Completo']})"
+                                except Exception as ex_s:
+                                    print("Error buscando tienda admin:", ex_s)
+                        elif dd_tiendas_admin and dd_tiendas_admin.value:
                             t_id = int(dd_tiendas_admin.value)
-                            target_user_id[0] = t_id
-                            t_name = "TIENDA"
+                            matched_id = t_id
                             for opt in dd_tiendas_admin.options:
                                 if opt.key == str(t_id):
-                                    t_name = opt.text
+                                    matched_name = opt.text
                                     break
-                            current_store_name_holder[0] = t_name
+
+                        if matched_id:
+                            target_user_id[0] = matched_id
+                            current_store_name_holder[0] = matched_name
+                            dd_tiendas_admin.value = str(matched_id)
                             actualizar_titulos_tienda()
-                            cargar_datos(t_id)
+                            cargar_datos(matched_id)
                             if active_subtab[0] == "diarias":
                                 subtab_content.content = build_subtab_diarias_view()
                             else:
                                 subtab_content.content = build_subtab_vendedores_view()
                             try: page.update()
                             except Exception: pass
-                            mostrar_snack(f"Metas cargadas para: {t_name}", color="#7CFC00")
+                            mostrar_snack(f"✅ Tienda cargada: {matched_name}", color="#7CFC00")
+                        else:
+                            mostrar_snack(f"⚠️ No se encontró tienda con: '{query}'", color="#FF4B4B")
 
                     btn_cargar_tienda_admin = ft.ElevatedButton(
-                        "🔄 Cargar Tienda",
+                        "🔍 Cargar Tienda",
                         bgcolor="#0284c7",
                         color="white",
-                        height=38,
+                        height=42,
                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                         on_click=ejecutar_cargar_tienda_admin
                     )
@@ -16660,6 +16701,7 @@ Ejemplo:
                                 ft.Text("Consultar Tienda (Admin):", color="white", weight="bold", size=13),
                             ]),
                             ft.Row([
+                                txt_buscar_tienda_admin,
                                 dd_tiendas_admin,
                                 btn_cargar_tienda_admin
                             ], spacing=10)
@@ -16669,7 +16711,6 @@ Ejemplo:
                         border_radius=8,
                         border=ft.Border.all(1, "#9D50BB")
                     )
-            else:
                 current_store_name_holder[0] = user_info.get("tienda") or user_info.get("nombre") or "Mi Tienda"
                 actualizar_titulos_tienda()
 
@@ -18461,7 +18502,7 @@ Ejemplo:
                 
             def procesar_cambio():
                 try:
-                    if vista not in main_views_cache or vista == "chat":
+                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
                         elif vista == "historial":

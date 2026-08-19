@@ -1,5 +1,9 @@
 Traceback (most recent call last):
-  File "C:\Users\MOISES\Desktop\luxo6.0\main.py", line 17646, in login_click
-    "cambiar_vista": cambiar_vista,
-                     ^^^^^^^^^^^^^
-NameError: name 'cambiar_vista' is not defined
+  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 19649, in procesar_login
+    cargar_chat()
+  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 19166, in cargar_chat
+    cambiar_vista("chat")
+  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 18428, in cambiar_vista
+    active_view[0] = vista
+    ^^^^^^^^^^^
+NameError: name 'active_view' is not defined
