@@ -1247,12 +1247,12 @@ def configurar_rutas_fastapi(app):
                         try {
                             if (rec) { try { rec.stop(); } catch(e){} }
                             rec = new SpeechRecognition();
-                            rec.continuous = true;
+                            rec.continuous = false;
                             rec.interimResults = true;
                             rec.lang = 'es-MX';
 
                             function sendVoiceQuery(queryText) {
-                                if (!queryText || queryText === lastSentText) return;
+                                if (!queryText) return;
                                 lastSentText = queryText;
                                 lastSentTime = Date.now();
                                 playBeep(2);
@@ -1264,7 +1264,6 @@ def configurar_rutas_fastapi(app):
                                 if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
                                 if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
                                 setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
-                                try { rec.stop(); } catch(e){}
                             }
 
                             rec.onstart = function() {
@@ -1301,16 +1300,7 @@ def configurar_rutas_fastapi(app):
 
                                         if (!query) {
                                             setStatus("👂 ¡Oye LUXO Detectado! Di tu pregunta...", "#FF00FF", "🔊");
-                                            if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
-                                            window.luxoDictatingTimeout = setTimeout(function(){
-                                                window.luxoManualDictating = false;
-                                                setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
-                                            }, 14000);
                                         } else {
-                                            if (!window.luxoManualDictating) {
-                                                playBeep(1);
-                                                window.luxoManualDictating = true;
-                                            }
                                             if (e.results[i].isFinal) {
                                                 sendVoiceQuery(query);
                                             } else {
@@ -1318,7 +1308,7 @@ def configurar_rutas_fastapi(app):
                                                 if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
                                                 window.luxoSilenceTimer = setTimeout(function() {
                                                     sendVoiceQuery(query);
-                                                }, 1200);
+                                                }, 1000);
                                             }
                                         }
                                     } else if (window.luxoManualDictating) {
@@ -1331,7 +1321,7 @@ def configurar_rutas_fastapi(app):
                                                 if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
                                                 window.luxoSilenceTimer = setTimeout(function() {
                                                     sendVoiceQuery(query);
-                                                }, 1200);
+                                                }, 1000);
                                             }
                                         }
                                     }
