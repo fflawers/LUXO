@@ -1870,12 +1870,13 @@ def configurar_rutas_fastapi(app):
                     except Exception as ex:
                         print(f"WARN page.update() falló: {ex}")
 
-                    async def trigger_send():
-                        try:
+                    try:
+                        if hasattr(page, "run_thread"):
+                            page.run_thread(enviar_mensaje, None)
+                        else:
                             enviar_mensaje(None)
-                        except Exception as ex:
-                            print(f"ERROR en enviar_mensaje: {ex}\n{traceback.format_exc()}")
-                    page.run_task(trigger_send)
+                    except Exception as ex:
+                        print(f"ERROR en enviar_mensaje: {ex}\n{traceback.format_exc()}")
                     return {"status": "success"}
                 else:
                     print(f"DEBUG: Faltan componentes - input_msg={input_msg is not None}, enviar_mensaje={enviar_mensaje is not None}, page={page is not None}")
@@ -2674,7 +2675,10 @@ def iniciar_hilo_escucha_luxo():
                                                     winsound.Beep(1500, 100)
                                                 except Exception: pass
                                             try:
-                                                threading.Thread(target=enviar_mensaje_fn, args=(None,), daemon=True).start()
+                                                if page_obj and hasattr(page_obj, "run_thread"):
+                                                    page_obj.run_thread(enviar_mensaje_fn, None)
+                                                else:
+                                                    threading.Thread(target=enviar_mensaje_fn, args=(None,), daemon=True).start()
                                             except Exception as ex_send:
                                                 print("Notice enviar_mensaje_fn:", ex_send)
                                         else:
@@ -2691,6 +2695,7 @@ def iniciar_hilo_escucha_luxo():
                                         query = text.strip()
                                         input_msg = target_sess.get("input_msg")
                                         enviar_mensaje_fn = target_sess.get("enviar_mensaje")
+                                        page_obj = target_sess.get("page")
                                         if query and input_msg and enviar_mensaje_fn:
                                             print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
                                             input_msg.value = query
@@ -2701,7 +2706,10 @@ def iniciar_hilo_escucha_luxo():
                                                     winsound.Beep(1500, 100)
                                                 except Exception: pass
                                             try:
-                                                threading.Thread(target=enviar_mensaje_fn, args=(None,), daemon=True).start()
+                                                if page_obj and hasattr(page_obj, "run_thread"):
+                                                    page_obj.run_thread(enviar_mensaje_fn, None)
+                                                else:
+                                                    threading.Thread(target=enviar_mensaje_fn, args=(None,), daemon=True).start()
                                             except Exception as ex_send:
                                                 print("Notice enviar_mensaje_fn:", ex_send)
                             except sr.UnknownValueError:
