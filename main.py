@@ -7617,7 +7617,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
                             if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
                             setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
-                            try { rec.abort(); } catch(e){}
+                            try { rec.stop(); } catch(e){}
                         }
 
                         rec.onresult = function(e) {
@@ -7694,8 +7694,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             window.luxoSpeechRecognitionActive = false;
                             if (!isMobileDevice) {
                                 setTimeout(function() {
-                                    try { rec.start(); } catch(e){}
-                                }, 300);
+                                    try {
+                                        rec.start();
+                                    } catch(e) {
+                                        setTimeout(function() {
+                                            try { rec.start(); } catch(e2){}
+                                        }, 1000);
+                                    }
+                                }, 600);
                             }
                         };
 
