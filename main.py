@@ -1769,32 +1769,21 @@ def configurar_rutas_fastapi(app):
             page = session.get("page")
             siri_orb = session.get("siri_orb")
             if page:
+                def async_ui_notify():
+                    try:
+                        if siri_orb:
+                            siri_orb.opacity = 1
+                            siri_orb.scale = 1
+                            siri_orb.update()
+                        page.snack_bar = ft.SnackBar(ft.Text("✨ ¡Oye LUXO detectado! Escuchando...", color="white", weight="bold"), bgcolor="#9D50BB", duration=3000)
+                        page.snack_bar.open = True
+                        page.update()
+                    except Exception: pass
                 try:
-                    # Forzar el encendido visual del Orbe Javascript inyectado
-                    target_url = "javascript:if(typeof window.showLuxoSiriOrb === 'function'){ window.showLuxoSiriOrb(5000); } void(0);"
-                    import urllib.parse
-                    encoded = urllib.parse.quote(target_url[11:])
-                    page.launch_url(f"javascript:void(eval(decodeURIComponent('{encoded}')))")
-
-                    if siri_orb:
-                        siri_orb.opacity = 1
-                        siri_orb.scale = 1
-                        siri_orb.update()
-
-                    page.snack_bar = ft.SnackBar(ft.Text("✨ ¡Oye LUXO detectado! Escuchando...", color="white", weight="bold"), bgcolor="#9D50BB", duration=3000)
-                    page.snack_bar.open = True
-                    page.update()
-
-                    if siri_orb:
-                        async def hide_orb():
-                            import asyncio
-                            await asyncio.sleep(5)
-                            try:
-                                siri_orb.opacity = 0
-                                siri_orb.scale = 0.1
-                                siri_orb.update()
-                            except: pass
-                        page.run_task(hide_orb)
+                    if hasattr(page, "run_thread"):
+                        page.run_thread(async_ui_notify)
+                    else:
+                        async_ui_notify()
                 except Exception as ex:
                     print(f"WARN Flet overlay error: {ex}")
         return {"status": "success"}
@@ -7645,24 +7634,23 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         .replace(/oye luco/gi, '')
                                         .trim();
                                         
+                                    if (!window.luxoManualDictating) {
+                                        playBeep(1);
+                                        window.luxoManualDictating = true;
+                                    }
                                     if (!window.luxoIsListeningAlertSent) {
                                         window.luxoIsListeningAlertSent = true;
-                                        fetch('/luxo_listening_start?user_id=' + window.getLuxoUserId(), { method: 'POST' });
+                                        fetch('/luxo_listening_start?user_id=' + window.getLuxoUserId(), { method: 'POST' }).catch(function(){});
                                     }
-                                    
                                     window.showLuxoSiriOrb(8000);
 
                                     if (!query) {
-                                        if (e.results[i].isFinal || !window.luxoManualDictating) {
-                                            playBeep(1);
-                                            setStatus("👂 ¡Oye LUXO Detectado! Di tu pregunta...", "#FF00FF", "🔊");
-                                            window.luxoManualDictating = true;
-                                            if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
-                                            window.luxoDictatingTimeout = setTimeout(function(){
-                                                window.luxoManualDictating = false;
-                                                setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
-                                            }, 14000);
-                                        }
+                                        setStatus("👂 ¡Oye LUXO Detectado! Di tu pregunta...", "#FF00FF", "🔊");
+                                        if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
+                                        window.luxoDictatingTimeout = setTimeout(function(){
+                                            window.luxoManualDictating = false;
+                                            setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
+                                        }, 14000);
                                     } else {
                                         if (!window.luxoManualDictating) {
                                             playBeep(1);
