@@ -2593,7 +2593,7 @@ def iniciar_hilo_escucha_luxo():
                             r.non_speaking_duration = 0.8
                             break
                         try:
-                            audio = r.listen(source, timeout=6, phrase_time_limit=25)
+                            audio = r.listen(source, timeout=12, phrase_time_limit=30)
                             try:
                                 text = r.recognize_google(audio, language="es-MX")
                                 print(f"🎙️ Voz captada en micrófono de Windows: '{text}'")
@@ -7615,6 +7615,22 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
                         };
 
+                        function sendVoiceQuery(queryText) {
+                            if (!queryText || queryText === lastSentText) return;
+                            lastSentText = queryText;
+                            lastSentTime = Date.now();
+                            playBeep(2);
+                            window.showLuxoSiriOrb(5000);
+                            setStatus("⚡ Enviando a LUXO: " + queryText, "#7CFC00", "🚀");
+                            fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(queryText), { method: 'POST' });
+                            window.luxoIsListeningAlertSent = false;
+                            window.luxoManualDictating = false;
+                            if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
+                            if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
+                            setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
+                            try { rec.abort(); } catch(e){}
+                        }
+
                         rec.onresult = function(e) {
                             for (let i = e.resultIndex; i < e.results.length; ++i) {
                                 const transcript = e.results[i][0].transcript;
@@ -7622,13 +7638,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 console.log("🎙️ [Luxo Chat Mic]:", transcript, "isFinal:", e.results[i].isFinal);
                                 
                                 if (lower.includes("oye luxo") || lower.includes("oye lujo") || lower.includes("oye lux") || lower.includes("oye luco")) {
-                                    const now = Date.now();
                                     let query = transcript
                                         .replace(/oye luxo/gi, '')
                                         .replace(/oye lujo/gi, '')
                                         .replace(/oye lux/gi, '')
                                         .replace(/oye luco/gi, '')
                                         .trim();
+                                        
                                     if (!window.luxoIsListeningAlertSent) {
                                         window.luxoIsListeningAlertSent = true;
                                         fetch('/luxo_listening_start?user_id=' + window.getLuxoUserId(), { method: 'POST' });
@@ -7645,36 +7661,34 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             window.luxoDictatingTimeout = setTimeout(function(){
                                                 window.luxoManualDictating = false;
                                                 setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
-                                            }, 12000);
+                                            }, 14000);
                                         }
-                                    } else if (query && e.results[i].isFinal) {
-                                        if (query !== lastSentText) {
-                                            lastSentText = query;
-                                            lastSentTime = now;
-                                            playBeep(2);
-                                            window.showLuxoSiriOrb(5000);
-                                            setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                            fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(query), { method: 'POST' });
-                                            window.luxoIsListeningAlertSent = false;
-                                            window.luxoManualDictating = false;
-                                            if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
-                                            setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
-                                            try { rec.abort(); } catch(e){}
+                                    } else {
+                                        if (!window.luxoManualDictating) {
+                                            playBeep(1);
+                                            window.luxoManualDictating = true;
+                                        }
+                                        if (e.results[i].isFinal) {
+                                            sendVoiceQuery(query);
+                                        } else {
+                                            setStatus("👂 Escuchando: " + query, "#FF00FF", "🔊");
+                                            if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
+                                            window.luxoSilenceTimer = setTimeout(function() {
+                                                sendVoiceQuery(query);
+                                            }, 1200);
                                         }
                                     }
                                 } else if (window.luxoManualDictating) {
                                     const query = transcript.trim();
-                                    if (query && (e.results[i].isFinal || query.length > 3)) {
-                                        if (query !== lastSentText) {
-                                            lastSentText = query;
-                                            playBeep(2);
-                                            window.showLuxoSiriOrb(5000);
-                                            setStatus("⚡ Enviando a LUXO: " + query, "#7CFC00", "🚀");
-                                            fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(query), { method: 'POST' });
-                                            window.luxoManualDictating = false;
-                                            if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
-                                            setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
-                                            try { rec.abort(); } catch(e){}
+                                    if (query) {
+                                        if (e.results[i].isFinal) {
+                                            sendVoiceQuery(query);
+                                        } else {
+                                            setStatus("👂 Escuchando: " + query, "#FF00FF", "🔊");
+                                            if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
+                                            window.luxoSilenceTimer = setTimeout(function() {
+                                                sendVoiceQuery(query);
+                                            }, 1200);
                                         }
                                     }
                                 }
