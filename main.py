@@ -1162,15 +1162,22 @@ def configurar_rutas_fastapi(app):
                     function playBeep(count) {
                         try {
                             const cnt = count || 1;
-                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                            if (!window.luxoAudioCtx || window.luxoAudioCtx.state === 'closed') {
+                                window.luxoAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                            }
+                            const ctx = window.luxoAudioCtx;
+                            if (ctx.state === 'suspended') {
+                                ctx.resume().catch(function(){});
+                            }
                             function emitTone(freq, duration, delay) {
                                 setTimeout(function() {
                                     try {
+                                        if (ctx.state === 'suspended') { ctx.resume().catch(function(){}); }
                                         const osc = ctx.createOscillator();
                                         const gain = ctx.createGain();
                                         osc.type = 'sine';
                                         osc.frequency.value = freq;
-                                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                        gain.gain.setValueAtTime(0.18, ctx.currentTime);
                                         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
                                         osc.connect(gain);
                                         gain.connect(ctx.destination);
@@ -1182,11 +1189,17 @@ def configurar_rutas_fastapi(app):
                             if (cnt === 1) {
                                 emitTone(880, 0.12, 0);
                             } else if (cnt >= 2) {
-                                emitTone(1050, 0.08, 0);
-                                emitTone(1320, 0.12, 120);
+                                emitTone(1050, 0.1, 0);
+                                emitTone(1400, 0.16, 120);
                             }
                         } catch(e){}
                     }
+
+                    document.addEventListener('click', function() {
+                        if (window.luxoAudioCtx && window.luxoAudioCtx.state === 'suspended') {
+                            window.luxoAudioCtx.resume().catch(function(){});
+                        }
+                    }, { once: true });
 
 
                     let rec = null;
