@@ -19103,6 +19103,13 @@ Ejemplo:
                 finally:
                     try: db.close()
                     except: pass
+            if len(opciones) == 1:
+                opciones.extend([
+                    ft.dropdown.Option(key="1", text="📍 ZONA CENTRO"),
+                    ft.dropdown.Option(key="2", text="📍 ZONA NORTE"),
+                    ft.dropdown.Option(key="3", text="📍 ZONA OCCIDENTE"),
+                    ft.dropdown.Option(key="4", text="📍 ZONA SUR")
+                ])
             return opciones
 
         def obtener_opciones_regiones_db(zona_id="0"):
