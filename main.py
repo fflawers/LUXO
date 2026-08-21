@@ -1194,8 +1194,9 @@ def configurar_rutas_fastapi(app):
                     let lastSentText = "";
                     let lastSentTime = 0;
 
-                    // Detección de dispositivo móvil para evitar loop de SpeechRecognition
-                    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) || ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
+                    // Detección de dispositivo móvil para evitar loop de SpeechRecognition en celulares
+                    const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
+                    const isMobileDevice = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) && !isDesktopOS;
 
                     window.initLuxoMicPermission = function() {
                         // En celulares/tablets: NO activar reconocimiento continuo "Oye LUXO"
@@ -1508,7 +1509,7 @@ def configurar_rutas_fastapi(app):
                             }
                         }
                     };
-                    // window.initLuxoMicPermission(); // Desactivado inicio automático
+                    window.initLuxoMicPermission();
                 })();
                 </script>
                 """
@@ -3791,6 +3792,8 @@ def main(page: ft.Page):
         "rol": ""
     }
     active_zone_filter = ["Todas"]
+    active_region_filter = ["Todas"]
+    user_session = {"zona_activa_id": "0", "region_activa_id": "0"}
     garantias_cache = []
     garantias_cargando = [False]
     garantias_cargadas = [False]
@@ -7548,8 +7551,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 let lastSentText = "";
                 let lastSentTime = 0;
 
-                // Detección de dispositivo móvil/tablet
-                const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) || ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
+                // Detección de dispositivo móvil/tablet (excluye computadoras Windows/Mac)
+                const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
+                const isMobileDevice = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) && !isDesktopOS;
 
                 window.initLuxoMicPermission = function() {
                     // En celulares/tablets: NO activar escucha continua en segundo plano
@@ -8483,13 +8487,29 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             store_usage_controls = []
             tiendas_uso = []
             try:
-                z_id = str(user_session.get("zona_activa_id", "0"))
-                r_id = str(user_session.get("region_activa_id", "0"))
+                z_val = dd_zona_activa.value if ('dd_zona_activa' in locals() and dd_zona_activa and dd_zona_activa.value) else user_session.get("zona_activa_id", "0")
+                r_val = dd_region_activa.value if ('dd_region_activa' in locals() and dd_region_activa and dd_region_activa.value) else user_session.get("region_activa_id", "0")
+
+                z_raw = str(z_val).replace("📍", "").replace("Zona:", "").strip()
+                r_raw = str(r_val).replace("🗺️", "").replace("Región:", "").strip()
+
+                where_conditions = []
+                params = []
+
+                if z_raw and z_raw not in ("0", "Todas", "Todas las Zonas (Nacional)", "Todas las Zonas"):
+                    where_conditions.append("(z.id = %s OR z.nombre_zona = %s OR z.nombre_zona LIKE %s)")
+                    params.extend([z_raw, z_raw, f"%{z_raw}%"])
+
+                if r_raw and r_raw not in ("0", "Todas", "Todas las Regiones"):
+                    where_conditions.append("(r.id = %s OR r.nombre_region = %s OR r.nombre_region LIKE %s)")
+                    params.extend([r_raw, r_raw, f"%{r_raw}%"])
+
+                where_sql = ("WHERE " + " AND ".join(where_conditions)) if where_conditions else ""
 
                 db_st = conectar_db()
                 if db_st:
                     cur_st = db_st.cursor(dictionary=True)
-                    cur_st.execute("""
+                    query = f"""
                         SELECT 
                             t.id AS Tienda_ID,
                             t.nombre_tienda AS Tienda,
@@ -8499,11 +8519,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         JOIN zonas z ON r.zona_id = z.id
                         LEFT JOIN usuarios usr ON (usr.Usuario LIKE CONCAT('%%', t.id, '%%') OR LOWER(usr.Tienda) LIKE CONCAT('%%', LOWER(t.nombre_tienda), '%%') OR LOWER(t.nombre_tienda) LIKE CONCAT('%%', LOWER(usr.Tienda), '%%'))
                         LEFT JOIN historial_conversaciones h ON h.ID_Usuario = usr.ID_Usuario
-                        WHERE (%s = '0' OR z.id = %s)
-                          AND (%s = '0' OR r.id = %s)
+                        {where_sql}
                         GROUP BY t.id, t.nombre_tienda
                         ORDER BY Total_Consultas DESC, t.nombre_tienda ASC
-                    """, (z_id, z_id, r_id, r_id))
+                    """
+                    cur_st.execute(query, tuple(params))
                     tiendas_uso = cur_st.fetchall()
                     db_st.close()
 
@@ -18804,12 +18824,23 @@ Ejemplo:
             curr_v = active_view[0] if active_view else "chat"
             curr_lang = (lang_dropdown.value if 'lang_dropdown' in locals() and lang_dropdown and lang_dropdown.value else selected_lang[0]) or "es"
             apply_language(curr_lang)
+            main_views_cache.clear()
+
+            if 'dd_zona_activa' in locals() and 'dd_region_activa' in locals():
+                z_val = dd_zona_activa.value or "0"
+                new_opts = obtener_opciones_regiones_db(z_val)
+                dd_region_activa.options.clear()
+                dd_region_activa.options.extend(new_opts)
+                try:
+                    actualizar_top_appbar_layout()
+                except Exception: pass
+
             cambiar_vista(curr_v)
             if page:
                 snack = ft.SnackBar(
                     content=ft.Row([
                         ft.Text("🔄", size=14),
-                        ft.Text(f"LUXO ({curr_lang.upper()}): Módulo '{curr_v.upper()}' y Lenguaje Recargados", color="white", weight="bold", size=12)
+                        ft.Text(f"LUXO ({curr_lang.upper()}): Módulo '{curr_v.upper()}' Sincronizado", color="white", weight="bold", size=12)
                     ], spacing=6),
                     bgcolor="#064E3B",
                     duration=2000
@@ -19080,15 +19111,17 @@ Ejemplo:
             if db:
                 try:
                     cursor = db.cursor(dictionary=True)
-                    if str(zona_id) != "0":
-                        cursor.execute(
-                            "SELECT id, nombre_region, gerente_area FROM regiones WHERE zona_id=%s ORDER BY nombre_region",
-                            (zona_id,)
-                        )
+                    z_clean = str(zona_id).replace("📍", "").replace("Zona:", "").strip()
+                    if z_clean and z_clean not in ("0", "Todas", "Todas las Zonas (Nacional)", "Todas las Zonas"):
+                        cursor.execute("""
+                            SELECT r.id, r.nombre_region, r.gerente_area 
+                            FROM regiones r
+                            JOIN zonas z ON r.zona_id = z.id
+                            WHERE (r.zona_id = %s OR z.nombre_zona = %s OR z.nombre_zona LIKE CONCAT('%%', %s, '%%'))
+                            ORDER BY r.nombre_region
+                        """, (z_clean, z_clean, z_clean))
                     else:
-                        cursor.execute(
-                            "SELECT id, nombre_region, gerente_area FROM regiones ORDER BY nombre_region"
-                        )
+                        cursor.execute("SELECT id, nombre_region, gerente_area FROM regiones ORDER BY nombre_region")
                     rows = cursor.fetchall()
                     for r in rows:
                         r_id = str(r["id"])
@@ -19101,9 +19134,36 @@ Ejemplo:
                     except: pass
             return opciones
 
+        MAPEO_ZONAS_REGIONES = {
+            "0": [("0", "🗺️ Todas las Regiones")],
+            "1": [("0", "🗺️ Todas las Regiones"), ("1", "🗺️ Región: AICM"), ("2", "🗺️ Región: DF CENTRO"), ("3", "🗺️ Región: DF NORTE"), ("4", "🗺️ Región: VALLE")],
+            "2": [("0", "🗺️ Todas las Regiones"), ("5", "🗺️ Región: MTY"), ("6", "🗺️ Región: NORESTE"), ("7", "🗺️ Región: NORTE"), ("8", "🗺️ Región: PACIFICO")],
+            "3": [("0", "🗺️ Todas las Regiones"), ("9", "🗺️ Región: BAJIO"), ("10", "🗺️ Región: GDL"), ("11", "🗺️ Región: OCCIDENTE")],
+            "4": [("0", "🗺️ Todas las Regiones"), ("12", "🗺️ Región: ACUN"), ("13", "🗺️ Región: CUN"), ("14", "🗺️ Región: PLAYA"), ("15", "🗺️ Región: GOLFO"), ("16", "🗺️ Región: PENINSULA")],
+            "ZONA CENTRO": [("0", "🗺️ Todas las Regiones"), ("1", "🗺️ Región: AICM"), ("2", "🗺️ Región: DF CENTRO"), ("3", "🗺️ Región: DF NORTE"), ("4", "🗺️ Región: VALLE")],
+            "ZONA NORTE": [("0", "🗺️ Todas las Regiones"), ("5", "🗺️ Región: MTY"), ("6", "🗺️ Región: NORESTE"), ("7", "🗺️ Región: NORTE"), ("8", "🗺️ Región: PACIFICO")],
+            "ZONA OCCIDENTE": [("0", "🗺️ Todas las Regiones"), ("9", "🗺️ Región: BAJIO"), ("10", "🗺️ Región: GDL"), ("11", "🗺️ Región: OCCIDENTE")],
+            "ZONA SUR": [("0", "🗺️ Todas las Regiones"), ("12", "🗺️ Región: ACUN"), ("13", "🗺️ Región: CUN"), ("14", "🗺️ Región: PLAYA"), ("15", "🗺️ Región: GOLFO"), ("16", "🗺️ Región: PENINSULA")],
+        }
+
+        def get_region_options_for_zona(zona_key):
+            z_str = str(zona_key).replace("📍", "").replace("Zona:", "").strip()
+            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4"}
+            z_id = name_map.get(z_str, z_str)
+            raw_tuples = MAPEO_ZONAS_REGIONES.get(z_id, None)
+            if not raw_tuples or z_id == "0":
+                raw_tuples = [("0", "🗺️ Todas las Regiones")]
+                for k in ["1", "2", "3", "4"]:
+                    for opt_k, opt_txt in MAPEO_ZONAS_REGIONES[k]:
+                        if opt_k != "0":
+                            raw_tuples.append((opt_k, opt_txt))
+            return [ft.dropdown.Option(key=k, text=txt) for k, txt in raw_tuples]
+
+        is_adm = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
+
         dd_zona_activa = ft.Dropdown(
             options=obtener_opciones_zonas_db(),
-            value="0",
+            value=user_session.get("zona_activa_id", "0"),
             width=210,
             height=36,
             text_size=11,
@@ -19112,79 +19172,72 @@ Ejemplo:
             border_color="#00FFFF",
             border_radius=6,
             content_padding=6,
-            tooltip="Seleccionar Zona Activa de Trabajo"
+            tooltip="Seleccionar Zona Activa de Trabajo",
+            visible=is_adm
         )
 
-        dd_region_activa = ft.Dropdown(
-            options=obtener_opciones_regiones_db("0"),
-            value="0",
-            width=200,
-            height=36,
-            text_size=11,
-            color="#00FF88",
-            bgcolor="#1E1E2E",
-            border_color="#00FF88",
-            border_radius=6,
-            content_padding=6,
-            tooltip="Seleccionar Región Específica de Trabajo"
-        )
+        dd_region_container = ft.Container()
 
-        def on_region_activa_change(e):
-            r_val = dd_region_activa.value
-            user_session["region_activa_id"] = r_val
-            print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
-            main_views_cache.clear()
-            try:
-                txt_nom = "Todas las Regiones"
-                for opt in dd_region_activa.options:
-                    if opt.key == r_val:
-                        txt_nom = opt.text
-                        break
-                page.snack_bar = ft.SnackBar(
-                    content=ft.Text(f"🗺️ Región cambiada a: {txt_nom}", color="white"),
-                    bgcolor="#00CC66",
-                    duration=2500
-                )
-                page.snack_bar.open = True
-            except Exception: pass
-            cambiar_vista(active_view[0])
+        def crear_dropdown_region(z_key="0", r_key="0"):
+            opts = get_region_options_for_zona(z_key)
+            valid_keys = [o.key for o in opts]
+            val = r_key if r_key in valid_keys else "0"
 
-        dd_region_activa.on_change = on_region_activa_change
+            dd = ft.Dropdown(
+                options=opts,
+                value=val,
+                width=200,
+                height=36,
+                text_size=11,
+                color="#00FF88",
+                bgcolor="#1E1E2E",
+                border_color="#00FF88",
+                border_radius=6,
+                content_padding=6,
+                tooltip="Seleccionar Región Específica de Trabajo",
+                visible=is_adm
+            )
+            
+            def on_r_change(e):
+                r_val = dd.value or "0"
+                user_session["region_activa_id"] = r_val
+                print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
+                main_views_cache.clear()
+                cambiar_vista(active_view[0])
+                try:
+                    page.update()
+                except Exception: pass
+
+            dd.on_change = on_r_change
+            return dd
+
+        dd_region_activa = crear_dropdown_region(user_session.get("zona_activa_id", "0"), user_session.get("region_activa_id", "0"))
+        dd_region_container.content = dd_region_activa
 
         def on_zona_activa_change(e):
-            z_val = dd_zona_activa.value
+            z_val = dd_zona_activa.value or "0"
             user_session["zona_activa_id"] = z_val
             user_session["region_activa_id"] = "0"
             print(f"📍 Zona Activa cambiada a ID={z_val} por usuario={user_info.get('id')}")
             main_views_cache.clear()
-            
-            dd_region_activa.options = obtener_opciones_regiones_db(z_val)
-            dd_region_activa.value = "0"
-            try:
-                dd_region_activa.update()
-            except Exception: pass
 
+            nonlocal dd_region_activa
+            dd_region_activa = crear_dropdown_region(z_val, "0")
+            dd_region_container.content = dd_region_activa
+            
             try:
-                txt_nom = "Todas las Zonas"
-                for opt in dd_zona_activa.options:
-                    if opt.key == z_val:
-                        txt_nom = opt.text
-                        break
-                page.snack_bar = ft.SnackBar(
-                    content=ft.Text(f"📍 Zona cambiada a: {txt_nom}", color="white"),
-                    bgcolor="#00AAFF",
-                    duration=2500
-                )
-                page.snack_bar.open = True
-            except Exception: pass
+                actualizar_top_appbar_layout()
+                top_appbar.update()
+                page.update()
+            except Exception as ex_z:
+                print("Notice zona change appbar update:", ex_z)
+
             cambiar_vista(active_view[0])
+            try:
+                page.update()
+            except Exception: pass
 
         dd_zona_activa.on_change = on_zona_activa_change
-
-        # Ocultar desplegables de Zona y Región para usuarios de Tienda (Solo visibles para Admin)
-        is_adm = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
-        dd_zona_activa.visible = is_adm
-        dd_region_activa.visible = is_adm
 
         # Definir la cabecera superior permanente adaptativa para toda la aplicación
         top_appbar = ft.Container(
@@ -19223,19 +19276,19 @@ Ejemplo:
                     rows.append(
                         ft.Row([
                             dd_zona_activa,
-                            dd_region_activa,
+                            dd_region_container,
                         ], spacing=6)
                     )
                 top_appbar.content = ft.Column(rows, spacing=6)
             else:
                 dd_zona_activa.width = 210
                 dd_zona_activa.expand = False
-                dd_region_activa.width = 200
-                dd_region_activa.expand = False
+                dd_region_container.width = 200
+                dd_region_container.expand = False
                 
                 ctrls = []
                 if is_adm:
-                    ctrls.extend([dd_zona_activa, dd_region_activa])
+                    ctrls.extend([dd_zona_activa, dd_region_container])
                 ctrls.append(btn_global_master_refresh)
                 
                 top_appbar.content = ft.Row([
