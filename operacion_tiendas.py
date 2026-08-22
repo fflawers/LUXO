@@ -26,7 +26,36 @@ def conectar_db_local():
     except Exception:
         return None
 
+def crear_tabla_config_general_if_not_exists(db):
+    try:
+        cursor = db.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS config_general (
+                clave VARCHAR(100) PRIMARY KEY,
+                valor TEXT NOT NULL,
+                fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """)
+        db.commit()
+    except Exception as e:
+        print("Notice crear_tabla_config_general:", e)
+
 def obtener_hora_limite_apertura():
+    # 1. Intentar desde MySQL primero
+    try:
+        db = conectar_db_local()
+        if db:
+            crear_tabla_config_general_if_not_exists(db)
+            cursor = db.cursor(dictionary=True)
+            cursor.execute("SELECT valor FROM config_general WHERE clave = 'hora_limite_apertura'")
+            row = cursor.fetchone()
+            db.close()
+            if row and row.get("valor"):
+                return row["valor"].strip()
+    except Exception as ex_db:
+        print("Notice db config get:", ex_db)
+
+    # 2. Fallback a config.json local
     try:
         base_path = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(base_path, "config.json")
@@ -39,23 +68,41 @@ def obtener_hora_limite_apertura():
     return "10:00"
 
 def guardar_hora_limite_apertura(hora_str):
+    success = False
+    # 1. Guardar en MySQL
+    try:
+        db = conectar_db_local()
+        if db:
+            crear_tabla_config_general_if_not_exists(db)
+            cursor = db.cursor()
+            cursor.execute("""
+                INSERT INTO config_general (clave, valor)
+                VALUES ('hora_limite_apertura', %s)
+                ON DUPLICATE KEY UPDATE valor = %s
+            """, (hora_str, hora_str))
+            db.commit()
+            db.close()
+            success = True
+    except Exception as ex_db:
+        print("Error al guardar hora en DB:", ex_db)
+
+    # 2. Guardar en config.json local
     try:
         base_path = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(base_path, "config.json")
         config_data = {}
         if os.path.exists(config_path):
             with open(config_path, "r", encoding="utf-8") as f:
-                try:
-                    config_data = json.load(f)
-                except Exception:
-                    pass
+                try: config_data = json.load(f)
+                except Exception: pass
         config_data["hora_limite_apertura"] = hora_str
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=4, ensure_ascii=False)
-        return True
+        success = True
     except Exception as e:
-        print("Error al guardar hora limite:", e)
-    return False
+        print("Error al guardar hora limite json:", e)
+
+    return success
 
 def obtener_tiendas_activas(db):
     try:

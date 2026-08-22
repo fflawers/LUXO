@@ -4510,17 +4510,18 @@ def main(page: ft.Page):
                 except Exception as ex_spk:
                     print("Error en reproductor nativo:", ex_spk)
 
-            if getattr(page, "web", False):
-                try:
-                    # Usar TTS nativo del navegador vía JS, no requiere librerías (gtts) ni generar MP3
-                    safe_text = clean_text.replace("'", "\\'").replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
-                    js_code = f"javascript:if('speechSynthesis' in window){{window.speechSynthesis.cancel(); var msg = new SpeechSynthesisUtterance('{safe_text}'); msg.lang='es-MX'; window.speechSynthesis.speak(msg);}}void(0);"
-                    ejecutar_js_flet(page, js_code)
-                except Exception as e_ft:
-                    print("Error lanzando TTS en JS:", e_ft)
-            else:
+            # Usar TTS nativo del navegador vía JS para reproducir el audio en el navegador
+            try:
+                safe_text = clean_text.replace("'", "\\'").replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
+                js_code = f"javascript:if('speechSynthesis' in window){{window.speechSynthesis.cancel(); var msg = new SpeechSynthesisUtterance('{safe_text}'); msg.lang='es-MX'; window.speechSynthesis.speak(msg);}}void(0);"
+                ejecutar_js_flet(page, js_code)
+            except Exception as e_ft:
+                print("Error lanzando TTS en JS:", e_ft)
+
+            try:
                 t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
                 t_speak.start()
+            except Exception: pass
 
         except Exception as e:
             print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5467,6 +5468,17 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         # Mensaje de bienvenida inicial de LUXO al abrir el chat
         avatar_luxo_base64 = obtener_64("avatar_luxo2.png")
+        usr_nombre = user_info.get("nombre", "").strip()
+        usr_tienda = user_info.get("tienda", "").strip()
+
+        if usr_nombre.lower() == "tienda" and usr_tienda:
+            raw_n = usr_tienda
+        else:
+            raw_n = usr_nombre if usr_nombre else (usr_tienda if usr_tienda else "Usuario")
+
+        clean_name = raw_n.split("(")[0].replace("SUCURSAL", "").replace("Sucursal", "").replace("TIENDA", "").replace("Tienda", "").strip()
+        first_name = clean_name.split(" ")[0] if clean_name else "Interlomas"
+        
         chat_display.controls.append(
             ft.Container(
                 content=ft.Row([
@@ -5479,7 +5491,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         alignment=ft.alignment.Alignment(0, 0),
                         border=ft.Border.all(1.5, "#D8B4FE"),
                     ),
-                    ft.Text(f"LUXO: ¡Bienvenido {user_info.get('nombre', '').split(' ')[0]}! Soy LUXO, tu asistente virtual.", color="white", weight="bold", expand=True, selectable=True),
+                    ft.Text(f"LUXO: ¡Hola, {first_name}! 👋 Bienvenid@ a LUXO. ¿En qué te puedo ayudar el día de hoy?", color="white", weight="bold", expand=True, selectable=True),
                 ], vertical_alignment="start", spacing=10),
                 bgcolor="#1E1E2E",
                 padding=12,
@@ -5489,7 +5501,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         )
         
         # Reproducir el saludo inicial por voz
-        welcome_text_str = f"¡Bienvenido {user_info.get('nombre', '').split(' ')[0]}! Soy LUXO, tu asistente virtual."
+        welcome_text_str = f"¡Hola {first_name}! Bienvenido a LUXO."
         try:
             start_speak(welcome_text_str)
         except Exception as e_speak:
@@ -6808,27 +6820,22 @@ Debes responder de manera directa, concisa y profesional. Queda estrictamente pr
 
 
 ══════════════════════════════════════════════════════════
-INSTRUCCIÓN CRÍTICA DE SEGURIDAD (CERO ALUCINACIONES)
+INSTRUCCIÓN DE PERSONALIDAD Y SEGURIDAD (ESTILO SIMULADOR IA)
 ══════════════════════════════════════════════════════════
-1. CLASIFICACIÓN Y RESPUESTAS OBLIGATORIAS:
+1. PERSONALIDAD Y TONO CONVERSACIONAL NATURAL:
+   - Eres LUXO, el copiloto e inteligencia operativa inteligente, carismático y cercano de Sunglass Hut.
+   - Tu tono de voz es fluido, humano, amable, motivador y natural (exactamente como en un diálogo real entre compañeros de tienda).
+   - Para saludos, comentarios informales, bromas o expresiones casuales ("hola", "jajaja", "si hay alguien aquí...", "qué haces", etc.), responde de forma fluida, simpática y conversacional, conectando de manera agradable hacia las tareas de la tienda.
 
-   A) PREGUNTAS NO RELACIONADAS CON LA EMPRESA SUNGLASS HUT:
-      - Si la consulta del usuario NO está relacionada con Sunglass Hut, sus productos, tiendas u operación (ejemplos: cultura general, chistes, deportes, ciencia, política, recetas, preguntas personales, etc.):
-      - DEBES RESPONDER ÚNICAMENTE Y DE FORMA EXACTA:
-        "No puedo contestar preguntas que no están relacionadas con la empresa."
+2. REGLA ESTRICTA DE INFORMACIÓN TÉCNICA (CERO ALUCINACIONES):
+   - Para cualquier consulta operativa de Sunglass Hut (procedimientos, garantías, teléfonos de tienda, KPIs, cortes, etc.), debes basarte ÚNICAMENTE en la información provista en la sección "DOCUMENTOS / MANUALES".
+   - Explica el procedimiento con fluidez conversacional pero sin inventar pasos, cifras ni políticas que no existan en los documentos de la empresa.
+   - Si la información operativa sobre la empresa no aparece en los manuales provistos, explica amablemente de forma conversacional que esa consulta específica no se encuentra en el manual de la tienda y ofrece ayudar con otra duda operativa.
 
-   B) PREGUNTAS SOBRE LA EMPRESA O OPERACIÓN NO ENCONTRADAS EN LOS MANUALES:
-      - Si la consulta del usuario trata sobre Sunglass Hut o la operación de la tienda, pero la respuesta NO se encuentra detallada de forma textual en la sección "DOCUMENTOS / MANUALES PROPORCIONADOS":
-      - DEBES RESPONDER ÚNICAMENTE Y DE FORMA EXACTA:
-        "Esta pregunta no se encuentra en los manuales."
-
-2. Debes responder basándote ÚNICAMENTE en la información provista en la sección "DOCUMENTOS / MANUALES". Está terminantemente PROHIBIDO usar tu conocimiento general o inventar procedimientos para resolver consultas operativas.
-3. No agregues pasos, consejos ni sugieras personas a contactar que no estén indicados textualmente en el manual provisto.
-4. EXCEPCIÓN DE CORTESÍA: Únicamente los saludos, despedidas y agradecimientos de cortesía ("hola", "buenos días", "gracias", "hasta luego") respóndelos de forma natural, amable y profesional sin aplicar las reglas de restricción.
-5. Está estrictamente PROHIBIDO comenzar tu respuesta con muletillas como "Según el manual...", "De acuerdo con el documento..." — da la respuesta de forma directa y profesional.
-6. Para respuestas basadas en manuales (excluyendo saludos/cortesías), al final cita la fuente exacta en el idioma del usuario (ej: "Puedes encontrar esta información en el manual [Nombre Manual], sección [Sección]").
-7. Para fórmulas matemáticas usa "entre" o "dividido entre" para divisiones, nunca "dividido por".
-8. NO traduzcas siglas (como AUR) si la traducción no está textualmente en el manual.
+3. Está strictly PROHIBIDO comenzar tu respuesta con muletillas como "Según el manual...", "De acuerdo con el documento..." — entrega la información de forma hablada y directa.
+4. Para respuestas basadas en manuales, cita al final de tu mensaje la fuente exacta en el idioma correspondiente.
+5. Para fórmulas matemáticas usa "entre" o "dividido entre" para divisiones, nunca "dividido por".
+6. NO traduzcas siglas (como AUR) si la traducción no está textualmente en el manual.
 
 ══════════════════════════════════════════════════════════
 INSTRUCCIÓN DE INTERPRETACIÓN Y ORTOGRAFÍA (OBLIGATORIO)
@@ -6870,7 +6877,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     payload = {
                         "model": GROQ_MODEL,
                         "messages": mensajes_api,
-                        "temperature": 0.0
+                        "temperature": 0.35
                     }
 
 
@@ -15342,8 +15349,8 @@ Ejemplo:
             # Inicializar con 1 fila por defecto
             agregar_fila_articulo()
 
-            crm_history_col = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
-            crm_notif_col = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+            crm_history_col = ft.Column(spacing=8)
+            crm_notif_col = ft.Column(spacing=10)
             notif_badge_text = ft.Text("0", color="#00FFFF", weight="bold", size=12)
             
             # --- FUNCIÓN DE LIMPIAR FORMULARIO ---
@@ -15543,110 +15550,78 @@ Ejemplo:
                 fecha_venc_str = dt_venc.strftime("%d/%m/%Y")
                 fecha_compra_str = dt_c.strftime("%d/%m/%Y")
 
-                # Cargar vista de imagen de ticket físico si existe
-                img_ticket_modal = None
-                ruta_t = compra.get("Ruta_Ticket")
-                if ruta_t and os.path.exists(ruta_t):
+                def guardar_asistencia_click(e):
+                    asist = 1 if chk_asistio.value else 0
                     try:
-                        with open(ruta_t, "rb") as ft_img:
-                            import base64
-                            b64_t = base64.b64encode(ft_img.read()).decode("utf-8")
-                            img_ticket_modal = ft.Container(
-                                content=ft.Column([
-                                    ft.Text("📸 COMPROBANTE / TICKET FÍSICO ESCANEADO:", color="#00FFFF", weight="bold", size=11),
-                                    ft.Image(src=f"data:image/jpeg;base64,{b64_t}", width=400, height=220, fit="contain")
-                                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                                bgcolor="#161922", padding=10, border_radius=8, border=ft.Border.all(1, "#333333")
-                            )
-                    except Exception as ex_t:
-                        print("Error cargando imagen ticket modal:", ex_t)
+                        monto = float(tf_monto_venta.value.strip()) if tf_monto_venta.value else 0.0
+                    except ValueError:
+                        monto = 0.0
 
-                ticket_column_items = [
-                    # Encabezado del Ticket
-                    ft.Column([
-                        ft.Text("🕶️ SUNGLASS HUT MEXICO 🕶️", color="#00FFFF", weight="bold", size=16, text_align=ft.TextAlign.CENTER),
-                        ft.Text("STORE #4052 - PLAZA SATÉLITE", color="#aaaaaa", size=11, text_align=ft.TextAlign.CENTER),
-                        ft.Text("TICKET DE COMPRA Y GARANTÍA DIGITAL", color="#D8B4FE", weight="bold", size=12, text_align=ft.TextAlign.CENTER),
-                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
-                    ft.Divider(height=12, color="#00FFFF"),
-                    
-                    # Datos de Transacción
-                    ft.Row([ft.Text("N° TRANSACCIÓN:", color="#aaaaaa", size=11, width=150), ft.Text(compra['Transaccion'], color="white", weight="bold", size=12)]),
-                    ft.Row([ft.Text("FECHA DE EMISIÓN:", color="#aaaaaa", size=11, width=150), ft.Text(fecha_compra_str, color="white", size=12)]),
-                    ft.Row([ft.Text("VENDEDOR ATENDIÓ:", color="#aaaaaa", size=11, width=150), ft.Text(compra['Nombre_Vendedor'] or "Atención Luxo", color="white", size=12)]),
-                    ft.Row([ft.Text("TIENDA DE ORIGEN:", color="#aaaaaa", size=11, width=150), ft.Text(compra['Tienda'] or "Sunglass Hut", color="white", size=12)]),
-                    ft.Divider(height=8, color="#333333"),
-                    
-                    # Datos del Cliente
-                    ft.Text("👤 DATOS DEL CLIENTE:", color="#00FFFF", weight="bold", size=12),
-                    ft.Row([ft.Text("Nombre del Cliente:", color="#aaaaaa", size=11, width=150), ft.Text(compra['Nombre_Cliente'], color="white", weight="bold", size=12)]),
-                    ft.Row([ft.Text("Teléfono de Contacto:", color="#aaaaaa", size=11, width=150), ft.Text(compra['Telefono_Cliente'] or "Sin Teléfono", color="#7CFC00", weight="bold", size=12)]),
-                    ft.Divider(height=8, color="#333333"),
-                    
-                    # Detalle de Producto
-                    ft.Text("🛍️ DETALLE DEL LENTE ADQUIRIDO:", color="#D8B4FE", weight="bold", size=12),
-                    ft.Row([ft.Text("UPC / Código Lente:", color="#aaaaaa", size=11, width=150), ft.Text(compra['UPC'], color="white", weight="bold", size=12)]),
-                    ft.Row([ft.Text("Precio Con IVA:", color="#aaaaaa", size=11, width=150), ft.Text(f"${compra['Precio_Con_IVA']:,.2f} MXN", color="#7CFC00", weight="bold", size=13)]),
-                    ft.Row([ft.Text("Notas / Modelo:", color="#aaaaaa", size=11, width=150), ft.Text(compra.get('Notas') or "Ray-Ban / Oakley", color="#E2E8F0", size=11)]),
-                    ft.Divider(height=8, color="#333333"),
-                ]
+                    try:
+                        db = conectar_db()
+                        if db:
+                            cur = db.cursor()
+                            cur.execute("""
+                                UPDATE crm_compras 
+                                SET Estatus_Seguimiento = 'Contactado / Venta Realizada',
+                                    Cliente_Asistio = %s,
+                                    Monto_Nueva_Venta = %s
+                                WHERE ID_Compra = %s
+                            """, (asist, monto, compra["ID_Compra"]))
+                            db.commit()
+                            db.close()
+                            mostrar_snack(f"✅ Venta registrada: ${monto:,.2f} MXN para {compra['Nombre_Cliente']}.", color="green")
+                            dialog.open = False
+                            page.update()
+                            cargar_historial_crm()
+                            cargar_notificaciones_crm()
+                            cargar_metricas_crm()
+                    except Exception as ex:
+                        print("Error guardando venta crm:", ex)
 
-                if img_ticket_modal:
-                    ticket_column_items.extend([img_ticket_modal, ft.Divider(height=8, color="#333333")])
-
-                ticket_column_items.extend([
-                    # Coberturas de Garantía LUXO
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Text("📜 COBERTURAS DE GARANTÍA LUXO (1 AÑO):", color="#FFD700", weight="bold", size=11),
-                            ft.Text(f"• Garantía por Ruptura / Daño: VIGENTE HASTA EL {fecha_venc_str}", color="#7CFC00", size=11),
-                            ft.Text("• Garantía por Robo: 50% descuento en pieza de menor valor presentando Acta de Denuncia en tienda.", color="white", size=11)
-                        ], spacing=4),
-                        bgcolor="#1E2330",
-                        padding=10,
-                        border_radius=8,
-                        border=ft.Border.all(1, "#FFD700")
-                    ),
-                    ft.Divider(height=8, color="#333333"),
-
-                    # Estado de Asistencia
-                    ft.Row([
-                        ft.Text("Estatus en Tienda:", color="#aaaaaa", size=11, width=150),
-                        ft.Text("Asistió a Tienda 🏬" if compra.get("Cliente_Asistio") == 1 else "Pendiente de Visita", color="#7CFC00" if compra.get("Cliente_Asistio") == 1 else "#00FFFF", weight="bold", size=12)
-                    ]),
-                    ft.Row([
-                        ft.Text("Nueva Venta Generada:", color="#aaaaaa", size=11, width=150),
-                        ft.Text(f"${compra.get('Monto_Nueva_Venta') or 0:,.2f} MXN", color="#7CFC00", weight="bold", size=12)
-                    ]),
-                ])
-
-                ticket_content = ft.Container(
-                    width=460,
-                    bgcolor="#0D1117",
-                    padding=20,
-                    border_radius=12,
-                    border=ft.Border.all(2, "#00FFFF"),
-                    content=ft.Column(ticket_column_items, spacing=6, scroll=ft.ScrollMode.AUTO)
+                chk_asistio = ft.Checkbox(label="¿El cliente asistió a la tienda a aprovechar la garantía?", value=compra.get("Cliente_Asistio") == 1)
+                tf_monto_venta = ft.TextField(
+                    label="Monto de la Nueva Venta Generada ($ MXN)",
+                    value=str(compra.get("Monto_Nueva_Venta") or ""),
+                    border_color="#7CFC00",
+                    color="white",
+                    text_size=13,
+                    width=280
                 )
 
-                def cerrar_ticket(e):
-                    try:
-                        page.close(dialog)
-                    except Exception:
-                        pass
-                    dialog.open = False
-                    page.update()
+                ticket_img_widget = ft.Container()
+                if compra.get("Ruta_Ticket"):
+                    full_p = os.path.join(os.getcwd(), compra["Ruta_Ticket"].lstrip("/"))
+                    if os.path.exists(full_p):
+                        ticket_img_widget = ft.Column([
+                            ft.Text("🧾 Foto del Ticket Escaneado:", color="#00FFFF", weight="bold", size=12),
+                            ft.Image(src=full_p, width=280, height=350, fit=ft.ImageFit.CONTAIN, border_radius=8)
+                        ], spacing=6)
 
                 dialog = ft.AlertDialog(
-                    open=True,
-                    title=ft.Row([
-                        ft.Icon(ft.Icons.RECEIPT_LONG, color="#00FFFF"),
-                        ft.Text("Ticket de Compra Digital 🧾", color="white", weight="bold", size=16)
-                    ]),
-                    content=ticket_content,
+                    title=ft.Text(f"📋 Ficha Completa del Cliente: {compra['Nombre_Cliente']}", color="#FFD700", weight="bold", size=15),
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text(f"• Transacción / Ticket: {compra['Transaccion']}", color="white", size=12),
+                            ft.Text(f"• Fecha de Compra: {fecha_compra_str}", color="white", size=12),
+                            ft.Text(f"• Teléfono del Cliente: {compra['Telefono_Cliente'] or 'Sin registrar'}", color="#00FFFF", weight="bold", size=13),
+                            ft.Text(f"• Vendedor Atendió: {compra['Nombre_Vendedor']}", color="white", size=12),
+                            ft.Text(f"• Producto / UPC: {compra['UPC']}", color="white", size=12),
+                            ft.Text(f"• Precio de Compra Original: ${compra['Precio_Con_IVA']:,.2f} MXN", color="#7CFC00", weight="bold", size=13),
+                            ft.Text(f"• Notas: {compra.get('Notas') or 'Sin notas'}", color="#aaaaaa", size=11),
+                            ft.Divider(height=10, color="#333333"),
+                            ticket_img_widget,
+                            ft.Divider(height=10, color="#333333"),
+                            ft.Text("REGISTRAR RESULTADO DE LA CAMPAÑA MES 11:", color="#FFD700", weight="bold", size=12),
+                            chk_asistio,
+                            tf_monto_venta
+                        ], spacing=8, scroll=ft.ScrollMode.AUTO),
+                        width=420,
+                        height=500
+                    ),
                     actions=[
-                        ft.ElevatedButton("🖨️ Imprimir Ticket", bgcolor="#333333", color="#00FFFF", on_click=lambda e: mostrar_snack("🖨️ Enviando ticket a la impresora de tienda...", color="#00FFFF")),
-                        ft.ElevatedButton("Cerrar Ticket ❌", bgcolor="#FF4B4B", color="white", on_click=cerrar_ticket)
+                        ft.ElevatedButton("Guardar Venta 💰", bgcolor="#7CFC00", color="black", on_click=guardar_asistencia_click),
+                        ft.TextButton("Cerrar ❌", on_click=lambda e: setattr(dialog, 'open', False) or page.update())
                     ]
                 )
 
@@ -15656,8 +15631,258 @@ Ejemplo:
                 dialog.open = True
                 page.update()
 
-            # --- CARGAR NOTIFICACIONES AL MES 11 ---
+
+
+            crm_history_col = ft.Column(spacing=10)
+            crm_notif_col = ft.Column(spacing=12)
+            notif_badge_text = ft.Text("0", color="black", weight="bold", size=10)
+
+            def del_crm(comp_id):
+                try:
+                    db = conectar_db()
+                    if db:
+                        cur = db.cursor()
+                        cur.execute("DELETE FROM crm_compras WHERE ID_Compra = %s", (comp_id,))
+                        db.commit()
+                        db.close()
+                        mostrar_snack("Registro eliminado de CRM.", color="red")
+                        cargar_historial_crm()
+                        cargar_notificaciones_crm()
+                        cargar_metricas_crm()
+                except Exception as ex:
+                    print("Error eliminando CRM:", ex)
+
+            def mostrar_detalle_notificacion(comp):
+                def guardar_asistencia_click(e):
+                    asist = 1 if chk_asistio.value else 0
+                    try:
+                        monto = float(tf_monto_venta.value.strip()) if tf_monto_venta.value else 0.0
+                    except ValueError:
+                        monto = 0.0
+
+                    try:
+                        db = conectar_db()
+                        if db:
+                            cur = db.cursor()
+                            cur.execute("""
+                                UPDATE crm_compras 
+                                SET Estatus_Seguimiento = 'Contactado / Venta Realizada',
+                                    Cliente_Asistio = %s,
+                                    Monto_Nueva_Venta = %s
+                                WHERE ID_Compra = %s
+                            """, (asist, monto, comp["ID_Compra"]))
+                            db.commit()
+                            db.close()
+                            mostrar_snack(f"✅ Venta registrada: ${monto:,.2f} MXN para {comp['Nombre_Cliente']}.", color="green")
+                            dialog.open = False
+                            page.update()
+                            cargar_historial_crm()
+                            cargar_notificaciones_crm()
+                            cargar_metricas_crm()
+                    except Exception as ex:
+                        print("Error guardando venta crm:", ex)
+
+                chk_asistio = ft.Checkbox(label="¿El cliente asistió a la tienda a aprovechar la garantía?", value=comp.get("Cliente_Asistio") == 1)
+                tf_monto_venta = ft.TextField(
+                    label="Monto de la Nueva Venta Generada ($ MXN)",
+                    value=str(comp.get("Monto_Nueva_Venta") or ""),
+                    border_color="#7CFC00",
+                    color="white",
+                    text_size=13,
+                    width=280
+                )
+
+                ticket_img_widget = ft.Container()
+                if comp.get("Ruta_Ticket"):
+                    full_p = os.path.join(os.getcwd(), comp["Ruta_Ticket"].lstrip("/"))
+                    if os.path.exists(full_p):
+                        ticket_img_widget = ft.Column([
+                            ft.Text("🧾 Foto del Ticket Escaneado:", color="#00FFFF", weight="bold", size=12),
+                            ft.Image(src=full_p, width=280, height=350, fit=ft.ImageFit.CONTAIN, border_radius=8)
+                        ], spacing=6)
+
+                dialog = ft.AlertDialog(
+                    title=ft.Text(f"📋 Ficha Completa del Cliente: {comp['Nombre_Cliente']}", color="#FFD700", weight="bold", size=15),
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text(f"• Transacción / Ticket: {comp['Transaccion']}", color="white", size=12),
+                            ft.Text(f"• Fecha de Compra: {comp['Fecha_Compra']}", color="white", size=12),
+                            ft.Text(f"• Teléfono del Cliente: {comp['Telefono_Cliente'] or 'Sin registrar'}", color="#00FFFF", weight="bold", size=13),
+                            ft.Text(f"• Vendedor Atendió: {comp['Nombre_Vendedor']}", color="white", size=12),
+                            ft.Text(f"• Producto / UPC: {comp['UPC']}", color="white", size=12),
+                            ft.Text(f"• Precio de Compra Original: ${comp['Precio_Con_IVA']:,.2f} MXN", color="#7CFC00", weight="bold", size=13),
+                            ft.Text(f"• Notas: {comp.get('Notas') or 'Sin notas'}", color="#aaaaaa", size=11),
+                            ft.Divider(height=10, color="#333333"),
+                            ticket_img_widget,
+                            ft.Divider(height=10, color="#333333"),
+                            ft.Text("REGISTRAR RESULTADO DE LA CAMPAÑA MES 11:", color="#FFD700", weight="bold", size=12),
+                            chk_asistio,
+                            tf_monto_venta
+                        ], spacing=8, scroll=ft.ScrollMode.AUTO),
+                        width=420,
+                        height=500
+                    ),
+                    actions=[
+                        ft.ElevatedButton("Guardar Venta 💰", bgcolor="#7CFC00", color="black", on_click=guardar_asistencia_click),
+                        ft.TextButton("Cerrar ❌", on_click=lambda e: setattr(dialog, 'open', False) or page.update())
+                    ]
+                )
+
+                if dialog not in page.overlay:
+                    page.overlay.append(dialog)
+                page.dialog = dialog
+                dialog.open = True
+                page.update()
+
+            def marcar_contacto_manual_click(comp_id, val):
+                try:
+                    db = conectar_db()
+                    if db:
+                        cur = db.cursor()
+                        v_bit = 1 if val else 0
+                        cur.execute("""
+                            UPDATE crm_compras 
+                            SET Contacto_Tienda_Manual = %s, 
+                                Fecha_Contacto_Manual = IF(%s = 1, NOW(), NULL),
+                                Estatus_Seguimiento = IF(%s = 1, 'Contactado por Tienda (Manual)', 'Pendiente')
+                            WHERE ID_Compra = %s
+                        """, (v_bit, v_bit, v_bit, comp_id))
+                        db.commit()
+                        db.close()
+                        mostrar_snack("✅ Seguimiento manual actualizado para este folio.", color="#7CFC00")
+                        cargar_notificaciones_crm()
+                        cargar_historial_crm()
+                except Exception as ex_m:
+                    print("Error registrando contacto manual:", ex_m)
+
+            def verificar_y_enviar_whatsapp_48h():
+                """
+                Revisa compras al Mes 11 (330+ días) donde la sucursal NO haya marcado Contacto_Tienda_Manual
+                y hayan pasado 48 horas sin atención, para enviar UN SOLO mensaje de aviso por WhatsApp.
+                """
+                try:
+                    db = conectar_db()
+                    if not db: return
+                    cursor = db.cursor(dictionary=True)
+                    cursor.execute("""
+                        SELECT c.ID_Compra, c.Transaccion, c.Fecha_Compra, c.Nombre_Cliente, c.Telefono_Cliente, 
+                               c.Nombre_Vendedor, c.UPC, c.Precio_Con_IVA, c.Tienda, c.Contacto_Tienda_Manual, c.Whatsapp_Enviado
+                        FROM crm_compras c
+                        WHERE (DATEDIFF(CURDATE(), c.Fecha_Compra) >= 330)
+                          AND (c.Contacto_Tienda_Manual IS NULL OR c.Contacto_Tienda_Manual = 0)
+                          AND (c.Whatsapp_Enviado IS NULL OR c.Whatsapp_Enviado = 0)
+                          AND TIMESTAMPDIFF(HOUR, c.Fecha_Compra, NOW()) >= 48
+                        LIMIT 10
+                    """)
+                    rows = cursor.fetchall()
+                    
+                    for r in rows:
+                        tienda_nombre = r.get("Tienda") or "Sunglass Hut"
+                        cursor.execute("SELECT Numero_Whatsapp, Direccion_Tienda, Api_Token FROM config_whatsapp_tienda WHERE Tienda LIKE %s OR Tienda = %s LIMIT 1", (f"%{tienda_nombre}%", tienda_nombre))
+                        cfg_t = cursor.fetchone()
+                        dir_tienda = (cfg_t.get("Direccion_Tienda") if cfg_t and cfg_t.get("Direccion_Tienda") else "nuestra sucursal").strip()
+                        api_token = (cfg_t.get("Api_Token") if cfg_t and cfg_t.get("Api_Token") else "").strip()
+                        
+                        num_cli = (r.get("Telefono_Cliente") or "").strip()
+                        nom_cli = (r.get("Nombre_Cliente") or "Estimado Cliente").strip()
+                        nom_vend = (r.get("Nombre_Vendedor") or "Asesor").strip()
+                        num_tkt = (r.get("Transaccion") or "").strip()
+
+                        mensaje_wa = f"Hola buenas tardes {nom_cli}, soy {nom_vend} de la tienda Sunglass Hut {tienda_nombre} que se ubica en {dir_tienda}. Te comunico que tu garantía de robo o ruptura del ticket {num_tkt} está a punto de vencer. Si tienes tus gafas rotas, rayadas o en cualquier estado, puedes venir, dejarlas y te llevas otra con el 50% de descuento. Si tuviste la mala suerte de que fuera robada, puedes traer denuncia impresa con los datos de la gafa y el ticket y puedes llevarte otra gafa con el 50% de descuento (te comento que este descuento se le aplicará a la pieza de menor costo ya sea la que nos traigas o la que te lleves). Te esperamos. Por favor, para que sea más fácil en tienda, proporciona tu número de teléfono para encontrarte. Muchas gracias, feliz día, estamos a tus servicios."
+
+                        print(f"🤖 [LUXO WHATSAPP 48H] Procesando aviso único para {nom_cli} ({num_cli}) | Ticket {num_tkt}")
+
+                        # Si la sucursal tiene un API Gateway Token de WhatsApp (Meta / UltraMsg / Evolution API)
+                        if api_token and num_cli:
+                            try:
+                                import requests
+                                # Ejemplo de despacho HTTP POST a Gateway API
+                                res_post = requests.post("https://api.ultramsg.com/instance/messages/chat", data={
+                                    "token": api_token,
+                                    "to": f"52{num_cli}",
+                                    "body": mensaje_wa
+                                }, timeout=10)
+                                print(f"✅ [LUXO WHATSAPP API POST] Respuesta Gateway: {res_post.status_code} | {res_post.text}")
+                            except Exception as ex_post:
+                                print(f"⚠️ [LUXO WHATSAPP API POST ERROR]: {ex_post}")
+
+                        cursor_upd = db.cursor()
+                        cursor_upd.execute("""
+                            UPDATE crm_compras
+                            SET Whatsapp_Enviado = 1, Fecha_Whatsapp_Enviado = NOW(), Estatus_Seguimiento = 'Enviado por LUXO (WhatsApp 48h)'
+                            WHERE ID_Compra = %s
+                        """, (r["ID_Compra"],))
+                        db.commit()
+                        
+                    db.close()
+                except Exception as ex_wa:
+                    print("Error verificando envío automático de WhatsApp CRM 48h:", ex_wa)
+
+            # --- CARGAR NOTIFICACIONES AL MES 11 Y GRACIA 48H ---
+            def abrir_modal_whatsapp_directo(wa_url, num_dest, nom_cli, test_msg):
+                clean_num = "".join(filter(str.isdigit, str(num_dest)))
+                if len(clean_num) == 10:
+                    clean_num = f"52{clean_num}"
+                
+                import urllib.parse
+                msg_enc = urllib.parse.quote(test_msg)
+                direct_wa_url = f"https://api.whatsapp.com/send?phone={clean_num}&text={msg_enc}"
+
+                dialog_wa = ft.AlertDialog(
+                    title=ft.Row([
+                        ft.Icon(ft.Icons.PHONE_ANDROID, color="#00FF88", size=22),
+                        ft.Text(f"Enviar WhatsApp a {nom_cli}", color="#00FF88", weight="bold", size=15)
+                    ]),
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text(f"📱 Destinatario: +{clean_num}", color="#00FFFF", weight="bold", size=13),
+                            ft.Text("Haz clic en el botón verde a continuación para abrir WhatsApp con el mensaje prellenado:", color="white", size=12),
+                            ft.Divider(height=10, color="#333333"),
+                            ft.Container(
+                                content=ft.Text(test_msg, color="#E2E8F0", size=11, italic=True),
+                                bgcolor="#1E2330", padding=12, border_radius=8, border=ft.Border.all(1, "#333333")
+                            ),
+                            ft.Divider(height=10, color="#333333"),
+                            ft.ElevatedButton(
+                                "👉 HACER CLIC AQUÍ PARA ABRIR WHATSAPP 📲",
+                                url=direct_wa_url,
+                                bgcolor="#25D366",
+                                color="black",
+                                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                                width=380,
+                                height=45
+                            )
+                        ], spacing=10, scroll=ft.ScrollMode.AUTO),
+                        width=420,
+                        height=380
+                    ),
+                    actions=[
+                        ft.TextButton("Cerrar ❌", on_click=lambda e: setattr(dialog_wa, 'open', False) or page.update())
+                    ]
+                )
+                if dialog_wa not in page.overlay:
+                    page.overlay.append(dialog_wa)
+                page.dialog = dialog_wa
+                dialog_wa.open = True
+                page.update()
+
             def cargar_notificaciones_crm():
+                def enviar_wa_manual_click(comp):
+                     num_cli = (comp.get("Telefono_Cliente") or "").strip()
+                     if not num_cli:
+                         num_cli = tf_wa_numero.value.strip() if (tf_wa_numero and tf_wa_numero.value) else "5619202488"
+                     
+                     t_nombre = get_nombre_tienda_crm()
+                     dir_tienda = (tf_wa_direccion.value.strip() if (tf_wa_direccion and tf_wa_direccion.value) else "nuestra sucursal").strip()
+                     nom_cli = (comp.get("Nombre_Cliente") or "Estimado Cliente").strip()
+                     nom_vend = (comp.get("Nombre_Vendedor") or user_info.get("nombre", "Asesor")).strip()
+                     num_tkt = (comp.get("Transaccion") or "").strip()
+
+                     mensaje_wa = f"Hola buenas tardes {nom_cli}, soy {nom_vend} de la tienda Sunglass Hut {t_nombre} que se ubica en {dir_tienda}. Te comunico que tu garantía de robo o ruptura del ticket {num_tkt} está a punto de vencer. Si tienes tus gafas rotas, rayadas o en cualquier estado, puedes venir, dejarlas y te llevas otra con el 50% de descuento. Si tuviste la mala suerte de que fuera robada, puedes traer denuncia impresa con los datos de la gafa y el ticket y puedes llevarte otra gafa con el 50% de descuento (te comento que este descuento se le aplicará a la pieza de menor costo ya sea la que nos traigas o la que te lleves). Te esperamos. Por favor, para que sea más fácil en tienda, proporciona tu número de teléfono para encontrarte. Muchas gracias, feliz día, estamos a tus servicios."
+
+                     abrir_modal_whatsapp_directo("", num_cli, nom_cli, mensaje_wa)
+
+                verificar_y_enviar_whatsapp_48h()
                 crm_notif_col.controls.clear()
                 count_notif = 0
                 try:
@@ -15665,7 +15890,7 @@ Ejemplo:
                     if db:
                         cursor = db.cursor(dictionary=True)
                         cursor.execute("""
-                            SELECT ID_Compra, Transaccion, Fecha_Compra, Nombre_Cliente, Telefono_Cliente, Nombre_Vendedor, UPC, Precio_Con_IVA, Tienda, Estatus_Seguimiento, Cliente_Asistio, Monto_Nueva_Venta, Notas, Ruta_Ticket, DATEDIFF(CURDATE(), Fecha_Compra) as dias_transcurridos
+                            SELECT ID_Compra, Transaccion, Fecha_Compra, Nombre_Cliente, Telefono_Cliente, Nombre_Vendedor, UPC, Precio_Con_IVA, Tienda, Estatus_Seguimiento, Cliente_Asistio, Monto_Nueva_Venta, Notas, Ruta_Ticket, Contacto_Tienda_Manual, Whatsapp_Enviado, DATEDIFF(CURDATE(), Fecha_Compra) as dias_transcurridos
                             FROM crm_compras
                             WHERE (DATEDIFF(CURDATE(), Fecha_Compra) BETWEEN 330 AND 395 OR (DATEDIFF(CURDATE(), Fecha_Compra) >= 330 AND Estatus_Seguimiento = 'Pendiente'))
                             ORDER BY Fecha_Compra ASC
@@ -15674,12 +15899,7 @@ Ejemplo:
                         db.close()
 
                         if not rows:
-                            crm_notif_col.controls.append(
-                                ft.Container(
-                                    content=ft.Text("No hay notificaciones de garantías por cumplir 1 año pendientes por contactar.", color="#aaaaaa", italic=True),
-                                    padding=15
-                                )
-                            )
+                            crm_notif_col.controls.append(ft.Container(content=ft.Text("No hay notificaciones de garantías por cumplir 1 año pendientes.", color="#aaaaaa", italic=True), padding=15))
                         else:
                             count_notif = len(rows)
                             for r in rows:
@@ -15688,22 +15908,41 @@ Ejemplo:
                                 dt_venc = dt_c + timedelta(days=365)
                                 fecha_venc_str = dt_venc.strftime("%d/%m/%Y")
 
-                                is_contactado = r.get("Estatus_Seguimiento") in ("Contactado / Venta Realizada", "Venta Realizada")
+                                is_manual_contact = (r.get("Contacto_Tienda_Manual") == 1)
+                                is_wa_sent = (r.get("Whatsapp_Enviado") == 1)
+
+                                if is_manual_contact:
+                                    tag_status = ft.Container(
+                                        content=ft.Text("🟢 CONTACTADO POR TIENDA (MANUAL)", color="black", weight="bold", size=10),
+                                        bgcolor="#7CFC00", padding=ft.Padding(8, 3, 8, 3), border_radius=4
+                                    )
+                                elif is_wa_sent:
+                                    tag_status = ft.Container(
+                                        content=ft.Text("🤖 NOTIFICADO POR LUXO (WHATSAPP 48H)", color="white", weight="bold", size=10),
+                                        bgcolor="#0284C7", padding=ft.Padding(8, 3, 8, 3), border_radius=4
+                                    )
+                                else:
+                                    tag_status = ft.Container(
+                                        content=ft.Text("⚠️ ALERTA MES 11 — PENDIENTE DE CONTACTO", color="black", weight="bold", size=10),
+                                        bgcolor="#FFD700", padding=ft.Padding(8, 3, 8, 3), border_radius=4
+                                    )
+
+                                chk_manual = ft.Checkbox(
+                                    label="☑️ Marcar como Contactado por Tienda (Cancela WhatsApp automático)",
+                                    value=is_manual_contact,
+                                    on_change=lambda e, comp_id=r["ID_Compra"]: marcar_contacto_manual_click(comp_id, e.control.value)
+                                )
 
                                 crm_notif_col.controls.append(
                                     ft.Container(
                                         content=ft.Column([
                                             ft.Row([
-                                                ft.Container(
-                                                    content=ft.Text("⚠️ ALERTA MES 11 — ANIVERSARIO DE COMPRA", color="#000000", weight="bold", size=10),
-                                                    bgcolor="#FFD700" if not is_contactado else "#7CFC00",
-                                                    padding=ft.Padding(8, 3, 8, 3),
-                                                    border_radius=4
-                                                ),
+                                                tag_status,
                                                 ft.Text(f"Ticket: {r['Transaccion']}", color="white", weight="bold", size=12),
                                                 ft.Text(f"Vence: {fecha_venc_str}", color="#FF8C00", weight="bold", size=12)
-                                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                            ft.Text(f"📢 Recomendación de Venta: El cliente {r['Nombre_Cliente']} ({r['Telefono_Cliente'] or 'Sin Teléfono'}) compró el lente UPC {r['UPC']} (${r['Precio_Con_IVA']:,.2f} MXN) y su garantía de 1 año vence el {fecha_venc_str}. Comunícate para recordarle sus coberturas de Ruptura y Robo (50% de descuento en la pieza de menor valor) e iniciar labor de venta.", color="#E2E8F0", size=12),
+                                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
+                                            ft.Text(f"📢 Cliente: {r['Nombre_Cliente']} ({r['Telefono_Cliente'] or 'Sin Teléfono'}) | UPC {r['UPC']} (${r['Precio_Con_IVA']:,.2f} MXN). Garantía vence el {fecha_venc_str}.", color="#E2E8F0", size=12),
+                                            chk_manual,
                                             ft.Row([
                                                 ft.ElevatedButton(
                                                     "Ver Todos los Datos y Registrar Venta 📄",
@@ -15713,10 +15952,10 @@ Ejemplo:
                                                     on_click=lambda e, comp=r: mostrar_detalle_notificacion(comp)
                                                 ),
                                                 ft.Text(f"Venta Generada: ${r.get('Monto_Nueva_Venta') or 0:,.2f} MXN", color="#7CFC00", size=11, weight="bold")
-                                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True)
                                         ], spacing=8),
                                         bgcolor="#1A1A2E",
-                                        border=ft.Border.all(1, "#FFD700" if not is_contactado else "#7CFC00"),
+                                        border=ft.Border.all(1, "#7CFC00" if is_manual_contact else ("#0284C7" if is_wa_sent else "#FFD700")),
                                         padding=12,
                                         border_radius=10
                                     )
@@ -15725,7 +15964,8 @@ Ejemplo:
                     print("Error notif crm:", ex)
                 
                 notif_badge_text.value = str(count_notif)
-                page.update()
+                try: page.update()
+                except Exception: pass
 
             # --- CARGAR HISTORIAL DE COMPRAS CRM & BÚSQUEDA POR TELÉFONO ---
             tf_buscar_crm = ft.TextField(label="🔍 Buscar por Ticket, Cliente o UPC...", border_color="#9D50BB", color="white", text_size=12, width=280, on_change=lambda e: cargar_historial_crm())
@@ -15740,7 +15980,7 @@ Ejemplo:
                     if db:
                         cursor = db.cursor(dictionary=True)
                         cursor.execute("""
-                            SELECT ID_Compra, Transaccion, Fecha_Compra, Nombre_Cliente, Telefono_Cliente, Nombre_Vendedor, UPC, Precio_Con_IVA, Tienda, Estatus_Seguimiento, Cliente_Asistio, Monto_Nueva_Venta, Notas, Ruta_Ticket, DATEDIFF(CURDATE(), Fecha_Compra) as dias
+                            SELECT ID_Compra, Transaccion, Fecha_Compra, Nombre_Cliente, Telefono_Cliente, Nombre_Vendedor, UPC, Precio_Con_IVA, Tienda, Estatus_Seguimiento, Cliente_Asistio, Monto_Nueva_Venta, Notas, Ruta_Ticket, Contacto_Tienda_Manual, Whatsapp_Enviado, DATEDIFF(CURDATE(), Fecha_Compra) as dias
                             FROM crm_compras
                             ORDER BY Fecha_Compra DESC
                         """)
@@ -15753,51 +15993,37 @@ Ejemplo:
                             rows = [r for r in rows if q_tel in (r["Telefono_Cliente"] or "").lower()]
 
                         if not rows:
-                            crm_history_col.controls.append(ft.Text("No hay registros en el CRM.", color="#aaaaaa", italic=True))
+                            crm_history_col.controls.append(ft.Text("No hay registros en el historial CRM.", color="#aaaaaa", italic=True))
                         else:
                             for r in rows:
-                                dias = r.get("dias") or 0
-                                if dias >= 365:
-                                    tag_garantia = ft.Container(content=ft.Text("🔴 Garantía Vencida", color="white", size=10, weight="bold"), bgcolor="#DC2626", padding=4, border_radius=4)
-                                elif dias >= 330:
-                                    tag_garantia = ft.Container(content=ft.Text("⚠️ Alerta Mes 11 (Vence Pronto)", color="black", size=10, weight="bold"), bgcolor="#FFD700", padding=4, border_radius=4)
+                                is_manual = (r.get("Contacto_Tienda_Manual") == 1)
+                                is_wa = (r.get("Whatsapp_Enviado") == 1)
+
+                                if is_manual:
+                                    tag_garantia = ft.Container(content=ft.Text("🟢 Contactado por Sucursal", color="black", size=9, weight="bold"), bgcolor="#7CFC00", padding=4, border_radius=4)
+                                elif is_wa:
+                                    tag_garantia = ft.Container(content=ft.Text("🤖 WhatsApp Enviado (LUXO 48h)", color="white", size=9, weight="bold"), bgcolor="#0284C7", padding=4, border_radius=4)
                                 else:
-                                    tag_garantia = ft.Container(content=ft.Text("🟢 Garantía Vigente (Ruptura/Robo)", color="black", size=10, weight="bold"), bgcolor="#7CFC00", padding=4, border_radius=4)
+                                    tag_garantia = ft.Container(content=ft.Text("🟡 Pendiente", color="black", size=9, weight="bold"), bgcolor="#FFD700", padding=4, border_radius=4)
 
-                                def del_crm(id_c=r["ID_Compra"]):
+                                def guardar_asistencia_card(comp, chk_ref, tf_ref):
+                                    asist = 1 if chk_ref.value else 0
                                     try:
-                                        db_d = conectar_db()
-                                        if db_d:
-                                            cur_d = db_d.cursor()
-                                            cur_d.execute("DELETE FROM crm_compras WHERE ID_Compra = %s", (id_c,))
-                                            db_d.commit()
-                                            db_d.close()
-                                            mostrar_snack("Registro eliminado del CRM.", color="orange")
-                                            cargar_historial_crm()
-                                            cargar_notificaciones_crm()
-                                            cargar_metricas_crm()
-                                    except Exception as ex:
-                                        print("Error delete CRM:", ex)
-
-                                def guardar_asistencia_card(comp=r, chk=None, tf=None):
-                                    try:
-                                        asist = 1 if chk.value else 0
+                                        monto = float(tf_ref.value.strip()) if tf_ref.value else 0.0
+                                    except ValueError:
                                         monto = 0.0
-                                        if tf.value.strip():
-                                            try:
-                                                monto = float(tf.value.replace("$", "").replace(",", "").strip())
-                                            except Exception:
-                                                mostrar_snack("Monto de venta inválido.", color="red")
-                                                return
-                                        estatus = "Venta Realizada" if (asist and monto > 0) else ("Contactado / Asistió" if asist else "Contactado / Pendiente")
+
+                                    try:
                                         db = conectar_db()
                                         if db:
                                             cur = db.cursor()
                                             cur.execute("""
                                                 UPDATE crm_compras 
-                                                SET Cliente_Asistio = %s, Monto_Nueva_Venta = %s, Estatus_Seguimiento = %s, Fecha_Asistencia = NOW()
+                                                SET Estatus_Seguimiento = 'Contactado / Venta Realizada',
+                                                    Cliente_Asistio = %s,
+                                                    Monto_Nueva_Venta = %s
                                                 WHERE ID_Compra = %s
-                                            """, (asist, monto, estatus, comp["ID_Compra"]))
+                                            """, (asist, monto, comp["ID_Compra"]))
                                             db.commit()
                                             db.close()
                                             mostrar_snack(f"✅ Asistencia y venta de ${monto:,.2f} MXN registradas para {comp['Nombre_Cliente']}.", color="green")
@@ -15808,51 +16034,41 @@ Ejemplo:
                                         print("Error guardando asistencia card:", ex)
 
                                 chk_card_asistio = ft.Checkbox(label="Cliente Asistió 🏬", value=r.get("Cliente_Asistio") == 1)
-                                tf_card_monto = ft.TextField(
-                                    label="Monto Nueva Venta ($ MXN)",
-                                    value=str(r.get("Monto_Nueva_Venta") or ""),
-                                    border_color="#7CFC00",
-                                    color="white",
-                                    text_size=11,
-                                    width=170
-                                )
+                                tf_card_monto = ft.TextField(label="Monto Nueva Venta ($ MXN)", value=str(r.get("Monto_Nueva_Venta") or ""), border_color="#7CFC00", color="white", text_size=11, width=170)
 
                                 crm_history_col.controls.append(
                                     ft.Container(
                                         content=ft.Column([
-                                            ft.Row([
-                                                tag_garantia,
-                                                ft.Text(f"Ticket: {r['Transaccion']}", color="white", weight="bold", size=13),
-                                                ft.Text(f"Fecha: {r['Fecha_Compra']}", color="#aaaaaa", size=11)
-                                            ], spacing=8, wrap=True),
+                                            ft.Row([tag_garantia, ft.Text(f"Ticket: {r['Transaccion']}", color="white", weight="bold", size=13), ft.Text(f"Fecha: {r['Fecha_Compra']}", color="#aaaaaa", size=11)], spacing=8, wrap=True),
                                             ft.Text(f"Cliente: {r['Nombre_Cliente']}", color="#D8B4FE", size=12),
                                             ft.Text(f"Tel: {r['Telefono_Cliente'] or 'S/N'} | Vendedor: {r['Nombre_Vendedor']}", color="#aaaaaa", size=11),
                                             ft.Text(f"UPC: {r['UPC']} | Precio: ${r['Precio_Con_IVA']:,.2f} MXN", color="white", size=11),
+                                            ft.Row([chk_card_asistio, tf_card_monto], spacing=10, wrap=True),
                                             ft.Row([
-                                                chk_card_asistio,
-                                                tf_card_monto,
-                                            ], spacing=10, wrap=True),
-                                            ft.Row([
-                                                ft.ElevatedButton("Guardar Venta 💰", bgcolor="#7CFC00", color="black", style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=6)), on_click=lambda e, comp=r, chk=chk_card_asistio, tf=tf_card_monto: guardar_asistencia_card(comp, chk, tf)),
+                                                ft.ElevatedButton("Guardar Venta 💰", bgcolor="#7CFC00", color="black", on_click=lambda e, comp=r, chk=chk_card_asistio, tf=tf_card_monto: guardar_asistencia_card(comp, chk, tf)),
                                                 ft.ElevatedButton("Ver Ticket 🧾", icon=ft.Icons.RECEIPT_LONG, bgcolor="#1E2330", color="#00FFFF", on_click=lambda e, comp=r: mostrar_detalle_notificacion(comp)),
-                                                ft.IconButton(ft.Icons.DELETE, icon_color="#FF4B4B", tooltip="Eliminar (Admin)", visible=es_admin(), on_click=lambda e, id_c=r["ID_Compra"]: del_crm(id_c))
+                                                ft.IconButton(ft.Icons.DELETE, icon_color="#FF4B4B", tooltip="Eliminar", on_click=lambda e, id_c=r["ID_Compra"]: del_crm(id_c))
                                             ], spacing=8, wrap=True)
                                         ], spacing=6),
-                                        bgcolor="#161922",
-                                        padding=12,
-                                        border_radius=8,
-                                        border=ft.Border.all(1, "#333333")
+                                        bgcolor="#161922", padding=12, border_radius=8, border=ft.Border.all(1, "#333333")
                                     )
                                 )
                 except Exception as ex:
                     print("Error historial CRM:", ex)
-                page.update()
+                try: page.update()
+                except Exception: pass
+
+            def get_nombre_tienda_crm():
+                t_raw = user_info.get("tienda") or user_session.get("zona_activa_id") or "Interlomas"
+                t_clean = str(t_raw).split("(")[0].replace("SUCURSAL", "").replace("Sucursal", "").replace("TIENDA", "").replace("Tienda", "").strip()
+                return t_clean if t_clean else "Interlomas"
 
             # --- SUB-PESTAÑA DE MÉTRICAS Y RENTABILIDAD CRM 📊 ---
             crm_metrics_container = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
 
             def cargar_metricas_crm():
                 crm_metrics_container.controls.clear()
+                t_nombre = get_nombre_tienda_crm()
                 try:
                     db = conectar_db()
                     if db:
@@ -15862,26 +16078,26 @@ Ejemplo:
                                 COUNT(*) as total_registros,
                                 COUNT(CASE WHEN DATEDIFF(CURDATE(), Fecha_Compra) >= 330 THEN 1 END) as notificados_mes11,
                                 COUNT(CASE WHEN Cliente_Asistio = 1 THEN 1 END) as asistieron_tienda,
-                                COALESCE(SUM(Monto_Nueva_Venta), 0) as venta_total_crm,
+                                COALESCE(SUM(CASE WHEN Cliente_Asistio = 1 THEN Monto_Nueva_Venta ELSE 0 END), 0) as venta_total_crm,
                                 COALESCE(AVG(CASE WHEN Cliente_Asistio = 1 AND Monto_Nueva_Venta > 0 THEN Monto_Nueva_Venta END), 0) as venta_promedio
                             FROM crm_compras
-                        """)
+                            WHERE Tienda LIKE %s OR Tienda = %s
+                        """, (f"%{t_nombre}%", t_nombre))
                         row = cursor.fetchone()
                         db.close()
 
-                        tot_reg = row["total_registros"] or 0
-                        notif_11 = row["notificados_mes11"] or 0
-                        asist = row["asistieron_tienda"] or 0
-                        venta_tot = float(row["venta_total_crm"] or 0)
-                        venta_prom = float(row["venta_promedio"] or 0)
+                        tot_reg = (row["total_registros"] if row else 0) or 0
+                        notif_11 = (row["notificados_mes11"] if row else 0) or 0
+                        asist = (row["asistieron_tienda"] if row else 0) or 0
+                        venta_tot = float(row["venta_total_crm"] or 0) if row else 0.0
+                        venta_prom = float(row["venta_promedio"] or 0) if row else 0.0
 
                         tasa_conversion = (asist / notif_11 * 100.0) if notif_11 > 0 else 0.0
 
                         crm_metrics_container.controls.extend([
-                            ft.Text("Métricas de Efectividad y Rentabilidad del CRM 📊", color="#FFD700", weight="bold", size=16),
+                            ft.Text(f"Métricas de Efectividad y Rentabilidad CRM — Sucursal {t_nombre} 📊", color="#FFD700", weight="bold", size=16),
                             ft.Text("Análisis en tiempo real de las ventas adicionales generadas por la campaña de recordatorio de garantías al mes 11.", color="#aaaaaa", size=12),
                             ft.Divider(height=10, color="#333333"),
-                            # KPI CARDS
                             ft.Row([
                                 ft.Container(
                                     content=ft.Column([
@@ -15907,69 +16123,226 @@ Ejemplo:
                                         ft.Text(f"{asist} / {notif_11}", color="#FFD700", size=20, weight="bold")
                                     ]), bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1, "#FFD700"), expand=True
                                 )
-                            ]),
-                            ft.Divider(height=10, color="#333333"),
-                            ft.Text("GRÁFICA COMPARATIVA DE RENDIMIENTO DEL CRM:", color="#D8B4FE", weight="bold", size=14),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Row([
-                                        ft.Text("Clientes Notificados (Mes 11):", color="white", width=220),
-                                        ft.ProgressBar(value=1.0 if notif_11 > 0 else 0, color="#FFD700", bgcolor="#333333", expand=True),
-                                        ft.Text(f"{notif_11} Clientes", color="#FFD700", weight="bold", width=90)
-                                    ]),
-                                    ft.Row([
-                                        ft.Text("Clientes que Asistieron a Tienda:", color="white", width=220),
-                                        ft.ProgressBar(value=(asist / notif_11) if notif_11 > 0 else 0, color="#00FFFF", bgcolor="#333333", expand=True),
-                                        ft.Text(f"{asist} Clientes", color="#00FFFF", weight="bold", width=90)
-                                    ]),
-                                    ft.Row([
-                                        ft.Text("Ventas Concretadas ($):", color="white", width=220),
-                                        ft.ProgressBar(value=min(1.0, venta_tot / 20000.0) if venta_tot > 0 else 0, color="#7CFC00", bgcolor="#333333", expand=True),
-                                        ft.Text(f"${venta_tot:,.0f} MXN", color="#7CFC00", weight="bold", width=90)
-                                    ])
-                                ], spacing=12),
-                                bgcolor="#161922", padding=16, border_radius=10, border=ft.Border.all(1, "#333333")
-                            )
+                            ])
                         ])
                 except Exception as ex:
                     print("Error métricas crm:", ex)
-                page.update()
+                try: page.update()
+                except Exception: pass
 
-            # --- SECCIÓN GUÍA DE REGLAS DE GARANTÍA ---
-            guia_garantias_view = ft.Container(
-                content=ft.Column([
-                    ft.Text("REGLAS Y COBERTURAS DE GARANTÍAS SUNGLASS HUT (1 AÑO) 📜", color="#FFD700", weight="bold", size=16),
-                    ft.Divider(height=10, color="#333333"),
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Row([ft.Icon(ft.Icons.BUILD_ROUNDED, color="#00FFFF"), ft.Text("1. GARANTÍA POR RUPTURA / DAÑO (VIGENCIA 1 AÑO)", color="#00FFFF", weight="bold", size=14)]),
-                            ft.Text("• Aplica cuando el cliente acude a la tienda con su gafa que sufrió alguna ruptura o daño accidental (sin importar el estado físico en el que se encuentre la pieza).", color="white", size=12),
-                            ft.Text("• El cliente debe entregar la gafa en tienda.", color="white", size=12),
-                            ft.Text("• SE APLICA EL 50% DE DESCUENTO SOBRE LA PIEZA DE MENOR VALOR (ya sea la pieza que entrega el cliente o la nueva gafa que se lleva).", color="#7CFC00", weight="bold", size=12)
-                        ], spacing=6),
-                        bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1, "#00FFFF")
-                    ),
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Row([ft.Icon(ft.Icons.SECURITY_ROUNDED, color="#FF8C00"), ft.Text("2. GARANTÍA POR ROBO (VIGENCIA 1 AÑO)", color="#FF8C00", weight="bold", size=14)]),
-                            ft.Text("• Aplica cuando al cliente le roban sus gafas dentro del primer año de compra.", color="white", size=12),
-                            ft.Text("• El cliente debe presentar en tienda su ticket de compra y el ACTA DE DENUNCIA emitida por la autoridad competente con los datos del lente.", color="white", size=12),
-                            ft.Text("• EL ACTA DE DENUNCIA IMPRESA DEBE QUEDAR FÍSICAMENTE ARCHIVADA EN LA TIENDA.", color="#FFD700", weight="bold", size=12),
-                            ft.Text("• SE APLICA EL 50% DE DESCUENTO SOBRE LA PIEZA DE MISMO O MENOR VALOR.", color="#7CFC00", weight="bold", size=12)
-                        ], spacing=6),
-                        bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1, "#FF8C00")
-                    ),
-                    ft.Container(
-                        content=ft.Column([
-                            ft.Row([ft.Icon(ft.Icons.ALARM_ON_ROUNDED, color="#D8B4FE"), ft.Text("3. ESTRATEGIA DE FIDELIZACIÓN AL MES 11", color="#D8B4FE", weight="bold", size=14)]),
-                            ft.Text("• LUXO genera alertas automáticas a los 11 meses de la compra (1 mes antes de vencer).", color="white", size=12),
-                            ft.Text("• La tienda debe ponerse en contacto con el cliente para recordarle sus garantías de Ruptura y Robo antes de que venza su ticket y realizar labor de venta para ofrecerle las nuevas colecciones.", color="white", size=12)
-                        ], spacing=6),
-                        bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1, "#D8B4FE")
-                    )
-                ], spacing=14, scroll=ft.ScrollMode.AUTO),
-                expand=True
+            # --- TAB CONFIGURACIÓN WHATSAPP SUCURSAL 📱 ---
+            tf_wa_tienda = ft.TextField(
+                label="Nombre / Sucursal de Tienda",
+                value=get_nombre_tienda_crm(),
+                border_color="#9D50BB",
+                color="white",
+                text_size=12,
+                disabled=True,
+                width=300
             )
+            tf_wa_numero = ft.TextField(
+                label="Teléfono WhatsApp Oficial de la Sucursal",
+                border_color="#00FF88",
+                color="white",
+                text_size=13,
+                width=300,
+                hint_text="ej: 5551234567"
+            )
+            tf_wa_direccion = ft.TextField(
+                label="Dirección Física Exacta de la Tienda (Paseo, Centro Comercial, Local)",
+                border_color="#9D50BB",
+                color="white",
+                text_size=12,
+                multiline=True,
+                min_lines=2,
+                max_lines=3
+            )
+            dd_wa_proveedor = ft.Dropdown(
+                label="Proveedor / Gateway de Envío Automático",
+                value="UltraMsg",
+                options=[
+                    ft.dropdown.Option("UltraMsg", "🟢 UltraMsg API (Escáner QR Único - Recomendado)"),
+                    ft.dropdown.Option("MetaCloud", "🟦 Meta Cloud API (Oficial Facebook / Meta)"),
+                    ft.dropdown.Option("GreenAPI", "🟨 Green-API / Evolution API"),
+                    ft.dropdown.Option("Simulador", "⚙️ Simulación por Servidor (Registro en BD)")
+                ],
+                border_color="#9D50BB",
+                color="white",
+                text_size=12,
+                width=340
+            )
+            tf_wa_instance_id = ft.TextField(
+                label="ID de Instancia / Phone Number ID",
+                border_color="#9D50BB",
+                color="white",
+                text_size=12,
+                width=240,
+                hint_text="ej: instance98412"
+            )
+            tf_wa_api_token = ft.TextField(
+                label="Token / API Key de Acceso (Opcional para 100% Automático)",
+                border_color="#9D50BB",
+                color="white",
+                text_size=12,
+                width=320,
+                password=True,
+                can_reveal_password=True,
+                hint_text="Token de tu servicio de API"
+            )
+            lbl_wa_permiso_badge = ft.Container(padding=10, border_radius=8)
+
+            def cargar_config_whatsapp_tienda():
+                t_nombre = get_nombre_tienda_crm()
+                tf_wa_tienda.value = t_nombre
+                is_admin = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
+
+                num_registrado = ""
+                dir_registrada = ""
+                try:
+                    db = conectar_db()
+                    if db:
+                        cur = db.cursor(dictionary=True)
+                        cur.execute("SELECT Numero_Whatsapp, Direccion_Tienda, Proveedor_Api, Instance_Id, Api_Token FROM config_whatsapp_tienda WHERE Tienda LIKE %s OR Tienda = %s LIMIT 1", (f"%{t_nombre}%", t_nombre))
+                        row = cur.fetchone()
+                        db.close()
+                        if row:
+                            num_registrado = (row.get("Numero_Whatsapp") or "").strip()
+                            dir_registrada = (row.get("Direccion_Tienda") or "").strip()
+                            prov_r = (row.get("Proveedor_Api") or "UltraMsg").strip()
+                            inst_r = (row.get("Instance_Id") or "").strip()
+                            tok_r = (row.get("Api_Token") or "").strip()
+                            dd_wa_proveedor.value = prov_r if prov_r in ["UltraMsg", "MetaCloud", "GreenAPI", "Simulador"] else "UltraMsg"
+                            tf_wa_instance_id.value = inst_r
+                            tf_wa_api_token.value = tok_r
+                except Exception as ex_cfg:
+                    print("Error cargando config whatsapp:", ex_cfg)
+
+                tf_wa_numero.value = num_registrado
+                tf_wa_direccion.value = dir_registrada
+
+                if num_registrado:
+                    if is_admin:
+                        tf_wa_numero.disabled = False
+                        tf_wa_direccion.disabled = False
+                        lbl_wa_permiso_badge.bgcolor = "#1E293B"
+                        lbl_wa_permiso_badge.content = ft.Row([
+                            ft.Icon(ft.Icons.EDIT, color="#00FFFF"),
+                            ft.Text("✏️ Modo Edición Administrador Habilitado: Puedes modificar el WhatsApp y dirección.", color="#00FFFF", weight="bold", size=12)
+                        ])
+                    else:
+                        tf_wa_numero.disabled = True
+                        tf_wa_direccion.disabled = True
+                        lbl_wa_permiso_badge.bgcolor = "#312E81"
+                        lbl_wa_permiso_badge.content = ft.Row([
+                            ft.Icon(ft.Icons.LOCK, color="#FFD700"),
+                            ft.Text("🔒 WhatsApp vinculado por la sucursal. Únicamente un Administrador puede modificarlo.", color="#FFD700", weight="bold", size=12)
+                        ])
+                else:
+                    tf_wa_numero.disabled = False
+                    tf_wa_direccion.disabled = False
+                    lbl_wa_permiso_badge.bgcolor = "#064E3B"
+                    lbl_wa_permiso_badge.content = ft.Row([
+                        ft.Icon(ft.Icons.PHONE_ANDROID, color="#7CFC00"),
+                        ft.Text("📱 Campo de WhatsApp libre: Ingresa el número oficial de tu sucursal por primera vez.", color="#7CFC00", weight="bold", size=12)
+                    ])
+
+                try: page.update()
+                except Exception: pass
+
+            def guardar_config_whatsapp_click(e):
+                t_nombre = get_nombre_tienda_crm()
+                num_v = tf_wa_numero.value.strip() if tf_wa_numero.value else ""
+                dir_v = tf_wa_direccion.value.strip() if tf_wa_direccion.value else ""
+                prov_v = dd_wa_proveedor.value or "UltraMsg"
+                inst_v = tf_wa_instance_id.value.strip() if tf_wa_instance_id.value else ""
+                tok_v = tf_wa_api_token.value.strip() if tf_wa_api_token.value else ""
+                is_admin = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
+
+                if not num_v:
+                    mostrar_snack("Por favor ingresa un número de WhatsApp válido para la tienda.", color="red")
+                    return
+
+                try:
+                    db = conectar_db()
+                    if db:
+                        cur = db.cursor(dictionary=True)
+                        cur.execute("SELECT Numero_Whatsapp FROM config_whatsapp_tienda WHERE Tienda LIKE %s OR Tienda = %s LIMIT 1", (f"%{t_nombre}%", t_nombre))
+                        row_prev = cur.fetchone()
+                        
+                        if row_prev and row_prev.get("Numero_Whatsapp") and not is_admin:
+                            mostrar_snack("🔒 El número ya fue vinculado previamente. Únicamente un Administrador puede modificarlo.", color="red")
+                            db.close()
+                            return
+
+                        cur.execute("""
+                            INSERT INTO config_whatsapp_tienda (Tienda, Numero_Whatsapp, Direccion_Tienda, Proveedor_Api, Instance_Id, Api_Token, Registrado_Por, Ultima_Modificacion_Por, Fecha_Actualizacion)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                            ON DUPLICATE KEY UPDATE
+                                Numero_Whatsapp = %s,
+                                Direccion_Tienda = %s,
+                                Proveedor_Api = %s,
+                                Instance_Id = %s,
+                                Api_Token = %s,
+                                Ultima_Modificacion_Por = %s,
+                                Fecha_Actualizacion = NOW()
+                        """, (t_nombre, num_v, dir_v, prov_v, inst_v, tok_v, user_info.get("nombre", "Tienda"), user_info.get("nombre", "Tienda"), num_v, dir_v, prov_v, inst_v, tok_v, user_info.get("nombre", "Tienda")))
+                        db.commit()
+                        db.close()
+                        mostrar_snack("✅ Configuración de WhatsApp de Sucursal guardada con éxito.", color="#7CFC00")
+                        cargar_config_whatsapp_tienda()
+                except Exception as ex_g:
+                    print("Error guardando config whatsapp:", ex_g)
+                    mostrar_snack("Error al guardar configuración de WhatsApp.", color="red")
+
+            def probar_envio_wa_click(e):
+                num_dest = tf_wa_numero.value.strip() if (tf_wa_numero and tf_wa_numero.value) else "5619202488"
+                dir_t = tf_wa_direccion.value.strip() if (tf_wa_direccion and tf_wa_direccion.value) else "vialidad de la barranca no.6 ex hacienda jesus del monte sunglass hut segundo nivel"
+                t_nom = get_nombre_tienda_crm()
+                vendedor_nom = user_info.get("nombre", "Asesor Interlomas")
+
+                test_msg = f"Hola buenas tardes Cliente de Prueba, soy {vendedor_nom} de la tienda Sunglass Hut {t_nom} que se ubica en {dir_t}. Te comunico que tu garantía de robo o ruptura del ticket TRX-TEST-2026 está a punto de vencer. Si tienes tus gafas rotas, rayadas o en cualquier estado, puedes venir, dejarlas y te llevas otra con el 50% de descuento. Si tuviste la mala suerte de que fuera robada, puedes traer denuncia impresa con los datos de la gafa y el ticket y puedes llevarte otra gafa con el 50% de descuento (te comento que este descuento se le aplicará a la pieza de menor costo ya sea la que nos traigas o la que te lleves). Te esperamos. Por favor, para que sea más fácil en tienda, proporciona tu número de teléfono para encontrarte. Muchas gracias, feliz día, estamos a tus servicios."
+
+                abrir_modal_whatsapp_directo("", num_dest, "Cliente de Prueba", test_msg)
+
+            def crear_compra_prueba_mes11_click(e):
+                t_nom = get_nombre_tienda_crm()
+                vendedor_nom = user_info.get("nombre", "Asesor Interlomas")
+                import time, datetime
+                trx_demo = f"DEMO-{int(time.time())}"[-8:]
+                fecha_hace_11m = (datetime.datetime.now() - datetime.timedelta(days=335)).strftime("%Y-%m-%d")
+                tel_dest = tf_wa_numero.value.strip() if (tf_wa_numero and tf_wa_numero.value) else "5619202488"
+
+                try:
+                    db = conectar_db()
+                    if db:
+                        cur = db.cursor()
+                        cur.execute("""
+                            INSERT INTO crm_compras 
+                            (Transaccion, Fecha_Compra, Nombre_Cliente, Telefono_Cliente, Nombre_Vendedor, UPC, Precio_Con_IVA, Tienda, Notas, Estatus_Seguimiento, Contacto_Tienda_Manual, Whatsapp_Enviado)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Pendiente', 0, 0)
+                        """, (trx_demo, fecha_hace_11m, "Cliente Demo Prueba", tel_dest, vendedor_nom, "8053672000000 (Ray-Ban Wayfarer)", 4599.00, t_nom, "Ticket de prueba de automatización WhatsApp 48h"))
+                        db.commit()
+                        db.close()
+                        mostrar_snack(f"🧪 Ticket de prueba #{trx_demo} generado con éxito al Mes 11.", color="#7CFC00")
+                        cargar_notificaciones_crm()
+                except Exception as ex_demo:
+                    print("Error creando compra de prueba CRM:", ex_demo)
+
+            tab_config_wa = ft.Column([
+                ft.Text("Vincular WhatsApp Oficial de la Sucursal 📱", color="#00FF88", weight="bold", size=16),
+                ft.Text("Configura el teléfono celular, dirección y opcionalmente las credenciales API para envíos 100% automáticos a las 48h.", color="#aaaaaa", size=12),
+                ft.Divider(height=10, color="#333333"),
+                lbl_wa_permiso_badge,
+                ft.Row([tf_wa_tienda, tf_wa_numero], wrap=True, spacing=12),
+                tf_wa_direccion,
+                ft.Divider(height=5, color="transparent"),
+                ft.Text("🤖 Gateway de Envío Automático (Opcional - Sin Intervención Humana):", color="#00FFFF", weight="bold", size=13),
+                ft.Row([dd_wa_proveedor, tf_wa_instance_id, tf_wa_api_token], wrap=True, spacing=10),
+                ft.Row([
+                    ft.ElevatedButton("🧪 Probar Plantilla WhatsApp Directa", icon=ft.Icons.CHAT_ROUNDED, bgcolor="#0284C7", color="white", on_click=probar_envio_wa_click),
+                    ft.ElevatedButton("Guardar Configuración WhatsApp 💾", icon=ft.Icons.SAVE, bgcolor="#00FF88", color="black", style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)), on_click=guardar_config_whatsapp_click)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True)
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
 
             # --- TABS PRINCIPALES DEL CRM ---
             tab_captura = ft.Column([
@@ -15996,28 +16369,66 @@ Ejemplo:
                     ft.ElevatedButton("Guardar Registro en CRM 💾", icon=ft.Icons.SAVE, bgcolor="#9D50BB", color="white", on_click=guardar_compra_crm),
                     ft.OutlinedButton("Limpiar Campos 🔄", on_click=lambda e: limpiar_form_crm())
                 ], alignment=ft.MainAxisAlignment.END, wrap=True, spacing=10)
-            ], scroll=ft.ScrollMode.AUTO, expand=True)
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
 
             tab_historial_crm = ft.Column([
                 ft.Text("Historial de CRM y Garantías 📋", color="#D8B4FE", weight="bold", size=15),
                 ft.Row([tf_buscar_crm, tf_buscar_telefono], wrap=True, spacing=10),
                 crm_history_col
-            ], expand=True, scroll=ft.ScrollMode.AUTO)
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
 
             tab_notificaciones = ft.Column([
                 ft.Row([
                     ft.Text("Notificaciones & Alertas Mes 11 (Fidelización) 🔔", color="#FFD700", weight="bold", size=15),
-                    ft.ElevatedButton("Actualizar Alertas 🔄", bgcolor="#333333", color="white", on_click=lambda e: cargar_notificaciones_crm())
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Text("A continuación se enlistan las compras que están por cumplir 1 año (al mes 11). Haz clic en 'Ver Todos los Datos y Registrar Venta' para iniciar la labor de venta y registrar la asistencia y nueva venta.", color="#aaaaaa", size=12),
+                    ft.Row([
+                        ft.ElevatedButton("🧪 Generar Ticket Demo Mes 11", icon=ft.Icons.SCIENCE, bgcolor="#312E81", color="#FFD700", on_click=crear_compra_prueba_mes11_click),
+                        ft.ElevatedButton("Actualizar Alertas 🔄", bgcolor="#333333", color="white", on_click=lambda e: cargar_notificaciones_crm())
+                    ], spacing=8, wrap=True)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
+                ft.Text("A continuación se enlistan las compras que están por cumplir 1 año (al mes 11). Marca '☑️ Contactado por Tienda' para cancelar el aviso de WhatsApp 48h.", color="#aaaaaa", size=12),
                 ft.Divider(height=10, color="#333333"),
                 crm_notif_col
-            ], expand=True)
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
+
+            guia_garantias_view = ft.Container(
+                content=ft.Column([
+                    ft.Text("REGLAS Y COBERTURAS DE GARANTÍAS SUNGLASS HUT (1 AÑO) 📜", color="#FFD700", weight="bold", size=16),
+                    ft.Divider(height=10, color="#333333"),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([ft.Icon(ft.Icons.BUILD_ROUNDED, color="#00FFFF"), ft.Text("1. GARANTÍA POR RUPTURA / DAÑO (VIGENCIA 1 AÑO)", color="#00FFFF", weight="bold", size=14)]),
+                            ft.Text("• Aplica cuando el cliente acude a la tienda con su gafa que sufrió alguna ruptura o daño accidental (sin importar el estado físico en el que se encuentre la pieza).", color="white", size=12),
+                            ft.Text("• El cliente debe entregar la gafa en tienda.", color="white", size=12),
+                            ft.Text("• SE APLICA EL 50% DE DESCUENTO SOBRE LA PIEZA DE MENOR VALOR (ya sea la pieza que entrega el cliente o la nueva gafa que se lleva).", color="#7CFC00", weight="bold", size=12)
+                        ], spacing=6),
+                        bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1, "#00FFFF")
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([ft.Icon(ft.Icons.SECURITY_ROUNDED, color="#FF8C00"), ft.Text("2. GARANTÍA POR ROBO (VIGENCIA 1 AÑO)", color="#FF8C00", weight="bold", size=14)]),
+                            ft.Text("• Aplica cuando al cliente le roban sus gafas dentro del primer año de compra.", color="white", size=12),
+                            ft.Text("• El cliente debe presentar en tienda su ticket de compra y el ACTA DE DENUNCIA emitida por la autoridad competente con los datos del lente.", color="white", size=12),
+                            ft.Text("• EL ACTA DE DENUNCIA IMPRESA DEBE QUEDAR FÍSICAMENTE ARCHIVADA EN LA TIENDA.", color="#FFD700", weight="bold", size=12),
+                            ft.Text("• SE APLICA EL 50% DE DESCUENTO SOBRE LA PIEZA DE MISMO O MENOR VALOR.", color="#7CFC00", weight="bold", size=12)
+                        ], spacing=6),
+                        bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1, "#FF8C00")
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([ft.Icon(ft.Icons.ALARM_ROUNDED, color="#D8B4FE"), ft.Text("3. ESTRATEGIA DE FIDELIZACIÓN AL MES 11", color="#D8B4FE", weight="bold", size=14)]),
+                            ft.Text("• LUXO genera alertas automáticas a los 11 meses de la compra (1 mes antes de vencer).", color="white", size=12),
+                            ft.Text("• La tienda debe ponerse en contacto con el cliente para recordarle sus garantías de Ruptura y Robo antes de que venza su ticket y realizar labor de venta para ofrecerle las nuevas colecciones.", color="white", size=12)
+                        ], spacing=6),
+                        bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1, "#D8B4FE")
+                    )
+                ], spacing=14, scroll=ft.ScrollMode.ALWAYS),
+                expand=True
+            )
 
             crm_tabs = ft.Tabs(
                 selected_index=0,
                 animation_duration=300,
-                length=5,
+                length=6,
                 expand=True,
                 content=ft.Column(
                     expand=True,
@@ -16027,6 +16438,7 @@ Ejemplo:
                                 ft.Tab(label="Captura y Registro 📝"),
                                 ft.Tab(label="Historial CRM 📋"),
                                 ft.Tab(label="Notificaciones (Mes 11) 🔔"),
+                                ft.Tab(label="Configuración WhatsApp 📱"),
                                 ft.Tab(label="Métricas & ROI CRM 📊"),
                                 ft.Tab(label="Reglas de Garantía 📜")
                             ]
@@ -16037,6 +16449,7 @@ Ejemplo:
                                 tab_captura,
                                 tab_historial_crm,
                                 tab_notificaciones,
+                                tab_config_wa,
                                 crm_metrics_container,
                                 guia_garantias_view
                             ]
@@ -16048,6 +16461,7 @@ Ejemplo:
             cargar_historial_crm()
             cargar_notificaciones_crm()
             cargar_metricas_crm()
+            cargar_config_whatsapp_tienda()
 
             return ft.Column([
                 ft.Row([
@@ -16067,6 +16481,365 @@ Ejemplo:
                 ft.Text("Gestión de clientes, escáner de tickets con IA, coberturas por Ruptura o Robo (1 año) y alertas automáticas al mes 11.", color="#aaaaaa", size=13),
                 ft.Divider(height=15, color="#333333"),
                 crm_tabs
+            ], expand=True)
+
+        def build_fedex_view():
+            """Vista de Integración Logística FedEx (Traspasos, Recolecciones, Monitoreo y Credenciales)."""
+            import fedex_service
+            
+            db = conectar_db()
+            cfg_fedex = fedex_service.obtener_config_fedex(db)
+            is_adm = es_admin()
+            is_mobile_w = (page.width < 700) if (page and page.width) else False
+
+            modo_badge = ft.Container(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE if cfg_fedex.get("modo_produccion") else ft.Icons.SCIENCE, color="#00FF88" if cfg_fedex.get("modo_produccion") else "#FFD700", size=14),
+                    ft.Text("🟢 PRODUCCIÓN REAL" if cfg_fedex.get("modo_produccion") else "🧪 MODO PRUEBAS / SIMULADOR", color="white", weight="bold", size=11)
+                ], spacing=4),
+                bgcolor="#1E2330", padding=ft.Padding(8, 4, 8, 4), border_radius=6, border=ft.Border.all(1, "#00FFFF")
+            )
+
+            # --- CAMPOS DE GENERAR GUÍA ---
+            tienda_actual = sucursal_activa[0] if 'sucursal_activa' in locals() and sucursal_activa else "Interlomas"
+            
+            opts_tiendas = [ft.dropdown.Option(key="Interlomas", text="📍 Interlomas (3502)"), ft.dropdown.Option(key="Toreo", text="📍 Toreo (3501)"), ft.dropdown.Option(key="Perisur", text="📍 Perisur (3503)"), ft.dropdown.Option(key="CEDIS", text="🏭 CEDIS / Almacén Central"), ft.dropdown.Option(key="Garantias", text="🛠️ Laboratorio de Garantías")]
+            if db:
+                try:
+                    cursor = db.cursor(dictionary=True)
+                    cursor.execute("SELECT nombre_tienda, numero_tienda FROM tiendas ORDER BY nombre_tienda ASC")
+                    rows = cursor.fetchall()
+                    if rows:
+                        opts_tiendas = [ft.dropdown.Option(key=r["nombre_tienda"], text=f"📍 {r['nombre_tienda']} ({r.get('numero_tienda', '')})") for r in rows]
+                except Exception as ex_t:
+                    print("Notice fedex tiendas db options:", ex_t)
+                finally:
+                    try: db.close()
+                    except: pass
+
+            dd_origen = ft.Dropdown(options=opts_tiendas, value=tienda_actual, label="🏬 Tienda Origen (Remitente)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
+            dd_destino = ft.Dropdown(options=opts_tiendas, value="Toreo" if tienda_actual != "Toreo" else "Interlomas", label="🏬 Tienda Destino (Destinatario)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
+
+            tf_peso = ft.TextField(label="Peso (kg)", value="1.0", width=140, border_color="#00FFFF", color="white")
+            tf_largo = ft.TextField(label="Largo (cm)", value="20", width=100, border_color="#00FFFF", color="white")
+            tf_ancho = ft.TextField(label="Ancho (cm)", value="15", width=100, border_color="#00FFFF", color="white")
+            tf_alto = ft.TextField(label="Alto (cm)", value="10", width=100, border_color="#00FFFF", color="white")
+            tf_valor = ft.TextField(label="Valor Declarado ($)", value="4500.00", width=180, border_color="#00FFFF", color="white")
+
+            res_container = ft.Column(spacing=8)
+
+            def generar_guia_click(e):
+                origen_val = dd_origen.value or "Interlomas"
+                destino_val = dd_destino.value or "Toreo"
+                
+                if origen_val == destino_val:
+                    mostrar_snack("La tienda de origen y destino deben ser diferentes.", "red")
+                    return
+
+                try: p_val = float(tf_peso.value)
+                except: p_val = 1.0
+                try: l_val = int(tf_largo.value)
+                except: l_val = 20
+                try: a_val = int(tf_ancho.value)
+                except: a_val = 15
+                try: h_val = int(tf_alto.value)
+                except: h_val = 10
+                try: v_val = float(tf_valor.value)
+                except: v_val = 4500.0
+
+                res = fedex_service.generar_guia_fedex(origen_val, destino_val, p_val, l_val, a_val, h_val, v_val)
+                mostrar_snack("¡Guía FedEx generada con éxito!", "#7CFC00")
+
+                res_container.controls.clear()
+                res_container.controls.append(
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE, color="#7CFC00"), ft.Text("✅ GUÍA FEDEX EMITIDA Y RECOLECCIÓN PROGRAMADA", color="#7CFC00", weight="bold", size=14)]),
+                            ft.Divider(height=5, color="#333333"),
+                            ft.Text(f"🚚 Número de Rastreo FedEx: {res['folio_rastreo']}", color="white", weight="bold", size=13),
+                            ft.Text(f"📅 Folio de Recolección: {res['folio_recoleccion']} (Horario Fijo: 11:00 a 19:00 hrs)", color="#FFD700", weight="bold", size=12),
+                            ft.Text(f"📍 Origen: {res['origen']['nombre']} ({res['origen']['email']})", color="#aaaaaa", size=11),
+                            ft.Text(f"📍 Destino: {res['destino']['nombre']} ({res['destino']['email']})", color="#aaaaaa", size=11),
+                            ft.Text(f"🔒 Servicio: {res['servicio']}", color="#00FFFF", size=11),
+                            ft.ElevatedButton("👉 IMPRIMIR GUÍA FEDEX (PDF) 🖨️", icon=ft.Icons.PICTURE_AS_PDF, bgcolor="#00FF88", color="black", url=res['pdf_url'])
+                        ], spacing=6),
+                        bgcolor="#1E2330", padding=14, border_radius=10, border=ft.Border.all(1.5, "#7CFC00")
+                    )
+                )
+                res_container.update()
+
+            tab_generar_guia = ft.Column([
+                ft.Text("Generar Guía de Traspaso Inter-Tiendas 📦", color="#D8B4FE", weight="bold", size=15),
+                ft.Text("Selecciona la tienda destino. LUXO extrae automáticamente las direcciones y correos registrados sin riesgo de alucinación.", color="#aaaaaa", size=12),
+                ft.Divider(height=10, color="#333333"),
+                ft.Row([dd_origen, dd_destino], wrap=True, spacing=10),
+                ft.Row([tf_peso, tf_largo, tf_ancho, tf_alto, tf_valor], wrap=True, spacing=10),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.LOCK, color="#00FFFF", size=14),
+                        ft.Text("Reglas Corporativas Aplicadas: Servicio Nacional Económico Terrestre | Horario Fijo 11:00 a 19:00 hrs", color="#00FFFF", size=11, weight="bold")
+                    ]),
+                    bgcolor="#141424", padding=8, border_radius=6, border=ft.Border.all(1, "#00FFFF")
+                ),
+                ft.ElevatedButton("📦 GENERAR GUÍA Y SOLICITAR RECOLECCIÓN FEDEX", icon=ft.Icons.LOCAL_SHIPPING, bgcolor="#9D50BB", color="white", on_click=generar_guia_click),
+                res_container
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
+
+            # --- TAB CONFIGURACIÓN ADMIN ---
+            tf_acc = ft.TextField(label="Número de Cuenta Corporativo", value=cfg_fedex.get("account_number", ""), width=260, border_color="#00FFFF", color="white")
+            tf_key = ft.TextField(label="API Key", value=cfg_fedex.get("api_key", ""), width=260, border_color="#00FFFF", color="white")
+            tf_sec = ft.TextField(label="Secret Key", value=cfg_fedex.get("secret_key", ""), password=True, can_reveal_password=True, width=260, border_color="#00FFFF", color="white")
+            tf_met = ft.TextField(label="Meter Number (Opcional)", value=cfg_fedex.get("meter_number", ""), width=260, border_color="#00FFFF", color="white")
+            sw_activo = ft.Switch(label="Habilitar Servicio General de FedEx (Master Control)", value=cfg_fedex.get("servicio_activo", True))
+            sw_prod = ft.Switch(label="Activar Modo Producción Real FedEx", value=cfg_fedex.get("modo_produccion", False))
+
+            def guardar_admin_fedex_click(e):
+                ok = fedex_service.guardar_config_fedex(tf_acc.value, tf_key.value, tf_sec.value, tf_met.value, sw_prod.value, sw_activo.value)
+                if ok:
+                    mostrar_snack("Configuración de FedEx guardada exitosamente en MySQL!", "#7CFC00")
+                else:
+                    mostrar_snack("Error al guardar configuración de FedEx.", "red")
+
+            tab_admin_fedex = ft.Column([
+                ft.Text("⚙️ Pasarela de Llaves API y Control de FedEx (Exclusivo Admin)", color="#FFD700", weight="bold", size=15),
+                ft.Text("Ingresa aquí las llaves corporativas de FedEx. Puedes apagar el servicio por completo para bloquear la emisión de guías por política de ahorro.", color="#aaaaaa", size=12),
+                ft.Divider(height=10, color="#333333"),
+                sw_activo,
+                sw_prod,
+                ft.Divider(height=10, color="#333333"),
+                ft.Row([tf_acc, tf_met], wrap=True, spacing=10),
+                ft.Row([tf_key, tf_sec], wrap=True, spacing=10),
+                ft.ElevatedButton("Guardar Configuración FedEx 💾", icon=ft.Icons.SAVE, bgcolor="#00FF88", color="black", on_click=guardar_admin_fedex_click)
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
+
+            fedex_tabs = ft.Tabs(
+                selected_index=0,
+                animation_duration=300,
+                expand=True,
+                tabs=[
+                    ft.Tab(
+                        text="Traspasos y Guías 📦",
+                        content=tab_generar_guia
+                    ),
+                    ft.Tab(
+                        text="Historial Logístico 📋",
+                        content=ft.Column([ft.Text("Historial de Envíos y Rastreo FedEx 📋", weight="bold", color="#D8B4FE")], scroll=ft.ScrollMode.ALWAYS, expand=True)
+                    )
+                ] + ([
+                    ft.Tab(
+                        text="Configuración API Admin ⚙️",
+                        content=tab_admin_fedex
+                    )
+                ] if is_adm else [])
+            )
+
+            return ft.Column([
+                ft.Row([
+                    ft.Text("Módulo Logístico FedEx 🚚", size=24, color="#D8B4FE", weight="bold"),
+                    modo_badge
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Text("Gestión de traspasos de mercancía entre tiendas Sunglass Hut, recolección automatizada y rastreo de envíos.", color="#aaaaaa", size=13),
+                ft.Divider(height=15, color="#333333"),
+                fedex_tabs
+            ], expand=True)
+
+        def build_facturacion_view():
+            """Vista del Módulo de Facturación Automática CFDI v4.0 Sunglass Hut con OCR y Corroboración."""
+            import facturacion_service
+            
+            db = conectar_db()
+            is_mobile_w = (page.width < 700) if (page and page.width) else False
+            tienda_actual = sucursal_activa[0] if 'sucursal_activa' in locals() and sucursal_activa else "Interlomas (3502)"
+
+            portal_badge = ft.Container(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.RECEIPT_LONG, color="#00FF88", size=14),
+                    ft.Text("🔗 Portal: https://sunglasshut.cfdiv40.cloud", color="white", weight="bold", size=11)
+                ], spacing=4),
+                bgcolor="#1E2330", padding=ft.Padding(8, 4, 8, 4), border_radius=6, border=ft.Border.all(1, "#00FF88")
+            )
+
+            # --- CAMPOS DE EXTRACCIÓN OCR Y VERIFICACIÓN ---
+            tf_rfc = ft.TextField(label="1. RFC del Cliente *", value="", width=200, border_color="#00FFFF", color="white")
+            tf_razon = ft.TextField(label="2. Razón Social / Nombre Fiscal *", value="", width=380 if not is_mobile_w else 280, border_color="#00FFFF", color="white")
+            tf_cp = ft.TextField(label="3. Código Postal Fiscal *", value="", width=180, border_color="#00FFFF", color="white")
+            tf_regimen = ft.TextField(label="4. Régimen Fiscal", value="601 - General de Ley Personas Morales", width=300, border_color="#00FFFF", color="white")
+
+            # --- CAMPOS DE COMPRA Y CONTACTO ---
+            tf_ticket = ft.TextField(label="Número de Ticket *", value="", width=180, border_color="#00FFFF", color="white")
+            tf_tienda = ft.TextField(label="Número / Nombre de Tienda *", value=tienda_actual, width=220, border_color="#00FFFF", color="white")
+            tf_hora = ft.TextField(label="Hora de la Compra (ej. 14:30)", value="14:00", width=180, border_color="#00FFFF", color="white")
+            tf_monto = ft.TextField(label="Monto Total ($)", value="4500.00", width=160, border_color="#00FFFF", color="white")
+
+            dd_pago = ft.Dropdown(
+                label="Forma de Pago",
+                options=[
+                    ft.dropdown.Option("01 - Efectivo"),
+                    ft.dropdown.Option("04 - Tarjeta de Crédito"),
+                    ft.dropdown.Option("28 - Tarjeta de Débito"),
+                    ft.dropdown.Option("03 - Transferencia Electrónica")
+                ],
+                value="04 - Tarjeta de Crédito",
+                width=240, border_color="#00FFFF", color="white"
+            )
+
+            dd_uso = ft.Dropdown(
+                label="Uso de CFDI",
+                options=[
+                    ft.dropdown.Option("G03 - Gastos en general"),
+                    ft.dropdown.Option("CP01 - Pagos"),
+                    ft.dropdown.Option("S01 - Sin efectos fiscales"),
+                    ft.dropdown.Option("P01 - Por definir")
+                ],
+                value="G03 - Gastos en general",
+                width=260, border_color="#00FFFF", color="white"
+            )
+
+            tf_email = ft.TextField(label="Correo Electrónico del Cliente *", value="", width=260, border_color="#00FFFF", color="white")
+            tf_tel = ft.TextField(label="Teléfono Móvil (WhatsApp) *", value="", width=200, border_color="#00FFFF", color="white")
+
+            ocr_msg_container = ft.Column(spacing=4)
+            tabla_solicitudes_container = ft.Column(spacing=6)
+
+            def refrescar_tabla_solicitudes():
+                solicitudes = facturacion_service.obtener_solicitudes_facturacion(limit=20)
+                tabla_solicitudes_container.controls.clear()
+                if not solicitudes:
+                    tabla_solicitudes_container.controls.append(ft.Text("No hay solicitudes de facturación registradas aún.", color="#aaaaaa", italic=True))
+                else:
+                    for s in solicitudes:
+                        est_color = "#FFD700" if s["estatus"] == "PENDIENTE_SINCRONIZACION" else "#00FF88"
+                        tabla_solicitudes_container.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Text(f"🎟️ Ticket #{s['ticket']} ({s['numero_tienda']})", color="white", weight="bold", size=13),
+                                        ft.Container(content=ft.Text(s["estatus"], color="black", weight="bold", size=10), bgcolor=est_color, padding=ft.Padding(6,2,6,2), border_radius=4)
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Text(f"👤 RFC: {s['rfc']} | {s['razon_social']} (CP: {s['cp_fiscal']})", color="#aaaaaa", size=11),
+                                    ft.Text(f"💰 Monto: ${s['monto']:,.2f} | Pago: {s['forma_pago']} | Hora: {s['hora_compra']}", color="#00FFFF", size=11),
+                                    ft.Text(f"📱 WhatsApp: {s['telefono_cliente']} (Ventana: 11:00 AM a 9:00 PM | Estatus: {s['whatsapp_estatus']})", color="#FFD700", size=10),
+                                    ft.Text(f"📅 Registrado el: {s.get('fecha_creacion_str', '')}", color="#888888", size=10)
+                                ], spacing=4),
+                                bgcolor="#1E2330", padding=10, border_radius=8, border=ft.Border.all(1, "#333333")
+                            )
+                        )
+                try:
+                    if getattr(tabla_solicitudes_container, "page", None):
+                        tabla_solicitudes_container.update()
+                except Exception as ex_tsu:
+                    print("Notice tabla_solicitudes_container update:", ex_tsu)
+
+            def procesar_demo_csf(e):
+                res = facturacion_service.extraer_datos_ocr_csf("demo")
+                tf_rfc.value = res["rfc"]
+                tf_razon.value = res["razon_social"]
+                tf_cp.value = res["cp_fiscal"]
+                tf_regimen.value = res["regimen_fiscal"]
+                
+                ocr_msg_container.controls.clear()
+                ocr_msg_container.controls.append(
+                    ft.Text("✅ Constancia de Situación Fiscal leída con éxito por OCR IA. Por favor corrobora los datos abajo con el cliente.", color="#00FF88", weight="bold", size=12)
+                )
+                try:
+                    if getattr(ocr_msg_container, "page", None):
+                        ocr_msg_container.update()
+                        tf_rfc.update()
+                        tf_razon.update()
+                        tf_cp.update()
+                        tf_regimen.update()
+                except Exception as ex_ocu:
+                    print("Notice ocr_msg_container update:", ex_ocu)
+
+            def registrar_factura_click(e):
+                if not tf_rfc.value or not tf_razon.value or not tf_cp.value:
+                    mostrar_snack("Por favor corrobora el RFC, Razón Social y Código Postal.", "red")
+                    return
+                if not tf_ticket.value or not tf_email.value or not tf_tel.value:
+                    mostrar_snack("Ingresa el Número de Ticket, Correo y Teléfono del cliente.", "red")
+                    return
+
+                try: m_val = float(tf_monto.value)
+                except: m_val = 0.0
+
+                ok = facturacion_service.registrar_solicitud_facturacion(
+                    tf_ticket.value, tf_tienda.value, tf_hora.value, m_val, dd_pago.value,
+                    tf_rfc.value, tf_razon.value, tf_cp.value, tf_regimen.value, dd_uso.value,
+                    tf_email.value, tf_tel.value
+                )
+
+                if ok:
+                    mostrar_snack("¡Solicitud de Facturación registrada y corroborada exitosamente!", "#7CFC00")
+                    refrescar_tabla_solicitudes()
+                    tf_ticket.value = ""
+                    tf_email.value = ""
+                    tf_tel.value = ""
+                    try:
+                        if getattr(tf_ticket, "page", None):
+                            tf_ticket.update()
+                            tf_email.update()
+                            tf_tel.update()
+                    except Exception: pass
+                else:
+                    mostrar_snack("Error al registrar la solicitud de facturación.", "red")
+
+            tab_solicitar = ft.Column([
+                ft.Text("1. Lectura de Constancia Fiscal (CSF) por OCR IA 📄", color="#D8B4FE", weight="bold", size=15),
+                ft.Text("Sube la imagen o PDF de la Constancia Fiscal del cliente para que la IA extraiga los datos automáticamente.", color="#aaaaaa", size=12),
+                ft.Row([
+                    ft.ElevatedButton("📸 SUBIR FOTO / PDF DE CONSTANCIA FISCAL (CSF)", icon=ft.Icons.UPLOAD_FILE, bgcolor="#00FF88", color="black", on_click=procesar_demo_csf)
+                ]),
+                ocr_msg_container,
+                ft.Divider(height=10, color="#333333"),
+                ft.Text("2. Corroboración Obligatoria por el Vendedor 👁️", color="#FFD700", weight="bold", size=15),
+                ft.Text("Revisa y corrobora que los datos fiscales extraídos sean 100% exactos antes de proceder.", color="#aaaaaa", size=12),
+                ft.Row([tf_rfc, tf_cp], wrap=True, spacing=10),
+                ft.Row([tf_razon], wrap=True, spacing=10),
+                ft.Row([tf_regimen], wrap=True, spacing=10),
+                ft.Divider(height=10, color="#333333"),
+                ft.Text("3. Datos del Ticket y Contacto del Cliente 🎟️📱", color="#00FFFF", weight="bold", size=15),
+                ft.Row([tf_ticket, tf_tienda, tf_hora, tf_monto], wrap=True, spacing=10),
+                ft.Row([dd_pago, dd_uso], wrap=True, spacing=10),
+                ft.Row([tf_email, tf_tel], wrap=True, spacing=10),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.ACCESS_TIME, color="#00FFFF", size=14),
+                        ft.Text("Reglas de Facturación: Monitoreo 24/7 de Sincronización + Ventana Respetuosa de WhatsApp (11:00 AM a 9:00 PM)", color="#00FFFF", size=11, weight="bold")
+                    ]),
+                    bgcolor="#141424", padding=8, border_radius=6, border=ft.Border.all(1, "#00FFFF")
+                ),
+                ft.ElevatedButton("📌 CORROBORAR Y REGISTRAR PARA FACTURACIÓN AUTOMÁTICA", icon=ft.Icons.CHECK_CIRCLE, bgcolor="#9D50BB", color="white", on_click=registrar_factura_click)
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
+
+            refrescar_tabla_solicitudes()
+
+            facturacion_tabs = ft.Tabs(
+                selected_index=0,
+                animation_duration=300,
+                expand=True,
+                tabs=[
+                    ft.Tab(
+                        text="Nueva Solicitud y Corroboración 📄",
+                        content=tab_solicitar
+                    ),
+                    ft.Tab(
+                        text="Historial y Estatus de Facturas 📋",
+                        content=ft.Column([
+                            ft.Text("Historial de Facturas Registradas y Monitoreadas 📋", weight="bold", color="#D8B4FE", size=15),
+                            tabla_solicitudes_container
+                        ], scroll=ft.ScrollMode.ALWAYS, expand=True)
+                    )
+                ]
+            )
+
+            return ft.Column([
+                ft.Row([
+                    ft.Text("Facturación Automática CFDI v4.0 🧾", size=24, color="#D8B4FE", weight="bold"),
+                    portal_badge
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Text("Portal oficial: https://sunglasshut.cfdiv40.cloud/facturar-ticket - Extracción OCR, corroboración obligatoria del vendedor y monitoreo de sincronización 24/7.", color="#aaaaaa", size=13),
+                ft.Divider(height=15, color="#333333"),
+                facturacion_tabs
             ], expand=True)
 
         def build_bitacora_view():
@@ -18562,103 +19335,6 @@ Ejemplo:
         active_view = ["chat"]
         main_views_cache = {}
 
-        # Cambiar vistas con hover y estilos activos
-        def cambiar_vista(vista):
-            active_view[0] = vista
-            for btn, v_name in [(btn_chat, "chat"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_garantias, "garantias"), (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_enfoque, "enfoque_diario")]:
-                if btn:
-                    btn.style = ft.ButtonStyle(
-                        bgcolor="#141424" if v_name == vista else "transparent",
-                        shape=ft.RoundedRectangleBorder(radius=8)
-                    )
-            if btn_dashboard:
-                btn_dashboard.style = ft.ButtonStyle(
-                    bgcolor="#141424" if vista == "dashboard" else "transparent",
-                    shape=ft.RoundedRectangleBorder(radius=8)
-                )
-            if btn_admin_trivia:
-                btn_admin_trivia.style = ft.ButtonStyle(
-                    bgcolor="#141424" if vista == "admin_trivia" else "transparent",
-                    shape=ft.RoundedRectangleBorder(radius=8)
-                )
-                
-            def procesar_cambio():
-                try:
-                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario"]:
-                        if vista == "chat":
-                            main_views_cache["chat"] = build_chat_view()
-                        elif vista == "historial":
-                            main_views_cache["historial"] = build_historial_view()
-                        elif vista == "checklists":
-                            main_views_cache["checklists"] = build_checklists_view()
-                        elif vista == "manuales":
-                            main_views_cache["manuales"] = build_manuals_view()
-                        elif vista == "garantias":
-                            main_views_cache["garantias"] = build_garantias_view()
-                        elif vista == "tareas":
-                            main_views_cache["tareas"] = build_tareas_view()
-                        elif vista == "campanas":
-                            main_views_cache["campanas"] = build_campanas_view()
-                        elif vista == "presupuesto":
-                            main_views_cache["presupuesto"] = build_presupuesto_view()
-                        elif vista == "reto":
-                            main_views_cache["reto"] = build_reto_dia_view()
-                        elif vista == "dashboard":
-                            main_views_cache["dashboard"] = build_dashboard_view()
-                        elif vista == "vendedores":
-                            main_views_cache["vendedores"] = build_vendedores_view()
-                        elif vista == "simulador":
-                            main_views_cache["simulador"] = build_simulador_view()
-                        elif vista == "crm":
-                            main_views_cache["crm"] = build_crm_view()
-                        elif vista == "meta_semanal":
-                            main_views_cache["meta_semanal"] = build_meta_semanal_view()
-                        elif vista == "weekly":
-                            main_views_cache["weekly"] = build_weekly_view()
-                        elif vista == "enfoque_diario":
-                            import enfoque_diario
-                            main_views_cache["enfoque_diario"] = enfoque_diario.build_enfoque_diario_view(page, user_info)
-                        elif vista == "operacion_diaria":
-                            if es_admin():
-                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)
-                            else:
-                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_operacion_diaria_view(
-                                    page, user_info, conectar_db, mostrar_snack, tr,
-                                    seleccionar_archivo_async=seleccionar_archivo_async
-                                )
-                        elif vista == "admin_trivia":
-                            if not es_admin():
-                                mostrar_snack("Acceso denegado: Se requieren permisos de administrador.", color="red")
-                                active_view[0] = "chat"
-                                main_views_cache["chat"] = build_chat_view()
-                            else:
-                                main_views_cache["admin_trivia"] = build_admin_trivia_view()
-                        elif vista == "bitacora":
-                            if not es_admin():
-                                mostrar_snack("Acceso denegado: Solo Administradores pueden ver la Bitácora de Seguridad.", color="red")
-                                active_view[0] = "chat"
-                                main_views_cache["chat"] = build_chat_view()
-                            else:
-                                main_views_cache["bitacora"] = build_bitacora_view()
-
-                    content_area.content = main_views_cache[vista]
-
-                    # Cerrar el menú lateral en móviles al cambiar de vista
-                    if getattr(page, "width", None) and page.width < 800:
-                        sidebar.visible = False
-                except Exception as ex:
-                    print(f"Error cambiando a vista {vista}:", ex)
-                    import traceback
-                    traceback.print_exc()
-                finally:
-                    try: page.update()
-                    except: pass
-
-            import threading
-            threading.Thread(target=procesar_cambio, daemon=True).start()
-
-        sess_data["cambiar_vista"] = cambiar_vista
-
         def tr(es, en, fr=None, it=None, zh=None):
             l = selected_lang[0]
             if l == "en": return en
@@ -18736,6 +19412,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_fedex = ft.TextButton(
+            content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("FedEx Traspasos 🚚", "FedEx Shipping 🚚", "FedEx Expédition 🚚", "FedEx Spedizione 🚚", "FedEx 物流 🚚"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("fedex"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_simulador = ft.TextButton(
             content=ft.Row([ft.Text("🎭", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Simulador IA 🎭", "AI Simulator 🎭", "Simulateur IA 🎭", "Simulatore IA 🎭", "AI 模拟器 🎭"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("simulador"),
@@ -18745,6 +19427,12 @@ Ejemplo:
         btn_crm = ft.TextButton(
             content=ft.Row([ft.Text("📱", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("CRM Cobertura Oops 📱", "CRM Coverage Oops 📱", "CRM Couverture Oops 📱", "CRM Copertura Oops 📱", "CRM 意外保障 📱"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("crm"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
+        btn_facturacion = ft.TextButton(
+            content=ft.Row([ft.Text("🧾", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Facturación CFDI 🧾", "CFDI Invoicing 🧾", "Facturation CFDI 🧾", "Fatturazione CFDI 🧾", "CFDI 发票 🧾"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("facturacion"),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
@@ -18795,6 +19483,122 @@ Ejemplo:
             on_click=lambda e: cerrar_sesion(),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
+
+        # Cambiar vistas con hover y estilos activos
+        def cambiar_vista(vista):
+            active_view[0] = vista
+            all_btn_tuples = [
+                (btn_chat, "chat"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
+                (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_garantias, "garantias"), 
+                (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
+                (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
+                (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_enfoque, "enfoque_diario"),
+                (btn_crm, "crm"), (btn_fedex, "fedex"), (btn_facturacion, "facturacion")
+            ]
+            for btn_tuple in all_btn_tuples:
+                btn = btn_tuple[0]
+                v_name = btn_tuple[1]
+                if btn:
+                    btn.style = ft.ButtonStyle(
+                        bgcolor="#141424" if v_name == vista else "transparent",
+                        shape=ft.RoundedRectangleBorder(radius=8)
+                    )
+            if btn_dashboard:
+                btn_dashboard.style = ft.ButtonStyle(
+                    bgcolor="#141424" if vista == "dashboard" else "transparent",
+                    shape=ft.RoundedRectangleBorder(radius=8)
+                )
+            if btn_admin_trivia:
+                btn_admin_trivia.style = ft.ButtonStyle(
+                    bgcolor="#141424" if vista == "admin_trivia" else "transparent",
+                    shape=ft.RoundedRectangleBorder(radius=8)
+                )
+                
+            def procesar_cambio():
+                try:
+                    print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
+                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion"]:
+                        if vista == "chat":
+                            main_views_cache["chat"] = build_chat_view()
+                        elif vista == "historial":
+                            main_views_cache["historial"] = build_historial_view()
+                        elif vista == "checklists":
+                            main_views_cache["checklists"] = build_checklists_view()
+                        elif vista == "manuales":
+                            main_views_cache["manuales"] = build_manuals_view()
+                        elif vista == "garantias":
+                            main_views_cache["garantias"] = build_garantias_view()
+                        elif vista == "tareas":
+                            main_views_cache["tareas"] = build_tareas_view()
+                        elif vista == "campanas":
+                            main_views_cache["campanas"] = build_campanas_view()
+                        elif vista == "presupuesto":
+                            main_views_cache["presupuesto"] = build_presupuesto_view()
+                        elif vista == "reto":
+                            main_views_cache["reto"] = build_reto_dia_view()
+                        elif vista == "dashboard":
+                            main_views_cache["dashboard"] = build_dashboard_view()
+                        elif vista == "vendedores":
+                            main_views_cache["vendedores"] = build_vendedores_view()
+                        elif vista == "simulador":
+                            main_views_cache["simulador"] = build_simulador_view()
+                        elif vista == "crm":
+                            main_views_cache["crm"] = build_crm_view()
+                        elif vista == "fedex":
+                            main_views_cache["fedex"] = build_fedex_view()
+                        elif vista == "facturacion":
+                            main_views_cache["facturacion"] = build_facturacion_view()
+                        elif vista == "meta_semanal":
+                            main_views_cache["meta_semanal"] = build_meta_semanal_view()
+                        elif vista == "weekly":
+                            main_views_cache["weekly"] = build_weekly_view()
+                        elif vista == "enfoque_diario":
+                            import enfoque_diario
+                            main_views_cache["enfoque_diario"] = enfoque_diario.build_enfoque_diario_view(page, user_info)
+                        elif vista == "operacion_diaria":
+                            if es_admin():
+                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)
+                            else:
+                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_operacion_diaria_view(
+                                    page, user_info, conectar_db, mostrar_snack, tr,
+                                    seleccionar_archivo_async=seleccionar_archivo_async
+                                )
+                        elif vista == "admin_trivia":
+                            if not es_admin():
+                                mostrar_snack("Acceso denegado: Se requieren permisos de administrador.", color="red")
+                                active_view[0] = "chat"
+                                main_views_cache["chat"] = build_chat_view()
+                            else:
+                                main_views_cache["admin_trivia"] = build_admin_trivia_view()
+                        elif vista == "bitacora":
+                            if not es_admin():
+                                mostrar_snack("Acceso denegado: Solo Administradores pueden ver la Bitácora de Seguridad.", color="red")
+                                active_view[0] = "chat"
+                                main_views_cache["chat"] = build_chat_view()
+                            else:
+                                main_views_cache["bitacora"] = build_bitacora_view()
+
+                    print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
+                    content_area.content = main_views_cache.get(vista, build_chat_view())
+                    try:
+                        content_area.update()
+                    except Exception as ex_cu:
+                        print("Notice content_area.update():", ex_cu)
+
+                    # Cerrar el menú lateral en móviles al cambiar de vista
+                    if getattr(page, "width", None) and page.width < 800:
+                        sidebar.visible = False
+                except Exception as ex:
+                    print(f"❌ Error cambiando a vista {vista}:", ex)
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    try: page.update()
+                    except: pass
+
+            procesar_cambio()
+
+        sess_data["cambiar_vista"] = cambiar_vista
 
         # --- RECUADRO DE SUGERENCIAS EN LA BARRA LATERAL (VISIBLE PARA TODOS) ---
         suggestion_input = ft.TextField(
@@ -18925,6 +19729,8 @@ Ejemplo:
                 btn_vendedores.content.controls[1].value = tr("Configuración Tienda 👥", "Store Config 👥", "Configuration 👥", "Configurazione 👥", "店铺配置 👥")
                 btn_simulador.content.controls[1].value = tr("Simulador IA 🎭", "AI Simulator 🎭", "Simulateur IA 🎭", "Simulatore IA 🎭", "AI 模拟器 🎭")
                 btn_crm.content.controls[1].value = tr("CRM Cobertura Oops 📱", "CRM Coverage Oops 📱", "CRM Couverture Oops 📱", "CRM Copertura Oops 📱", "CRM 意外保障 📱")
+                btn_fedex.content.controls[1].value = tr("FedEx Traspasos 🚚", "FedEx Shipping 🚚", "FedEx Expédition 🚚", "FedEx Spedizione 🚚", "FedEx 物流 🚚")
+                btn_facturacion.content.controls[1].value = tr("Facturación CFDI 🧾", "CFDI Invoicing 🧾", "Facturation CFDI 🧾", "Fatturazione CFDI 🧾", "CFDI 发票 🧾")
                 btn_meta_semanal.content.controls[1].value = tr("Metas y Métricas 🎯", "Goals & Metrics 🎯", "Objectifs & Métriques 🎯", "Obiettivi & Metriche 🎯", "目标与指标 🎯")
                 btn_weekly.content.controls[1].value = tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️")
                 btn_enfoque.content.controls[1].value = tr("Enfoque Diario 2026 ☀️", "Daily Focus 2026 ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️")
@@ -19010,13 +19816,13 @@ Ejemplo:
             ventas_controls
         )
 
-        clientes_controls = [btn_crm, btn_garantias]
+        clientes_controls = [btn_crm, btn_garantias, btn_facturacion]
         tile_clientes = crear_acordeon(
             ft.Text(tr("🤝 CLIENTES Y GARANTÍAS", "🤝 CLIENTS & WARRANTY", "🤝 CLIENTS & GARANTIE", "🤝 CLIENTI & GARANZIA", "🤝 客户 & 保修"), color="#00FFFF", weight="bold", size=12),
             clientes_controls
         )
 
-        operacion_controls = [btn_operacion_diaria, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_vendedores]
+        operacion_controls = [btn_operacion_diaria, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
@@ -19178,14 +19984,20 @@ Ejemplo:
                 try:
                     cursor = db.cursor(dictionary=True)
                     z_clean = str(zona_id).replace("📍", "").replace("Zona:", "").strip()
-                    if z_clean and z_clean not in ("0", "Todas", "Todas las Zonas (Nacional)", "Todas las Zonas"):
+                    name_map = {
+                        "ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4",
+                        "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"
+                    }
+                    z_id_norm = name_map.get(z_clean.upper(), z_clean)
+
+                    if z_id_norm and z_id_norm not in ("0", "Todas", "Todas las Zonas (Nacional)", "Todas las Zonas"):
                         cursor.execute("""
                             SELECT r.id, r.nombre_region, r.gerente_area 
                             FROM regiones r
-                            JOIN zonas z ON r.zona_id = z.id
-                            WHERE (r.zona_id = %s OR z.nombre_zona = %s OR z.nombre_zona LIKE CONCAT('%%', %s, '%%'))
+                            LEFT JOIN zonas z ON r.zona_id = z.id
+                            WHERE (r.zona_id = %s OR z.id = %s OR z.nombre_zona = %s OR z.nombre_zona LIKE CONCAT('%%', %s, '%%'))
                             ORDER BY r.nombre_region
-                        """, (z_clean, z_clean, z_clean))
+                        """, (z_id_norm, z_id_norm, z_clean, z_clean))
                     else:
                         cursor.execute("SELECT id, nombre_region, gerente_area FROM regiones ORDER BY nombre_region")
                     rows = cursor.fetchall()
@@ -19214,33 +20026,30 @@ Ejemplo:
 
         def get_region_options_for_zona(zona_key):
             z_str = str(zona_key).replace("📍", "").replace("Zona:", "").strip()
-            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4"}
-            z_id = name_map.get(z_str, z_str)
+            name_map = {
+                "1": "1", "2": "2", "3": "3", "4": "4",
+                "ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4",
+                "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"
+            }
+            z_id = name_map.get(z_str.upper(), z_str)
+
+            # 1. Intentar obtener desde la Base de Datos primero
+            db_opts = obtener_opciones_regiones_db(z_id)
+            if db_opts and len(db_opts) > 1:
+                return db_opts
+
+            # 2. Fallback a mapa estático
             raw_tuples = MAPEO_ZONAS_REGIONES.get(z_id, None)
-            if not raw_tuples or z_id == "0":
+            if not raw_tuples:
                 raw_tuples = [("0", "🗺️ Todas las Regiones")]
-                for k in ["1", "2", "3", "4"]:
-                    for opt_k, opt_txt in MAPEO_ZONAS_REGIONES[k]:
-                        if opt_k != "0":
-                            raw_tuples.append((opt_k, opt_txt))
+                if z_id == "0":
+                    for k in ["1", "2", "3", "4"]:
+                        for opt_k, opt_txt in MAPEO_ZONAS_REGIONES[k]:
+                            if opt_k != "0":
+                                raw_tuples.append((opt_k, opt_txt))
             return [ft.dropdown.Option(key=k, text=txt) for k, txt in raw_tuples]
 
         is_adm = (user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1")
-
-        dd_zona_activa = ft.Dropdown(
-            options=obtener_opciones_zonas_db(),
-            value=user_session.get("zona_activa_id", "0"),
-            width=210,
-            height=36,
-            text_size=11,
-            color="#00FFFF",
-            bgcolor="#1E1E2E",
-            border_color="#00FFFF",
-            border_radius=6,
-            content_padding=6,
-            tooltip="Seleccionar Zona Activa de Trabajo",
-            visible=is_adm
-        )
 
         dd_region_container = ft.Container()
 
@@ -19248,6 +20057,16 @@ Ejemplo:
             opts = get_region_options_for_zona(z_key)
             valid_keys = [o.key for o in opts]
             val = r_key if r_key in valid_keys else "0"
+
+            def on_r_change(e):
+                r_val = dd.value or "0"
+                user_session["region_activa_id"] = r_val
+                print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
+                main_views_cache.clear()
+                cambiar_vista(active_view[0])
+                try:
+                    page.update()
+                except Exception: pass
 
             dd = ft.Dropdown(
                 options=opts,
@@ -19261,24 +20080,10 @@ Ejemplo:
                 border_radius=6,
                 content_padding=6,
                 tooltip="Seleccionar Región Específica de Trabajo",
-                visible=is_adm
+                visible=True
             )
-            
-            def on_r_change(e):
-                r_val = dd.value or "0"
-                user_session["region_activa_id"] = r_val
-                print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
-                main_views_cache.clear()
-                cambiar_vista(active_view[0])
-                try:
-                    page.update()
-                except Exception: pass
-
             dd.on_change = on_r_change
             return dd
-
-        dd_region_activa = crear_dropdown_region(user_session.get("zona_activa_id", "0"), user_session.get("region_activa_id", "0"))
-        dd_region_container.content = dd_region_activa
 
         def on_zona_activa_change(e):
             z_val = dd_zona_activa.value or "0"
@@ -19290,11 +20095,14 @@ Ejemplo:
             nonlocal dd_region_activa
             dd_region_activa = crear_dropdown_region(z_val, "0")
             dd_region_container.content = dd_region_activa
-            
+
+            try:
+                dd_region_container.update()
+            except Exception: pass
+
             try:
                 actualizar_top_appbar_layout()
                 top_appbar.update()
-                page.update()
             except Exception as ex_z:
                 print("Notice zona change appbar update:", ex_z)
 
@@ -19303,7 +20111,24 @@ Ejemplo:
                 page.update()
             except Exception: pass
 
+        dd_zona_activa = ft.Dropdown(
+            options=obtener_opciones_zonas_db(),
+            value=user_session.get("zona_activa_id", "0"),
+            width=210,
+            height=36,
+            text_size=11,
+            color="#00FFFF",
+            bgcolor="#1E1E2E",
+            border_color="#00FFFF",
+            border_radius=6,
+            content_padding=6,
+            tooltip="Seleccionar Zona Activa de Trabajo",
+            visible=True
+        )
         dd_zona_activa.on_change = on_zona_activa_change
+
+        dd_region_activa = crear_dropdown_region(user_session.get("zona_activa_id", "0"), user_session.get("region_activa_id", "0"))
+        dd_region_container.content = dd_region_activa
 
         # Definir la cabecera superior permanente adaptativa para toda la aplicación
         top_appbar = ft.Container(
@@ -19321,7 +20146,7 @@ Ejemplo:
                 dd_region_activa.width = None
                 dd_region_activa.expand = 1
                 
-                rows = [
+                top_appbar.content = ft.Column([
                     ft.Row([
                         ft.Row([
                             ft.Container(
@@ -19336,26 +20161,17 @@ Ejemplo:
                             ft.Text("LUXO AI SYSTEM", color="white", weight="bold", size=14),
                         ], vertical_alignment="center", spacing=4),
                         btn_global_master_refresh
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
-                ]
-                if is_adm:
-                    rows.append(
-                        ft.Row([
-                            dd_zona_activa,
-                            dd_region_container,
-                        ], spacing=6)
-                    )
-                top_appbar.content = ft.Column(rows, spacing=6)
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Row([
+                        dd_zona_activa,
+                        dd_region_container,
+                    ], spacing=6)
+                ], spacing=6)
             else:
                 dd_zona_activa.width = 210
                 dd_zona_activa.expand = False
                 dd_region_container.width = 200
                 dd_region_container.expand = False
-                
-                ctrls = []
-                if is_adm:
-                    ctrls.extend([dd_zona_activa, dd_region_container])
-                ctrls.append(btn_global_master_refresh)
                 
                 top_appbar.content = ft.Row([
                     ft.Row([
@@ -19370,7 +20186,7 @@ Ejemplo:
                         ),
                         ft.Text("LUXO AI SYSTEM", color="white", weight="bold", size=15),
                     ], vertical_alignment="center", spacing=4),
-                    ft.Row(ctrls, vertical_alignment="center", spacing=6)
+                    ft.Row([dd_zona_activa, dd_region_container, btn_global_master_refresh], vertical_alignment="center", spacing=6)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         actualizar_top_appbar_layout()
@@ -19406,8 +20222,6 @@ Ejemplo:
             right_area
         ], expand=True, spacing=12)
 
-        cambiar_vista("chat")
-
         page.controls.clear()
         page.bgcolor = "#05070D"
 
@@ -19436,6 +20250,7 @@ Ejemplo:
                 )
             )
 
+        cambiar_vista("chat")
         page.update()
 
     def obtener_avatar_usuario(id_usuario):
@@ -19722,6 +20537,12 @@ Ejemplo:
         except Exception as ex_pk:
             print("Error activando passkey:", ex_pk)
             mostrar_snack("Huella/Passkey: Usa Chrome, Edge o Safari en tu celular/laptop con sensor 👆", "orange")
+
+    def reproducir_saludo_login(nombre_completo):
+        try:
+            first_n = nombre_completo.strip().split(" ")[0] if nombre_completo else "Usuario"
+            mostrar_snack(f"✨ ¡Bienvenid@, {first_n}!", color="#00FFFF")
+        except Exception: pass
 
     # =====================================
     # LOGIN

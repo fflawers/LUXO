@@ -379,9 +379,14 @@ import threading
 def _async_save_worker(user_id, payload, sem_str, tienda_id):
     try:
         json_str = json.dumps(payload, ensure_ascii=False)
-        sf = get_state_file(user_id)
-        with open(sf, "w", encoding="utf-8") as f:
+        sf_user = get_state_file(user_id)
+        with open(sf_user, "w", encoding="utf-8") as f:
             f.write(json_str)
+
+        if tienda_id and int(tienda_id) > 0:
+            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{tienda_id}.json")
+            with open(sf_tienda, "w", encoding="utf-8") as f:
+                f.write(json_str)
 
         db = conectar_db()
         if db:
@@ -390,7 +395,7 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
                 cursor.execute("""
                 INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json)
                 VALUES (%s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE estado_json=VALUES(estado_json), fecha_actualizacion=NOW()
+                ON DUPLICATE KEY UPDATE estado_json=VALUES(estado_json), user_id=VALUES(user_id), fecha_actualizacion=NOW()
                 """, (str(user_id), int(tienda_id), str(sem_str), json_str))
                 db.commit()
             except Exception as ex_db:
@@ -428,26 +433,46 @@ def guardar_estado_persistente(user_id):
         print(f"Error al guardar estado de enfoque diario para {user_id}:", ex)
 
 def cargar_estado_persistente(user_id):
-    loaded_from_db = False
+    loaded = False
     try:
-        # 1. Intentar cargar prioritariamente desde MySQL por user_id, tienda_id y semana
+        g_meta = user_states[user_id]["global_meta"]
+        sem_str = str(g_meta.get("semana", "30"))
+        try: tienda_id = int(g_meta.get("num_tienda", 0))
+        except Exception: tienda_id = 0
+
         db = conectar_db()
         if db:
             try:
                 cursor = db.cursor(dictionary=True)
-                sem_str = str(user_states[user_id]["global_meta"].get("semana", "30"))
-                tienda_id = int(user_states[user_id]["global_meta"].get("num_tienda", 0))
-                cursor.execute(
-                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
-                    (str(user_id), tienda_id, sem_str)
-                )
-                row = cursor.fetchone()
-                if not row:
+                row = None
+                if tienda_id > 0:
                     cursor.execute(
-                        "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND tienda_id=%s ORDER BY id DESC LIMIT 1",
-                        (str(user_id), tienda_id)
+                        "SELECT estado_json FROM enfoque_diario_guardado WHERE tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                        (tienda_id, sem_str)
                     )
                     row = cursor.fetchone()
+
+                if not row and tienda_id > 0:
+                    cursor.execute(
+                        "SELECT estado_json FROM enfoque_diario_guardado WHERE tienda_id=%s ORDER BY id DESC LIMIT 1",
+                        (tienda_id,)
+                    )
+                    row = cursor.fetchone()
+
+                if not row:
+                    cursor.execute(
+                        "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                        (str(user_id), sem_str)
+                    )
+                    row = cursor.fetchone()
+
+                if not row:
+                    cursor.execute(
+                        "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s ORDER BY id DESC LIMIT 1",
+                        (str(user_id),)
+                    )
+                    row = cursor.fetchone()
+
                 if row and row.get("estado_json"):
                     payload = json.loads(row["estado_json"])
                     if "store_state" in payload:
@@ -460,19 +485,22 @@ def cargar_estado_persistente(user_id):
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
                     if "active_tab" in payload:
                         user_states[user_id]["active_tab"] = payload["active_tab"]
-                    loaded_from_db = True
-                    print(f"✅ Estado de Enfoque Diario para usuario {user_id} (tienda {tienda_id}, semana {sem_str}) cargado desde MySQL con éxito.")
+                    loaded = True
+                    print(f"✅ Estado de Enfoque Diario para tienda {tienda_id} (semana {sem_str}) cargado desde MySQL.")
             except Exception as ex_db:
                 print(f"Notice DB load enfoque_diario for user {user_id}:", ex_db)
             finally:
                 try: db.close()
                 except: pass
 
-        # 2. Respaldo: Cargar desde archivo JSON local si no estaba en MySQL
-        if not loaded_from_db:
-            sf = get_state_file(user_id)
-            if os.path.exists(sf):
-                with open(sf, "r", encoding="utf-8") as f:
+        if not loaded:
+            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{tienda_id}.json") if tienda_id > 0 else None
+            sf_user = get_state_file(user_id)
+
+            file_to_load = sf_tienda if (sf_tienda and os.path.exists(sf_tienda)) else (sf_user if os.path.exists(sf_user) else None)
+
+            if file_to_load:
+                with open(file_to_load, "r", encoding="utf-8") as f:
                     payload = json.load(f)
                     if "store_state" in payload:
                         for d in DIAS:
@@ -484,6 +512,7 @@ def cargar_estado_persistente(user_id):
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
                     if "active_tab" in payload:
                         user_states[user_id]["active_tab"] = payload["active_tab"]
+                    print(f"✅ Estado de Enfoque Diario cargado desde archivo local {os.path.basename(file_to_load)}.")
             else:
                 guardar_estado_persistente(user_id)
     except Exception as ex:
@@ -582,6 +611,17 @@ def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None)
                 """, (target_t,))
                 rows = cursor.fetchall()
 
+            # 3. Si no hay por ID directo ni por JOIN exacto, intentar por match parcial de tienda o usuario
+            if not rows and target_t:
+                cursor.execute("""
+                    SELECT v.Nombre_Completo
+                    FROM vendedores v
+                    JOIN usuarios u ON v.ID_Usuario_Tienda = u.ID_Usuario
+                    WHERE (LOWER(u.Tienda) LIKE CONCAT('%%', LOWER(%s), '%%') OR LOWER(u.Usuario) LIKE CONCAT('%%', LOWER(%s), '%%')) AND v.Activo = 1
+                    ORDER BY v.ID_Vendedor ASC
+                """, (target_t, target_t))
+                rows = cursor.fetchall()
+
             db.close()
             db_names = [r["Nombre_Completo"] for r in rows if r.get("Nombre_Completo")]
     except Exception as ex:
@@ -591,12 +631,11 @@ def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None)
         for d in DIAS:
             for i in range(8):
                 if i < len(db_names):
-                    s_state[d]["colaboradores"][i]["nombre"] = db_names[i]
+                    curr_n = s_state[d]["colaboradores"][i].get("nombre", "").strip()
+                    if not curr_n:
+                        s_state[d]["colaboradores"][i]["nombre"] = db_names[i]
                     if s_state[d]["colaboradores"][i]["horas"] <= 0:
                         s_state[d]["colaboradores"][i]["horas"] = 10.0 if i == 0 else 8.0
-                else:
-                    s_state[d]["colaboradores"][i]["nombre"] = ""
-                    s_state[d]["colaboradores"][i]["horas"] = 0.0
         guardar_estado_persistente(user_id)
 
 # --- FUNCIONES MATEMÁTICAS EXPORTADAS AL MÓDULO ---
@@ -1643,7 +1682,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         w_colab_ck = 65 if is_mobile_w else 80
 
         colab_hdr_ui = ft.Row([
-            ft.Container(ft.Text("COLABORADOR (🔒)", weight="bold", color="#00FFFF", size=11), width=w_colab_name),
+            ft.Container(ft.Text("COLABORADOR (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_name),
             ft.Container(ft.Text("HORAS (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_hrs),
             ft.Container(ft.Text("META VTA (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_vta),
             ft.Container(ft.Text("ANÁLOGOS (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_ana),
@@ -1657,7 +1696,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             r_calc = calc["colab_rows"][idx]
             colab_rows_ui.append(
                 ft.Row([
-                    make_readonly_input(c["nombre"], width=w_colab_name),
+                    make_white_input(c["nombre"], f"colab_nom_{idx}", width=w_colab_name),
                     make_white_input(c["horas"], f"colab_hrs_{idx}", width=w_colab_hrs),
                     make_green_calc(f"colab_vta_{idx}", f"${r_calc['meta_vta']:,.2f}", width=w_colab_vta),
                     make_green_calc(f"colab_ana_{idx}", str(r_calc['meta_ana']), width=w_colab_ana),
@@ -1747,7 +1786,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             r_calc = calc["colab_rows"][idx]
             cv_colab_rows.append(
                 ft.Row([
-                    make_readonly_input(c["nombre"], width=90),
+                    make_white_input(c["nombre"], f"colab_nom_{idx}", width=90),
                     make_green_calc(f"colab_cv_hrs_{idx}", f"{r_calc['horas']:.1f}", width=50),
                     make_white_input(c.get("interacciones", 0), f"colab_int_{idx}", width=90),
                     make_white_input(c.get("convertidos", 0), f"colab_conv_{idx}", width=110),
