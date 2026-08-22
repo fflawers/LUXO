@@ -20068,17 +20068,21 @@ Ejemplo:
                     page.update()
                 except Exception: pass
 
+            is_mob = (page.width < 768) if (page and page.width) else False
+
             dd = ft.Dropdown(
                 options=opts,
                 value=val,
-                width=200,
-                height=36,
-                text_size=11,
+                width=None if is_mob else 200,
+                expand=1 if is_mob else False,
+                height=42,
+                text_size=10 if is_mob else 11,
                 color="#00FF88",
                 bgcolor="#1E1E2E",
                 border_color="#00FF88",
                 border_radius=6,
-                content_padding=6,
+                content_padding=ft.padding.only(left=6, right=4, top=2, bottom=2),
+                dense=True,
                 tooltip="Seleccionar Región Específica de Trabajo",
                 visible=True
             )
@@ -20097,11 +20101,11 @@ Ejemplo:
             dd_region_container.content = dd_region_activa
 
             try:
+                actualizar_top_appbar_layout()
                 dd_region_container.update()
             except Exception: pass
 
             try:
-                actualizar_top_appbar_layout()
                 top_appbar.update()
             except Exception as ex_z:
                 print("Notice zona change appbar update:", ex_z)
@@ -20111,17 +20115,21 @@ Ejemplo:
                 page.update()
             except Exception: pass
 
+        is_mob_init = (page.width < 768) if (page and page.width) else False
+
         dd_zona_activa = ft.Dropdown(
             options=obtener_opciones_zonas_db(),
             value=user_session.get("zona_activa_id", "0"),
-            width=210,
-            height=36,
-            text_size=11,
+            width=None if is_mob_init else 210,
+            expand=1 if is_mob_init else False,
+            height=42,
+            text_size=10 if is_mob_init else 11,
             color="#00FFFF",
             bgcolor="#1E1E2E",
             border_color="#00FFFF",
             border_radius=6,
-            content_padding=6,
+            content_padding=ft.padding.only(left=6, right=4, top=2, bottom=2),
+            dense=True,
             tooltip="Seleccionar Zona Activa de Trabajo",
             visible=True
         )
@@ -20143,9 +20151,16 @@ Ejemplo:
             if is_mob:
                 dd_zona_activa.width = None
                 dd_zona_activa.expand = 1
-                dd_region_activa.width = None
-                dd_region_activa.expand = 1
+                dd_zona_activa.text_size = 10
                 
+                dd_region_container.width = None
+                dd_region_container.expand = 1
+                
+                if dd_region_container.content:
+                    dd_region_container.content.width = None
+                    dd_region_container.content.expand = 1
+                    dd_region_container.content.text_size = 10
+
                 top_appbar.content = ft.Column([
                     ft.Row([
                         ft.Row([
@@ -20170,9 +20185,16 @@ Ejemplo:
             else:
                 dd_zona_activa.width = 210
                 dd_zona_activa.expand = False
+                dd_zona_activa.text_size = 11
+                
                 dd_region_container.width = 200
                 dd_region_container.expand = False
                 
+                if dd_region_container.content:
+                    dd_region_container.content.width = 200
+                    dd_region_container.content.expand = False
+                    dd_region_container.content.text_size = 11
+
                 top_appbar.content = ft.Row([
                     ft.Row([
                         ft.Container(
