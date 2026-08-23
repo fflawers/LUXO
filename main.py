@@ -21233,8 +21233,9 @@ Ejemplo:
     def unmute_on_first_interaction(e=None):
         if not has_interacted_audio[0]:
             has_interacted_audio[0] = True
-            if login_video_player and login_video_player.muted:
+            if login_video_player:
                 try:
+                    login_video_player.playlist = [fv.VideoMedia(video_login_url)]
                     login_video_player.muted = False
                     login_video_player.volume = 100.0
                     login_video_player.play()
