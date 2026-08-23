@@ -2928,10 +2928,20 @@ def autenticar_por_huella_1toN():
         print("Error autenticando por huella:", ex)
         return None, str(ex)
 
-def conectar_db():
+_USERS_SYNCED = False
 
+def conectar_db():
+    global _USERS_SYNCED
     try:
-        return mysql.connector.connect(**DB_CONFIG)
+        db = mysql.connector.connect(**DB_CONFIG)
+        if not _USERS_SYNCED and db:
+            _USERS_SYNCED = True
+            try:
+                import auto_sync_usuarios
+                auto_sync_usuarios.sincronizar_usuarios_db(db)
+            except Exception as ex_sync:
+                print("Notice auto_sync_usuarios init:", ex_sync)
+        return db
 
     except Exception as e:
         print("ERROR MYSQL:", e)
