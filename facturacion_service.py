@@ -48,19 +48,19 @@ def crear_tabla_facturas_if_not_exists(db=None):
                 numero_tienda VARCHAR(50) NOT NULL,
                 hora_compra VARCHAR(20) NULL,
                 monto DECIMAL(10,2) DEFAULT 0.00,
-                forma_pago VARCHAR(50) DEFAULT 'Tarjeta de Crédito',
+                forma_pago VARCHAR(50) DEFAULT 'Tarjeta de crédito',
                 rfc VARCHAR(20) NOT NULL,
                 razon_social VARCHAR(200) NOT NULL,
                 cp_fiscal VARCHAR(10) NOT NULL,
                 regimen_fiscal VARCHAR(100) NULL,
-                uso_cfdi VARCHAR(100) DEFAULT 'G03 - Gastos en general',
+                uso_cfdi VARCHAR(100) DEFAULT 'G03 - Gastos en general.',
                 email_cliente VARCHAR(150) NOT NULL,
                 telefono_cliente VARCHAR(20) NULL,
                 estatus VARCHAR(50) DEFAULT 'PENDIENTE_SINCRONIZACION',
                 pdf_url TEXT NULL,
                 xml_url TEXT NULL,
                 intentos INT DEFAULT 0,
-                whatsapp_estatus VARCHAR(50) DEFAULT 'PENDIENTE',
+                whatsapp_estatus VARCHAR(100) DEFAULT 'PROGRAMADO',
                 fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 fecha_facturacion TIMESTAMP NULL
             )
@@ -75,6 +75,28 @@ def crear_tabla_facturas_if_not_exists(db=None):
             try: db.close()
             except: pass
 
+def calcular_programacion_monitoreo(fecha_ref=None):
+    """
+    REGLA DE MONITOREO #5:
+    - Compras en Viernes, Sábado o Domingo: Sin monitoreo en fin de semana. Monitoreo inicia LUNES a las 11:00 AM.
+    - Compras de Lunes a Jueves: Monitoreo se programa a las 24 HORAS después de la compra.
+    """
+    if not fecha_ref:
+        fecha_ref = get_now_mexico_city()
+
+    w = fecha_ref.weekday()  # 0=Lunes, 1=Martes, 2=Miércoles, 3=Jueves, 4=Viernes, 5=Sábado, 6=Domingo
+    if w in (4, 5, 6):
+        # Viernes (4), Sábado (5) o Domingo (6) ➔ Lunes siguiente a las 11:00 AM
+        days_ahead = (7 - w) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        lunes = (fecha_ref + timedelta(days=days_ahead)).replace(hour=11, minute=0, second=0, microsecond=0)
+        return "INICIA_LUNES_11AM", f"Monitoreo programado LUNES ({lunes.strftime('%d/%m/%Y')} 11:00 AM)"
+    else:
+        # Lunes (0), Martes (1), Miércoles (2) o Jueves (3) ➔ 24 horas después
+        next_24h = fecha_ref + timedelta(hours=24)
+        return "INICIA_24H_POST", f"Monitoreo programado en 24h ({next_24h.strftime('%d/%m/%Y %H:%M')})"
+
 def extraer_datos_ocr_csf(file_path_or_bytes):
     """
     Ejecuta lectura OCR e inspección de texto en Constancia de Situación Fiscal (CSF).
@@ -85,7 +107,7 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
         "rfc": "",
         "razon_social": "",
         "cp_fiscal": "",
-        "regimen_fiscal": "601 - General de Ley Personas Morales"
+        "regimen_fiscal": "626 - Régimen Simplificado de Confianza"
     }
 
     if not file_path_or_bytes:
@@ -95,7 +117,6 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
         raw_text = ""
         file_path = str(file_path_or_bytes)
 
-        # 1. Si es un archivo existente en disco
         if os.path.exists(file_path):
             ext = os.path.splitext(file_path)[1].lower()
             if ext == ".pdf":
@@ -115,7 +136,6 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
                     except Exception:
                         pass
             else:
-                # Imagen (PNG, JPG, WEBP)
                 try:
                     import easyocr
                     reader = easyocr.Reader(['es', 'en'], gpu=False)
@@ -128,7 +148,6 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
                     except Exception:
                         pass
 
-        # 2. Análisis por Expresiones Regulares sobre el texto extraído
         if raw_text:
             rfc_match = re.search(r'([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text, re.IGNORECASE)
             if rfc_match:
@@ -149,7 +168,6 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
     except Exception as ex:
         print("Notice extraer_datos_ocr_csf:", ex)
 
-    # Valores por defecto para fallback si la lectura directa no encuentra campos incompletos
     if not extracted["rfc"]:
         extracted["rfc"] = "VME2309015M2"
     if not extracted["razon_social"]:
@@ -169,6 +187,8 @@ def registrar_solicitud_facturacion(ticket, numero_tienda, hora_compra, monto, f
     if not db:
         return False
 
+    cod_monitoreo, txt_monitoreo = calcular_programacion_monitoreo()
+
     try:
         cursor = db.cursor()
         cursor.execute("""
@@ -183,7 +203,7 @@ def registrar_solicitud_facturacion(ticket, numero_tienda, hora_compra, monto, f
             str(rfc).upper().strip(), str(razon_social).upper().strip(), str(cp_fiscal).strip(),
             str(regimen_fiscal).strip(), str(uso_cfdi).strip(),
             str(email_cliente).strip(), str(telefono_cliente).strip(),
-            "PENDIENTE_SINCRONIZACION", "PROGRAMADO_11AM_9PM"
+            "PENDIENTE_SINCRONIZACION", txt_monitoreo
         ))
         db.commit()
         return True

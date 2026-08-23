@@ -16729,15 +16729,14 @@ Ejemplo:
             tf_ticket = ft.TextField(label="Número de Ticket *", value="", width=180, border_color="#00FFFF", color="white")
             tf_tienda = ft.TextField(label="Número / Nombre de Tienda *", value=tienda_actual, width=220, border_color="#00FFFF", color="white")
             tf_hora = ft.TextField(label="Hora de la Compra (ej. 14:30)", value="14:00", width=180, border_color="#00FFFF", color="white")
-            tf_monto = ft.TextField(label="Monto Total ($)", value="3659.00", width=160, border_color="#00FFFF", color="white")
+            tf_monto = ft.TextField(label="Monto Total ($) [Auto BD]", value="3659.00", width=190, border_color="#555555", color="#AAAAAA", disabled=True, read_only=True, tooltip="Monto auto-cargado desde el ticket en la BD")
 
             dd_pago = ft.Dropdown(
                 label="Forma de Pago *",
                 options=[
                     ft.dropdown.Option("04 - Tarjeta de crédito"),
                     ft.dropdown.Option("28 - Tarjeta de débito"),
-                    ft.dropdown.Option("01 - Efectivo"),
-                    ft.dropdown.Option("03 - Transferencia electrónica de fondos")
+                    ft.dropdown.Option("01 - Efectivo")
                 ],
                 value="04 - Tarjeta de crédito",
                 width=260, border_color="#00FFFF", color="white"
@@ -16864,7 +16863,7 @@ Ejemplo:
                 ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.ACCESS_TIME, color="#00FFFF", size=14),
-                        ft.Text("Reglas de Facturación: Monitoreo 24/7 de Sincronización + Envió por Correo y WhatsApp (11:00 AM a 9:00 PM)", color="#00FFFF", size=11, weight="bold")
+                        ft.Text("Reglas de Facturación: Monitoreo Lunes a Jueves (24h después) | Viernes a Domingo (Inicia Lunes 11:00 AM) | Envíos WhatsApp (11:00 AM a 9:00 PM)", color="#00FFFF", size=11, weight="bold")
                     ]),
                     bgcolor="#141424", padding=8, border_radius=6, border=ft.Border.all(1, "#00FFFF")
                 ),
