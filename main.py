@@ -20591,6 +20591,9 @@ Ejemplo:
                     except: pass
                     return
 
+                u_val = (txt_user.value or "").strip().lower()
+                p_val = (txt_pass.value or "").strip()
+
                 cursor = db.cursor(dictionary=True)
 
                 cursor.execute(
@@ -20604,19 +20607,19 @@ Ejemplo:
                     Zona,
                     Contrasena
                     FROM usuarios
-                    WHERE Usuario = %s
+                    WHERE LOWER(TRIM(Usuario)) = %s
                     """,
-                    (txt_user.value,)
+                    (u_val,)
                 )
 
                 res = cursor.fetchone()
 
-                if res and verify_password(txt_pass.value, res.get("Contrasena", "")):
+                if res and verify_password(p_val, res.get("Contrasena", "")):
                     # Migración transparente: Si la contraseña en BD era texto plano legacy, actualizarla con hash bcrypt
                     stored_pass = str(res.get("Contrasena") or "")
                     if not (stored_pass.startswith("$2b$") or stored_pass.startswith("$2a$")):
                         try:
-                            new_hash = hash_password(txt_pass.value)
+                            new_hash = hash_password(p_val)
                             cursor.execute("UPDATE usuarios SET Contrasena = %s WHERE ID_Usuario = %s", (new_hash, res["ID_Usuario"]))
                             db.commit()
                             print(f"🔒 Contraseña del usuario '{res['Nombre_Completo']}' migrada exitosamente a hash bcrypt.")
@@ -20741,10 +20744,16 @@ Ejemplo:
                         SELECT
                         ID_Usuario
                         FROM usuarios
-                        WHERE Usuario = %s
+                        WHERE LOWER(TRIM(Usuario)) = %s
                         """,
-                        (txt_user.value,)
+                        (u_val,)
                     )
+                    usuario_existe = cursor.fetchone()
+
+                    if usuario_existe:
+                        mensaje = "Contraseña incorrecta"
+                    else:
+                        mensaje = "Usuario no registrado"
                     usuario_existe = cursor.fetchone()
 
                     if usuario_existe:
