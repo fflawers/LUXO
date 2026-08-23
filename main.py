@@ -16527,24 +16527,38 @@ Ejemplo:
             )
 
             # --- CAMPOS DE GENERAR GUÍA ---
-            tienda_actual = sucursal_activa[0] if 'sucursal_activa' in locals() and sucursal_activa else "Interlomas"
+            tienda_actual = user_info.get("tienda") or "Interlomas"
             
-            opts_tiendas = [ft.dropdown.Option(key="Interlomas", text="📍 Interlomas (3502)"), ft.dropdown.Option(key="Toreo", text="📍 Toreo (3501)"), ft.dropdown.Option(key="Perisur", text="📍 Perisur (3503)"), ft.dropdown.Option(key="CEDIS", text="🏭 CEDIS / Almacén Central"), ft.dropdown.Option(key="Garantias", text="🛠️ Laboratorio de Garantías")]
+            opts_tiendas = []
             if db:
                 try:
                     cursor = db.cursor(dictionary=True)
-                    cursor.execute("SELECT nombre_tienda, numero_tienda FROM tiendas ORDER BY nombre_tienda ASC")
+                    cursor.execute("SELECT DISTINCT Tienda FROM usuarios WHERE Tienda IS NOT NULL AND TRIM(Tienda) != '' ORDER BY Tienda ASC")
                     rows = cursor.fetchall()
                     if rows:
-                        opts_tiendas = [ft.dropdown.Option(key=r["nombre_tienda"], text=f"📍 {r['nombre_tienda']} ({r.get('numero_tienda', '')})") for r in rows]
+                        opts_tiendas = [ft.dropdown.Option(key=r["Tienda"], text=f"📍 {r['Tienda']}") for r in rows if r.get("Tienda")]
                 except Exception as ex_t:
                     print("Notice fedex tiendas db options:", ex_t)
-                finally:
-                    try: db.close()
-                    except: pass
 
-            dd_origen = ft.Dropdown(options=opts_tiendas, value=tienda_actual, label="🏬 Tienda Origen (Remitente)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
-            dd_destino = ft.Dropdown(options=opts_tiendas, value="Toreo" if tienda_actual != "Toreo" else "Interlomas", label="🏬 Tienda Destino (Destinatario)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
+            if not opts_tiendas:
+                opts_tiendas = [
+                    ft.dropdown.Option(key="Interlomas", text="📍 Interlomas (3502)"),
+                    ft.dropdown.Option(key="Toreo", text="📍 Toreo (3501)"),
+                    ft.dropdown.Option(key="Perisur", text="📍 Perisur (3503)"),
+                    ft.dropdown.Option(key="CEDIS", text="🏭 CEDIS / Almacén Central"),
+                    ft.dropdown.Option(key="Garantias", text="🛠️ Laboratorio de Garantías")
+                ]
+
+            valid_keys = [o.key for o in opts_tiendas]
+            if tienda_actual and tienda_actual not in valid_keys:
+                opts_tiendas.insert(0, ft.dropdown.Option(key=tienda_actual, text=f"📍 {tienda_actual}"))
+                valid_keys.append(tienda_actual)
+
+            val_origen = tienda_actual if tienda_actual in valid_keys else valid_keys[0]
+            val_destino = valid_keys[1] if len(valid_keys) > 1 and valid_keys[0] == val_origen else valid_keys[0]
+
+            dd_origen = ft.Dropdown(options=opts_tiendas, value=val_origen, label="🏬 Tienda Origen (Remitente)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
+            dd_destino = ft.Dropdown(options=opts_tiendas, value=val_destino, label="🏬 Tienda Destino (Destinatario)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
 
             tf_peso = ft.TextField(label="Peso (kg)", value="1.0", width=140, border_color="#00FFFF", color="white")
             tf_largo = ft.TextField(label="Largo (cm)", value="20", width=100, border_color="#00FFFF", color="white")
