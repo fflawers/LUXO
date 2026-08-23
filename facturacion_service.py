@@ -160,7 +160,7 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
         "rfc": "",
         "razon_social": "",
         "cp_fiscal": "",
-        "regimen_fiscal": "626 - Régimen Simplificado de Confianza"
+        "regimen_fiscal": ""
     }
 
     if not file_path_or_bytes:
@@ -173,60 +173,85 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
         if os.path.exists(file_path):
             ext = os.path.splitext(file_path)[1].lower()
             if ext == ".pdf":
+                # 1. Intentar PyMuPDF (fitz) - Extractor ultrarrápido de PDFs SAT
                 try:
-                    import pypdf
-                    reader = pypdf.PdfReader(file_path)
-                    for page in reader.pages:
-                        t = page.extract_text()
+                    import fitz
+                    doc = fitz.open(file_path)
+                    for page in doc:
+                        t = page.get_text()
                         if t: raw_text += "\n" + t
-                except Exception:
-                    pass
+                except Exception as ex_fitz:
+                    print("Notice PyMuPDF fitz:", ex_fitz)
 
-                if not raw_text:
+                # 2. Fallback a PyPDF2 si fitz no obtuvo texto
+                if not raw_text.strip():
                     try:
-                        with open(file_path, "rb") as f:
-                            raw_text = f.read().decode("utf-8", errors="ignore")
-                    except Exception:
-                        pass
+                        import PyPDF2
+                        reader = PyPDF2.PdfReader(file_path)
+                        for page in reader.pages:
+                            t = page.extract_text()
+                            if t: raw_text += "\n" + t
+                    except Exception as ex_p2:
+                        print("Notice PyPDF2:", ex_p2)
+
+                # 3. Si el PDF es un escaneo de imagen sin capa de texto, aplicar EasyOCR
+                if not raw_text.strip():
+                    try:
+                        import fitz, easyocr
+                        doc = fitz.open(file_path)
+                        reader = easyocr.Reader(['es', 'en'], gpu=False)
+                        for page in doc:
+                            pix = page.get_pixmap()
+                            img_bytes = pix.tobytes("png")
+                            ocr_res = reader.readtext(img_bytes, detail=0)
+                            if ocr_res: raw_text += "\n" + " ".join(ocr_res)
+                    except Exception as ex_po:
+                        print("Notice EasyOCR on PDF fallback:", ex_po)
+
             else:
+                # Archivos de Imagen (PNG, JPG, WEBP)
                 try:
                     import easyocr
                     reader = easyocr.Reader(['es', 'en'], gpu=False)
                     results = reader.readtext(file_path, detail=0)
                     raw_text = " ".join(results)
-                except Exception:
-                    try:
-                        with open(file_path, "rb") as f:
-                            raw_text = f.read().decode("utf-8", errors="ignore")
-                    except Exception:
-                        pass
+                except Exception as ex_eo:
+                    print("Notice EasyOCR on Image:", ex_eo)
 
+        # 2. Análisis por Expresiones Regulares sobre el texto extraído del SAT
         if raw_text:
-            rfc_match = re.search(r'([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text, re.IGNORECASE)
+            # 2.1 RFC del Cliente
+            rfc_match = re.search(r'RFC\s*:?\s*([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text, re.IGNORECASE)
+            if not rfc_match:
+                rfc_match = re.search(r'([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text)
             if rfc_match:
                 extracted["rfc"] = rfc_match.group(1).upper()
 
-            cp_match = re.search(r'(?:Código Postal|C\.?P\.?)\s*:?\s*(\d{5})', raw_text, re.IGNORECASE)
+            # 2.2 Denominación o Razón Social
+            razon_match = re.search(r'(?:Denominación\s*/?\s*Razón\s*Social|Denominación|Razón\s*Social|Nombre\s*Comercial)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            if razon_match:
+                val = razon_match.group(1).strip().upper()
+                val = re.sub(r'^[/\s:]+', '', val).strip()
+                if '\n' in val:
+                    val = val.split('\n')[0].strip()
+                extracted["razon_social"] = val
+
+            # 2.3 Código Postal (CP) Domicilio Fiscal
+            cp_match = re.search(r'(?:Código\s*Postal|C\.?P\.?)\s*:?\s*(\d{5})', raw_text, re.IGNORECASE)
             if cp_match:
                 extracted["cp_fiscal"] = cp_match.group(1)
 
-            nombre_match = re.search(r'(?:Denominación|Razón Social|Nombre[s]?)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
-            if nombre_match:
-                extracted["razon_social"] = nombre_match.group(1).strip().upper()
-
-            regimen_match = re.search(r'(?:Régimen|Regimen)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            # 2.4 Régimen Fiscal
+            regimen_match = re.search(r'(?:Régimen\s*Fiscal|Régimen)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
             if regimen_match:
-                extracted["regimen_fiscal"] = regimen_match.group(1).strip()
+                r_val = regimen_match.group(1).strip()
+                r_val = re.sub(r'^[/\s:]+', '', r_val).strip()
+                if '\n' in r_val:
+                    r_val = r_val.split('\n')[0].strip()
+                extracted["regimen_fiscal"] = r_val
 
     except Exception as ex:
         print("Notice extraer_datos_ocr_csf:", ex)
-
-    if not extracted["rfc"]:
-        extracted["rfc"] = "VME2309015M2"
-    if not extracted["razon_social"]:
-        extracted["razon_social"] = "LUXOTTICA RETAIL MEXICO S.A. DE C.V."
-    if not extracted["cp_fiscal"]:
-        extracted["cp_fiscal"] = "05348"
 
     return extracted
 
