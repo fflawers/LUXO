@@ -94,12 +94,11 @@ def obtener_fechas_semana(anio=2026, semana=30):
     except Exception:
         a, s = 2026, 30
 
-    # Desfase SGH Fiscal (-1 semana para sincronizar con el calendario corporativo SGH)
-    s_effective = s + 1
+    # Las semanas de la empresa inician en DOMINGO. Semana 34 = Dom 23/Ago a Sáb 29/Ago.
     first_day = datetime.date(a, 1, 1)
     offset_to_sun = (first_day.weekday() + 1) % 7
     first_sunday = first_day - datetime.timedelta(days=offset_to_sun)
-    target_sunday = first_sunday + datetime.timedelta(weeks=(s_effective - 1))
+    target_sunday = first_sunday + datetime.timedelta(weeks=s)
 
     dias_nombres = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO']
     fechas = {}
@@ -124,7 +123,7 @@ def obtener_semana_sgh_de_fecha(d_date):
         first_day = datetime.date(y, 1, 1)
         offset_to_sun = (first_day.weekday() + 1) % 7
         first_sunday = first_day - datetime.timedelta(days=offset_to_sun)
-    week_num = ((d_date - first_sunday).days // 7) + 1 - 1
+    week_num = ((d_date - first_sunday).days // 7)
     if week_num < 1:
         week_num = 52
     return y, week_num
