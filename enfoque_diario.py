@@ -432,11 +432,19 @@ def guardar_estado_persistente(user_id):
     except Exception as ex:
         print(f"Error al guardar estado de enfoque diario para {user_id}:", ex)
 
+def get_current_sgh_week_str():
+    try:
+        yr, sem = obtener_semana_sgh_de_fecha(datetime.date.today())
+        return str(sem)
+    except Exception:
+        return "34"
+
 def cargar_estado_persistente(user_id):
     loaded = False
     try:
         g_meta = user_states[user_id]["global_meta"]
-        sem_str = str(g_meta.get("semana", "30"))
+        cur_sem_default = get_current_sgh_week_str()
+        sem_str = str(g_meta.get("semana") or cur_sem_default)
         try: tienda_id = int(g_meta.get("num_tienda", 0))
         except Exception: tienda_id = 0
 
@@ -445,6 +453,7 @@ def cargar_estado_persistente(user_id):
             try:
                 cursor = db.cursor(dictionary=True)
                 row = None
+                # 1. Buscar coincidencia exacta por tienda_id y semana
                 if tienda_id > 0:
                     cursor.execute(
                         "SELECT estado_json FROM enfoque_diario_guardado WHERE tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
@@ -452,24 +461,11 @@ def cargar_estado_persistente(user_id):
                     )
                     row = cursor.fetchone()
 
-                if not row and tienda_id > 0:
-                    cursor.execute(
-                        "SELECT estado_json FROM enfoque_diario_guardado WHERE tienda_id=%s ORDER BY id DESC LIMIT 1",
-                        (tienda_id,)
-                    )
-                    row = cursor.fetchone()
-
+                # 2. Buscar coincidencia exacta por user_id y semana
                 if not row:
                     cursor.execute(
                         "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
                         (str(user_id), sem_str)
-                    )
-                    row = cursor.fetchone()
-
-                if not row:
-                    cursor.execute(
-                        "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s ORDER BY id DESC LIMIT 1",
-                        (str(user_id),)
                     )
                     row = cursor.fetchone()
 
@@ -480,7 +476,10 @@ def cargar_estado_persistente(user_id):
                             if d in payload["store_state"]:
                                 user_states[user_id]["store_state"][d].update(payload["store_state"][d])
                     if "global_meta" in payload:
-                        user_states[user_id]["global_meta"].update(payload["global_meta"])
+                        saved_meta = payload["global_meta"]
+                        for k, v in saved_meta.items():
+                            if k != "semana" or sem_str == "30":
+                                g_meta[k] = v
                     if "historico_semanal_state" in payload:
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
                     if "active_tab" in payload:
@@ -507,7 +506,10 @@ def cargar_estado_persistente(user_id):
                             if d in payload["store_state"]:
                                 user_states[user_id]["store_state"][d].update(payload["store_state"][d])
                     if "global_meta" in payload:
-                        user_states[user_id]["global_meta"].update(payload["global_meta"])
+                        saved_meta = payload["global_meta"]
+                        for k, v in saved_meta.items():
+                            if k != "semana":
+                                g_meta[k] = v
                     if "historico_semanal_state" in payload:
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
                     if "active_tab" in payload:
@@ -524,7 +526,8 @@ def guardar_semana_historico(user_id):
     s_state = user_states[user_id]["store_state"]
     h_state = user_states[user_id]["historico_semanal_state"]
     sincronizar_baselines_domingo(s_state)
-    key = f"S{g_meta['semana']}_{g_meta['num_tienda']}_{g_meta['tienda']}"
+    sem_val = str(g_meta.get("semana") or get_current_sgh_week_str())
+    key = f"S{sem_val}_{g_meta.get('num_tienda','0')}_{g_meta.get('tienda','')}"
     import copy
     h_state[key] = copy.deepcopy(s_state)
     guardar_estado_persistente(user_id)
@@ -534,9 +537,13 @@ def cargar_semana_historico(user_id, num_semana):
     g_meta = user_states[user_id]["global_meta"]
     s_state = user_states[user_id]["store_state"]
     h_state = user_states[user_id]["historico_semanal_state"]
-    g_meta["semana"] = str(num_semana)
-    key = f"S{num_semana}_{g_meta['num_tienda']}_{g_meta['tienda']}"
+    num_sem_str = str(num_semana)
+    g_meta["semana"] = num_sem_str
+
+    tienda_id = int(g_meta.get("num_tienda", 0))
+    key = f"S{num_sem_str}_{g_meta.get('num_tienda','0')}_{g_meta.get('tienda','')}"
     import copy
+
     if key in h_state:
         s_state.clear()
         s_state.update(copy.deepcopy(h_state[key]))
@@ -546,10 +553,9 @@ def cargar_semana_historico(user_id, num_semana):
         if db:
             try:
                 cursor = db.cursor(dictionary=True)
-                tienda_id = int(g_meta.get("num_tienda", 0))
                 cursor.execute(
-                    "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
-                    (str(user_id), tienda_id, str(num_semana))
+                    "SELECT estado_json FROM enfoque_diario_guardado WHERE (tienda_id=%s OR user_id=%s) AND semana=%s ORDER BY id DESC LIMIT 1",
+                    (tienda_id, str(user_id), num_sem_str)
                 )
                 row = cursor.fetchone()
                 if row and row.get("estado_json"):
@@ -564,13 +570,16 @@ def cargar_semana_historico(user_id, num_semana):
                         h_state[key] = copy.deepcopy(s_state)
                         loaded_from_db = True
             except Exception as ex_db:
-                print(f"Notice DB load semana {num_semana}:", ex_db)
+                print(f"Notice DB load semana {num_sem_str}:", ex_db)
             finally:
                 try: db.close()
                 except: pass
+
         if not loaded_from_db:
             s_state.clear()
-            s_state.update(default_store_state())
+            def_s = default_store_state()
+            for d in DIAS:
+                s_state[d] = copy.deepcopy(def_s[d])
             h_state[key] = copy.deepcopy(s_state)
     sincronizar_baselines_domingo(s_state)
     guardar_estado_persistente(user_id)
