@@ -1143,7 +1143,6 @@ def configurar_rutas_fastapi(app):
                     } else {
                         document.addEventListener("DOMContentLoaded", attachBanner);
                     }
-                    setInterval(attachBanner, 1000);
 
                     const iconEl = document.getElementById("luxo-voice-icon");
                     const textEl = document.getElementById("luxo-voice-text");
@@ -1344,9 +1343,9 @@ def configurar_rutas_fastapi(app):
                                         } catch(e) {
                                             setTimeout(function() {
                                                 try { rec.start(); } catch(e2){}
-                                            }, 1000);
+                                            }, 1500);
                                         }
-                                    }, 600);
+                                    }, 1200);
                                 }
                             };
 
@@ -2785,7 +2784,11 @@ iniciar_hilo_escucha_luxo()
 # IMAGENES BASE64
 # =========================================
 
+_BASE64_CACHE = {}
+
 def obtener_64(nombre):
+    if nombre in _BASE64_CACHE:
+        return _BASE64_CACHE[nombre]
 
     def buscar_archivo(nombre_buscar):
         target_base = os.path.splitext(nombre_buscar)[0]
@@ -2810,7 +2813,9 @@ def obtener_64(nombre):
             mime = "image/png" if ext == ".png" else "image/jpeg"
             with open(ruta, "rb") as f:
                 contenido = base64.b64encode(f.read()).decode("utf-8")
-            return f"data:{mime};base64,{contenido}"
+            res_b64 = f"data:{mime};base64,{contenido}"
+            _BASE64_CACHE[nombre] = res_b64
+            return res_b64
 
     except Exception as e:
         print("ERROR IMAGEN:", e)
@@ -2946,23 +2951,47 @@ def autenticar_por_huella_1toN():
         return None, str(ex)
 
 _USERS_SYNCED = False
+_DB_POOL = None
+
+def get_db_pool():
+    global _DB_POOL
+    if _DB_POOL is None:
+        try:
+            import mysql.connector.pooling
+            p_config = dict(DB_CONFIG)
+            p_config["pool_name"] = "luxo_app_pool"
+            p_config["pool_size"] = 10
+            _DB_POOL = mysql.connector.pooling.MySQLConnectionPool(**p_config)
+            print("⚡ Pool de Conexiones MySQL Inicializado (10 conexiones reutilizables).")
+        except Exception as ex_p:
+            print("Notice init MySQL pool:", ex_p)
+            _DB_POOL = False
+    return _DB_POOL if _DB_POOL else None
 
 def conectar_db():
     global _USERS_SYNCED
-    try:
-        db = mysql.connector.connect(**DB_CONFIG)
-        if not _USERS_SYNCED and db:
-            _USERS_SYNCED = True
-            try:
-                import auto_sync_usuarios
-                auto_sync_usuarios.sincronizar_usuarios_db(db)
-            except Exception as ex_sync:
-                print("Notice auto_sync_usuarios init:", ex_sync)
-        return db
+    db = None
+    pool = get_db_pool()
+    if pool:
+        try:
+            db = pool.get_connection()
+        except Exception:
+            db = None
+    if not db:
+        try:
+            db = mysql.connector.connect(**DB_CONFIG)
+        except Exception as e:
+            print("ERROR MYSQL:", e)
+            return None
 
-    except Exception as e:
-        print("ERROR MYSQL:", e)
-        return None
+    if not _USERS_SYNCED and db:
+        _USERS_SYNCED = True
+        try:
+            import auto_sync_usuarios
+            auto_sync_usuarios.sincronizar_usuarios_db(db)
+        except Exception as ex_sync:
+            print("Notice auto_sync_usuarios init:", ex_sync)
+    return db
 
 def rebuild_rag_cache():
     global RAG_BLOQUES_CACHE, RAG_DF_CACHE, RAG_IDF_CACHE, RAG_EXCEL_CACHE
