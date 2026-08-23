@@ -20153,11 +20153,152 @@ Ejemplo:
             tooltip="Recargar y sincronizar el módulo activo actual"
         )
 
+        ZONAS_SEED = [
+            (1, "ZONA CENTRO", "CORONA TINOCO JULIO CESAR"),
+            (2, "ZONA NORTE", "ESCOBEDO VILLA KARINA MARLEN"),
+            (3, "ZONA OCCIDENTE", "SANCHEZ ROQUE JENIFFER ALEJANDRA"),
+            (4, "ZONA SUR", "VALENCIA TRUJILLO OMAR"),
+        ]
+        REGIONES_SEED = [
+            (1, 1, "AICM", "VILLA MARTINEZ YANARELI"),
+            (2, 1, "DF CENTRO", "JUAREZ GONZALEZ MIGUEL ANGEL"),
+            (3, 1, "DF NORTE", "TELLEZ ESQUIVEL LUIS GERARDO"),
+            (4, 1, "VALLE", "SAN PEDRO GUEVARA MANUEL"),
+            (5, 2, "MTY", "MILLAN GARCIA FABIAN DE JESUS"),
+            (6, 2, "NORESTE", "LOPEZ NAVA JOSE LUIS"),
+            (7, 2, "NORTE", "CARRANZA IBARRA KARLA LIZBETH"),
+            (8, 2, "PACIFICO", "ROA GARCIA JOSE FERNANDO"),
+            (9, 3, "BAJIO", "JAIME GAMIÑO MARIA DE JESUS"),
+            (10, 3, "GDL", "CARDONA CEPEDA DANIEL"),
+            (11, 3, "OCCIDENTE", "CORTES ALVAREZ THALIA ADANARIT"),
+            (12, 4, "ACUN", "TBD"),
+            (13, 4, "CUN", "HUERTA BARRON ROSAURA"),
+            (14, 4, "PLAYA", "GALVAN VILLEGAS ALDO"),
+            (15, 4, "GOLFO", "SALINAS XOCHITLA EVELYN ANDREA"),
+            (16, 4, "PENINSULA", "GARCIA MENA GUILLERMO ADRIAN"),
+        ]
+        TIENDAS_SEED = [
+            (2281, 15, "AMERICAS VER"), (2383, 1, "TEZONTLE 2"), (2529, 11, "GDL OUTLET"), (2561, 2, "LERMA OUTLET"),
+            (2719, 11, "AGDL T1D"), (2726, 8, "GAL MAZ"), (2875, 12, "CUN T2A"), (2876, 12, "CUN T2B"),
+            (2877, 12, "CUN T2C"), (2878, 12, "CUN T2D"), (2879, 12, "CUN T3A"), (2880, 12, "CUN T3B"),
+            (2881, 14, "CZM T1"), (2882, 15, "HUA T1"), (2883, 16, "MER T1"), (2885, 15, "OAX T1"),
+            (2886, 16, "TAB T1"), (2887, 15, "VER T1"), (2900, 14, "PLAYA PASEO"), (2902, 6, "CDJ T1"),
+            (2903, 6, "CHI T1"), (2905, 7, "TIJ T1A"), (2945, 14, "PLAYA 10"), (3009, 8, "CLN FORUM"),
+            (3010, 10, "APVR"), (3019, 3, "PARQUE TOR"), (3028, 4, "OASIS COY"), (3035, 10, "PVR GAL"),
+            (3049, 11, "AGDL T1A"), (3051, 6, "CDJ"), (3067, 11, "AGDL T1B"), (3080, 11, "PP KIOSCO"),
+            (3138, 8, "CLN FORUM 2"), (3150, 4, "ACA3"), (3151, 10, "AND2"), (3154, 6, "CHI1"),
+            (3155, 6, "CHI2"), (3160, 10, "GG4"), (3162, 10, "GP3"), (3164, 16, "MER1"),
+            (3167, 16, "MER4"), (3169, 5, "MTY1"), (3170, 5, "MTY2"), (3178, 5, "MTY4"),
+            (3179, 6, "MTY5"), (3180, 6, "MTY6"), (3181, 5, "MTY7"), (3196, 8, "ACLN"),
+            (3200, 9, "LEON OUTLET"), (3201, 8, "MAZ T1"), (3203, 8, "CABO1"), (3204, 8, "CABO2"),
+            (3206, 8, "CABO3"), (3238, 9, "URUAPAN"), (3259, 10, "GG STZA"), (3260, 10, "AND3"),
+            (3280, 11, "GDL FORUM"), (3282, 16, "TAB2"), (3287, 6, "MTY TA"), (3289, 6, "MTY TB"),
+            (3290, 13, "CUN2"), (3295, 13, "CUN3"), (3296, 6, "MTY TC"), (3347, 7, "HMO T1"),
+            (3348, 10, "PVR T1"), (3456, 9, "LEON T1"), (3464, 11, "COL1"), (3482, 16, "CD CAR 1"),
+            (3487, 1, "QRO1"), (3488, 3, "ATIZAPAN 1"), (3491, 7, "HMO1"), (3497, 11, "GDL FORUM 2"),
+            (3500, 2, "SAMARA"), (3502, 3, "INTERLOMAS 1"), (3504, 5, "TOR1"), (3506, 2, "222 A"),
+            (3507, 3, "LINDAVISTA 2"), (3508, 1, "P DELTA 1"), (3511, 5, "MTY11"), (3516, 2, "LERMA OUTLET 2"),
+            (3518, 9, "ZAC1"), (3519, 2, "STA FE 1"), (3523, 6, "MTY9"), (3526, 15, "COATZA 1"),
+            (3542, 3, "GAL PACH"), (3556, 13, "CUN5"), (3557, 2, "METEPEC 1"), (3567, 6, "MTY TA2"),
+            (3574, 2, "GAL TOL"), (3582, 5, "SLP2"), (3583, 3, "SATELITE 1"), (3584, 1, "SAN MIGUEL 1"),
+            (3585, 2, "STA FE 2"), (3586, 3, "PUNTA NORTE 1"), (3600, 13, "CUN6"), (3617, 5, "SLP1"),
+            (3625, 14, "PLAYA AME"), (3645, 3, "VALLEJO"), (3754, 16, "CAMPECHE"), (3770, 10, "GG5"),
+            (3911, 9, "SALAMANCA"), (4018, 4, "ANGELOPOLIS"), (4040, 4, "PERISUR"), (4066, 4, "PUEBLA OUTLET"),
+            (4222, 15, "ANDAMAR VER"), (4849, 15, "VER T1B"), (4862, 7, "MEXICALI T1"), (5006, 6, "MTY8"),
+            (5078, 12, "CUN FBO"), (5079, 16, "TAB"), (5080, 7, "TIJ"), (5081, 14, "PLAYA CH"),
+            (5107, 9, "CIBELES"), (5112, 9, "LEON MEDIANA"), (5203, 14, "PLAYA ZOLAR"), (5205, 14, "PLAYA 16"),
+            (5207, 13, "CUN1"), (5208, 1, "AICM T1A"), (5215, 1, "AICM T1D"), (5238, 4, "ZIHUATANEJO T1"),
+            (5256, 3, "PUNTA NORTE 2"), (5342, 14, "PLAYA CORAZON"), (5352, 8, "CABO T1"), (5378, 1, "AICM T1F"),
+            (5379, 1, "AICM T2A"), (5385, 1, "AICM T2B"), (5399, 1, "AICM T2D"), (5610, 9, "MOR ALTOZANO"),
+            (5632, 9, "LEON GDE"), (5638, 9, "AGS"), (7048, 8, "CABO4"), (7049, 2, "ANTARA"),
+            (7051, 8, "LA PAZ T1"), (7058, 12, "CUN T2E"), (7060, 5, "MTY ESFERA"), (7061, 6, "MTY LA FE"),
+            (7062, 7, "TIJ 2"), (8471, 13, "CUN OUTLET"), (8474, 2, "MASARYK"), (8491, 7, "ENSENADA"),
+            (8604, 10, "SENTURA ZAMORA"), (8686, 5, "MTY FASHION DRIVE"), (8691, 4, "FORUM CUERNAVACA"),
+            (8692, 10, "LA ISLA PVR"), (8784, 9, "MOR T1"), (8820, 7, "NOGALES"), (8822, 15, "OAXACA VALLE"),
+            (8823, 15, "HUATULCO BAHIAS"), (8829, 1, "ANTEA"), (8838, 11, "FORUM TEPIC"), (8839, 3, "FORTUNA"),
+            (8845, 7, "TIJ T1C"), (8851, 13, "PUERTO CANCUN"), (8881, 8, "LA PAZ CENTRO"), (8882, 11, "PLAZA PATRIA"),
+            (8885, 1, "LA VICTORIA"), (8897, 6, "MTY OUTLET"), (8902, 5, "SALTILLO 1"), (8983, 14, "PUNTA LANGOSTA"),
+            (8992, 12, "CUN T3C"), (9006, 4, "AVERANDA"), (9037, 11, "AGDL T2A"), (9054, 4, "MANACAR"),
+            (9056, 6, "PASEO DURANGO"), (9063, 4, "PASEO ACOXPA"), (9095, 16, "AMBAR TUXTLA"), (9116, 4, "PASEO ZIHUATANEJO"),
+            (9176, 10, "MALECON VALLARTA"), (9183, 12, "CUN T4B"), (9184, 12, "CUN T4A"), (9191, 16, "LA ISLA MERIDA"),
+            (9253, 11, "AGDL T2B"), (9277, 3, "AMP INTERLOMAS"), (9279, 8, "LOS MOCHIS"), (9341, 11, "AGDL T2C"),
+            (9342, 4, "SOLARA PUEBLA"), (9343, 6, "PASEO CHIHUAHUA"), (9344, 2, "ANTENAS"), (9345, 7, "ALAMEDA TIJ"),
+            (9393, 9, "PLAZA CIBELES"), (9428, 4, "EXPLANADA PUEBLA"), (9506, 5, "SLP AERO"), (9507, 1, "PASEO QRO"),
+            (9536, 5, "PUNTO VALLE KIOSCO"), (9537, 5, "PUNTO VALLE"), (9539, 2, "TOWN SQUARE METEPEC"), (9551, 16, "HARBOR MERIDA"),
+            (9562, 10, "LANDMARK GDL"), (9563, 1, "QRO PREM OUTLET"), (9593, 11, "MIDTOWN JALISCO"), (9602, 15, "AMERICAS XALAPA"),
+            (9603, 2, "ANTENAS 2"), (10540, 13, "LA ISLA CUN 2"), (10615, 1, "ENCUENTRO OCEANIA"), (10637, 16, "GAL MERIDA"),
+            (10876, 9, "MOR AME KIOSKO"), (10955, 9, "ALTACIA LEON"), (12943, 12, "CUN T4C"), (12964, 3, "EXPLANADA PACHUCA"),
+            (14499, 11, "GAL SANTA ANITA"), (15364, 9, "MOR AMERICAS"), (15536, 15, "ALTAMA TAMPICO"), (15610, 7, "PENINSULA TIJ"),
+            (25163, 6, "MTY TA3"), (25164, 5, "SLP PARK"), (25237, 8, "LA CEIBA"), (25245, 14, "TULUM KAPEN HA"),
+            (25858, 7, "LANDMARK TIJUANA"), (25859, 13, "OUTLET RIVERA MAYA"), (25977, 1, "AIFA"), (26153, 7, "TIJ T1B"),
+            (26246, 2, "GAL METEPEC AMP"), (26369, 7, "ANDENES HMO"), (26382, 3, "PARQUE TEPEYAC"), (26503, 8, "ANIMA CABOS"),
+            (26558, 16, "LA ISLA MER 2"), (27405, 5, "PLAZA SAN LUIS SOLARIS")
+        ]
+
+        def asegurar_tablas_zonas_regiones_tiendas(db=None):
+            close_at_end = False
+            if not db:
+                db = conectar_db()
+                close_at_end = True
+            if not db: return False
+            try:
+                cursor = db.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS zonas (
+                        id INT PRIMARY KEY,
+                        nombre_zona VARCHAR(100) NOT NULL,
+                        gerente_zona VARCHAR(150) NULL
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS regiones (
+                        id INT PRIMARY KEY,
+                        zona_id INT NOT NULL,
+                        nombre_region VARCHAR(100) NOT NULL,
+                        gerente_area VARCHAR(150) NULL,
+                        FOREIGN KEY (zona_id) REFERENCES zonas(id) ON DELETE CASCADE
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS tiendas (
+                        id INT PRIMARY KEY,
+                        region_id INT NOT NULL,
+                        nombre_tienda VARCHAR(150) NOT NULL,
+                        FOREIGN KEY (region_id) REFERENCES regiones(id) ON DELETE CASCADE
+                    )
+                """)
+                db.commit()
+
+                cursor.execute("SELECT COUNT(*) FROM zonas")
+                if cursor.fetchone()[0] == 0:
+                    cursor.executemany("INSERT INTO zonas (id, nombre_zona, gerente_zona) VALUES (%s, %s, %s)", ZONAS_SEED)
+                    db.commit()
+
+                cursor.execute("SELECT COUNT(*) FROM regiones")
+                if cursor.fetchone()[0] == 0:
+                    cursor.executemany("INSERT INTO regiones (id, zona_id, nombre_region, gerente_area) VALUES (%s, %s, %s, %s)", REGIONES_SEED)
+                    db.commit()
+
+                cursor.execute("SELECT COUNT(*) FROM tiendas")
+                if cursor.fetchone()[0] == 0:
+                    cursor.executemany("INSERT INTO tiendas (id, region_id, nombre_tienda) VALUES (%s, %s, %s)", TIENDAS_SEED)
+                    db.commit()
+
+                return True
+            except Exception as ex:
+                print("Notice asegurar_tablas_zonas_regiones_tiendas:", ex)
+                return False
+            finally:
+                if close_at_end and db:
+                    try: db.close()
+                    except: pass
+
         def obtener_opciones_zonas_db():
             opciones = [ft.dropdown.Option(key="0", text="📍 Todas las Zonas (Nacional)")]
             db = conectar_db()
             if db:
                 try:
+                    asegurar_tablas_zonas_regiones_tiendas(db)
                     cursor = db.cursor(dictionary=True)
                     cursor.execute("SELECT id, nombre_zona FROM zonas ORDER BY nombre_zona")
                     rows = cursor.fetchall()
