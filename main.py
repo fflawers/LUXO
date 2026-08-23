@@ -1547,10 +1547,11 @@ def configurar_rutas_fastapi(app):
                                     } catch(e){}
                                 }, 300);
                             }
-                        }
-                    });
-
-                    // Mic permission will be initialized on user click, not on auto page load
+                    const isFirefox = navigator.userAgent.toLowerCase().includes("firefox");
+                    const hasWebSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+                    if (hasWebSpeech && !isFirefox && typeof window.initLuxoMicPermission === "function") {
+                        try { window.initLuxoMicPermission(); } catch(e){}
+                    }
                 })();
                 </script>
                 """
