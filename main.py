@@ -3419,19 +3419,36 @@ def parsear_ticket_texto_local(texto_raw):
         if nums:
             datos["precio"] = max(nums)
 
-    # 7. Modelos de Lentes (ej: RB3758 003/2v 56/16)
+    # 7. Modelos de Lentes / Descripción impreso arriba del UPC
+    lines_raw = [ln.strip() for ln in texto_raw.splitlines() if ln.strip()]
+    modelos_por_upc = {}
+    for idx_l, line_str in enumerate(lines_raw):
+        upc_m = re.search(r'\b(80\d{10,12}|0\d{11,13}|\d{12,14})\b', line_str)
+        if upc_m:
+            found_u = upc_m.group(1).replace('.', '').strip()
+            model_text = ""
+            if idx_l > 0:
+                prev_line = lines_raw[idx_l - 1].strip()
+                if not re.search(r'TICKET|FECHA|STORE|TOTAL|SUBTOTAL|PAGO|CAMBIO|GRACIAS|LUXOTTICA|RUT|RFC|CLIENTE|VENDEDOR|CAJERO', prev_line, re.IGNORECASE):
+                    model_text = prev_line
+            if model_text:
+                modelos_por_upc[found_u] = model_text
+
     modelos_found = re.findall(r'\b((?:RB|OO|PO|0RB|0OO|0PO|0EA|EA|VO|0VO)\d{3,4}[A-Za-z0-9\/\-\s]{3,20})\b', texto_raw, re.IGNORECASE)
+
     items_list = []
     if valid_upcs:
         for idx, u in enumerate(valid_upcs):
-            m_text = modelos_found[idx].strip() if idx < len(modelos_found) else ""
+            m_text = modelos_por_upc.get(u, "")
+            if not m_text and idx < len(modelos_found):
+                m_text = modelos_found[idx].strip()
             items_list.append({"upc": u, "modelo": m_text, "precio": datos["precio"]})
     elif modelos_found:
         items_list.append({"upc": "805" + datos["transaccion"], "modelo": modelos_found[0].strip(), "precio": datos["precio"]})
 
     datos["items"] = items_list
-    if modelos_found:
-        datos["notas"] = f"Modelo: {modelos_found[0].strip()}"
+    if items_list and items_list[0].get("modelo"):
+        datos["notas"] = f"Modelo: {items_list[0]['modelo']}"
 
     return datos
 
