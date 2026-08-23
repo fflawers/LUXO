@@ -16729,7 +16729,6 @@ Ejemplo:
             tf_ticket = ft.TextField(label="Número de Ticket *", value="", width=180, border_color="#00FFFF", color="white")
             tf_tienda = ft.TextField(label="Número / Nombre de Tienda *", value=tienda_actual, width=220, border_color="#00FFFF", color="white")
             tf_hora = ft.TextField(label="Hora de la Compra (ej. 14:30)", value="14:00", width=180, border_color="#00FFFF", color="white")
-            tf_monto = ft.TextField(label="Monto Total ($) [Auto BD]", value="3659.00", width=190, border_color="#555555", color="#AAAAAA", disabled=True, read_only=True, tooltip="Monto auto-cargado desde el ticket en la BD")
 
             dd_pago = ft.Dropdown(
                 label="Forma de Pago *",
@@ -16838,8 +16837,7 @@ Ejemplo:
                     mostrar_snack("Ingresa el Número de Ticket, Correo y Teléfono del cliente.", "red")
                     return
 
-                try: m_val = float(tf_monto.value)
-                except: m_val = 0.0
+                m_val = 0.0
 
                 ok = facturacion_service.registrar_solicitud_facturacion(
                     tf_ticket.value, tf_tienda.value, tf_hora.value, m_val, dd_pago.value,
@@ -16913,7 +16911,7 @@ Ejemplo:
                 ft.Row([dd_regimen, dd_uso], wrap=True, spacing=10),
                 ft.Divider(height=10, color="#333333"),
                 ft.Text("3. Datos del Ticket, Pago y Contacto del Cliente 🎟️💳📱", color="#00FFFF", weight="bold", size=15),
-                ft.Row([tf_ticket, tf_tienda, tf_hora, tf_monto], wrap=True, spacing=10),
+                ft.Row([tf_ticket, tf_tienda, tf_hora], wrap=True, spacing=10),
                 ft.Row([dd_pago, tf_email, tf_tel], wrap=True, spacing=10),
                 ft.Container(
                     content=ft.Row([
