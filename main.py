@@ -8633,18 +8633,33 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             store_usage_controls = []
             tiendas_uso = []
             try:
-                z_val = dd_zona_activa.value if ('dd_zona_activa' in locals() and dd_zona_activa and dd_zona_activa.value) else user_session.get("zona_activa_id", "0")
-                r_val = dd_region_activa.value if ('dd_region_activa' in locals() and dd_region_activa and dd_region_activa.value) else user_session.get("region_activa_id", "0")
+                z_val = user_session.get("zona_activa_id", "0")
+                if 'dd_zona_activa' in globals() and globals()['dd_zona_activa'] and globals()['dd_zona_activa'].value:
+                    z_val = globals()['dd_zona_activa'].value
+                elif 'dd_zona_activa' in locals() and dd_zona_activa and dd_zona_activa.value:
+                    z_val = dd_zona_activa.value
+
+                r_val = user_session.get("region_activa_id", "0")
+                if 'dd_region_activa' in globals() and globals()['dd_region_activa'] and globals()['dd_region_activa'].value:
+                    r_val = globals()['dd_region_activa'].value
+                elif 'dd_region_activa' in locals() and dd_region_activa and dd_region_activa.value:
+                    r_val = dd_region_activa.value
 
                 z_raw = str(z_val).replace("📍", "").replace("Zona:", "").strip()
                 r_raw = str(r_val).replace("🗺️", "").replace("Región:", "").strip()
+
+                name_map_z = {
+                    "ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4",
+                    "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"
+                }
+                z_id_norm = name_map_z.get(z_raw.upper(), z_raw)
 
                 where_conditions = []
                 params = []
 
                 if z_raw and z_raw not in ("0", "Todas", "Todas las Zonas (Nacional)", "Todas las Zonas"):
                     where_conditions.append("(z.id = %s OR z.nombre_zona = %s OR z.nombre_zona LIKE %s)")
-                    params.extend([z_raw, z_raw, f"%{z_raw}%"])
+                    params.extend([z_id_norm, z_raw, f"%{z_raw}%"])
 
                 if r_raw and r_raw not in ("0", "Todas", "Todas las Regiones"):
                     where_conditions.append("(r.id = %s OR r.nombre_region = %s OR r.nombre_region LIKE %s)")
