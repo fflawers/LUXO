@@ -21204,9 +21204,11 @@ Ejemplo:
 
     login_video_player = None
     btn_audio = None
+    has_interacted_audio = [False]
 
     def toggle_audio(e=None):
         nonlocal login_video_player, btn_audio
+        has_interacted_audio[0] = True
         if login_video_player:
             try:
                 if login_video_player.muted:
@@ -21228,6 +21230,22 @@ Ejemplo:
             except Exception as err:
                 print("Error al cambiar estado de audio:", err)
 
+    def unmute_on_first_interaction(e=None):
+        if not has_interacted_audio[0]:
+            has_interacted_audio[0] = True
+            if login_video_player and login_video_player.muted:
+                try:
+                    login_video_player.muted = False
+                    login_video_player.volume = 100.0
+                    login_video_player.play()
+                    if btn_audio:
+                        btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                        btn_audio.tooltip = "Silenciar Audio"
+                        btn_audio.update()
+                    login_video_player.update()
+                except Exception as ex_a:
+                    print("Notice auto unmute login:", ex_a)
+
     txt_user_input = ft.TextField(
         hint_text="Ej. admin",
         hint_style=ft.TextStyle(color="#555566", size=13),
@@ -21238,7 +21256,8 @@ Ejemplo:
         color="white",
         bgcolor="#040407",
         border_radius=10,
-        content_padding=12
+        content_padding=12,
+        on_focus=unmute_on_first_interaction
     )
 
     is_pass_hidden = [True]
@@ -21271,6 +21290,7 @@ Ejemplo:
         border_radius=10,
         content_padding=12,
         on_submit=login_click,
+        on_focus=unmute_on_first_interaction,
         suffix=btn_eye_3d
     )
 
