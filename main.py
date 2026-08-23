@@ -16652,25 +16652,31 @@ Ejemplo:
                 ft.ElevatedButton("Guardar Configuración FedEx 💾", icon=ft.Icons.SAVE, bgcolor="#00FF88", color="black", on_click=guardar_admin_fedex_click)
             ], scroll=ft.ScrollMode.ALWAYS, expand=True)
 
+            num_fedex_tabs = 3 if is_adm else 2
+            fedex_tab_headers = [
+                ft.Tab(label="Traspasos y Guías 📦"),
+                ft.Tab(label="Historial Logístico 📋")
+            ]
+            fedex_tab_views = [
+                tab_generar_guia,
+                ft.Column([ft.Text("Historial de Envíos y Rastreo FedEx 📋", weight="bold", color="#D8B4FE")], scroll=ft.ScrollMode.ALWAYS, expand=True)
+            ]
+            if is_adm:
+                fedex_tab_headers.append(ft.Tab(label="Configuración API Admin ⚙️"))
+                fedex_tab_views.append(tab_admin_fedex)
+
             fedex_tabs = ft.Tabs(
                 selected_index=0,
                 animation_duration=300,
+                length=num_fedex_tabs,
                 expand=True,
-                tabs=[
-                    ft.Tab(
-                        label="Traspasos y Guías 📦",
-                        content=tab_generar_guia
-                    ),
-                    ft.Tab(
-                        label="Historial Logístico 📋",
-                        content=ft.Column([ft.Text("Historial de Envíos y Rastreo FedEx 📋", weight="bold", color="#D8B4FE")], scroll=ft.ScrollMode.ALWAYS, expand=True)
-                    )
-                ] + ([
-                    ft.Tab(
-                        label="Configuración API Admin ⚙️",
-                        content=tab_admin_fedex
-                    )
-                ] if is_adm else [])
+                content=ft.Column(
+                    expand=True,
+                    controls=[
+                        ft.TabBar(tabs=fedex_tab_headers),
+                        ft.TabBarView(controls=fedex_tab_views, expand=True)
+                    ]
+                )
             )
 
             return ft.Column([
