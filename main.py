@@ -16788,6 +16788,7 @@ Ejemplo:
                         tabla_solicitudes_container.update()
                 except Exception as ex_tsu:
                     print("Notice tabla_solicitudes_container update:", ex_tsu)
+            file_picker_csf = ft.FilePicker()
             if page and hasattr(page, "services") and file_picker_csf not in page.services:
                 page.services.append(file_picker_csf)
 
