@@ -5866,30 +5866,42 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "dashboard": "dashboard",
                     "panel": "dashboard",
 
-                    # FedEx / Traspasos
+                    # FedEx / Traspasos (Requiere acción explícita: abrir, abre, ve a, dirígete a, etc.)
+                    "dirigete a fedex": "fedex",
+                    "dirígete a fedex": "fedex",
+                    "dirigete fedex": "fedex",
+                    "dirígete fedex": "fedex",
+                    "llevame a fedex": "fedex",
+                    "llévame a fedex": "fedex",
+                    "mostrar fedex": "fedex",
+                    "muestra fedex": "fedex",
                     "abrir fedex": "fedex",
                     "abre fedex": "fedex",
-                    "fedex": "fedex",
-                    "guias fedex": "fedex",
-                    "guia fedex": "fedex",
-                    "envios fedex": "fedex",
-                    "envio fedex": "fedex",
-                    "traspasos fedex": "fedex",
-                    "traspaso fedex": "fedex",
-                    "traspasos": "fedex",
-                    "traspaso": "fedex",
+                    "ve a fedex": "fedex",
+                    "ir a fedex": "fedex",
+                    "ve fedex": "fedex",
 
-                    # Facturación CFDI v4.0
+                    # Facturación CFDI v4.0 (Requiere acción explícita: abrir, abre, ve a, dirígete a, etc.)
+                    "dirigete a facturacion": "facturacion",
+                    "dirígete a facturacion": "facturacion",
+                    "dirigete a facturas": "facturacion",
+                    "dirígete a facturas": "facturacion",
+                    "dirigete facturacion": "facturacion",
+                    "dirígete facturacion": "facturacion",
+                    "llevame a facturacion": "facturacion",
+                    "llévame a facturacion": "facturacion",
+                    "mostrar facturacion": "facturacion",
+                    "muestra facturacion": "facturacion",
                     "abrir facturacion": "facturacion",
+                    "abrir facturas": "facturacion",
                     "abre facturacion": "facturacion",
-                    "facturacion cfdi": "facturacion",
-                    "facturacion": "facturacion",
-                    "facturar ticket": "facturacion",
-                    "facturar": "facturacion",
-                    "facturas": "facturacion",
-                    "factura": "facturacion",
-                    "cfdi v4.0": "facturacion",
-                    "cfdi": "facturacion"
+                    "abre facturas": "facturacion",
+                    "ve a facturacion": "facturacion",
+                    "ve a facturas": "facturacion",
+                    "ir a facturacion": "facturacion",
+                    "ir a facturas": "facturacion",
+                    "ve facturacion": "facturacion",
+                    "ve facturas": "facturacion"
                 }
                 
                 # Ordenar por longitud descendente para emparejar frases compuestas largas primero
