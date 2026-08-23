@@ -19878,7 +19878,7 @@ Ejemplo:
 
             if 'dd_zona_activa' in locals() and 'dd_region_activa' in locals():
                 z_val = dd_zona_activa.value or "0"
-                new_opts = obtener_opciones_regiones_db(z_val)
+                new_opts = get_region_options_for_zona(z_val)
                 dd_region_activa.options.clear()
                 dd_region_activa.options.extend(new_opts)
                 try:
@@ -20277,10 +20277,17 @@ Ejemplo:
             return dd
 
         def on_zona_activa_change(e):
-            z_val = dd_zona_activa.value or "0"
+            z_val = e.control.value if (e and getattr(e, "control", None) and e.control.value) else (dd_zona_activa.value or "0")
             user_session["zona_activa_id"] = z_val
             user_session["region_activa_id"] = "0"
-            print(f"📍 Zona Activa cambiada a ID={z_val} por usuario={user_info.get('id')}")
+            print(f"📍 Zona Activa cambiada a ID/val={z_val} por usuario={user_info.get('id')}")
+
+            # Recrear el control de regiones fresco con las opciones filtradas para la zona seleccionada
+            nonlocal dd_region_activa
+            dd_region_activa = crear_dropdown_region(z_val, "0")
+            dd_region_container.content = dd_region_activa
+
+            actualizar_top_appbar_layout()
 
             # Guardar la preferencia de Zona en la Base de Datos para persistir entre inicios de sesión
             if user_info.get("id"):
@@ -20299,20 +20306,6 @@ Ejemplo:
                 threading.Thread(target=_save_pref_zona, args=(user_info["id"], z_val), daemon=True).start()
 
             main_views_cache.clear()
-
-            new_reg_opts = get_region_options_for_zona(z_val)
-            dd_region_activa.options.clear()
-            dd_region_activa.options.extend(new_reg_opts)
-            dd_region_activa.value = "0"
-
-            try:
-                dd_region_activa.update()
-                dd_region_container.update()
-                actualizar_top_appbar_layout()
-                top_appbar.update()
-            except Exception as ex_z:
-                print("Notice zona change appbar update:", ex_z)
-
             cambiar_vista(active_view[0])
             try:
                 page.update()
