@@ -16788,27 +16788,22 @@ Ejemplo:
                         tabla_solicitudes_container.update()
                 except Exception as ex_tsu:
                     print("Notice tabla_solicitudes_container update:", ex_tsu)
-            file_picker_csf = ft.FilePicker()
-            if page and hasattr(page, "services") and file_picker_csf not in page.services:
-                page.services.append(file_picker_csf)
 
-            def on_csf_file_selected(e):
-                if not e.files or len(e.files) == 0:
+            def on_csf_file_selected(file_path):
+                if not file_path:
                     return
                 
-                f_obj = e.files[0]
-                f_path = f_obj.path
-                
+                fname = os.path.basename(file_path)
                 ocr_msg_container.controls.clear()
                 ocr_msg_container.controls.append(
-                    ft.Text(f"⏳ Procesando OCR IA para: '{f_obj.name}'...", color="#00FFFF", weight="bold", size=12)
+                    ft.Text(f"⏳ Procesando OCR IA para: '{fname}'...", color="#00FFFF", weight="bold", size=12)
                 )
                 try:
                     if getattr(ocr_msg_container, "page", None):
                         ocr_msg_container.update()
                 except Exception: pass
 
-                res = facturacion_service.extraer_datos_ocr_csf(f_path or f_obj.name)
+                res = facturacion_service.extraer_datos_ocr_csf(file_path)
                 tf_rfc.value = res["rfc"]
                 tf_razon.value = res["razon_social"]
                 tf_cp.value = res["cp_fiscal"]
@@ -16817,7 +16812,7 @@ Ejemplo:
 
                 ocr_msg_container.controls.clear()
                 ocr_msg_container.controls.append(
-                    ft.Text(f"✅ Constancia Fiscal '{f_obj.name}' leída con éxito por OCR IA. Por favor corrobora los datos abajo con el cliente.", color="#00FF88", weight="bold", size=12)
+                    ft.Text(f"✅ Constancia Fiscal '{fname}' leída con éxito por OCR IA. Por favor corrobora los datos abajo con el cliente.", color="#00FF88", weight="bold", size=12)
                 )
                 try:
                     if getattr(ocr_msg_container, "page", None):
@@ -16829,15 +16824,9 @@ Ejemplo:
                 except Exception as ex_ocu:
                     print("Notice ocr_msg_container update:", ex_ocu)
 
-            file_picker_csf.on_result = on_csf_file_selected
-
             def abrir_selector_csf(e):
                 try:
-                    file_picker_csf.pick_files(
-                        dialog_title="Seleccionar Constancia de Situación Fiscal (PDF / Imagen)",
-                        allow_multiple=False,
-                        allowed_extensions=["pdf", "png", "jpg", "jpeg", "webp"]
-                    )
+                    seleccionar_archivo_async("Subir Constancia Fiscal (PDF / Foto)", "pdf", on_csf_file_selected)
                 except Exception as ex_pk:
                     print("Error abriendo selector de archivos CSF:", ex_pk)
 
