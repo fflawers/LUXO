@@ -105,15 +105,40 @@ def guardar_hora_limite_apertura(hora_str):
 
     return success
 
-def obtener_tiendas_activas(db):
+def obtener_tiendas_activas_info(db, zona_id=None, region_id=None):
     try:
         cursor = db.cursor(dictionary=True)
-        cursor.execute("SELECT DISTINCT Tienda FROM usuarios WHERE Usuario LIKE 'sgh%' AND Tienda IS NOT NULL AND Tienda != '' ORDER BY Tienda ASC")
+        query = """
+            SELECT DISTINCT t.id AS num_tienda, CAST(t.id AS CHAR) AS Tienda, t.nombre_tienda
+            FROM tiendas t
+            JOIN regiones r ON t.region_id = r.id
+            JOIN zonas z ON r.zona_id = z.id
+            WHERE 1=1
+        """
+        params = []
+        if zona_id and str(zona_id).strip() not in ("0", "", "None", "Todas las Zonas"):
+            query += " AND (z.id = %s OR z.nombre_zona = %s)"
+            params.extend([str(zona_id).strip(), str(zona_id).strip()])
+        if region_id and str(region_id).strip() not in ("0", "", "None", "Todas las Regiones"):
+            query += " AND (r.id = %s OR r.nombre_region = %s)"
+            params.extend([str(region_id).strip(), str(region_id).strip()])
+        query += " ORDER BY t.id ASC"
+        
+        cursor.execute(query, params)
         rows = cursor.fetchall()
-        return [r["Tienda"].strip() for r in rows if r.get("Tienda")]
+        if rows:
+            return {str(r["num_tienda"]).strip(): (r.get("nombre_tienda") or f"Tienda {r['num_tienda']}") for r in rows}
+            
+        cursor.execute("SELECT DISTINCT Tienda FROM usuarios WHERE Usuario LIKE 'sgh%' AND Tienda IS NOT NULL AND Tienda != '' ORDER BY Tienda ASC")
+        rows_u = cursor.fetchall()
+        return {str(r["Tienda"]).strip(): f"Tienda {r['Tienda']}" for r in rows_u if r.get("Tienda")}
     except Exception as e:
-        print("Error obteniendo tiendas activas:", e)
-        return []
+        print("Error obteniendo tiendas activas info:", e)
+        return {}
+
+def obtener_tiendas_activas(db, zona_id=None, region_id=None):
+    info = obtener_tiendas_activas_info(db, zona_id, region_id)
+    return list(info.keys())
 
 def crear_tabla_operacion_diaria_if_not_exists(db):
     if not db:
@@ -138,13 +163,14 @@ def crear_tabla_operacion_diaria_if_not_exists(db):
     except Exception as ex:
         print("Error asegurando tabla operacion_diaria_tiendas:", ex)
 
-def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None, abrir_modal=False):
+def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None, abrir_modal=False, zona_id=None, region_id=None):
     db = conectar_db_fn() if conectar_db_fn else conectar_db_local()
     if not db:
         return
         
     try:
-        tiendas = obtener_tiendas_activas(db)
+        tiendas_dict = obtener_tiendas_activas_info(db, zona_id=zona_id, region_id=region_id)
+        tiendas = list(tiendas_dict.keys())
         if not tiendas:
             db.close()
             return
@@ -156,7 +182,7 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
             WHERE Fecha = CURDATE() AND Hora_Apertura IS NOT NULL AND Hora_Apertura != ''
         """)
         rows_rep = cursor.fetchall()
-        reportados = set(str(r["Numero_Tienda"]).strip() for r in rows_rep if r["Numero_Tienda"])
+        reportados_set = set(str(r["Numero_Tienda"]).strip() for r in rows_rep if r["Numero_Tienda"])
         db.close()
         
         limit_str = obtener_hora_limite_apertura()
@@ -164,8 +190,9 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
         now_time = get_now_mexico_city().time()
         
         total_tiendas = len(tiendas)
+        reportados = [t for t in tiendas if t in reportados_set]
         total_reportadas = len(reportados)
-        faltantes = [t for t in tiendas if t not in reportados]
+        faltantes = [t for t in tiendas if t not in reportados_set]
         
         color = "#888888" 
         tooltip = f"Aperturas hoy: {total_reportadas} de {total_tiendas} reportadas"
@@ -173,15 +200,15 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
         
         if total_reportadas >= total_tiendas:
             color = "#FFD700"
-            tooltip = "¡Todas las tiendas han reportado su apertura hoy! 🌟"
+            tooltip = "¡Todas las tiendas de la zona han reportado su apertura hoy! 🌟"
             icon = ft.Icons.STAR_ROUNDED
         elif now_time > limit_time:
             color = "#FF4500"
-            tooltip = f"¡ALERTA: Faltan {len(faltantes)} aperturas por reportar! 🚨"
+            tooltip = f"¡ALERTA: Faltan {len(faltantes)} aperturas por reportar en la zona! 🚨"
             icon = ft.Icons.STAR_ROUNDED
         else:
             color = "#888888"
-            tooltip = f"Aperturas hoy: {total_reportadas}/{total_tiendas} reportadas (Límite: {limit_str})"
+            tooltip = f"Aperturas hoy en zona: {total_reportadas}/{total_tiendas} reportadas (Límite: {limit_str})"
             icon = ft.Icons.STAR_BORDER_ROUNDED
 
         def on_star_click(e):
@@ -192,7 +219,7 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
             
             items_dialog.append(
                 ft.Row([
-                    ft.Text(f"Tiendas reportadas: {total_reportadas} de {total_tiendas}", color="#00FFFF", weight="bold", size=13),
+                    ft.Text(f"Aperturas en Zona: {total_reportadas} de {total_tiendas}", color="#00FFFF", weight="bold", size=13),
                     ft.Text(f"Hora límite: {limit_str}", color="#aaaaaa", size=12)
                 ], alignment="spaceBetween")
             )
@@ -201,7 +228,7 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
                 items_dialog.append(
                     ft.Container(
                         content=ft.Row([
-                            ft.Text("🌟 ¡Excelente! Todas las tiendas han reportado su apertura el día de hoy.", color="#7CFC00", weight="bold")
+                            ft.Text("🌟 ¡Excelente! Todas las tiendas de la zona han reportado su apertura hoy.", color="#7CFC00", weight="bold")
                         ], alignment="center"),
                         bgcolor="#0A290A",
                         padding=15,
@@ -212,12 +239,13 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
             else:
                 rows_faltantes = []
                 for store_num in faltantes:
-                    store_name = f"Tienda {store_num}"
+                    s_name = tiendas_dict.get(store_num, f"Tienda {store_num}")
+                    store_display = f"{s_name} ({store_num})" if not s_name.endswith(store_num) else s_name
                     rows_faltantes.append(
                         ft.Container(
                             content=ft.Row([
                                 ft.Icon(ft.Icons.STORE_ROUNDED, color="#FF4500", size=18),
-                                ft.Text(store_name, color="white", weight="bold", size=13, expand=True),
+                                ft.Text(store_display, color="white", weight="bold", size=13, expand=True),
                                 ft.Container(
                                     content=ft.Text("SIN APERTURA", size=10, color="white", weight="bold"),
                                     bgcolor="#FF4500",

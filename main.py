@@ -20112,7 +20112,9 @@ Ejemplo:
         star_icon_container.visible = es_admin()
         if es_admin():
             try:
-                operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db)
+                z_curr = user_session.get("zona_activa_id", "0")
+                r_curr = user_session.get("region_activa_id", "0")
+                operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_curr)
             except Exception as e:
                 print("Error al inicializar estrella de aperturas:", e)
 
@@ -20438,6 +20440,11 @@ Ejemplo:
                 r_val = dd.value or "0"
                 user_session["region_activa_id"] = r_val
                 print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
+                if es_admin():
+                    try:
+                        z_curr = user_session.get("zona_activa_id", "0")
+                        operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_val)
+                    except Exception: pass
                 main_views_cache.clear()
                 cambiar_vista(active_view[0])
                 try:
@@ -20477,6 +20484,11 @@ Ejemplo:
             dd_region_container.content = dd_region_activa
 
             actualizar_top_appbar_layout()
+
+            if es_admin():
+                try:
+                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_val, region_id="0")
+                except Exception: pass
 
             # Guardar la preferencia de Zona en la Base de Datos para persistir entre inicios de sesión
             if user_info.get("id"):
