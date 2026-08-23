@@ -3424,7 +3424,7 @@ def parsear_ticket_texto_local(texto_raw):
     items_list = []
     if valid_upcs:
         for idx, u in enumerate(valid_upcs):
-            m_text = modelos_found[idx].strip() if idx < len(modelos_found) else "Lentes Sunglass Hut"
+            m_text = modelos_found[idx].strip() if idx < len(modelos_found) else ""
             items_list.append({"upc": u, "modelo": m_text, "precio": datos["precio"]})
     elif modelos_found:
         items_list.append({"upc": "805" + datos["transaccion"], "modelo": modelos_found[0].strip(), "precio": datos["precio"]})
