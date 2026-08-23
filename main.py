@@ -5488,15 +5488,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         
         page.clean()
 
-        if user_info.get("rol") in ("Administrador", "Admin"):
-            try:
-                class MockBtn:
-                    def __init__(self): self.icon = ""; self.tooltip = ""; self.disabled = False
-                    def update(self): pass
-                mock_b = MockBtn()
-                start_speak(f"Bienvenido de vuelta, {user_info.get('nombre', 'Administrador')}", mock_b, mock_b)
-            except Exception as e:
-                print("Error en saludo de voz:", e)
+        # Cargar interfaz de chat y vista principal
 
         chat_display = ft.ListView(
             expand=True,
@@ -5539,12 +5531,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             )
         )
         
-        # Reproducir el saludo inicial por voz
-        welcome_text_str = f"¡Hola {first_name}! Bienvenido a LUXO."
-        try:
-            start_speak(welcome_text_str)
-        except Exception as e_speak:
-            print(f"No se pudo reproducir saludo inicial: {e_speak}")
+        # Historial de conversación en memoria para enviar al LLM
 
         # Historial de conversación en memoria para enviar al LLM
         historial_sesion = []
