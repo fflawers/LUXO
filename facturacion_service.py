@@ -220,6 +220,16 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
                     print("Notice EasyOCR on Image:", ex_eo)
 
         if raw_text:
+            # Helper para limpiar texto capturado
+            def clean_field_val(val_text):
+                if not val_text: return ""
+                v = val_text.strip()
+                v = re.sub(r'^[,\s/:]+', '', v).strip()
+                # Filtrar encabezados ruidosos de tablas SAT
+                if re.search(r'DENOMINACIÓN|RAZÓN|SOCIAL|PRIMER\s*APELLIDO|SEGUNDO\s*APELLIDO|DATOS|DOMICILIO', v, re.IGNORECASE):
+                    return ""
+                return v
+
             # --- 1. RFC ---
             rfc_match = re.search(r'RFC\s*:?\s*([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text, re.IGNORECASE)
             if not rfc_match:
@@ -229,28 +239,33 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
 
             # --- 2. Razón Social / Nombre Completo ---
             # 2.1 Persona Física (Nombre (s), Primer Apellido, Segundo Apellido)
-            n_m = re.search(r'Nombre\s*(?:\(\s*s\s*\))?\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
-            p_m = re.search(r'Primer\s*Apellido\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
-            s_m = re.search(r'Segundo\s*Apellido\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            n_m = re.search(r'Nombre\s*\(\s*s\s*\)\s*:\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            if not n_m:
+                n_m = re.search(r'Nombre[s]?\s*:\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            p_m = re.search(r'Primer\s*Apellido\s*:\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            s_m = re.search(r'Segundo\s*Apellido\s*:\s*([^\n\r]+)', raw_text, re.IGNORECASE)
 
-            if n_m or p_m:
-                nom = n_m.group(1).strip() if n_m else ""
-                pap = p_m.group(1).strip() if p_m else ""
-                sap = s_m.group(1).strip() if s_m else ""
+            nom = clean_field_val(n_m.group(1)) if n_m else ""
+            pap = clean_field_val(p_m.group(1)) if p_m else ""
+            sap = clean_field_val(s_m.group(1)) if s_m else ""
+
+            # Limpiar paréntesis residuales
+            sap = re.sub(r'[\(\)]', '', sap).strip()
+
+            if nom or pap:
                 full_pf = f"{nom} {pap} {sap}".strip().upper()
-                full_pf = re.sub(r'^[/\s:]+', '', full_pf).strip()
+                full_pf = re.sub(r'\s+', ' ', full_pf).strip()
                 if full_pf:
                     extracted["razon_social"] = full_pf
 
             # 2.2 Persona Moral (Denominación / Razón Social) - Si no fue Persona Física
             if not extracted["razon_social"]:
-                razon_match = re.search(r'(?:Denominación\s*/?\s*Razón\s*Social|Denominación|Razón\s*Social|Nombre\s*Comercial)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+                razon_match = re.search(r'(?:Denominación\s*/?\s*Razón\s*Social|Denominación|Razón\s*Social|Nombre\s*Comercial)\s*:\s*([^\n\r]+)', raw_text, re.IGNORECASE)
                 if razon_match:
-                    val = razon_match.group(1).strip().upper()
-                    val = re.sub(r'^[/\s:]+', '', val).strip()
+                    val = clean_field_val(razon_match.group(1)).upper()
                     if '\n' in val:
                         val = val.split('\n')[0].strip()
-                    if val and not val.startswith("O RAZÓN"):
+                    if val:
                         extracted["razon_social"] = val
 
             # --- 3. Código Postal (CP) ---
