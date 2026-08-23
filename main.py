@@ -927,25 +927,7 @@ def configurar_rutas_fastapi(app):
                         let mobileMicBtn = document.createElement("div");
                         mobileMicBtn.innerHTML = "🎙️";
                         mobileMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 64px; z-index: 9999999; font-size: 20px; background: #1E1E2E; border: 1.5px solid #00FFFF; border-radius: 23px; width: 46px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;";
-                        mobileMicBtn.id = "native-mobile-mic";
-
-                        setInterval(function() {
-                            let isLoggedIn = false;
-                            try {
-                                for (let i = 0; i < localStorage.length; i++) {
-                                    let key = localStorage.key(i);
-                                    if (key && key.includes('logged_user_id')) {
-                                        isLoggedIn = true;
-                                        break;
-                                    }
-                                }
-                            } catch(e) {}
-                            if(isLoggedIn && mobileMicBtn.style.display === "none") {
-                                mobileMicBtn.style.display = "flex";
-                            } else if (!isLoggedIn && mobileMicBtn.style.display === "flex") {
-                                mobileMicBtn.style.display = "none";
-                            }
-                        }, 1000);
+                        mobileMicBtn.style.display = "flex";
                         
                         let isDragging = false;
                         let startX, startY, initialX, initialY;
@@ -1568,7 +1550,7 @@ def configurar_rutas_fastapi(app):
                         }
                     });
 
-                    window.initLuxoMicPermission();
+                    // Mic permission will be initialized on user click, not on auto page load
                 })();
                 </script>
                 """
