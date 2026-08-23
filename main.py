@@ -20138,7 +20138,7 @@ Ejemplo:
             bgcolor="#1E1E2E",
             border_color="#00FFFF",
             border_radius=6,
-            content_padding=ft.padding.only(left=6, right=4, top=2, bottom=2),
+            content_padding=ft.Padding(left=6, top=2, right=4, bottom=2),
             dense=True,
             tooltip="Seleccionar Zona Activa de Trabajo",
             visible=True
