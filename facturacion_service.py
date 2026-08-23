@@ -153,14 +153,15 @@ def calcular_programacion_monitoreo(fecha_ref=None):
 def extraer_datos_ocr_csf(file_path_or_bytes):
     """
     Ejecuta lectura OCR e inspección de texto en Constancia de Situación Fiscal (CSF).
+    Soporta Persona Moral (Empresas) y Persona Física (Individuos).
     Soporta archivos PDF e Imágenes (PNG, JPG, WEBP).
-    Extrae RFC, Razón Social, Código Postal (CP) y Régimen Fiscal.
+    Extrae RFC, Razón Social / Nombre Completo, Código Postal (CP) y Régimen Fiscal.
     """
     extracted = {
         "rfc": "",
         "razon_social": "",
         "cp_fiscal": "",
-        "regimen_fiscal": ""
+        "regimen_fiscal": "626 - Régimen Simplificado de Confianza"
     }
 
     if not file_path_or_bytes:
@@ -173,7 +174,7 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
         if os.path.exists(file_path):
             ext = os.path.splitext(file_path)[1].lower()
             if ext == ".pdf":
-                # 1. Intentar PyMuPDF (fitz) - Extractor ultrarrápido de PDFs SAT
+                # 1. PyMuPDF (fitz)
                 try:
                     import fitz
                     doc = fitz.open(file_path)
@@ -183,7 +184,7 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
                 except Exception as ex_fitz:
                     print("Notice PyMuPDF fitz:", ex_fitz)
 
-                # 2. Fallback a PyPDF2 si fitz no obtuvo texto
+                # 2. Fallback PyPDF2
                 if not raw_text.strip():
                     try:
                         import PyPDF2
@@ -194,7 +195,7 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
                     except Exception as ex_p2:
                         print("Notice PyPDF2:", ex_p2)
 
-                # 3. Si el PDF es un escaneo de imagen sin capa de texto, aplicar EasyOCR
+                # 3. Fallback EasyOCR on PDF pages
                 if not raw_text.strip():
                     try:
                         import fitz, easyocr
@@ -218,37 +219,63 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
                 except Exception as ex_eo:
                     print("Notice EasyOCR on Image:", ex_eo)
 
-        # 2. Análisis por Expresiones Regulares sobre el texto extraído del SAT
         if raw_text:
-            # 2.1 RFC del Cliente
+            # --- 1. RFC ---
             rfc_match = re.search(r'RFC\s*:?\s*([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text, re.IGNORECASE)
             if not rfc_match:
                 rfc_match = re.search(r'([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text)
             if rfc_match:
                 extracted["rfc"] = rfc_match.group(1).upper()
 
-            # 2.2 Denominación o Razón Social
-            razon_match = re.search(r'(?:Denominación\s*/?\s*Razón\s*Social|Denominación|Razón\s*Social|Nombre\s*Comercial)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
-            if razon_match:
-                val = razon_match.group(1).strip().upper()
-                val = re.sub(r'^[/\s:]+', '', val).strip()
-                if '\n' in val:
-                    val = val.split('\n')[0].strip()
-                extracted["razon_social"] = val
+            # --- 2. Razón Social / Nombre Completo ---
+            # 2.1 Persona Física (Nombre (s), Primer Apellido, Segundo Apellido)
+            n_m = re.search(r'Nombre\s*(?:\(\s*s\s*\))?\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            p_m = re.search(r'Primer\s*Apellido\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            s_m = re.search(r'Segundo\s*Apellido\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
 
-            # 2.3 Código Postal (CP) Domicilio Fiscal
+            if n_m or p_m:
+                nom = n_m.group(1).strip() if n_m else ""
+                pap = p_m.group(1).strip() if p_m else ""
+                sap = s_m.group(1).strip() if s_m else ""
+                full_pf = f"{nom} {pap} {sap}".strip().upper()
+                full_pf = re.sub(r'^[/\s:]+', '', full_pf).strip()
+                if full_pf:
+                    extracted["razon_social"] = full_pf
+
+            # 2.2 Persona Moral (Denominación / Razón Social) - Si no fue Persona Física
+            if not extracted["razon_social"]:
+                razon_match = re.search(r'(?:Denominación\s*/?\s*Razón\s*Social|Denominación|Razón\s*Social|Nombre\s*Comercial)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+                if razon_match:
+                    val = razon_match.group(1).strip().upper()
+                    val = re.sub(r'^[/\s:]+', '', val).strip()
+                    if '\n' in val:
+                        val = val.split('\n')[0].strip()
+                    if val and not val.startswith("O RAZÓN"):
+                        extracted["razon_social"] = val
+
+            # --- 3. Código Postal (CP) ---
             cp_match = re.search(r'(?:Código\s*Postal|C\.?P\.?)\s*:?\s*(\d{5})', raw_text, re.IGNORECASE)
             if cp_match:
                 extracted["cp_fiscal"] = cp_match.group(1)
 
-            # 2.4 Régimen Fiscal
-            regimen_match = re.search(r'(?:Régimen\s*Fiscal|Régimen)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
-            if regimen_match:
-                r_val = regimen_match.group(1).strip()
-                r_val = re.sub(r'^[/\s:]+', '', r_val).strip()
-                if '\n' in r_val:
-                    r_val = r_val.split('\n')[0].strip()
-                extracted["regimen_fiscal"] = r_val
+            # --- 4. Mapeo Inteligente de Régimen Fiscal a Desplegable ---
+            regimenes_encontrados = re.findall(r'(?:Régimen\s*Fiscal|Régimen)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            r_str = " ".join(regimenes_encontrados).upper()
+
+            if 'SUELDOS' in r_str or 'SALARIOS' in r_str:
+                extracted["regimen_fiscal"] = "605 - Sueldos y Salarios e Ingresos por Prestación de Servicios"
+            elif 'SIMPLIFICADO' in r_str or 'CONFIANZA' in r_str or 'RESICO' in r_str:
+                extracted["regimen_fiscal"] = "626 - Régimen Simplificado de Confianza"
+            elif 'EMPRESARIAL' in r_str or 'PROFESIONAL' in r_str:
+                extracted["regimen_fiscal"] = "612 - Personas Físicas con Actividades Empresariales y Profesionales"
+            elif 'MORALES' in r_str or 'GENERAL DE LEY' in r_str:
+                extracted["regimen_fiscal"] = "601 - General de Ley Personas Morales"
+            elif 'ARRENDAMIENTO' in r_str:
+                extracted["regimen_fiscal"] = "606 - Arrendamiento"
+            elif 'PLATAFORMA' in r_str:
+                extracted["regimen_fiscal"] = "625 - Plataformas Tecnológicas"
+            elif len(regimenes_encontrados) > 0:
+                extracted["regimen_fiscal"] = regimenes_encontrados[0].strip()
 
     except Exception as ex:
         print("Notice extraer_datos_ocr_csf:", ex)
