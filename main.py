@@ -16792,7 +16792,7 @@ Ejemplo:
             if page and hasattr(page, "services") and file_picker_csf not in page.services:
                 page.services.append(file_picker_csf)
 
-            def on_csf_file_selected(e: ft.FilePickerResultEvent):
+            def on_csf_file_selected(e):
                 if not e.files or len(e.files) == 0:
                     return
                 
