@@ -16626,8 +16626,42 @@ Ejemplo:
             val_origen = tienda_actual if tienda_actual in valid_keys else valid_keys[0]
             val_destino = valid_keys[1] if len(valid_keys) > 1 and valid_keys[0] == val_origen else valid_keys[0]
 
-            dd_origen = ft.Dropdown(options=opts_tiendas, value=val_origen, label="🏬 Tienda Origen (Remitente)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
-            dd_destino = ft.Dropdown(options=opts_tiendas, value=val_destino, label="🏬 Tienda Destino (Destinatario)", width=300 if is_mobile_w else 320, border_color="#00FFFF", color="white")
+            tf_num_origen = ft.TextField(label="# Tienda Origen", hint_text="ej. 3502", width=120, border_color="#00FFFF", color="white")
+            dd_origen = ft.Dropdown(options=opts_tiendas, value=val_origen, label="🏬 Tienda Origen (Remitente)", width=220 if is_mobile_w else 240, border_color="#00FFFF", color="white")
+
+            tf_num_destino = ft.TextField(label="# Tienda Destino", hint_text="ej. 3645", width=120, border_color="#00FFFF", color="white")
+            dd_destino = ft.Dropdown(options=opts_tiendas, value=val_destino, label="🏬 Tienda Destino (Destinatario)", width=220 if is_mobile_w else 240, border_color="#00FFFF", color="white")
+
+            def buscar_tienda_por_numero(val_num):
+                val_clean = str(val_num).strip().lower()
+                if not val_clean: return None
+                for opt in opts_tiendas:
+                    opt_k = str(opt.key).lower()
+                    opt_t = str(opt.text).lower()
+                    if val_clean in opt_k or val_clean in opt_t:
+                        return opt.key
+                return None
+
+            def on_num_origen_change(e):
+                matched = buscar_tienda_por_numero(e.control.value)
+                if matched:
+                    dd_origen.value = matched
+                    try:
+                        if getattr(dd_origen, "page", None):
+                            dd_origen.update()
+                    except Exception: pass
+
+            def on_num_destino_change(e):
+                matched = buscar_tienda_por_numero(e.control.value)
+                if matched:
+                    dd_destino.value = matched
+                    try:
+                        if getattr(dd_destino, "page", None):
+                            dd_destino.update()
+                    except Exception: pass
+
+            tf_num_origen.on_change = on_num_origen_change
+            tf_num_destino.on_change = on_num_destino_change
 
             tf_peso = ft.TextField(label="Peso (kg)", value="1.0", width=140, border_color="#00FFFF", color="white")
             tf_largo = ft.TextField(label="Largo (cm)", value="20", width=100, border_color="#00FFFF", color="white")
@@ -16679,9 +16713,9 @@ Ejemplo:
 
             tab_generar_guia = ft.Column([
                 ft.Text("Generar Guía de Traspaso Inter-Tiendas 📦", color="#D8B4FE", weight="bold", size=15),
-                ft.Text("Selecciona la tienda destino. LUXO extrae automáticamente las direcciones y correos registrados sin riesgo de alucinación.", color="#aaaaaa", size=12),
+                ft.Text("Ingresa el número de tienda o selecciónala de la lista. LUXO extrae automáticamente las direcciones y correos registrados.", color="#aaaaaa", size=12),
                 ft.Divider(height=10, color="#333333"),
-                ft.Row([dd_origen, dd_destino], wrap=True, spacing=10),
+                ft.Row([tf_num_origen, dd_origen, tf_num_destino, dd_destino], wrap=True, spacing=10),
                 ft.Row([tf_peso, tf_largo, tf_ancho, tf_alto, tf_valor], wrap=True, spacing=10),
                 ft.Container(
                     content=ft.Row([
