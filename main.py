@@ -1552,6 +1552,23 @@ def configurar_rutas_fastapi(app):
                             }
                         }
                     };
+                    let lastHiddenTime = 0;
+                    document.addEventListener("visibilitychange", function() {
+                        if (document.hidden) {
+                            lastHiddenTime = Date.now();
+                        } else {
+                            const bgDuration = Date.now() - lastHiddenTime;
+                            console.log("📱 Pestaña/Pantalla reactivada tras:", bgDuration, "ms");
+                            if (bgDuration > 3000) {
+                                setTimeout(function() {
+                                    try {
+                                        fetch("/command?user_id=" + (window.luxoUserId || "1")).catch(function(){});
+                                    } catch(e){}
+                                }, 300);
+                            }
+                        }
+                    });
+
                     window.initLuxoMicPermission();
                 })();
                 </script>
