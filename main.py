@@ -5864,7 +5864,32 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "panel de control": "dashboard",
                     "panel control": "dashboard",
                     "dashboard": "dashboard",
-                    "panel": "dashboard"
+                    "panel": "dashboard",
+
+                    # FedEx / Traspasos
+                    "abrir fedex": "fedex",
+                    "abre fedex": "fedex",
+                    "fedex": "fedex",
+                    "guias fedex": "fedex",
+                    "guia fedex": "fedex",
+                    "envios fedex": "fedex",
+                    "envio fedex": "fedex",
+                    "traspasos fedex": "fedex",
+                    "traspaso fedex": "fedex",
+                    "traspasos": "fedex",
+                    "traspaso": "fedex",
+
+                    # Facturación CFDI v4.0
+                    "abrir facturacion": "facturacion",
+                    "abre facturacion": "facturacion",
+                    "facturacion cfdi": "facturacion",
+                    "facturacion": "facturacion",
+                    "facturar ticket": "facturacion",
+                    "facturar": "facturacion",
+                    "facturas": "facturacion",
+                    "factura": "facturacion",
+                    "cfdi v4.0": "facturacion",
+                    "cfdi": "facturacion"
                 }
                 
                 # Ordenar por longitud descendente para emparejar frases compuestas largas primero
