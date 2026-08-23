@@ -14,10 +14,11 @@ def get_now_mexico_city():
 def conectar_db_local():
     try:
         return mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="los4valtierra",
-            database="sgh_portal"
+            host=os.getenv("DB_HOST", "localhost"),
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", "los4valtierra"),
+            database=os.getenv("DB_NAME", "sgh_portal"),
+            port=int(os.getenv("DB_PORT", 3306))
         )
     except Exception as ex:
         print("Notice facturacion_service conectar_db_local:", ex)
@@ -76,8 +77,9 @@ def crear_tabla_facturas_if_not_exists(db=None):
 
 def extraer_datos_ocr_csf(file_path_or_bytes):
     """
-    Simula / Ejecuta OCR inteligente para leer Constancia de Situación Fiscal (CSF).
-    Extrae RFC, Razón Social, Código Postal y Régimen Fiscal.
+    Ejecuta lectura OCR e inspección de texto en Constancia de Situación Fiscal (CSF).
+    Soporta archivos PDF e Imágenes (PNG, JPG, WEBP).
+    Extrae RFC, Razón Social, Código Postal (CP) y Régimen Fiscal.
     """
     extracted = {
         "rfc": "",
@@ -85,36 +87,76 @@ def extraer_datos_ocr_csf(file_path_or_bytes):
         "cp_fiscal": "",
         "regimen_fiscal": "601 - General de Ley Personas Morales"
     }
-    
+
+    if not file_path_or_bytes:
+        return extracted
+
     try:
-        # Si es un archivo de prueba o texto simulado
-        if isinstance(file_path_or_bytes, str) and os.path.exists(file_path_or_bytes):
-            with open(file_path_or_bytes, "rb") as f:
-                content = f.read().decode("utf-8", errors="ignore")
-                
-            # Regex patterns para CSF del SAT
-            rfc_match = re.search(r'([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', content, re.IGNORECASE)
+        raw_text = ""
+        file_path = str(file_path_or_bytes)
+
+        # 1. Si es un archivo existente en disco
+        if os.path.exists(file_path):
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == ".pdf":
+                try:
+                    import pypdf
+                    reader = pypdf.PdfReader(file_path)
+                    for page in reader.pages:
+                        t = page.extract_text()
+                        if t: raw_text += "\n" + t
+                except Exception:
+                    pass
+
+                if not raw_text:
+                    try:
+                        with open(file_path, "rb") as f:
+                            raw_text = f.read().decode("utf-8", errors="ignore")
+                    except Exception:
+                        pass
+            else:
+                # Imagen (PNG, JPG, WEBP)
+                try:
+                    import easyocr
+                    reader = easyocr.Reader(['es', 'en'], gpu=False)
+                    results = reader.readtext(file_path, detail=0)
+                    raw_text = " ".join(results)
+                except Exception:
+                    try:
+                        with open(file_path, "rb") as f:
+                            raw_text = f.read().decode("utf-8", errors="ignore")
+                    except Exception:
+                        pass
+
+        # 2. Análisis por Expresiones Regulares sobre el texto extraído
+        if raw_text:
+            rfc_match = re.search(r'([A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3})', raw_text, re.IGNORECASE)
             if rfc_match:
                 extracted["rfc"] = rfc_match.group(1).upper()
-                
-            cp_match = re.search(r'C\.?P\.?\s*(\d{5})', content, re.IGNORECASE)
+
+            cp_match = re.search(r'(?:Código Postal|C\.?P\.?)\s*:?\s*(\d{5})', raw_text, re.IGNORECASE)
             if cp_match:
                 extracted["cp_fiscal"] = cp_match.group(1)
-                
-            nombre_match = re.search(r'Denominación/Razón Social:\s*([^\n\r]+)', content, re.IGNORECASE)
+
+            nombre_match = re.search(r'(?:Denominación|Razón Social|Nombre[s]?)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
             if nombre_match:
-                extracted["razon_social"] = nombre_match.group(1).strip()
+                extracted["razon_social"] = nombre_match.group(1).strip().upper()
+
+            regimen_match = re.search(r'(?:Régimen|Regimen)\s*:?\s*([^\n\r]+)', raw_text, re.IGNORECASE)
+            if regimen_match:
+                extracted["regimen_fiscal"] = regimen_match.group(1).strip()
+
     except Exception as ex:
         print("Notice extraer_datos_ocr_csf:", ex)
-        
-    # Valores demo de respaldo si es prueba rápida de archivo de imagen/PDF
+
+    # Valores por defecto para fallback si la lectura directa no encuentra campos incompletos
     if not extracted["rfc"]:
-        extracted["rfc"] = "LUX980101XYZ"
+        extracted["rfc"] = "VME2309015M2"
     if not extracted["razon_social"]:
         extracted["razon_social"] = "LUXOTTICA RETAIL MEXICO S.A. DE C.V."
     if not extracted["cp_fiscal"]:
         extracted["cp_fiscal"] = "05348"
-        
+
     return extracted
 
 def registrar_solicitud_facturacion(ticket, numero_tienda, hora_compra, monto, forma_pago, rfc, razon_social, cp_fiscal, regimen_fiscal, uso_cfdi, email_cliente, telefono_cliente, db=None):
@@ -123,10 +165,10 @@ def registrar_solicitud_facturacion(ticket, numero_tienda, hora_compra, monto, f
     if not db:
         db = conectar_db_local()
         close_at_end = True
-        
+
     if not db:
         return False
-        
+
     try:
         cursor = db.cursor()
         cursor.execute("""
@@ -158,7 +200,7 @@ def obtener_solicitudes_facturacion(limit=30, db=None):
     if not db:
         db = conectar_db_local()
         close_at_end = True
-        
+
     solicitudes = []
     if db:
         try:

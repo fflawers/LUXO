@@ -16706,42 +16706,56 @@ Ejemplo:
             )
 
             # --- CAMPOS DE EXTRACCIÓN OCR Y VERIFICACIÓN ---
-            tf_rfc = ft.TextField(label="1. RFC del Cliente *", value="", width=200, border_color="#00FFFF", color="white")
-            tf_razon = ft.TextField(label="2. Razón Social / Nombre Fiscal *", value="", width=380 if not is_mobile_w else 280, border_color="#00FFFF", color="white")
-            tf_cp = ft.TextField(label="3. Código Postal Fiscal *", value="", width=180, border_color="#00FFFF", color="white")
-            tf_regimen = ft.TextField(label="4. Régimen Fiscal", value="601 - General de Ley Personas Morales", width=300, border_color="#00FFFF", color="white")
+            # --- CAMPOS DE EXTRACCIÓN OCR Y VERIFICACIÓN ---
+            tf_rfc = ft.TextField(label="1. RFC del Cliente *", value="", width=220, border_color="#00FFFF", color="white")
+            tf_razon = ft.TextField(label="2. Nombre Completo o Razón Social *", value="", width=380 if not is_mobile_w else 280, border_color="#00FFFF", color="white")
+            tf_cp = ft.TextField(label="3. Código Postal (CP) *", value="", width=180, border_color="#00FFFF", color="white")
+            
+            dd_regimen = ft.Dropdown(
+                label="4. Régimen Fiscal *",
+                options=[
+                    ft.dropdown.Option("626 - Régimen Simplificado de Confianza"),
+                    ft.dropdown.Option("601 - General de Ley Personas Morales"),
+                    ft.dropdown.Option("605 - Sueldos y Salarios e Ingresos por Prestación de Servicios"),
+                    ft.dropdown.Option("612 - Personas Físicas con Actividades Empresariales y Profesionales"),
+                    ft.dropdown.Option("606 - Arrendamiento"),
+                    ft.dropdown.Option("625 - Plataformas Tecnológicas")
+                ],
+                value="626 - Régimen Simplificado de Confianza",
+                width=340, border_color="#00FFFF", color="white"
+            )
 
             # --- CAMPOS DE COMPRA Y CONTACTO ---
             tf_ticket = ft.TextField(label="Número de Ticket *", value="", width=180, border_color="#00FFFF", color="white")
             tf_tienda = ft.TextField(label="Número / Nombre de Tienda *", value=tienda_actual, width=220, border_color="#00FFFF", color="white")
             tf_hora = ft.TextField(label="Hora de la Compra (ej. 14:30)", value="14:00", width=180, border_color="#00FFFF", color="white")
-            tf_monto = ft.TextField(label="Monto Total ($)", value="4500.00", width=160, border_color="#00FFFF", color="white")
+            tf_monto = ft.TextField(label="Monto Total ($)", value="3659.00", width=160, border_color="#00FFFF", color="white")
 
             dd_pago = ft.Dropdown(
-                label="Forma de Pago",
+                label="Forma de Pago *",
                 options=[
+                    ft.dropdown.Option("04 - Tarjeta de crédito"),
+                    ft.dropdown.Option("28 - Tarjeta de débito"),
                     ft.dropdown.Option("01 - Efectivo"),
-                    ft.dropdown.Option("04 - Tarjeta de Crédito"),
-                    ft.dropdown.Option("28 - Tarjeta de Débito"),
-                    ft.dropdown.Option("03 - Transferencia Electrónica")
+                    ft.dropdown.Option("03 - Transferencia electrónica de fondos")
                 ],
-                value="04 - Tarjeta de Crédito",
-                width=240, border_color="#00FFFF", color="white"
-            )
-
-            dd_uso = ft.Dropdown(
-                label="Uso de CFDI",
-                options=[
-                    ft.dropdown.Option("G03 - Gastos en general"),
-                    ft.dropdown.Option("CP01 - Pagos"),
-                    ft.dropdown.Option("S01 - Sin efectos fiscales"),
-                    ft.dropdown.Option("P01 - Por definir")
-                ],
-                value="G03 - Gastos en general",
+                value="04 - Tarjeta de crédito",
                 width=260, border_color="#00FFFF", color="white"
             )
 
-            tf_email = ft.TextField(label="Correo Electrónico del Cliente *", value="", width=260, border_color="#00FFFF", color="white")
+            dd_uso = ft.Dropdown(
+                label="Uso de CFDI *",
+                options=[
+                    ft.dropdown.Option("G03 - Gastos en general."),
+                    ft.dropdown.Option("G01 - Adquisición de mercancías."),
+                    ft.dropdown.Option("S01 - Sin efectos fiscales."),
+                    ft.dropdown.Option("CP01 - Pagos")
+                ],
+                value="G03 - Gastos en general.",
+                width=260, border_color="#00FFFF", color="white"
+            )
+
+            tf_email = ft.TextField(label="Correo Electrónico *", value="", width=280, border_color="#00FFFF", color="white")
             tf_tel = ft.TextField(label="Teléfono Móvil (WhatsApp) *", value="", width=200, border_color="#00FFFF", color="white")
 
             ocr_msg_container = ft.Column(spacing=4)
@@ -16763,8 +16777,8 @@ Ejemplo:
                                         ft.Container(content=ft.Text(s["estatus"], color="black", weight="bold", size=10), bgcolor=est_color, padding=ft.Padding(6,2,6,2), border_radius=4)
                                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                     ft.Text(f"👤 RFC: {s['rfc']} | {s['razon_social']} (CP: {s['cp_fiscal']})", color="#aaaaaa", size=11),
-                                    ft.Text(f"💰 Monto: ${s['monto']:,.2f} | Pago: {s['forma_pago']} | Hora: {s['hora_compra']}", color="#00FFFF", size=11),
-                                    ft.Text(f"📱 WhatsApp: {s['telefono_cliente']} (Ventana: 11:00 AM a 9:00 PM | Estatus: {s['whatsapp_estatus']})", color="#FFD700", size=10),
+                                    ft.Text(f"💰 Monto: ${s['monto']:,.2f} | Pago: {s['forma_pago']} | Régimen: {s.get('regimen_fiscal', '')}", color="#00FFFF", size=11),
+                                    ft.Text(f"📱 Contacto: {s['email_cliente']} | WhatsApp: {s['telefono_cliente']}", color="#FFD700", size=10),
                                     ft.Text(f"📅 Registrado el: {s.get('fecha_creacion_str', '')}", color="#888888", size=10)
                                 ], spacing=4),
                                 bgcolor="#1E2330", padding=10, border_radius=8, border=ft.Border.all(1, "#333333")
@@ -16781,7 +16795,8 @@ Ejemplo:
                 tf_rfc.value = res["rfc"]
                 tf_razon.value = res["razon_social"]
                 tf_cp.value = res["cp_fiscal"]
-                tf_regimen.value = res["regimen_fiscal"]
+                if res.get("regimen_fiscal"):
+                    dd_regimen.value = res["regimen_fiscal"]
                 
                 ocr_msg_container.controls.clear()
                 ocr_msg_container.controls.append(
@@ -16793,7 +16808,7 @@ Ejemplo:
                         tf_rfc.update()
                         tf_razon.update()
                         tf_cp.update()
-                        tf_regimen.update()
+                        dd_regimen.update()
                 except Exception as ex_ocu:
                     print("Notice ocr_msg_container update:", ex_ocu)
 
@@ -16810,7 +16825,7 @@ Ejemplo:
 
                 ok = facturacion_service.registrar_solicitud_facturacion(
                     tf_ticket.value, tf_tienda.value, tf_hora.value, m_val, dd_pago.value,
-                    tf_rfc.value, tf_razon.value, tf_cp.value, tf_regimen.value, dd_uso.value,
+                    tf_rfc.value, tf_razon.value, tf_cp.value, dd_regimen.value, dd_uso.value,
                     tf_email.value, tf_tel.value
                 )
 
@@ -16831,52 +16846,67 @@ Ejemplo:
 
             tab_solicitar = ft.Column([
                 ft.Text("1. Lectura de Constancia Fiscal (CSF) por OCR IA 📄", color="#D8B4FE", weight="bold", size=15),
-                ft.Text("Sube la imagen o PDF de la Constancia Fiscal del cliente para que la IA extraiga los datos automáticamente.", color="#aaaaaa", size=12),
+                ft.Text("Sube la imagen o PDF de la Constancia Fiscal del cliente para que la IA extraiga automáticamente los datos fiscales.", color="#aaaaaa", size=12),
                 ft.Row([
                     ft.ElevatedButton("📸 SUBIR FOTO / PDF DE CONSTANCIA FISCAL (CSF)", icon=ft.Icons.UPLOAD_FILE, bgcolor="#00FF88", color="black", on_click=procesar_demo_csf)
                 ]),
                 ocr_msg_container,
                 ft.Divider(height=10, color="#333333"),
-                ft.Text("2. Corroboración Obligatoria por el Vendedor 👁️", color="#FFD700", weight="bold", size=15),
-                ft.Text("Revisa y corrobora que los datos fiscales extraídos sean 100% exactos antes de proceder.", color="#aaaaaa", size=12),
+                ft.Text("2. Datos Fiscales (Corroboración Obligatoria del Vendedor) 👁️", color="#FFD700", weight="bold", size=15),
+                ft.Text("Revisa que los datos coincidan exactamente con la Constancia de Situación Fiscal para evitar rechazos por parte del SAT.", color="#aaaaaa", size=12),
                 ft.Row([tf_rfc, tf_cp], wrap=True, spacing=10),
                 ft.Row([tf_razon], wrap=True, spacing=10),
-                ft.Row([tf_regimen], wrap=True, spacing=10),
+                ft.Row([dd_regimen, dd_uso], wrap=True, spacing=10),
                 ft.Divider(height=10, color="#333333"),
-                ft.Text("3. Datos del Ticket y Contacto del Cliente 🎟️📱", color="#00FFFF", weight="bold", size=15),
+                ft.Text("3. Datos del Ticket, Pago y Contacto del Cliente 🎟️💳📱", color="#00FFFF", weight="bold", size=15),
                 ft.Row([tf_ticket, tf_tienda, tf_hora, tf_monto], wrap=True, spacing=10),
-                ft.Row([dd_pago, dd_uso], wrap=True, spacing=10),
-                ft.Row([tf_email, tf_tel], wrap=True, spacing=10),
+                ft.Row([dd_pago, tf_email, tf_tel], wrap=True, spacing=10),
                 ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.ACCESS_TIME, color="#00FFFF", size=14),
-                        ft.Text("Reglas de Facturación: Monitoreo 24/7 de Sincronización + Ventana Respetuosa de WhatsApp (11:00 AM a 9:00 PM)", color="#00FFFF", size=11, weight="bold")
+                        ft.Text("Reglas de Facturación: Monitoreo 24/7 de Sincronización + Envió por Correo y WhatsApp (11:00 AM a 9:00 PM)", color="#00FFFF", size=11, weight="bold")
                     ]),
                     bgcolor="#141424", padding=8, border_radius=6, border=ft.Border.all(1, "#00FFFF")
                 ),
-                ft.ElevatedButton("📌 CORROBORAR Y REGISTRAR PARA FACTURACIÓN AUTOMÁTICA", icon=ft.Icons.CHECK_CIRCLE, bgcolor="#9D50BB", color="white", on_click=registrar_factura_click)
+                ft.ElevatedButton("📌 EMITIR Y REGISTRAR FACTURA", icon=ft.Icons.CHECK_CIRCLE, bgcolor="#9D50BB", color="white", on_click=registrar_factura_click)
             ], scroll=ft.ScrollMode.ALWAYS, expand=True)
 
             refrescar_tabla_solicitudes()
 
+            tab_historial_facturas = ft.Column([
+                ft.Text("Historial de Facturas Registradas y Monitoreadas 📋", weight="bold", color="#D8B4FE", size=15),
+                tabla_solicitudes_container
+            ], scroll=ft.ScrollMode.ALWAYS, expand=True)
+
             facturacion_tabs = ft.Tabs(
                 selected_index=0,
                 animation_duration=300,
+                length=2,
                 expand=True,
-                tabs=[
-                    ft.Tab(
-                        text="Nueva Solicitud y Corroboración 📄",
-                        content=tab_solicitar
-                    ),
-                    ft.Tab(
-                        text="Historial y Estatus de Facturas 📋",
-                        content=ft.Column([
-                            ft.Text("Historial de Facturas Registradas y Monitoreadas 📋", weight="bold", color="#D8B4FE", size=15),
-                            tabla_solicitudes_container
-                        ], scroll=ft.ScrollMode.ALWAYS, expand=True)
-                    )
-                ]
+                content=ft.Column(
+                    expand=True,
+                    controls=[
+                        ft.TabBar(tabs=[
+                            ft.Tab(label="Nueva Solicitud y Corroboración 📄"),
+                            ft.Tab(label="Historial y Estatus de Facturas 📋")
+                        ]),
+                        ft.TabBarView(controls=[
+                            tab_solicitar,
+                            tab_historial_facturas
+                        ], expand=True)
+                    ]
+                )
             )
+
+            return ft.Column([
+                ft.Row([
+                    ft.Text("Facturación Automática CFDI v4.0 🧾", size=24, color="#D8B4FE", weight="bold"),
+                    portal_badge
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Text("Portal oficial: https://sunglasshut.cfdiv40.cloud/facturar-ticket - Extracción OCR, corroboración obligatoria del vendedor y monitoreo de sincronización 24/7.", color="#aaaaaa", size=13),
+                ft.Divider(height=15, color="#333333"),
+                facturacion_tabs
+            ], expand=True)
 
             return ft.Column([
                 ft.Row([
