@@ -16911,7 +16911,7 @@ Ejemplo:
                             tf_email.update()
                             tf_tel.update()
                     except Exception: pass
-            is_adm_user = es_admin()
+            is_adm_user = es_admin() or user_info.get("usuario") == "mx204562" or user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1"
             servicio_activo = facturacion_service.obtener_estado_servicio_facturacion(db)
 
             btn_registrar_factura = ft.ElevatedButton(
@@ -16943,7 +16943,7 @@ Ejemplo:
                     except Exception: pass
 
                 sw_control_facturacion = ft.Switch(
-                    label="⚡ Control Maestro Facturación (Exclusivo Admin)",
+                    label="⚡ Control Maestro Facturación (Admin mx204562)" if not is_mobile_w else "⚡ Master Facturación",
                     value=servicio_activo,
                     active_color="#00FF88",
                     tooltip="Apagar o encender el servicio general de emisión de facturas para todas las tiendas",
@@ -17004,26 +17004,25 @@ Ejemplo:
                 )
             )
 
-            header_controls = [portal_badge]
-            if sw_control_facturacion:
-                header_controls.insert(0, sw_control_facturacion)
+            header_row_items = []
+            if is_adm_user and sw_control_facturacion:
+                header_row_items.append(
+                    ft.Container(
+                        content=sw_control_facturacion,
+                        bgcolor="#1E2330",
+                        padding=ft.Padding(8, 4, 8, 4),
+                        border_radius=8,
+                        border=ft.Border.all(1.5, "#00FF88")
+                    )
+                )
+            header_row_items.append(portal_badge)
 
             return ft.Column([
                 ft.Row([
-                    ft.Text("Facturación Automática CFDI v4.0 🧾", size=24, color="#D8B4FE", weight="bold"),
-                    ft.Row(header_controls, spacing=10)
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Text("Portal oficial: https://sunglasshut.cfdiv40.cloud/facturar-ticket - Extracción OCR, corroboración obligatoria del vendedor y monitoreo de sincronización 24/7.", color="#aaaaaa", size=13),
-                ft.Divider(height=15, color="#333333"),
-                facturacion_tabs
-            ], expand=True)
-
-            return ft.Column([
-                ft.Row([
-                    ft.Text("Facturación Automática CFDI v4.0 🧾", size=24, color="#D8B4FE", weight="bold"),
-                    portal_badge
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Text("Portal oficial: https://sunglasshut.cfdiv40.cloud/facturar-ticket - Extracción OCR, corroboración obligatoria del vendedor y monitoreo de sincronización 24/7.", color="#aaaaaa", size=13),
+                    ft.Text("Facturación Automática CFDI v4.0 🧾", size=18 if is_mobile_w else 24, color="#D8B4FE", weight="bold"),
+                    ft.Row(header_row_items, wrap=True, spacing=10)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True, spacing=10),
+                ft.Text("Portal oficial: https://sunglasshut.cfdiv40.cloud/facturar-ticket - Extracción OCR, corroboración obligatoria del vendedor y monitoreo de sincronización 24/7.", color="#aaaaaa", size=11 if is_mobile_w else 13),
                 ft.Divider(height=15, color="#333333"),
                 facturacion_tabs
             ], expand=True)
