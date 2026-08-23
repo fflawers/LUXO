@@ -472,13 +472,15 @@ def cargar_estado_persistente(user_id):
                 if row and row.get("estado_json"):
                     payload = json.loads(row["estado_json"])
                     if "store_state" in payload:
+                        def_s = default_store_state()
                         for d in DIAS:
+                            user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
                             if d in payload["store_state"]:
                                 user_states[user_id]["store_state"][d].update(payload["store_state"][d])
                     if "global_meta" in payload:
                         saved_meta = payload["global_meta"]
                         for k, v in saved_meta.items():
-                            if k != "semana" or sem_str == "30":
+                            if k not in ("semana", "num_tienda", "tienda") or sem_str == "30":
                                 g_meta[k] = v
                     if "historico_semanal_state" in payload:
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
@@ -493,30 +495,10 @@ def cargar_estado_persistente(user_id):
                 except: pass
 
         if not loaded:
-            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{tienda_id}.json") if tienda_id > 0 else None
-            sf_user = get_state_file(user_id)
-
-            file_to_load = sf_tienda if (sf_tienda and os.path.exists(sf_tienda)) else (sf_user if os.path.exists(sf_user) else None)
-
-            if file_to_load:
-                with open(file_to_load, "r", encoding="utf-8") as f:
-                    payload = json.load(f)
-                    if "store_state" in payload:
-                        for d in DIAS:
-                            if d in payload["store_state"]:
-                                user_states[user_id]["store_state"][d].update(payload["store_state"][d])
-                    if "global_meta" in payload:
-                        saved_meta = payload["global_meta"]
-                        for k, v in saved_meta.items():
-                            if k != "semana":
-                                g_meta[k] = v
-                    if "historico_semanal_state" in payload:
-                        user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
-                    if "active_tab" in payload:
-                        user_states[user_id]["active_tab"] = payload["active_tab"]
-                    print(f"✅ Estado de Enfoque Diario cargado desde archivo local {os.path.basename(file_to_load)}.")
-            else:
-                guardar_estado_persistente(user_id)
+            def_s = default_store_state()
+            for d in DIAS:
+                user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
+            guardar_estado_persistente(user_id)
     except Exception as ex:
         print(f"Error al cargar estado de enfoque diario para {user_id}:", ex)
 
@@ -2699,13 +2681,15 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # 2. Campo # TIENDA (Número de Tienda SGH)
     def on_num_tienda_change(e):
         val = e.control.value.strip()
-        g_meta["num_tienda"] = val
-        if val in MAPEO_TIENDAS_SGH:
-            t_matched = MAPEO_TIENDAS_SGH[val]
-            g_meta["tienda"] = t_matched
-            dd_tienda.value = t_matched
-            sincronizar_colaboradores_db(session_user, t_matched)
-            guardar_estado_persistente(user_id)
+        if val and val != g_meta.get("num_tienda"):
+            guardar_semana_historico(user_id)
+            g_meta["num_tienda"] = val
+            if val in MAPEO_TIENDAS_SGH:
+                t_matched = MAPEO_TIENDAS_SGH[val]
+                g_meta["tienda"] = t_matched
+                dd_tienda.value = t_matched
+            cargar_estado_persistente(user_id)
+            sincronizar_colaboradores_db(session_user, g_meta.get("tienda"))
             update_active_view()
 
     txt_num_tienda = ft.TextField(
@@ -2726,20 +2710,22 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     def on_store_select_change(e):
         selected_tienda = e.control.value
-        g_meta["tienda"] = selected_tienda
-        if selected_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
-            num_code = MAPEO_NOMBRE_A_NUMERO_SGH[selected_tienda.upper()]
-            g_meta["num_tienda"] = num_code
-            txt_num_tienda.value = num_code
+        if selected_tienda and selected_tienda != g_meta.get("tienda"):
+            guardar_semana_historico(user_id)
+            g_meta["tienda"] = selected_tienda
+            if selected_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
+                num_code = MAPEO_NOMBRE_A_NUMERO_SGH[selected_tienda.upper()]
+                g_meta["num_tienda"] = num_code
+                txt_num_tienda.value = num_code
 
-        sincronizar_colaboradores_db(session_user, selected_tienda)
-        guardar_estado_persistente(user_id)
-        update_active_view()
-        if page:
-            snack = ft.SnackBar(ft.Text(f"🏢 Tienda cambiada a {selected_tienda} (# {g_meta['num_tienda']}).", color="white"), bgcolor="#059669")
-            page.overlay.append(snack)
-            snack.open = True
-            page.update()
+            cargar_estado_persistente(user_id)
+            sincronizar_colaboradores_db(session_user, selected_tienda)
+            update_active_view()
+            if page:
+                snack = ft.SnackBar(ft.Text(f"🏢 Tienda cambiada a {selected_tienda} (# {g_meta['num_tienda']}).", color="white"), bgcolor="#059669")
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
 
     dd_tienda = ft.Dropdown(
         value=g_meta["tienda"],
