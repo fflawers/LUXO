@@ -18,10 +18,11 @@ def conectar_db_local():
     import mysql.connector
     try:
         return mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="los4valtierra",
-            database="sgh_portal"
+            host=os.getenv("DB_HOST", "localhost"),
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", "los4valtierra"),
+            database=os.getenv("DB_NAME", "sgh_portal"),
+            port=int(os.getenv("DB_PORT", 3306))
         )
     except Exception:
         return None

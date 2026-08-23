@@ -20451,11 +20451,14 @@ Ejemplo:
                     try:
                         db_p = conectar_db()
                         if db_p:
+                            z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
+                            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                            z_norm = name_map.get(z_clean.upper(), z_clean)
                             cur_p = db_p.cursor()
-                            cur_p.execute("UPDATE usuarios SET Zona = %s WHERE ID_Usuario = %s", (str(z_id), uid))
+                            cur_p.execute("UPDATE usuarios SET Zona = %s WHERE ID_Usuario = %s", (z_norm, uid))
                             db_p.commit()
                             db_p.close()
-                            print(f"💾 Zona activa ID={z_id} guardada en BD para usuario ID={uid}")
+                            print(f"💾 Zona activa ID={z_norm} guardada en BD para usuario ID={uid}")
                     except Exception as ex_p:
                         print("Notice save zona DB:", ex_p)
                 import threading
@@ -20988,9 +20991,11 @@ Ejemplo:
                     user_info["nombre"] = res["Nombre_Completo"]
                     user_info["rol"] = res["Rol"]
                     user_info["tienda"] = res["Tienda"] if res["Tienda"] is not None else ""
-                    user_info["zona"] = res["Zona"] if res["Zona"] is not None else "Zona Centro"
+                    user_info["zona"] = res["Zona"] if res["Zona"] is not None else "1"
                     if res.get("Zona"):
-                        user_session["zona_activa_id"] = str(res["Zona"])
+                        z_clean = str(res["Zona"]).replace("📍", "").replace("Zona:", "").strip()
+                        name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                        user_session["zona_activa_id"] = name_map.get(z_clean.upper(), z_clean)
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     reproducir_saludo_login(res["Nombre_Completo"])
                     
