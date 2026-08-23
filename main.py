@@ -20174,10 +20174,11 @@ Ejemplo:
             content_padding=ft.Padding(left=6, top=2, right=4, bottom=2),
             dense=True,
             tooltip="Seleccionar Zona Activa de Trabajo",
-            visible=True
+            visible=is_adm
         )
         dd_zona_activa.on_change = on_zona_activa_change
 
+        dd_region_container = ft.Container(visible=is_adm)
         dd_region_activa = crear_dropdown_region(user_session.get("zona_activa_id", "0"), user_session.get("region_activa_id", "0"))
         dd_region_container.content = dd_region_activa
 
@@ -20191,6 +20192,8 @@ Ejemplo:
 
         def actualizar_top_appbar_layout():
             is_mob = (page.width < 768) if (page and page.width) else False
+            dd_zona_activa.visible = is_adm
+            dd_region_container.visible = is_adm
             if is_mob:
                 dd_zona_activa.width = None
                 dd_zona_activa.expand = 1
