@@ -75,6 +75,59 @@ def crear_tabla_facturas_if_not_exists(db=None):
             try: db.close()
             except: pass
 
+def obtener_estado_servicio_facturacion(db=None):
+    """Obtiene si el servicio general de Facturación está activo u desactivado por el Admin (mx204562)."""
+    close_at_end = False
+    if not db:
+        db = conectar_db_local()
+        close_at_end = True
+    
+    activo = True
+    if db:
+        try:
+            crear_tabla_facturas_if_not_exists(db)
+            cursor = db.cursor(dictionary=True)
+            cursor.execute("SELECT valor FROM config_general WHERE clave = 'facturacion_servicio_activo'")
+            row = cursor.fetchone()
+            if row and row.get("valor") is not None:
+                activo = (str(row["valor"]).lower() != "false")
+        except Exception as ex:
+            print("Notice obtener_estado_servicio_facturacion:", ex)
+        finally:
+            if close_at_end and db:
+                try: db.close()
+                except: pass
+    return activo
+
+def guardar_estado_servicio_facturacion(activo: bool, db=None):
+    """Guarda en MySQL el estado encendido/apagado del servicio de Facturación (Exclusivo Admin mx204562)."""
+    close_at_end = False
+    if not db:
+        db = conectar_db_local()
+        close_at_end = True
+    
+    if not db:
+        return False
+
+    try:
+        crear_tabla_facturas_if_not_exists(db)
+        cursor = db.cursor()
+        val_str = "true" if activo else "false"
+        cursor.execute("""
+            INSERT INTO config_general (clave, valor)
+            VALUES ('facturacion_servicio_activo', %s)
+            ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+        """, (val_str,))
+        db.commit()
+        return True
+    except Exception as ex:
+        print("Error al guardar estado de servicio facturacion:", ex)
+        return False
+    finally:
+        if close_at_end and db:
+            try: db.close()
+            except: pass
+
 def calcular_programacion_monitoreo(fecha_ref=None):
     """
     REGLA DE MONITOREO #5:

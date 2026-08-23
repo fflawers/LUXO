@@ -16840,8 +16840,44 @@ Ejemplo:
                             tf_email.update()
                             tf_tel.update()
                     except Exception: pass
-                else:
-                    mostrar_snack("Error al registrar la solicitud de facturación.", "red")
+            is_adm_user = es_admin()
+            servicio_activo = facturacion_service.obtener_estado_servicio_facturacion(db)
+
+            btn_registrar_factura = ft.ElevatedButton(
+                "📌 EMITIR Y REGISTRAR FACTURA",
+                icon=ft.Icons.CHECK_CIRCLE,
+                bgcolor="#9D50BB" if (is_adm_user or servicio_activo) else "#555555",
+                color="white",
+                disabled=not (is_adm_user or servicio_activo),
+                tooltip="Servicio activo" if (is_adm_user or servicio_activo) else "🔴 Servicio de Facturación Desactivado por Administración (mx204562)",
+                on_click=registrar_factura_click
+            )
+
+            sw_control_facturacion = None
+            if is_adm_user:
+                def on_switch_facturacion_change(e):
+                    val = e.control.value
+                    facturacion_service.guardar_estado_servicio_facturacion(val, db)
+                    if val:
+                        mostrar_snack("🟢 Servicio General de Facturación ENCENDIDO (Habilitado para todas las tiendas)", "#00FF88")
+                    else:
+                        mostrar_snack("🔴 Servicio General de Facturación APAGADO (Deshabilitado para tiendas)", "red")
+                    
+                    btn_registrar_factura.disabled = not (is_adm_user or val)
+                    btn_registrar_factura.bgcolor = "#9D50BB" if (is_adm_user or val) else "#555555"
+                    btn_registrar_factura.tooltip = "Servicio activo" if (is_adm_user or val) else "🔴 Servicio de Facturación Desactivado por Administración (mx204562)"
+                    try:
+                        if getattr(btn_registrar_factura, "page", None):
+                            btn_registrar_factura.update()
+                    except Exception: pass
+
+                sw_control_facturacion = ft.Switch(
+                    label="⚡ Control Maestro Facturación (Exclusivo Admin)",
+                    value=servicio_activo,
+                    active_color="#00FF88",
+                    tooltip="Apagar o encender el servicio general de emisión de facturas para todas las tiendas",
+                    on_change=on_switch_facturacion_change
+                )
 
             tab_solicitar = ft.Column([
                 ft.Text("1. Lectura de Constancia Fiscal (CSF) por OCR IA 📄", color="#D8B4FE", weight="bold", size=15),
@@ -16867,7 +16903,7 @@ Ejemplo:
                     ]),
                     bgcolor="#141424", padding=8, border_radius=6, border=ft.Border.all(1, "#00FFFF")
                 ),
-                ft.ElevatedButton("📌 EMITIR Y REGISTRAR FACTURA", icon=ft.Icons.CHECK_CIRCLE, bgcolor="#9D50BB", color="white", on_click=registrar_factura_click)
+                btn_registrar_factura
             ], scroll=ft.ScrollMode.ALWAYS, expand=True)
 
             refrescar_tabla_solicitudes()
@@ -16897,10 +16933,14 @@ Ejemplo:
                 )
             )
 
+            header_controls = [portal_badge]
+            if sw_control_facturacion:
+                header_controls.insert(0, sw_control_facturacion)
+
             return ft.Column([
                 ft.Row([
                     ft.Text("Facturación Automática CFDI v4.0 🧾", size=24, color="#D8B4FE", weight="bold"),
-                    portal_badge
+                    ft.Row(header_controls, spacing=10)
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Text("Portal oficial: https://sunglasshut.cfdiv40.cloud/facturar-ticket - Extracción OCR, corroboración obligatoria del vendedor y monitoreo de sincronización 24/7.", color="#aaaaaa", size=13),
                 ft.Divider(height=15, color="#333333"),
