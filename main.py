@@ -20104,6 +20104,23 @@ Ejemplo:
             user_session["zona_activa_id"] = z_val
             user_session["region_activa_id"] = "0"
             print(f"📍 Zona Activa cambiada a ID={z_val} por usuario={user_info.get('id')}")
+
+            # Guardar la preferencia de Zona en la Base de Datos para persistir entre inicios de sesión
+            if user_info.get("id"):
+                def _save_pref_zona(uid, z_id):
+                    try:
+                        db_p = conectar_db()
+                        if db_p:
+                            cur_p = db_p.cursor()
+                            cur_p.execute("UPDATE usuarios SET Zona = %s WHERE ID_Usuario = %s", (str(z_id), uid))
+                            db_p.commit()
+                            db_p.close()
+                            print(f"💾 Zona activa ID={z_id} guardada en BD para usuario ID={uid}")
+                    except Exception as ex_p:
+                        print("Notice save zona DB:", ex_p)
+                import threading
+                threading.Thread(target=_save_pref_zona, args=(user_info["id"], z_val), daemon=True).start()
+
             main_views_cache.clear()
 
             nonlocal dd_region_activa
@@ -20644,6 +20661,8 @@ Ejemplo:
                     user_info["rol"] = res["Rol"]
                     user_info["tienda"] = res["Tienda"] if res["Tienda"] is not None else ""
                     user_info["zona"] = res["Zona"] if res["Zona"] is not None else "Zona Centro"
+                    if res.get("Zona"):
+                        user_session["zona_activa_id"] = str(res["Zona"])
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     reproducir_saludo_login(res["Nombre_Completo"])
                     
@@ -21107,6 +21126,8 @@ Ejemplo:
                             user_info["rol"] = user_data["Rol"]
                             user_info["tienda"] = user_data.get("Tienda") or ""
                             user_info["zona"] = user_data.get("Zona") or "Zona Centro"
+                            if user_data.get("Zona"):
+                                user_session["zona_activa_id"] = str(user_data["Zona"])
                             user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
                             user_id_key = user_data["ID_Usuario"]
                             active_sessions[user_id_key] = {
