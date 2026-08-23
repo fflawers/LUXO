@@ -2534,10 +2534,15 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         num_code = u_user.lower().replace("sgh", "").strip()
         if u_tienda and u_tienda != "Tienda Luxo":
             g_meta["tienda"] = u_tienda
-            if num_code in MAPEO_TIENDAS_SGH:
+            if num_code and num_code.isdigit():
+                g_meta["num_tienda"] = num_code
+            elif num_code in MAPEO_TIENDAS_SGH:
                 g_meta["num_tienda"] = num_code
             elif u_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
                 g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[u_tienda.upper()]
+
+    # Cargar inmediatamente el estado persistente guardado desde MySQL para la tienda real del usuario
+    cargar_estado_persistente(user_id)
 
     # Sincronizar colaboradores iniciales
     sincronizar_colaboradores_db(session_user, g_meta["tienda"])
