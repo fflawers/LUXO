@@ -10,6 +10,9 @@ No modifica ninguna función existente del sistema.
 import os
 import math
 import datetime
+import json
+import copy
+import threading
 import flet as ft
 
 # Intentar importar reportlab para generación de PDF
@@ -501,7 +504,6 @@ def cargar_estado_persistente(user_id):
             def_s = default_store_state()
             for d in DIAS:
                 user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
-            guardar_estado_persistente(user_id)
     except Exception as ex:
         print(f"Error al cargar estado de enfoque diario para {user_id}:", ex)
 
@@ -2685,7 +2687,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     def on_num_tienda_change(e):
         val = e.control.value.strip()
         if val and val != g_meta.get("num_tienda"):
-            guardar_semana_historico(user_id)
             g_meta["num_tienda"] = val
             if val in MAPEO_TIENDAS_SGH:
                 t_matched = MAPEO_TIENDAS_SGH[val]
@@ -2714,7 +2715,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     def on_store_select_change(e):
         selected_tienda = e.control.value
         if selected_tienda and selected_tienda != g_meta.get("tienda"):
-            guardar_semana_historico(user_id)
             g_meta["tienda"] = selected_tienda
             if selected_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
                 num_code = MAPEO_NOMBRE_A_NUMERO_SGH[selected_tienda.upper()]
