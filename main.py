@@ -20301,16 +20301,15 @@ Ejemplo:
 
             main_views_cache.clear()
 
-            nonlocal dd_region_activa
-            dd_region_activa = crear_dropdown_region(z_val, "0")
-            dd_region_container.content = dd_region_activa
+            new_reg_opts = get_region_options_for_zona(z_val)
+            dd_region_activa.options.clear()
+            dd_region_activa.options.extend(new_reg_opts)
+            dd_region_activa.value = "0"
 
             try:
-                actualizar_top_appbar_layout()
+                dd_region_activa.update()
                 dd_region_container.update()
-            except Exception: pass
-
-            try:
+                actualizar_top_appbar_layout()
                 top_appbar.update()
             except Exception as ex_z:
                 print("Notice zona change appbar update:", ex_z)
