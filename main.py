@@ -16658,16 +16658,16 @@ Ejemplo:
                 expand=True,
                 tabs=[
                     ft.Tab(
-                        text="Traspasos y Guías 📦",
+                        label="Traspasos y Guías 📦",
                         content=tab_generar_guia
                     ),
                     ft.Tab(
-                        text="Historial Logístico 📋",
+                        label="Historial Logístico 📋",
                         content=ft.Column([ft.Text("Historial de Envíos y Rastreo FedEx 📋", weight="bold", color="#D8B4FE")], scroll=ft.ScrollMode.ALWAYS, expand=True)
                     )
                 ] + ([
                     ft.Tab(
-                        text="Configuración API Admin ⚙️",
+                        label="Configuración API Admin ⚙️",
                         content=tab_admin_fedex
                     )
                 ] if is_adm else [])
