@@ -21203,32 +21203,57 @@ Ejemplo:
     is_mobile_w = (page.width < 768) if (page.width and page.width > 0) else False
 
     login_video_player = None
+    login_audio_player = None
     btn_audio = None
     has_interacted_audio = [False]
 
+    saludo_mp3_path = os.path.join(BASE_PATH, "custom_assets", "saludo_login.mp3")
+    if os.path.exists(saludo_mp3_path):
+        try:
+            login_audio_player = ft.Audio(
+                src="/custom_assets/saludo_login.mp3",
+                autoplay=False,
+                volume=1.0
+            )
+            page.overlay.append(login_audio_player)
+        except Exception as ex_au:
+            print("Notice audio overlay init:", ex_au)
+
     def toggle_audio(e=None):
-        nonlocal login_video_player, btn_audio
+        nonlocal login_video_player, login_audio_player, btn_audio
         has_interacted_audio[0] = True
+        is_currently_muted = True
         if login_video_player:
+            is_currently_muted = login_video_player.muted
             try:
-                if login_video_player.muted:
-                    login_video_player.muted = False
-                    login_video_player.volume = 100.0
+                login_video_player.muted = not is_currently_muted
+                login_video_player.volume = 0.0 if not is_currently_muted else 100.0
+                if is_currently_muted:
+                    login_video_player.playlist = [fv.VideoMedia(video_login_url)]
                     login_video_player.play()
-                    if btn_audio:
-                        btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                        btn_audio.tooltip = "Silenciar Audio"
-                else:
-                    login_video_player.muted = True
-                    login_video_player.volume = 0.0
-                    if btn_audio:
-                        btn_audio.content = ft.Text("🔇", size=11, color="#00FFFF", text_align="center")
-                        btn_audio.tooltip = "Activar Audio"
                 login_video_player.update()
-                if btn_audio:
-                    btn_audio.update()
             except Exception as err:
-                print("Error al cambiar estado de audio:", err)
+                print("Error video toggle:", err)
+
+        if login_audio_player:
+            try:
+                if is_currently_muted:
+                    login_audio_player.play()
+                else:
+                    login_audio_player.pause()
+            except Exception as ex_a:
+                print("Error audio toggle:", ex_a)
+
+        if btn_audio:
+            try:
+                if is_currently_muted:
+                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                    btn_audio.tooltip = "Silenciar Audio"
+                else:
+                    btn_audio.content = ft.Text("🔇", size=11, color="#00FFFF", text_align="center")
+                    btn_audio.tooltip = "Activar Audio"
+                btn_audio.update()
+            except Exception: pass
 
     def unmute_on_first_interaction(e=None):
         if not has_interacted_audio[0]:
@@ -21239,13 +21264,20 @@ Ejemplo:
                     login_video_player.muted = False
                     login_video_player.volume = 100.0
                     login_video_player.play()
-                    if btn_audio:
-                        btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                        btn_audio.tooltip = "Silenciar Audio"
-                        btn_audio.update()
                     login_video_player.update()
                 except Exception as ex_a:
-                    print("Notice auto unmute login:", ex_a)
+                    print("Notice auto unmute video:", ex_a)
+            if login_audio_player:
+                try:
+                    login_audio_player.play()
+                except Exception as ex_au:
+                    print("Notice auto unmute audio:", ex_au)
+            if btn_audio:
+                try:
+                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                    btn_audio.tooltip = "Silenciar Audio"
+                    btn_audio.update()
+                except Exception: pass
 
     txt_user_input = ft.TextField(
         hint_text="Ej. admin",
