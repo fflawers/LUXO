@@ -20058,7 +20058,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_operacion_diaria, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
@@ -20137,7 +20137,6 @@ Ejemplo:
             ft.Divider(height=15, color="#444444"),
             btn_operacion_diaria,
             btn_chat,
-            btn_historial,
             btn_enfoque,
             ft.Divider(height=10, color="#333333"),
             tile_ventas,
