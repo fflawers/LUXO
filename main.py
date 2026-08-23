@@ -19524,6 +19524,8 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        content_area = ft.Container(content=build_chat_view(), expand=True)
+
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista):
             active_view[0] = vista
