@@ -5641,7 +5641,19 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             user_text_expandido = expandir_abreviaturas(user_text)
             user_text_norm = normalizar_texto(user_text_expandido)
 
-            # --- 1. COMANDO DIRECTO DE NOTIFICACIONES (Pestaña / Alertas) ---
+            # --- 0. COMANDO DIRECTO DE CERRAR SESIÓN (CHAT Y VOZ) ---
+            is_logout_query = any(trig in user_text_norm for trig in [
+                "cierra sesion", "cerrar sesion", "salir de cuenta", 
+                "salir de la cuenta", "logout", "log out", "cerrar cuenta", 
+                "salir de luxo", "desconectarse", "desconectar"
+            ])
+            if is_logout_query:
+                input_msg.value = ""
+                try:
+                    mostrar_snack("👋 Cerrando sesión...", color="#FF4500")
+                except Exception: pass
+                cerrar_sesion()
+                return
             is_notif_query = any(w in user_text_norm for w in ["notificaci", "abren no"])
             if is_notif_query:
                 input_msg.value = ""
