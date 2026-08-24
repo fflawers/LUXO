@@ -5261,8 +5261,13 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         btn_acceder.content.value = "ACCEDER"
 
         page.add(full_screen_background)
-
         page.update()
+
+        # REGLA: Desmutear y reproducir audio del avatar del inicio ÚNICAMENTE al cerrar sesión manualmente
+        try:
+            desmutear_avatar_logout()
+        except Exception as ex_dm:
+            print("Notice desmutear logout:", ex_dm)
 
     # =====================================
     # CHAT
@@ -8997,21 +9002,88 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             is_mobile = (page.width < 800) if (page and page.width) else False
             manuals_list = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
             
+            cat_activa = ["PDF"] # "PDF", "EXCEL", "MULTIMEDIA"
+
+            search_input = ft.TextField(
+                hint_text="🔍 Buscar documento por nombre...",
+                height=38,
+                text_size=12,
+                border_color="#00FFFF",
+                focused_border_color="#D8B4FE",
+                color="white",
+                content_padding=ft.padding.Padding(10, 4, 10, 4),
+                on_change=lambda e: cargar_manuales()
+            )
+
+            def set_cat(c):
+                cat_activa[0] = c
+                update_cat_buttons()
+                cargar_manuales()
+
+            btn_cat_pdf = ft.ElevatedButton("📄 PDFs / Manuales", on_click=lambda e: set_cat("PDF"), height=34)
+            btn_cat_excel = ft.ElevatedButton("📊 Excels", on_click=lambda e: set_cat("EXCEL"), height=34)
+            btn_cat_media = ft.ElevatedButton("🎥 Multimedia", on_click=lambda e: set_cat("MULTIMEDIA"), height=34)
+
+            def update_cat_buttons():
+                cur = cat_activa[0]
+                btn_cat_pdf.bgcolor = "#6E48AA" if cur == "PDF" else "#1F1F35"
+                btn_cat_pdf.color = "white" if cur == "PDF" else "#AAAAAA"
+
+                btn_cat_excel.bgcolor = "#1f6f43" if cur == "EXCEL" else "#1F1F35"
+                btn_cat_excel.color = "white" if cur == "EXCEL" else "#AAAAAA"
+
+                btn_cat_media.bgcolor = "#A100F2" if cur == "MULTIMEDIA" else "#1F1F35"
+                btn_cat_media.color = "white" if cur == "MULTIMEDIA" else "#AAAAAA"
+
+            update_cat_buttons()
+
             def cargar_manuales():
                 manuals_list.controls.clear()
+                search_term = (search_input.value or "").strip().lower()
+                cur_cat = cat_activa[0]
+
                 try:
                     db = conectar_db()
                     if db:
                         cursor = db.cursor(dictionary=True)
-                        cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto FROM manuales ORDER BY Nombre_Archivo")
-                        manuales = cursor.fetchall()
+                        cursor.execute("SELECT ID_Manual, Nombre_Archivo, Titulo, Version, Abierto, Categoria FROM manuales ORDER BY LOWER(Nombre_Archivo) ASC")
+                        all_manuales = cursor.fetchall()
                         db.close()
-                        
-                        manuals_list.controls.append(ft.Text("Manuales Base de Datos (PDF/Excel)", size=13 if is_mobile else 14, color="#00FFFF", weight="bold"))
-                        if not manuales:
-                            manuals_list.controls.append(ft.Text("No hay manuales cargados en la base de datos.", color="#aaaaaa", size=12))
+
+                        filtered_manuales = []
+                        for m in all_manuales:
+                            nom = (m.get("Nombre_Archivo") or "").lower()
+                            cat_db = str(m.get("Categoria") or "").upper()
+                            ext = os.path.splitext(nom)[1].lower()
+
+                            # Filtrado por carpeta activa
+                            if cur_cat == "PDF":
+                                if ext in [".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".gif", ".mp4", ".mov", ".avi"] or cat_db in ["EXCEL", "IMAGEN", "VIDEO", "MULTIMEDIA"]:
+                                    continue
+                            elif cur_cat == "EXCEL":
+                                if not (ext in [".xlsx", ".xls"] or cat_db == "EXCEL"):
+                                    continue
+                            elif cur_cat == "MULTIMEDIA":
+                                if not (ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mov", ".avi"] or cat_db in ["IMAGEN", "VIDEO", "MULTIMEDIA"]):
+                                    continue
+
+                            # Filtrado por término del buscador
+                            if search_term and search_term not in nom:
+                                continue
+
+                            filtered_manuales.append(m)
+
+                        cat_labels = {
+                            "PDF": "📄 Carpeta de Documentos y Manuales PDF (A-Z)",
+                            "EXCEL": "📊 Carpeta de Hojas de Cálculo Excel (A-Z)",
+                            "MULTIMEDIA": "🎥 Carpeta de Archivos Multimedia (A-Z)"
+                        }
+                        manuals_list.controls.append(ft.Text(cat_labels.get(cur_cat, "Documentos"), size=13 if is_mobile else 14, color="#00FFFF", weight="bold"))
+
+                        if not filtered_manuales and cur_cat != "MULTIMEDIA":
+                            manuals_list.controls.append(ft.Text(f"No se encontraron archivos en la carpeta '{cur_cat}'." if not search_term else f"No se encontraron archivos que coincidan con '{search_term}'.", color="#aaaaaa", size=12))
                         else:
-                            for m in manuales:
+                            for m in filtered_manuales:
                                 id_m = m["ID_Manual"]
                                 nombre = m.get("Nombre_Archivo") or ""
                                 version = m.get("Version") or ""
@@ -9036,14 +9108,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                                 rebuild_rag_cache()
                                                 mostrar_snack(f"Manual '{nom}' eliminado.")
                                                 cargar_manuales()
-                                                page.pop_dialog()
+                                                try: page.pop_dialog()
+                                                except: pass
                                                 page.update()
                                         except Exception as ex:
                                             print("ERROR BORRAR MANUAL:", ex)
                                             mostrar_snack("Error al borrar manual.", color="red")
                                             
                                     def on_cancelar(ev):
-                                        page.pop_dialog()
+                                        try: page.pop_dialog()
+                                        except: pass
                                         
                                     dialog_confirm = ft.AlertDialog(
                                         title=ft.Text("Confirmar Borrado", color="#FF4500", weight="bold"),
@@ -9080,8 +9154,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 tooltip_lock = "Acceso Público (Click para restringir a Admin)" if es_abierto == 1 else "Restringido (Click para permitir a todos)"
 
                                 is_excel = nombre.lower().endswith(('.xlsx', '.xls'))
-                                icon_type = ft.Icons.TABLE_CHART if is_excel else ft.Icons.PICTURE_AS_PDF
-                                color_type = "#7CFC00" if is_excel else "#00FFFF"
+                                is_media = nombre.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.mp4', '.mov', '.avi'))
+                                icon_type = ft.Icons.PERM_MEDIA if is_media else (ft.Icons.TABLE_CHART if is_excel else ft.Icons.PICTURE_AS_PDF)
+                                color_type = "#A100F2" if is_media else ("#7CFC00" if is_excel else "#00FFFF")
 
                                 manuals_list.controls.append(
                                     ft.Container(
@@ -9116,117 +9191,113 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     print("ERROR LISTA MANUALES:", ex)
                     manuals_list.controls.append(ft.Text("Error al cargar la lista de manuales.", color="red"))
                 
-                # --- Recursos Multimedia Locales (assets/) ---
-                manuals_list.controls.append(ft.Divider(height=15, color="#333333"))
-                manuals_list.controls.append(ft.Text("Recursos Multimedia Locales (assets/)", size=13 if is_mobile else 14, color="#A100F2", weight="bold"))
-                try:
-                    os.makedirs(ASSETS_PATH, exist_ok=True)
-                    archivos_protegidos = {
-                        "avatar_luxo.png.jpeg",
-                        "luxo_avatar1.mp4",
-                        "luxo_avatar2.mp4",
-                        "istockphoto-468228782-612x612.jpg.jpeg"
-                    }
-                    archivos = [
-                        f for f in os.listdir(ASSETS_PATH) 
-                        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.mp4', '.mov', '.avi'))
-                        and f not in archivos_protegidos
-                    ]
-                    if not archivos:
-                        manuals_list.controls.append(ft.Text("No hay archivos multimedia cargados en custom_assets/.", color="#aaaaaa", size=12))
-                    else:
-                        for filename in archivos:
-                            def borrar_media_click(e, fn=filename):
-                                def on_confirmar_media(ev):
-                                    try:
-                                        ruta_media = os.path.join(ASSETS_PATH, fn)
-                                        if os.path.exists(ruta_media):
-                                            os.remove(ruta_media)
-                                        mostrar_snack(f"Archivo multimedia '{fn}' eliminado.")
-                                        cargar_manuales()
-                                        page.pop_dialog()
-                                        page.update()
-                                    except Exception as ex:
-                                        print("ERROR BORRAR MEDIA:", ex)
-                                        mostrar_snack("Error al borrar archivo multimedia.", color="red")
+                # --- Recursos Multimedia Locales (assets/) (solo cuando la carpeta Multimedia está seleccionada) ---
+                if cur_cat == "MULTIMEDIA":
+                    manuals_list.controls.append(ft.Divider(height=15, color="#333333"))
+                    manuals_list.controls.append(ft.Text("Recursos Multimedia Locales (assets/) (A-Z)", size=13 if is_mobile else 14, color="#A100F2", weight="bold"))
+                    try:
+                        os.makedirs(ASSETS_PATH, exist_ok=True)
+                        archivos_protegidos = {
+                            "avatar_luxo.png.jpeg",
+                            "luxo_avatar1.mp4",
+                            "luxo_avatar2.mp4",
+                            "istockphoto-468228782-612x612.jpg.jpeg"
+                        }
+                        archivos = sorted([
+                            f for f in os.listdir(ASSETS_PATH) 
+                            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.mp4', '.mov', '.avi'))
+                            and f not in archivos_protegidos
+                            and (not search_term or search_term in f.lower())
+                        ], key=lambda x: x.lower())
+                        
+                        if not archivos:
+                            manuals_list.controls.append(ft.Text("No hay archivos multimedia cargados en custom_assets/.", color="#aaaaaa", size=12))
+                        else:
+                            for filename in archivos:
+                                def borrar_media_click(e, fn=filename):
+                                    def on_confirmar_media(ev):
+                                        try:
+                                            ruta_media = os.path.join(ASSETS_PATH, fn)
+                                            if os.path.exists(ruta_media):
+                                                os.remove(ruta_media)
+                                            mostrar_snack(f"Archivo multimedia '{fn}' eliminado.")
+                                            cargar_manuales()
+                                            try: page.pop_dialog()
+                                            except: pass
+                                            page.update()
+                                        except Exception as ex:
+                                            print("ERROR BORRAR MEDIA:", ex)
+                                            mostrar_snack("Error al borrar archivo multimedia.", color="red")
+                                            
+                                    def on_cancelar_media(ev):
+                                        try: page.pop_dialog()
+                                        except: pass
                                         
-                                def on_cancelar_media(ev):
-                                    page.pop_dialog()
-                                    
-                                dialog_confirm_media = ft.AlertDialog(
-                                    title=ft.Text("Confirmar Borrado de Multimedia", color="#FF4500", weight="bold"),
-                                    content=ft.Text(f"¿Seguro que deseas borrar el archivo multimedia \"{fn}\"?"),
-                                    actions=[
-                                        ft.TextButton("Cancelar", on_click=on_cancelar_media),
-                                        ft.ElevatedButton("Sí, Borrar", on_click=on_confirmar_media, bgcolor="#FF4500", color="white")
-                                    ],
-                                    actions_alignment="end",
-                                    bgcolor="#0F0F1A"
-                                )
-                                page.show_dialog(dialog_confirm_media)
+                                    dialog_confirm_media = ft.AlertDialog(
+                                        title=ft.Text("Confirmar Borrado de Multimedia", color="#FF4500", weight="bold"),
+                                        content=ft.Text(f"¿Seguro que deseas borrar el archivo multimedia \"{fn}\"?"),
+                                        actions=[
+                                            ft.TextButton("Cancelar", on_click=on_cancelar_media),
+                                            ft.ElevatedButton("Sí, Borrar", on_click=on_confirmar_media, bgcolor="#FF4500", color="white")
+                                        ],
+                                        actions_alignment="end",
+                                        bgcolor="#0F0F1A"
+                                    )
+                                    page.show_dialog(dialog_confirm_media)
 
-                            is_video = filename.lower().endswith(('.mp4', '.mov', '.avi'))
-                            icon_media = ft.Icons.PLAY_CIRCLE_FILL if is_video else ft.Icons.IMAGE
-                            color_media = "#A100F2"
-                            
-                            manuals_list.controls.append(
-                                ft.Container(
-                                    content=ft.Row([
-                                        ft.Icon(icon_media, color=color_media, size=20 if is_mobile else 24),
-                                        ft.Column([
-                                            ft.Text(filename, color="white", weight="bold", size=12 if is_mobile else 14),
-                                            ft.Text("Ubicación: local assets/", color="#aaaaaa", size=10 if is_mobile else 11)
-                                        ], spacing=2, expand=True),
-                                        ft.IconButton(
-                                            icon=ft.Icons.DELETE_FOREVER,
-                                            icon_color="#FF4500",
-                                            tooltip="Eliminar multimedia",
-                                            icon_size=18 if is_mobile else 22,
-                                            on_click=borrar_media_click
-                                        )
-                                    ], alignment="spaceBetween", vertical_alignment="center"),
-                                    bgcolor="#141424",
-                                    padding=8 if is_mobile else 10,
-                                    border_radius=8,
-                                    border=ft.Border.all(1, "#333333")
+                                is_video = filename.lower().endswith(('.mp4', '.mov', '.avi'))
+                                icon_media = ft.Icons.PLAY_CIRCLE_FILL if is_video else ft.Icons.IMAGE
+                                color_media = "#A100F2"
+                                
+                                manuals_list.controls.append(
+                                    ft.Container(
+                                        content=ft.Row([
+                                            ft.Icon(icon_media, color=color_media, size=20 if is_mobile else 24),
+                                            ft.Column([
+                                                ft.Text(filename, color="white", weight="bold", size=12 if is_mobile else 14),
+                                                ft.Text("Ubicación: local assets/", color="#aaaaaa", size=10 if is_mobile else 11)
+                                            ], spacing=2, expand=True),
+                                            ft.IconButton(
+                                                icon=ft.Icons.DELETE_FOREVER,
+                                                icon_color="#FF4500",
+                                                tooltip="Eliminar multimedia",
+                                                icon_size=18 if is_mobile else 22,
+                                                on_click=borrar_media_click
+                                            )
+                                        ], alignment="spaceBetween", vertical_alignment="center"),
+                                        bgcolor="#141424",
+                                        padding=8 if is_mobile else 10,
+                                        border_radius=8,
+                                        border=ft.Border.all(1, "#333333")
+                                    )
                                 )
-                            )
-                except Exception as ex:
-                    print("ERROR LISTA MULTIMEDIA:", ex)
-                    manuals_list.controls.append(ft.Text("Error al cargar la lista de archivos multimedia.", color="red"))
+                    except Exception as ex:
+                        print("ERROR LISTA MULTIMEDIA:", ex)
+                        manuals_list.controls.append(ft.Text("Error al cargar la lista de archivos multimedia.", color="red"))
                 
-                page.update()
+                try: page.update()
+                except: pass
                     
             cargar_manuales()
             
             def on_pdf_cargado(ruta):
                 procesar_cargar_pdf(ruta)
-                def reload_after_delay():
-                    import time
-                    time.sleep(1.5)
-                    cargar_manuales()
-                    page.update()
-                threading.Thread(target=reload_after_delay, daemon=True).start()
+                cargar_manuales()
+                mostrar_snack("✅ Documento PDF cargado exitosamente.", "#7CFC00")
                 
             def on_excel_cargado(ruta):
                 procesar_cargar_excel(ruta)
-                def reload_after_delay():
-                    import time
-                    time.sleep(1.5)
-                    cargar_manuales()
-                    page.update()
-                threading.Thread(target=reload_after_delay, daemon=True).start()
+                cargar_manuales()
+                mostrar_snack("✅ Archivo Excel cargado exitosamente.", "#7CFC00")
 
             def on_multimedia_cargado(ruta):
                 try:
                     mostrar_snack("Procesando e insertando multimedia...", color="#D8B4FE")
                     nombre_archivo = os.path.basename(ruta)
 
-                    # Leer binario del archivo
                     with open(ruta, "rb") as f:
                         archivo_binario = f.read()
 
-                    # Insertar en la tabla manuales (igual que PDF/Excel)
                     db_m = conectar_db()
                     if not db_m:
                         mostrar_snack("Error: No se pudo conectar a la base de datos.", color="#FF4500")
@@ -9242,16 +9313,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     db_m.commit()
                     db_m.close()
 
-                    mostrar_snack(f"✅ '{nombre_archivo}' cargado correctamente.")
+                    mostrar_snack(f"✅ '{nombre_archivo}' cargado correctamente.", "#7CFC00")
                     crear_notificacion_a_rol("Gerente", "Nuevo Multimedia Disponible 🖼️", f"Se ha subido: '{nombre_archivo}'", "manual")
 
-                    # Recargar lista después de cargar
-                    def reload_after_delay():
-                        import time
-                        time.sleep(1.5)
-                        cargar_manuales()
-                        page.update()
-                    threading.Thread(target=reload_after_delay, daemon=True).start()
+                    cargar_manuales()
                 except Exception as ex:
                     print("ERROR CARGANDO MULTIMEDIA:", ex)
                     mostrar_snack(f"Error al guardar archivo multimedia: {ex}", color="red")
@@ -9313,21 +9378,30 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             )
 
             buttons_row = ft.Row([btn_pdf, btn_excel, btn_media], wrap=True, spacing=6 if is_mobile else 10)
+            category_folders_row = ft.Row([btn_cat_pdf, btn_cat_excel, btn_cat_media], wrap=True, spacing=8)
 
             if is_mobile:
                 header_container = ft.Column([
                     ft.Text("Manuales y Documentos de Sunglass Hut", size=15, color="white", weight="bold"),
+                    search_input,
+                    category_folders_row,
                     buttons_row
                 ], spacing=8)
             else:
-                header_container = ft.Row([
-                    ft.Text("Manuales y Documentos de Sunglass Hut", size=18, color="white", weight="bold"),
-                    buttons_row
-                ], alignment="spaceBetween", vertical_alignment="center", wrap=True)
+                header_container = ft.Column([
+                    ft.Row([
+                        ft.Text("Manuales y Documentos de Sunglass Hut", size=18, color="white", weight="bold"),
+                        buttons_row
+                    ], alignment="spaceBetween", vertical_alignment="center", wrap=True),
+                    ft.Row([
+                        category_folders_row,
+                        search_input
+                    ], alignment="spaceBetween", vertical_alignment="center", wrap=True)
+                ], spacing=10)
 
             return ft.Column([
                 header_container,
-                ft.Divider(height=10, color="transparent"),
+                ft.Divider(height=10, color="#333333"),
                 manuals_list
             ], expand=True)
 
@@ -21300,6 +21374,24 @@ Ejemplo:
                     btn_audio.tooltip = "Silenciar Audio"
                     btn_audio.update()
                 except Exception: pass
+
+    def desmutear_avatar_logout():
+        has_interacted_audio[0] = True
+        if login_video_player:
+            try:
+                login_video_player.playlist = [fv.VideoMedia(video_login_url)]
+                login_video_player.muted = False
+                login_video_player.volume = 100.0
+                login_video_player.play()
+                login_video_player.update()
+            except Exception as ex_v:
+                print("Notice desmutear avatar logout:", ex_v)
+        if btn_audio:
+            try:
+                btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                btn_audio.tooltip = "Silenciar Audio"
+                btn_audio.update()
+            except Exception: pass
 
     txt_user_input = ft.TextField(
         hint_text="Ej. admin",
