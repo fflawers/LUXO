@@ -1540,13 +1540,8 @@ def configurar_rutas_fastapi(app):
                         } else {
                             const bgDuration = Date.now() - lastHiddenTime;
                             console.log("📱 Pestaña/Pantalla reactivada tras:", bgDuration, "ms");
-                            if (bgDuration > 3000) {
-                                setTimeout(function() {
-                                    try {
-                                        fetch("/command?user_id=" + (window.luxoUserId || "1")).catch(function(){});
-                                    } catch(e){}
-                                }, 300);
-                            }
+                        }
+                    });
                     const isFirefox = navigator.userAgent.toLowerCase().includes("firefox");
                     const hasWebSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
                     if (hasWebSpeech && !isFirefox && typeof window.initLuxoMicPermission === "function") {
@@ -5214,7 +5209,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     elif os.path.exists(os.path.join(BASE_PATH, "luxo_avatar.mp4")):
         video_login_exists = True
         video_login_path = os.path.join(BASE_PATH, "luxo_avatar.mp4")
-    video_login_url = "custom_assets/luxo_avatar1.mp4" if page.web else video_login_path
+    video_login_url = "/custom_assets/luxo_avatar1.mp4" if page.web else video_login_path
 
     video_chat_exists = False
     video_chat_path = ""
@@ -5672,7 +5667,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     return
 
                 try:
-                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, abrir_modal=True)
+                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, abrir_modal=True, get_zona_region_fn=obtener_zona_region_activa)
                 except Exception as ex_ap:
                     print("Error abriendo estrella de aperturas por comando:", ex_ap)
                     mostrar_snack("⭐ Monitor de aperturas abierto")
@@ -6299,12 +6294,36 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     query_norm_excel = normalizar_texto(user_text)
                     palabras_busqueda = set(w for w in re.findall(r"\w+", query_norm_excel) if len(w) > 2 and w not in stopwords)
                     
+                    # Expandir alias alfanuméricos de tiendas (ej. 26382 -> q382, c964 -> 12964, sghc964 -> c964, 12964)
+                    expanded_words = set(palabras_busqueda)
+                    try:
+                        from operacion_tiendas import MAPEO_CODIGOS_TIENDAS_ALIAS
+                        for w in palabras_busqueda:
+                            w_upper = w.upper()
+                            if w_upper in MAPEO_CODIGOS_TIENDAS_ALIAS:
+                                expanded_words.add(MAPEO_CODIGOS_TIENDAS_ALIAS[w_upper].lower())
+                            if w_upper.startswith("SGH"):
+                                sub_c = w_upper[3:]
+                                expanded_words.add(sub_c.lower())
+                                if sub_c in MAPEO_CODIGOS_TIENDAS_ALIAS:
+                                    expanded_words.add(MAPEO_CODIGOS_TIENDAS_ALIAS[sub_c].lower())
+                    except Exception: pass
+                    palabras_busqueda = expanded_words
+
+                    identificadores_campo = {"telefono", "gerente", "direccion", "tienda", "correo", "numero", "directorio", "plaza", "segmento", "estado"}
+                    
                     for fila_excel in excel_cache:
                         if not fila_excel.get("abierto", 1):
                             continue
                             
                         texto_norm_fila = fila_excel["norm"]
-                        matches = sum(1 for w in palabras_busqueda if w in texto_norm_fila)
+                        matches = 0
+                        for w in palabras_busqueda:
+                            if w in texto_norm_fila:
+                                if w in identificadores_campo:
+                                    matches += 1
+                                else:
+                                    matches += 10 # Ponderación alta para identificador único de tienda o código
                         
                         if matches > max_matches and matches >= 1:
                             max_matches = matches
@@ -19793,7 +19812,7 @@ Ejemplo:
                             main_views_cache["enfoque_diario"] = enfoque_diario.build_enfoque_diario_view(page, user_info)
                         elif vista == "operacion_diaria":
                             if es_admin():
-                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr)
+                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr, get_zona_region_fn=obtener_zona_region_activa)
                             else:
                                 main_views_cache["operacion_diaria"] = operacion_tiendas.build_operacion_diaria_view(
                                     page, user_info, conectar_db, mostrar_snack, tr,
@@ -19927,6 +19946,9 @@ Ejemplo:
 
             if 'dd_zona_activa' in locals() and 'dd_region_activa' in locals():
                 z_val = dd_zona_activa.value or "0"
+                r_val = dd_region_activa.value or "0"
+                user_session["zona_activa_id"] = z_val
+                user_session["region_activa_id"] = r_val
                 new_opts = get_region_options_for_zona(z_val)
                 dd_region_activa.options.clear()
                 dd_region_activa.options.extend(new_opts)
@@ -19934,12 +19956,19 @@ Ejemplo:
                     actualizar_top_appbar_layout()
                 except Exception: pass
 
+            if es_admin():
+                try:
+                    z_curr = user_session.get("zona_activa_id", "0")
+                    r_curr = user_session.get("region_activa_id", "0")
+                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_curr, get_zona_region_fn=obtener_zona_region_activa)
+                except Exception: pass
+
             cambiar_vista(curr_v)
             if page:
                 snack = ft.SnackBar(
                     content=ft.Row([
                         ft.Text("🔄", size=14),
-                        ft.Text(f"LUXO ({curr_lang.upper()}): Módulo '{curr_v.upper()}' Sincronizado", color="white", weight="bold", size=12)
+                        ft.Text(f"LUXO ({curr_lang.upper()}): Módulo '{curr_v.upper()}' y Filtros de Zona Sincronizados", color="white", weight="bold", size=12)
                     ], spacing=6),
                     bgcolor="#064E3B",
                     duration=2000
@@ -20109,12 +20138,15 @@ Ejemplo:
 
         subtitle_terminal = ft.Text("SYSTEM", size=9, weight="bold", color="#00FFFF")
 
+        def obtener_zona_region_activa():
+            return user_session.get("zona_activa_id", "0"), user_session.get("region_activa_id", "0")
+
         star_icon_container.visible = es_admin()
         if es_admin():
             try:
                 z_curr = user_session.get("zona_activa_id", "0")
                 r_curr = user_session.get("region_activa_id", "0")
-                operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_curr)
+                operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_curr, get_zona_region_fn=obtener_zona_region_activa)
             except Exception as e:
                 print("Error al inicializar estrella de aperturas:", e)
 
@@ -20435,16 +20467,40 @@ Ejemplo:
             opts = get_region_options_for_zona(z_key)
             valid_keys = [o.key for o in opts]
             val = r_key if r_key in valid_keys else "0"
+            def _save_pref_zona_region(uid, z_id, r_id):
+                if not uid:
+                    return
+                def _save():
+                    try:
+                        db_p = conectar_db()
+                        if db_p:
+                            z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
+                            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                            z_norm = name_map.get(z_clean.upper(), z_clean)
+                            r_clean = str(r_id).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
+                            cur_p = db_p.cursor()
+                            cur_p.execute("UPDATE usuarios SET Zona = %s, Region = %s WHERE ID_Usuario = %s", (z_norm, r_clean, uid))
+                            db_p.commit()
+                            db_p.close()
+                            print(f"💾 Preferencias de Zona={z_norm} y Región={r_clean} guardadas en BD para usuario ID={uid}")
+                    except Exception as ex_p:
+                        print("Notice save zona/region DB:", ex_p)
+                import threading
+                threading.Thread(target=_save, daemon=True).start()
 
             def on_r_change(e):
-                r_val = dd.value or "0"
+                r_val = e.control.value if (e and getattr(e, "control", None) and e.control.value is not None) else (dd.value or "0")
+                old_r = user_session.get("region_activa_id", "0")
+                if r_val == old_r:
+                    return
                 user_session["region_activa_id"] = r_val
                 print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
                 if es_admin():
                     try:
                         z_curr = user_session.get("zona_activa_id", "0")
-                        operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_val)
+                        operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_val, get_zona_region_fn=obtener_zona_region_activa)
                     except Exception: pass
+                _save_pref_zona_region(user_info.get("id"), user_session.get("zona_activa_id", "0"), r_val)
                 main_views_cache.clear()
                 cambiar_vista(active_view[0])
                 try:
@@ -20473,41 +20529,28 @@ Ejemplo:
             return dd
 
         def on_zona_activa_change(e):
-            z_val = e.control.value if (e and getattr(e, "control", None) and e.control.value) else (dd_zona_activa.value or "0")
+            z_val = e.control.value if (e and getattr(e, "control", None) and e.control.value is not None) else (dd_zona_activa.value or "0")
+            old_z = user_session.get("zona_activa_id", "0")
+            if z_val == old_z:
+                return
             user_session["zona_activa_id"] = z_val
             user_session["region_activa_id"] = "0"
-            print(f"📍 Zona Activa cambiada a ID/val={z_val} por usuario={user_info.get('id')}")
+            r_val = "0"
+            print(f"📍 Zona Activa cambiada a ID/val={z_val} (Región: {r_val}) por usuario={user_info.get('id')}")
 
             # Recrear el control de regiones fresco con las opciones filtradas para la zona seleccionada
             nonlocal dd_region_activa
-            dd_region_activa = crear_dropdown_region(z_val, "0")
+            dd_region_activa = crear_dropdown_region(z_val, r_val)
             dd_region_container.content = dd_region_activa
 
             actualizar_top_appbar_layout()
 
             if es_admin():
                 try:
-                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_val, region_id="0")
+                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_val, region_id=r_val, get_zona_region_fn=obtener_zona_region_activa)
                 except Exception: pass
 
-            # Guardar la preferencia de Zona en la Base de Datos para persistir entre inicios de sesión
-            if user_info.get("id"):
-                def _save_pref_zona(uid, z_id):
-                    try:
-                        db_p = conectar_db()
-                        if db_p:
-                            z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
-                            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
-                            z_norm = name_map.get(z_clean.upper(), z_clean)
-                            cur_p = db_p.cursor()
-                            cur_p.execute("UPDATE usuarios SET Zona = %s WHERE ID_Usuario = %s", (z_norm, uid))
-                            db_p.commit()
-                            db_p.close()
-                            print(f"💾 Zona activa ID={z_norm} guardada en BD para usuario ID={uid}")
-                    except Exception as ex_p:
-                        print("Notice save zona DB:", ex_p)
-                import threading
-                threading.Thread(target=_save_pref_zona, args=(user_info["id"], z_val), daemon=True).start()
+            _save_pref_zona_region(user_info.get("id"), z_val, r_val)
 
             main_views_cache.clear()
             cambiar_vista(active_view[0])
@@ -20996,6 +21039,14 @@ Ejemplo:
 
                 u_val = (txt_user.value or "").strip().lower()
                 p_val = (txt_pass.value or "").strip()
+                u_alias = u_val
+                try:
+                    from operacion_tiendas import MAPEO_CODIGOS_TIENDAS_ALIAS
+                    for orig, alias in MAPEO_CODIGOS_TIENDAS_ALIAS.items():
+                        if u_val == f"sgh{orig.lower()}":
+                            u_alias = f"sgh{alias.lower()}"
+                            break
+                except Exception: pass
 
                 cursor = db.cursor(dictionary=True)
 
@@ -21008,11 +21059,12 @@ Ejemplo:
                     Rol,
                     Tienda,
                     Zona,
+                    Region,
                     Contrasena
                     FROM usuarios
-                    WHERE LOWER(TRIM(Usuario)) = %s
+                    WHERE LOWER(TRIM(Usuario)) = %s OR LOWER(TRIM(Usuario)) = %s
                     """,
-                    (u_val,)
+                    (u_val, u_alias)
                 )
 
                 res = cursor.fetchone()
@@ -21041,6 +21093,9 @@ Ejemplo:
                         z_clean = str(res["Zona"]).replace("📍", "").replace("Zona:", "").strip()
                         name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
                         user_session["zona_activa_id"] = name_map.get(z_clean.upper(), z_clean)
+                    if res.get("Region"):
+                        r_clean = str(res["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
+                        user_session["region_activa_id"] = r_clean
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     reproducir_saludo_login(res["Nombre_Completo"])
                     
@@ -21203,57 +21258,29 @@ Ejemplo:
     is_mobile_w = (page.width < 768) if (page.width and page.width > 0) else False
 
     login_video_player = None
-    login_audio_player = None
     btn_audio = None
     has_interacted_audio = [False]
 
-    saludo_mp3_path = os.path.join(BASE_PATH, "custom_assets", "saludo_login.mp3")
-    if os.path.exists(saludo_mp3_path):
-        try:
-            login_audio_player = ft.Audio(
-                src="/custom_assets/saludo_login.mp3",
-                autoplay=False,
-                volume=1.0
-            )
-            page.overlay.append(login_audio_player)
-        except Exception as ex_au:
-            print("Notice audio overlay init:", ex_au)
-
     def toggle_audio(e=None):
-        nonlocal login_video_player, login_audio_player, btn_audio
+        nonlocal login_video_player, btn_audio
         has_interacted_audio[0] = True
-        is_currently_muted = True
         if login_video_player:
-            is_currently_muted = login_video_player.muted
             try:
-                login_video_player.muted = not is_currently_muted
-                login_video_player.volume = 0.0 if not is_currently_muted else 100.0
-                if is_currently_muted:
+                is_currently_muted = login_video_player.muted
+                new_muted_state = not is_currently_muted
+                login_video_player.muted = new_muted_state
+                login_video_player.volume = 0.0 if new_muted_state else 100.0
+                if not new_muted_state:
                     login_video_player.playlist = [fv.VideoMedia(video_login_url)]
                     login_video_player.play()
                 login_video_player.update()
+
+                if btn_audio:
+                    btn_audio.content = ft.Text("🔇" if new_muted_state else "🔊", size=11, color="#00FFFF", text_align="center")
+                    btn_audio.tooltip = "Activar Audio" if new_muted_state else "Silenciar Audio"
+                    btn_audio.update()
             except Exception as err:
                 print("Error video toggle:", err)
-
-        if login_audio_player:
-            try:
-                if is_currently_muted:
-                    login_audio_player.play()
-                else:
-                    login_audio_player.pause()
-            except Exception as ex_a:
-                print("Error audio toggle:", ex_a)
-
-        if btn_audio:
-            try:
-                if is_currently_muted:
-                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Silenciar Audio"
-                else:
-                    btn_audio.content = ft.Text("🔇", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Activar Audio"
-                btn_audio.update()
-            except Exception: pass
 
     def unmute_on_first_interaction(e=None):
         if not has_interacted_audio[0]:
@@ -21267,11 +21294,6 @@ Ejemplo:
                     login_video_player.update()
                 except Exception as ex_a:
                     print("Notice auto unmute video:", ex_a)
-            if login_audio_player:
-                try:
-                    login_audio_player.play()
-                except Exception as ex_au:
-                    print("Notice auto unmute audio:", ex_au)
             if btn_audio:
                 try:
                     btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
@@ -21547,7 +21569,7 @@ Ejemplo:
                     db_r = conectar_db()
                     if db_r:
                         cur_r = db_r.cursor(dictionary=True)
-                        cur_r.execute("SELECT ID_Usuario, Nombre_Completo, Rol, Tienda, Zona, Usuario FROM usuarios WHERE ID_Usuario = %s", (uid_saved,))
+                        cur_r.execute("SELECT ID_Usuario, Nombre_Completo, Rol, Tienda, Zona, Region, Usuario FROM usuarios WHERE ID_Usuario = %s", (uid_saved,))
                         user_data = cur_r.fetchone()
                         db_r.close()
                         if user_data:
@@ -21558,7 +21580,12 @@ Ejemplo:
                             user_info["tienda"] = user_data.get("Tienda") or ""
                             user_info["zona"] = user_data.get("Zona") or "Zona Centro"
                             if user_data.get("Zona"):
-                                user_session["zona_activa_id"] = str(user_data["Zona"])
+                                z_clean = str(user_data["Zona"]).replace("📍", "").replace("Zona:", "").strip()
+                                name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                                user_session["zona_activa_id"] = name_map.get(z_clean.upper(), z_clean)
+                            if user_data.get("Region"):
+                                r_clean = str(user_data["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
+                                user_session["region_activa_id"] = r_clean
                             user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
                             user_id_key = user_data["ID_Usuario"]
                             active_sessions[user_id_key] = {

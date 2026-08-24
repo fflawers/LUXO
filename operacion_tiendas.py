@@ -14,6 +14,34 @@ def get_now_mexico_city():
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
+MAPEO_CODIGOS_TIENDAS_ALIAS = {
+    "10540": "A540", "A540": "10540",
+    "10615": "A615", "A615": "10615",
+    "10637": "A637", "A637": "10637",
+    "10876": "A876", "A876": "10876",
+    "10955": "A955", "A955": "10955",
+    "12943": "C943", "C943": "12943",
+    "12964": "C964", "C964": "12964",
+    "14499": "E499", "E499": "14499",
+    "15364": "F364", "F364": "15364",
+    "15536": "F536", "F536": "15536",
+    "15610": "F610", "F610": "15610",
+    "25163": "P163", "P163": "25163",
+    "25164": "P164", "P164": "25164",
+    "25237": "P237", "P237": "25237",
+    "25245": "P245", "P245": "25245",
+    "25858": "P858", "P858": "25858",
+    "25859": "P859", "P859": "25859",
+    "25977": "P977", "P977": "25977",
+    "26153": "Q153", "Q153": "26153",
+    "26246": "Q246", "Q246": "26246",
+    "26369": "Q369", "Q369": "26369",
+    "26382": "Q382", "Q382": "26382",
+    "26503": "Q503", "Q503": "26503",
+    "26558": "A535", "A535": "26558",
+    "27405": "R405", "R405": "27405"
+}
+
 def conectar_db_local():
     import mysql.connector
     try:
@@ -41,7 +69,20 @@ def crear_tabla_config_general_if_not_exists(db):
     except Exception as e:
         print("Notice crear_tabla_config_general:", e)
 
-def obtener_hora_limite_apertura():
+def obtener_hora_limite_apertura(store_num=None):
+    if store_num:
+        try:
+            db = conectar_db_local()
+            if db:
+                cursor = db.cursor(dictionary=True)
+                cursor.execute("SELECT hora_limite_apertura FROM tiendas WHERE id = %s OR nombre_tienda = %s", (str(store_num).strip(), str(store_num).strip()))
+                row = cursor.fetchone()
+                db.close()
+                if row and row.get("hora_limite_apertura"):
+                    return row["hora_limite_apertura"].strip()
+        except Exception as ex_st:
+            print("Notice store specific limit time:", ex_st)
+
     # 1. Intentar desde MySQL primero
     try:
         db = conectar_db_local()
@@ -63,10 +104,26 @@ def obtener_hora_limite_apertura():
         if os.path.exists(config_path):
             with open(config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return data.get("hora_limite_apertura", "10:00")
+                return data.get("hora_limite_apertura", "11:00")
     except Exception:
         pass
-    return "10:00"
+    return "11:00"
+
+def guardar_hora_limite_tienda(store_num, hora_str):
+    if not store_num or not hora_str:
+        return False
+    hora_clean = str(hora_str).strip()
+    try:
+        db = conectar_db_local()
+        if db:
+            cursor = db.cursor()
+            cursor.execute("UPDATE tiendas SET hora_limite_apertura = %s WHERE id = %s OR nombre_tienda = %s", (hora_clean, str(store_num).strip(), str(store_num).strip()))
+            db.commit()
+            db.close()
+            return True
+    except Exception as ex:
+        print("Error guardando hora limite tienda:", ex)
+    return False
 
 def guardar_hora_limite_apertura(hora_str):
     success = False
@@ -106,6 +163,16 @@ def guardar_hora_limite_apertura(hora_str):
     return success
 
 def obtener_tiendas_activas_info(db, zona_id=None, region_id=None):
+    def limpiar_filtro(val):
+        if not val:
+            return ""
+        s = str(val).replace("📍", "").replace("🗺️", "").replace("Zona:", "").replace("Región:", "").replace("Region:", "").strip()
+        name_map = {
+            "ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4",
+            "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"
+        }
+        return name_map.get(s.upper(), s)
+
     try:
         cursor = db.cursor(dictionary=True)
         query = """
@@ -116,12 +183,16 @@ def obtener_tiendas_activas_info(db, zona_id=None, region_id=None):
             WHERE 1=1
         """
         params = []
-        if zona_id and str(zona_id).strip() not in ("0", "", "None", "Todas las Zonas"):
-            query += " AND (z.id = %s OR z.nombre_zona = %s)"
-            params.extend([str(zona_id).strip(), str(zona_id).strip()])
-        if region_id and str(region_id).strip() not in ("0", "", "None", "Todas las Regiones"):
-            query += " AND (r.id = %s OR r.nombre_region = %s)"
-            params.extend([str(region_id).strip(), str(region_id).strip()])
+        z_clean = limpiar_filtro(zona_id)
+        if z_clean and z_clean not in ("0", "None", "Todas las Zonas"):
+            query += " AND (z.id = %s OR z.nombre_zona = %s OR z.nombre_zona LIKE CONCAT('%%', %s, '%%'))"
+            params.extend([z_clean, z_clean, z_clean])
+            
+        r_clean = limpiar_filtro(region_id)
+        if r_clean and r_clean not in ("0", "None", "Todas las Regiones"):
+            query += " AND (r.id = %s OR r.nombre_region = %s OR r.nombre_region LIKE CONCAT('%%', %s, '%%'))"
+            params.extend([r_clean, r_clean, r_clean])
+
         query += " ORDER BY t.id ASC"
         
         cursor.execute(query, params)
@@ -163,7 +234,12 @@ def crear_tabla_operacion_diaria_if_not_exists(db):
     except Exception as ex:
         print("Error asegurando tabla operacion_diaria_tiendas:", ex)
 
-def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None, abrir_modal=False, zona_id=None, region_id=None):
+def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None, abrir_modal=False, zona_id=None, region_id=None, get_zona_region_fn=None):
+    if zona_id is None:
+        zona_id = "0"
+    if region_id is None:
+        region_id = "0"
+
     db = conectar_db_fn() if conectar_db_fn else conectar_db_local()
     if not db:
         return
@@ -214,17 +290,54 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
         def on_star_click(e):
             def cerrar_modal(ev):
                 page.pop_dialog()
+
+            active_z = zona_id
+            active_r = region_id
+            if get_zona_region_fn:
+                try:
+                    res_z, res_r = get_zona_region_fn()
+                    if res_z is not None: active_z = res_z
+                    if res_r is not None: active_r = res_r
+                except Exception as ex_fn:
+                    print("Notice get_zona_region_fn:", ex_fn)
+            
+            db_click = conectar_db_fn() if conectar_db_fn else conectar_db_local()
+            dict_click = {}
+            r_set_click = set()
+            if db_click:
+                try:
+                    dict_click = obtener_tiendas_activas_info(db_click, zona_id=active_z, region_id=active_r)
+                    cursor_c = db_click.cursor(dictionary=True)
+                    cursor_c.execute("""
+                        SELECT DISTINCT Numero_Tienda 
+                        FROM operacion_diaria_tiendas 
+                        WHERE Fecha = CURDATE() AND Hora_Apertura IS NOT NULL AND Hora_Apertura != ''
+                    """)
+                    r_rows = cursor_c.fetchall()
+                    r_set_click = set(str(r["Numero_Tienda"]).strip() for r in r_rows if r["Numero_Tienda"])
+                    db_click.close()
+                except Exception as ex_db:
+                    print("Notice db_click:", ex_db)
+
+            tiendas_c = list(dict_click.keys()) if dict_click else tiendas
+            dict_c = dict_click if dict_click else tiendas_dict
+            set_c = r_set_click if db_click else reportados_set
+
+            tot_c = len(tiendas_c)
+            rep_c = [t for t in tiendas_c if t in set_c]
+            tot_rep_c = len(rep_c)
+            falt_c = [t for t in tiendas_c if t not in set_c]
                 
             items_dialog = []
             
             items_dialog.append(
                 ft.Row([
-                    ft.Text(f"Aperturas en Zona: {total_reportadas} de {total_tiendas}", color="#00FFFF", weight="bold", size=13),
+                    ft.Text(f"Aperturas en Zona: {tot_rep_c} de {tot_c}", color="#00FFFF", weight="bold", size=13),
                     ft.Text(f"Hora límite: {limit_str}", color="#aaaaaa", size=12)
                 ], alignment="spaceBetween")
             )
             
-            if total_reportadas >= total_tiendas:
+            if tot_rep_c >= tot_c and tot_c > 0:
                 items_dialog.append(
                     ft.Container(
                         content=ft.Row([
@@ -238,8 +351,8 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
                 )
             else:
                 rows_faltantes = []
-                for store_num in faltantes:
-                    s_name = tiendas_dict.get(store_num, f"Tienda {store_num}")
+                for store_num in falt_c:
+                    s_name = dict_c.get(store_num, f"Tienda {store_num}")
                     store_display = f"{s_name} ({store_num})" if not s_name.endswith(store_num) else s_name
                     rows_faltantes.append(
                         ft.Container(
@@ -637,7 +750,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
     
     return view_content
 
-def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_fn, tr_fn):
+def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_fn, tr_fn, get_zona_region_fn=None):
     db_fn = conectar_db_fn or conectar_db_local
     mostrar_snack = mostrar_snack_fn
     tr = tr_fn
@@ -663,7 +776,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
             mostrar_snack("Hora límite configurada con éxito!", "#7CFC00")
             try:
                 from main import star_icon_container
-                actualizar_estrella_aperturas(page, star_icon_container, db_fn)
+                actualizar_estrella_aperturas(page, star_icon_container, db_fn, get_zona_region_fn=get_zona_region_fn)
             except Exception:
                 pass
         else:
@@ -696,13 +809,21 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
         tabla_container.content = ft.ProgressRing(width=30, height=30)
         page.update()
         
+        z_act, r_act = None, None
+        if get_zona_region_fn:
+            try:
+                z_act, r_act = get_zona_region_fn()
+            except Exception as ex_fn:
+                print("Notice get_zona_region_fn in tab:", ex_fn)
+
         db = db_fn()
         tiendas = []
         registros = {}
         if db:
             try:
                 crear_tabla_operacion_diaria_if_not_exists(db)
-                tiendas = obtener_tiendas_activas(db)
+                tiendas_info = obtener_tiendas_activas_info(db, zona_id=z_act, region_id=r_act)
+                tiendas = list(tiendas_info.keys())
                 cursor = db.cursor(dictionary=True)
                 cursor.execute("""
                     SELECT * FROM operacion_diaria_tiendas 
@@ -778,12 +899,55 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
             else:
                 cierre_cell = ft.Text("SIN CIERRE", color="#aaaaaa", italic=True, size=10 if is_mobile_w else 11)
                 
+            hora_lim_tienda = obtener_hora_limite_apertura(store)
+            tf_store_hora = ft.TextField(
+                value=hora_lim_tienda,
+                width=75 if is_mobile_w else 85,
+                height=35,
+                text_size=11,
+                color="white",
+                border_color="#9D50BB",
+                content_padding=ft.padding.Padding(6, 2, 6, 2)
+            )
+
+            def make_save_hora_click(s_num, tf_ctrl):
+                def on_save_click(e):
+                    h_val = tf_ctrl.value.strip()
+                    if not re.match(r"^\d{2}:\d{2}$", h_val):
+                        mostrar_snack("Formato de hora no válido. Use HH:MM (ej. 11:00)", "red")
+                        return
+                    if guardar_hora_limite_tienda(s_num, h_val):
+                        mostrar_snack(f"✅ Horario de tienda {s_num} actualizado a las {h_val}", "#7CFC00")
+                        try:
+                            from main import star_icon_container
+                            actualizar_estrella_aperturas(page, star_icon_container, db_fn)
+                        except Exception: pass
+                    else:
+                        mostrar_snack("Error guardando horario de tienda", "red")
+                return on_save_click
+
+            horario_cell = ft.Row([
+                tf_store_hora,
+                ft.IconButton(
+                    ft.Icons.SAVE_ROUNDED,
+                    icon_color="#7CFC00",
+                    icon_size=16,
+                    tooltip=f"Guardar horario especial para {store}",
+                    on_click=make_save_hora_click(store, tf_store_hora)
+                )
+            ], spacing=2, vertical_alignment="center")
+
+            s_name = tiendas_info.get(store) or tiendas_info.get(MAPEO_CODIGOS_TIENDAS_ALIAS.get(store, store), f"Tienda {store}")
+            code_alias = MAPEO_CODIGOS_TIENDAS_ALIAS.get(store, store)
+            store_display = f"{s_name} ({code_alias})" if not s_name.endswith(code_alias) else s_name
+
             rows_data.append(
                 ft.DataRow(
                     cells=[
-                        ft.DataCell(ft.Text(store, color="white", weight="bold", size=10 if is_mobile_w else 13)),
+                        ft.DataCell(ft.Text(store_display, color="white", weight="bold", size=10 if is_mobile_w else 12)),
                         ft.DataCell(apert_cell),
-                        ft.DataCell(cierre_cell)
+                        ft.DataCell(cierre_cell),
+                        ft.DataCell(horario_cell)
                     ]
                 )
             )
@@ -792,7 +956,8 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
             columns=[
                 ft.DataColumn(ft.Text("Sucursal / Tienda", color="#00FFFF", weight="bold", size=10 if is_mobile_w else 13)),
                 ft.DataColumn(ft.Text("Apertura", color="#00FFFF", weight="bold", size=10 if is_mobile_w else 13)),
-                ft.DataColumn(ft.Text("Cierre", color="#00FFFF", weight="bold", size=10 if is_mobile_w else 13))
+                ft.DataColumn(ft.Text("Cierre", color="#00FFFF", weight="bold", size=10 if is_mobile_w else 13)),
+                ft.DataColumn(ft.Text("Horario Límite 🕚", color="#D8B4FE", weight="bold", size=10 if is_mobile_w else 13))
             ],
             rows=rows_data,
             border=ft.Border.all(1, "#333333"),
