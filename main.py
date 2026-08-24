@@ -58,7 +58,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DB_CONFIG = {
     "host": os.getenv("DB_HOST", "localhost"),
     "user": os.getenv("DB_USER", "root"),
-    "password": os.getenv("DB_PASSWORD", ""),
+    "password": os.getenv("DB_PASSWORD", "los4valtierra"),
     "database": os.getenv("DB_NAME", "sgh_portal"),
     "port": int(os.getenv("DB_PORT", 3306))
 }
@@ -21202,34 +21202,22 @@ Ejemplo:
 
                 else:
                     cursor.execute(
-                        """
-                        SELECT
-                        ID_Usuario
-                        FROM usuarios
-                        WHERE LOWER(TRIM(Usuario)) = %s
-                        """,
-                        (u_val,)
+                        "SELECT ID_Usuario FROM usuarios WHERE LOWER(TRIM(Usuario)) = %s OR LOWER(TRIM(Usuario)) = %s",
+                        (u_val, u_alias)
                     )
                     usuario_existe = cursor.fetchone()
-
                     if usuario_existe:
-                        mensaje = "Contraseña incorrecta"
+                        mensaje = "❌ Contraseña incorrecta. Verifica tu clave."
                     else:
-                        mensaje = "Usuario no registrado"
-                    usuario_existe = cursor.fetchone()
-
-                    if usuario_existe:
-                        mensaje = "Contraseña incorrecta"
-                    else:
-                        mensaje = "Usuario no registrado"
+                        mensaje = "❌ Usuario no registrado. Verifica tu nombre de usuario."
 
                     login_message.value = mensaje
                     login_message.color = "#FF4B4B"
                     login_error_box.visible = True
-                    
                     btn_acceder.disabled = False
                     btn_acceder.content.value = "ACCEDER"
-                    page.update()
+                    try: page.update()
+                    except: pass
 
                 db.close()
             except Exception as err:

@@ -2176,6 +2176,93 @@ SGH_USERS_MASTER = [
   }
 ]
 
+ADMIN_USERS_MASTER = [
+  {
+    "ID_Usuario": 1,
+    "Usuario": "mx204562",
+    "Contrasena": "$2b$12$bai56TGDOdPfCxFOrytn6.VUdAD38oSbcjqhVRpIS069alsfjlEKW",
+    "Nombre_Completo": "Moises Garcia",
+    "Rol": "Admin",
+    "Tienda": "Interlomas",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "3",
+    "Puesto": "Administrador"
+  },
+  {
+    "ID_Usuario": 2,
+    "Usuario": "mx108024",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Diego Arzate",
+    "Rol": "Gerente",
+    "Tienda": "Plaza Satélite",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "3",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "ID_Usuario": 19,
+    "Usuario": "clorio",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Clorio",
+    "Rol": "Admin",
+    "Tienda": "Corporativo",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "0",
+    "Puesto": "Administrador"
+  },
+  {
+    "ID_Usuario": 20,
+    "Usuario": "ricardo",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Ricardo",
+    "Rol": "Admin",
+    "Tienda": "Corporativo",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "0",
+    "Puesto": "Administrador"
+  },
+  {
+    "ID_Usuario": 21,
+    "Usuario": "gerry",
+    "Contrasena": "$2b$12$5RCadlWe9l40qAbrNdyUTeg.eiTJPbEpCgKJ8mv0KHtC1HiEMBhTG",
+    "Nombre_Completo": "Gerry",
+    "Rol": "Admin",
+    "Tienda": "Corporativo",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "0",
+    "Puesto": "Administrador"
+  },
+  {
+    "ID_Usuario": 22,
+    "Usuario": "cesar",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Cesar",
+    "Rol": "Admin",
+    "Tienda": "Corporativo",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "0",
+    "Puesto": "Administrador"
+  },
+  {
+    "ID_Usuario": 23,
+    "Usuario": "manuel",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Manuel",
+    "Rol": "Admin",
+    "Tienda": "Corporativo",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "0",
+    "Puesto": "Administrador"
+  }
+]
+
 def sincronizar_usuarios_db(db):
     try:
         if not db: return
@@ -2184,29 +2271,30 @@ def sincronizar_usuarios_db(db):
         existing = set(r["u"] for r in cursor.fetchall() if r.get("u"))
         
         n_inserted = 0
-        for u_data in SGH_USERS_MASTER:
+        for u_data in ADMIN_USERS_MASTER + SGH_USERS_MASTER:
             u_key = u_data["Usuario"].lower().strip()
             if u_key not in existing:
                 cursor.execute("""
                     INSERT INTO usuarios 
-                    (Usuario, Contrasena, Nombre_Completo, Rol, Tienda, Segmento, Zona, Puesto)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (Usuario, Contrasena, Nombre_Completo, Rol, Tienda, Segmento, Zona, Region, Puesto)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     u_data["Usuario"],
                     u_data["Contrasena"],
                     u_data["Nombre_Completo"],
                     u_data["Rol"],
-                    u_data["Tienda"],
+                    u_data.get("Tienda", ""),
                     u_data.get("Segmento", "SGH"),
                     u_data.get("Zona", "ZONA CENTRO"),
-                    u_data.get("Puesto", "Gerente de Tienda")
+                    u_data.get("Region", "0"),
+                    u_data.get("Puesto", "Administrador")
                 ))
                 n_inserted += 1
                 existing.add(u_key)
         
         if n_inserted > 0:
             db.commit()
-            print(f"✅ Auto-Sincronización DB: Se insertaron {n_inserted} usuarios de tiendas faltantes en la BD de Producción.")
+            print(f"✅ Auto-Sincronización DB: Se insertaron {n_inserted} usuarios (Admin y Tiendas) en la BD.")
         else:
             print(f"✅ Auto-Sincronización DB: Los {len(SGH_USERS_MASTER)} usuarios de tiendas ya están presentes en la BD.")
     except Exception as ex:
