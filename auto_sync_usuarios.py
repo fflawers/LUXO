@@ -2195,6 +2195,201 @@ ADMIN_USERS_MASTER = [
     "Contrasena": "sgh12345",
     "Nombre_Completo": "Diego Arzate",
     "Rol": "Gerente",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh26558",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda LA ISLA MER 2 (26558)",
+    "Rol": "Gerente",
+    "Tienda": "LA ISLA MER 2",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh9191",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda LA ISLA MERIDA (9191)",
+    "Rol": "Gerente",
+    "Tienda": "LA ISLA MERIDA",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh2883",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda MER T1 (2883)",
+    "Rol": "Gerente",
+    "Tienda": "MER T1",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh3164",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda MER1 (3164)",
+    "Rol": "Gerente",
+    "Tienda": "MER1",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh3167",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda MER4 (3167)",
+    "Rol": "Gerente",
+    "Tienda": "MER4",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh5079",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda TAB (5079)",
+    "Rol": "Gerente",
+    "Tienda": "TAB",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh2886",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda TAB T1 (2886)",
+    "Rol": "Gerente",
+    "Tienda": "TAB T1",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh3282",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda TAB2 (3282)",
+    "Rol": "Gerente",
+    "Tienda": "TAB2",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh2881",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda CZM T1 (2881)",
+    "Rol": "Gerente",
+    "Tienda": "CZM T1",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh2945",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PLAYA 10 (2945)",
+    "Rol": "Gerente",
+    "Tienda": "PLAYA 10",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh5205",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PLAYA 16 (5205)",
+    "Rol": "Gerente",
+    "Tienda": "PLAYA 16",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh3625",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PLAYA AME (3625)",
+    "Rol": "Gerente",
+    "Tienda": "PLAYA AME",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh5081",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PLAYA CH (5081)",
+    "Rol": "Gerente",
+    "Tienda": "PLAYA CH",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh5342",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PLAYA CORAZON (5342)",
+    "Rol": "Gerente",
+    "Tienda": "PLAYA CORAZON",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh2900",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PLAYA PASEO (2900)",
+    "Rol": "Gerente",
+    "Tienda": "PLAYA PASEO",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh5203",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PLAYA ZOLAR (5203)",
+    "Rol": "Gerente",
+    "Tienda": "PLAYA ZOLAR",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  },
+  {
+    "Usuario": "sgh8983",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Tienda PUNTA LANGOSTA (8983)",
+    "Rol": "Gerente",
+    "Tienda": "PUNTA LANGOSTA",
+    "Segmento": "SGH",
+    "Zona": "ZONA SUR",
+    "Puesto": "Gerente de Tienda"
+  }
+]
+
+ADMIN_USERS_MASTER = [
+  {
+    "ID_Usuario": 1,
+    "Usuario": "mx204562",
+    "Contrasena": "$2b$12$bai56TGDOdPfCxFOrytn6.VUdAD38oSbcjqhVRpIS069alsfjlEKW",
+    "Nombre_Completo": "Moises Garcia",
+    "Rol": "Admin",
+    "Tienda": "Interlomas",
+    "Segmento": "SGH",
+    "Zona": "1",
+    "Region": "3",
+    "Puesto": "Administrador"
+  },
+  {
+    "ID_Usuario": 2,
+    "Usuario": "mx108024",
+    "Contrasena": "sgh12345",
+    "Nombre_Completo": "Diego Arzate",
+    "Rol": "Gerente",
     "Tienda": "Plaza Satélite",
     "Segmento": "SGH",
     "Zona": "1",
@@ -2267,6 +2462,15 @@ def sincronizar_usuarios_db(db):
     try:
         if not db: return
         cursor = db.cursor(dictionary=True)
+        try:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN Region VARCHAR(100) NULL")
+            db.commit()
+        except Exception: pass
+        try:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN Zona VARCHAR(100) NULL")
+            db.commit()
+        except Exception: pass
+
         cursor.execute("SELECT LOWER(TRIM(Usuario)) as u FROM usuarios")
         existing = set(r["u"] for r in cursor.fetchall() if r.get("u"))
         
