@@ -1936,11 +1936,9 @@ def configurar_rutas_fastapi(app):
             user_id = form.get("user_id", "1")
             if file:
                 raw_filename = getattr(file, "filename", "upload.jpg") or "upload.jpg"
-                base, ext = os.path.splitext(os.path.basename(raw_filename))
-                if not ext:
-                    ext = ".jpg"
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:19]
-                filename = f"{base}_{timestamp}{ext}"
+                filename = os.path.basename(raw_filename)
+                if not filename:
+                    filename = "upload.jpg"
 
                 os.makedirs("uploads", exist_ok=True)
                 filepath = os.path.join("uploads", filename)
@@ -4830,6 +4828,19 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
             nombre_archivo = os.path.basename(ruta_pdf)
 
+            # MODO ACTUALIZACIÓN: Si el archivo ya existe en la BD, eliminar versión anterior antes de insertar la nueva
+            try:
+                cursor.execute("SELECT ID_Manual FROM manuales WHERE Nombre_Archivo = %s OR Titulo = %s", (nombre_archivo, nombre_archivo))
+                viejos = cursor.fetchall()
+                for v_row in viejos:
+                    v_id = v_row[0] if isinstance(v_row, (tuple, list)) else v_row.get("ID_Manual")
+                    if v_id:
+                        cursor.execute("DELETE FROM pendientes_actualizacion WHERE ID_Conversacion IN (SELECT ID_Conversacion FROM historial_conversaciones WHERE ID_Manual = %s)", (v_id,))
+                        cursor.execute("DELETE FROM historial_conversaciones WHERE ID_Manual = %s", (v_id,))
+                        cursor.execute("DELETE FROM manuales WHERE ID_Manual = %s", (v_id,))
+            except Exception as ex_del_old:
+                print("Notice update old PDF:", ex_del_old)
+
             sql = """
             INSERT INTO manuales
             (Titulo, Nombre_Archivo, Archivo_PDF, Contenido_Texto, Categoria, Version)
@@ -4956,6 +4967,19 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             print("=====================================\n")
 
             nombre_archivo = os.path.basename(ruta_excel)
+
+            # MODO ACTUALIZACIÓN: Si el Excel ya existe en la BD, eliminar versión anterior antes de insertar la nueva
+            try:
+                cursor.execute("SELECT ID_Manual FROM manuales WHERE Nombre_Archivo = %s OR Titulo = %s", (nombre_archivo, nombre_archivo))
+                viejos = cursor.fetchall()
+                for v_row in viejos:
+                    v_id = v_row[0] if isinstance(v_row, (tuple, list)) else v_row.get("ID_Manual")
+                    if v_id:
+                        cursor.execute("DELETE FROM pendientes_actualizacion WHERE ID_Conversacion IN (SELECT ID_Conversacion FROM historial_conversaciones WHERE ID_Manual = %s)", (v_id,))
+                        cursor.execute("DELETE FROM historial_conversaciones WHERE ID_Manual = %s", (v_id,))
+                        cursor.execute("DELETE FROM manuales WHERE ID_Manual = %s", (v_id,))
+            except Exception as ex_del_old:
+                print("Notice update old Excel:", ex_del_old)
 
             sql = """
             INSERT INTO manuales
@@ -6000,53 +6024,78 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 db.close()
 
                 # =======================================================
-                # 3. INTENT ROUTING: Descarga directa de archivos
+                # 3. INTENT ROUTING: Descarga directa de archivos y Desambiguación Inteligente
                 # =======================================================
-                palabras_descarga = {"pdf", "archivo", "formato", "documento", "descargar", "manual", "video", "imagen", "excel", "foto"}
+                palabras_descarga = {"pdf", "archivo", "formato", "documento", "descargar", "manual", "video", "imagen", "excel", "foto", "ficha", "contrato", "aviso", "renuncia", "alta", "politica", "politicas"}
                 user_words = set(user_text_norm.split())
-                intencion_descarga = bool(user_words.intersection(palabras_descarga))
+                intencion_descarga = bool(user_words.intersection(palabras_descarga)) or any(w in user_text_norm for w in ["tienes", "pasa", "pasame", "dame", "muestrame", "consigue", "trae", "busca", "buscame", "necesito"])
                 
                 if intencion_descarga:
-                    # Búsqueda rápida por nombre de archivo o título
-                    stop_words = {"de", "el", "la", "los", "las", "un", "una", "quiero", "puedes", "pasar", "pasame", "dame", "ver", "necesito", "buscame", "busca", "por", "favor", "luxo", "oye"}
-                    palabras_query = user_words - palabras_descarga - stop_words
-                    
-                    mejor_manual = None
-                    mayor_coincidencia = 0
-                    
-                    if palabras_query: # Si hay más contexto que solo la palabra "pdf"
+                    stop_words = {
+                        "de", "el", "la", "los", "las", "un", "una", "unos", "unas", "del", "al", "en",
+                        "quiero", "puedes", "pasar", "pasame", "dame", "ver", "necesito", "buscame", "busca",
+                        "por", "favor", "luxo", "oye", "tienes", "tendras", "tengan", "consigue", "muestra",
+                        "muestrame", "trae", "traeme", "aqui", "alli", "hola", "saludos", "tendran"
+                    }
+                    palabras_query = [w for w in user_text_norm.split() if w not in palabras_descarga and w not in stop_words and len(w) >= 2]
+                    query_str_limpia = " ".join(palabras_query).strip()
+
+                    candidatos = [] # List of tuples: (score, manual_dict)
+
+                    if query_str_limpia:
                         for m in manuales:
-                            titulo_norm = normalizar_texto(m.get("Titulo") or "")
-                            nombre_norm = normalizar_texto(m.get("Nombre_Archivo") or "")
+                            titulo = (m.get("Titulo") or "").strip()
+                            nombre_arch = (m.get("Nombre_Archivo") or "").strip()
                             
-                            # Evitamos que el `.pdf` del nombre_norm sume falsos positivos eliminándolo temporalmente para el set
-                            nombre_limpio = nombre_norm.replace(".pdf", "").replace(".xlsx", "")
+                            titulo_norm = normalizar_texto(titulo)
+                            nombre_norm = normalizar_texto(nombre_arch)
                             
-                            palabras_doc = set(titulo_norm.split()) | set(nombre_limpio.split())
+                            nombre_sin_ext = re.sub(r"\.(pdf|xlsx|xls|png|jpg|jpeg|gif|mp4|mov|avi)$", "", nombre_norm, flags=re.IGNORECASE)
+                            titulo_sin_ext = re.sub(r"\.(pdf|xlsx|xls|png|jpg|jpeg|gif|mp4|mov|avi)$", "", titulo_norm, flags=re.IGNORECASE)
+
+                            score = 0
+                            # 1. Coincidencia de subcadena completa
+                            if query_str_limpia in nombre_sin_ext or query_str_limpia in titulo_sin_ext:
+                                score += 10
                             
-                            coincidencias = len(palabras_query.intersection(palabras_doc))
-                            
-                            if coincidencias > mayor_coincidencia:
-                                mayor_coincidencia = coincidencias
-                                mejor_manual = m
-                    
-                        if mejor_manual and mayor_coincidencia > 0:
-                            # Se encontró un match directo. Obtenemos URL segura.
-                            import urllib.parse as _urllib_parse
-                            nombre_safe = obtener_pdf_assets(mejor_manual['ID_Manual'])
+                            # 2. Coincidencia por tokens de palabras
+                            doc_tokens = set(nombre_sin_ext.split()) | set(titulo_sin_ext.split())
+                            matching_tokens = set(palabras_query).intersection(doc_tokens)
+                            score += len(matching_tokens) * 3
+
+                            # 3. Coincidencia por subcadena parcial de tokens individualmente
+                            for q_tok in palabras_query:
+                                if q_tok in nombre_sin_ext or q_tok in titulo_sin_ext:
+                                    score += 2
+
+                            if score > 0:
+                                candidatos.append((score, m))
+
+                    # Ordenar por puntuación descendente
+                    candidatos.sort(key=lambda x: x[0], reverse=True)
+
+                    if candidatos:
+                        top_score = candidatos[0][0]
+                        # Seleccionar hasta 3 candidatos principales con puntuación fuerte
+                        top_candidatos = [c[1] for c in candidatos if c[0] >= max(top_score - 3, 2)][:3]
+
+                        import urllib.parse as _urllib_parse
+
+                        if len(top_candidatos) == 1 or (len(candidatos) > 1 and top_score >= candidatos[1][0] * 2):
+                            # --- CASO 1: Coincidencia Dominante 100% Única ---
+                            m_target = top_candidatos[0]
+                            nombre_safe = obtener_pdf_assets(m_target['ID_Manual'])
                             if nombre_safe:
                                 nombre_quoted = _urllib_parse.quote(nombre_safe)
-                                original_quoted = _urllib_parse.quote(mejor_manual['Nombre_Archivo'] or "documento")
-                                
+                                original_quoted = _urllib_parse.quote(m_target['Nombre_Archivo'] or "documento")
                                 url_dl = f"/dl?file={nombre_quoted}&original={original_quoted}"
-                                nombre_display = mejor_manual['Titulo'] or mejor_manual['Nombre_Archivo'] or nombre_safe
+                                nombre_display = m_target['Titulo'] or m_target['Nombre_Archivo'] or nombre_safe
 
-                                # Mensaje de confirmación de LUXO
                                 chat_display.controls.append(
                                     ft.Container(
                                         content=ft.Row([
                                             ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
-                                            ft.Text(f"¡Aquí tienes el archivo que buscabas!", color="white", expand=True)
+                                            ft.Text(f"¡Aquí tienes el archivo solicitado!", color="white", weight="bold", expand=True)
                                         ], spacing=10),
                                         bgcolor="#0F0F1A",
                                         padding=10,
@@ -6055,7 +6104,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                     )
                                 )
 
-                                # Tarjeta de archivo con botones (igual que el flujo RAG)
                                 ext_quick = os.path.splitext(nombre_safe)[1].lower()
                                 icon_quick = ft.Icons.PICTURE_AS_PDF if ext_quick == ".pdf" else (
                                     ft.Icons.TABLE_CHART if ext_quick in [".xlsx", ".xls"] else (
@@ -6103,7 +6151,74 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                     )
                                 )
                                 page.update()
-                                return  # 🛑 CORTAMOS EL FLUJO: No llamamos a Groq ni al RAG
+                                return
+
+                        else:
+                            # --- CASO 2: Desambiguación Inteligente (Varios candidatos con coincidencia similar) ---
+                            chat_display.controls.append(
+                                ft.Container(
+                                    content=ft.Row([
+                                        ft.Icon(ft.Icons.HELP_OUTLINE_ROUNDED, color="#00FFFF", size=22),
+                                        ft.Text("Encontré los siguientes documentos que coinciden con tu búsqueda. ¿Cuál de ellos necesitas?", color="white", weight="bold", expand=True)
+                                    ], spacing=10),
+                                    bgcolor="#0F0F1A",
+                                    padding=10,
+                                    border_radius=10,
+                                    border=ft.Border.all(1, "#00FFFF")
+                                )
+                            )
+
+                            for m_cand in top_candidatos:
+                                nombre_safe = obtener_pdf_assets(m_cand['ID_Manual'])
+                                if nombre_safe:
+                                    nombre_quoted = _urllib_parse.quote(nombre_safe)
+                                    original_quoted = _urllib_parse.quote(m_cand['Nombre_Archivo'] or "documento")
+                                    url_dl = f"/dl?file={nombre_quoted}&original={original_quoted}"
+                                    nombre_display = m_cand['Titulo'] or m_cand['Nombre_Archivo'] or nombre_safe
+
+                                    ext_quick = os.path.splitext(nombre_safe)[1].lower()
+                                    icon_quick = ft.Icons.PICTURE_AS_PDF if ext_quick == ".pdf" else (
+                                        ft.Icons.TABLE_CHART if ext_quick in [".xlsx", ".xls"] else (
+                                            ft.Icons.IMAGE if ext_quick in [".png", ".jpg", ".jpeg", ".gif", ".webp"] else
+                                            ft.Icons.VIDEOCAM_ROUNDED
+                                        )
+                                    )
+                                    chat_display.controls.append(
+                                        ft.Container(
+                                            content=ft.Column([
+                                                ft.Row([
+                                                    ft.Icon(icon_quick, color="#D8B4FE"),
+                                                    ft.Text(nombre_display, color="white", weight="bold", size=13, expand=True),
+                                                ], spacing=5),
+                                                ft.Row([
+                                                    ft.ElevatedButton(
+                                                        t("view_pdf"),
+                                                        icon=ft.Icons.VISIBILITY,
+                                                        on_click=lambda e, s=nombre_safe, d=nombre_display: abrir_visor_modal_global(s, d),
+                                                        bgcolor="#6E48AA",
+                                                        color="white",
+                                                        expand=True,
+                                                        disabled=(not nombre_safe)
+                                                    ),
+                                                    ft.ElevatedButton(
+                                                        t("download_pdf"),
+                                                        icon=ft.Icons.DOWNLOAD,
+                                                        url=url_dl,
+                                                        bgcolor="#204870",
+                                                        color="white",
+                                                        expand=True,
+                                                        disabled=(url_dl == "")
+                                                    ),
+                                                ], spacing=5)
+                                            ], spacing=8),
+                                            bgcolor="#1a1a2e",
+                                            padding=10,
+                                            border_radius=10,
+                                            border=ft.Border.all(1, "#333333")
+                                        )
+                                    )
+                            page.update()
+                            return  # 🛑 CORTAMOS EL FLUJO: No llamamos a Groq ni al RAG
                 
                 # =======================================================
 
@@ -9305,6 +9420,20 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     cursor_m = db_m.cursor()
                     ext_mm = os.path.splitext(nombre_archivo)[1].lower()
                     tipo = "Imagen" if ext_mm in [".png",".jpg",".jpeg",".gif",".webp"] else "Video"
+
+                    # MODO ACTUALIZACIÓN: Eliminar registro previo de multimedia si ya existe
+                    try:
+                        cursor_m.execute("SELECT ID_Manual FROM manuales WHERE Nombre_Archivo = %s OR Titulo = %s", (nombre_archivo, nombre_archivo))
+                        viejos_m = cursor_m.fetchall()
+                        for vm_row in viejos_m:
+                            vm_id = vm_row[0] if isinstance(vm_row, (tuple, list)) else vm_row.get("ID_Manual")
+                            if vm_id:
+                                cursor_m.execute("DELETE FROM pendientes_actualizacion WHERE ID_Conversacion IN (SELECT ID_Conversacion FROM historial_conversaciones WHERE ID_Manual = %s)", (vm_id,))
+                                cursor_m.execute("DELETE FROM historial_conversaciones WHERE ID_Manual = %s", (vm_id,))
+                                cursor_m.execute("DELETE FROM manuales WHERE ID_Manual = %s", (vm_id,))
+                    except Exception as ex_dm:
+                        print("Notice update old media:", ex_dm)
+
                     cursor_m.execute("""
                         INSERT INTO manuales
                         (Titulo, Nombre_Archivo, Archivo_PDF, Contenido_Texto, Categoria, Version)
