@@ -234,7 +234,6 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
                                 "👁️ Ver Ficha",
                                 icon=ft.Icons.VISIBILITY,
                                 url=url_view,
-                                url_target="_blank",
                                 style=ft.ButtonStyle(color="white", bgcolor="#2563eb")
                             ),
                             ft.ElevatedButton(
