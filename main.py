@@ -426,7 +426,7 @@ def configurar_rutas_fastapi(app):
     # ─── Endpoint de descarga sin autenticación ────────────────────────────────
     # Funciona tanto en local como en Render (mismo puerto 443/8550)
     @app.get("/dl")
-    async def download_file_route(file: str = "", original: str = ""):
+    async def download_file_route(file: str = "", original: str = "", inline: int = 0):
         import urllib.parse as _up
         import re
         from fastapi.responses import FileResponse, Response
@@ -435,6 +435,15 @@ def configurar_rutas_fastapi(app):
             return Response(content="Archivo no especificado", status_code=400)
 
         filepath = os.path.join(ASSETS_PATH, "temp_pdfs", safe)
+        if not os.path.exists(filepath):
+            pan_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "panamericano", safe)
+            if os.path.exists(pan_path):
+                filepath = pan_path
+            else:
+                up_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", safe)
+                if os.path.exists(up_path):
+                    filepath = up_path
+
         if not os.path.exists(filepath):
             m_id = re.match(r"^manual_(\d+)", safe)
             if m_id:
@@ -460,12 +469,13 @@ def configurar_rutas_fastapi(app):
         media_type = mime_map.get(ext, "application/octet-stream")
         safe_ascii_name = display_name.encode('ascii', 'ignore').decode('ascii') or "descarga"
         encoded_name = _up.quote(display_name)
+        disposition_type = "inline" if inline == 1 else "attachment"
         return FileResponse(
             path=filepath,
             filename=display_name,
             media_type=media_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{safe_ascii_name}"; filename*=UTF-8\'\'{encoded_name}',
+                "Content-Disposition": f'{disposition_type}; filename="{safe_ascii_name}"; filename*=UTF-8\'\'{encoded_name}',
                 "Access-Control-Allow-Origin": "*"
             }
         )

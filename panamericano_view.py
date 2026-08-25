@@ -160,7 +160,7 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
             def make_ver_modal(nombre_archivo=f_nom):
                 def _click(e):
                     try:
-                        url_view = f"/dl?file={urllib.parse.quote(nombre_archivo)}&original={urllib.parse.quote(nombre_archivo)}"
+                        url_view = f"/dl?file={urllib.parse.quote(nombre_archivo)}&original={urllib.parse.quote(nombre_archivo)}&inline=1"
                         page.launch_url(url_view)
                     except Exception as ex_v:
                         print("Notice abrir panamericano view:", ex_v)
