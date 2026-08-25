@@ -99,7 +99,8 @@ def limpiar_upc(upc_raw):
             
     # Eliminar cualquier caracter que no sea dígito
     cleaned = re.sub(r'\D', '', val_str)
-    return cleaned
+    # Normalizar quitando ceros a la izquierda (empareja 08053672879018 de SAP con 8053672879018 de escaneo)
+    return cleaned.lstrip('0')
 
 def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     """
