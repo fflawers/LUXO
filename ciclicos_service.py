@@ -134,6 +134,8 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     
     col_upc_esc = 0  # Col A por defecto
     col_pzs_esc = 1  # Col B por defecto
+    col_art_esc = 1  # Col B por defecto para ART
+    col_marca_esc = 2 # Col C por defecto para MARCA
     start_row_esc = 0
     
     # Auto-detectar encabezados en las primeras 25 filas buscando únicamente en las primeras 8 columnas (A a H)
@@ -147,10 +149,15 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
                     col_upc_esc = idx_c
                 elif cell_str in ["pzs", "piezas", "cant", "cantidad", "conteo", "pz"]:
                     col_pzs_esc = idx_c
+                elif cell_str in ["art", "articulo", "artículo", "modelo"]:
+                    col_art_esc = idx_c
+                elif cell_str in ["marca", "brand", "linea", "línea"]:
+                    col_marca_esc = idx_c
             start_row_esc = idx_r + 1
             break
             
     conteo_escaneo = {} # {upc_limpio: cantidad_piezas}
+    info_escaneo_extra = {} # {upc_limpio: {"art": str, "marca": str}}
     
     for row in rows_esc[start_row_esc:]:
         if not row or len(row) <= col_upc_esc or row[col_upc_esc] is None:
@@ -167,6 +174,11 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
                 cant_pzas = 1
                 
         conteo_escaneo[upc_clean] = conteo_escaneo.get(upc_clean, 0) + cant_pzas
+        
+        art_val = str(row[col_art_esc]).strip() if col_art_esc < len(row) and row[col_art_esc] is not None else ""
+        marca_val = str(row[col_marca_esc]).strip() if col_marca_esc < len(row) and row[col_marca_esc] is not None else ""
+        if upc_clean not in info_escaneo_extra:
+            info_escaneo_extra[upc_clean] = {"art": art_val, "marca": marca_val}
 
     # 2. Leer Inventario SAP (StockSummary_Details)
     wb_sap = openpyxl.load_workbook(file_sap_path, data_only=True)
@@ -239,6 +251,7 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     falta_en_escaneo = [] # En SAP pero no escaneado o escaneado < SAP
     falta_en_sap = []     # Escaneado pero no en SAP o escaneado > SAP
     stock_negativo = []   # Stock SAP < 0
+    tabla_suma_dif = []   # Lista resumida para tabla Suma de DIF
     
     todos_los_upcs = set(conteo_escaneo.keys()).union(set(datos_sap.keys()))
     
@@ -247,7 +260,7 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     
     diferencias_absolutas = 0
     
-    for upc in todos_los_upcs:
+    for upc in sorted(todos_los_upcs):
         cant_esc = conteo_escaneo.get(upc, 0)
         sap_info = datos_sap.get(upc, {"desc": "No registrado en reporte SAP", "stock": 0, "transito": 0})
         cant_sap = sap_info["stock"]
@@ -256,7 +269,20 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
         
         diff = cant_esc - cant_sap # Positivo = Sobrante, Negativo = Faltante
         diferencias_absolutas += abs(diff)
+
+        # Construir info de ART y MARCA para la tabla Suma de DIF
+        extra_info = info_escaneo_extra.get(upc, {})
+        art_code = extra_info.get("art") or (desc.split()[0] if desc and desc != "Sin descripción" else "N/A")
+        marca_name = extra_info.get("marca") or "Ray-Ban"
         
+        if diff != 0:
+            tabla_suma_dif.append({
+                "upc": upc,
+                "art": art_code,
+                "marca": marca_name,
+                "total_dif": diff
+            })
+
         # Alerta: Stock Negativo en SAP
         if cant_sap < 0:
             stock_negativo.append({
@@ -294,11 +320,14 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
                 "mensaje": f"Este código lo escaneaste ({cant_esc} pza(s)) pero en tu inventario SAP no figura o tiene registrado menos ({cant_sap} pza(s))."
             })
 
-    # Cálculo de varianza (%)
-    if total_sap_pzas > 0:
-        varianza_pct = round((diferencias_absolutas / total_sap_pzas) * 100, 2)
+    # Cálculo de varianza (%) usando Total Piezas Escaneadas o SAP
+    base_divisor = total_escaneo_pzas if total_escaneo_pzas > 0 else total_sap_pzas
+    if base_divisor > 0:
+        varianza_pct = round((diferencias_absolutas / base_divisor) * 100, 2)
     else:
         varianza_pct = 0.0
+
+    suma_dif_total = sum(item["total_dif"] for item in tabla_suma_dif)
 
     return {
         "summary": {
@@ -307,8 +336,10 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
             "total_falta_escaneo": len(falta_en_escaneo),
             "total_falta_sap": len(falta_en_sap),
             "total_negativos": len(stock_negativo),
-            "varianza_pct": varianza_pct
+            "varianza_pct": varianza_pct,
+            "suma_dif_total": suma_dif_total
         },
+        "tabla_suma_dif": tabla_suma_dif,
         "falta_en_escaneo": falta_en_escaneo,
         "falta_en_sap": falta_en_sap,
         "stock_negativo": stock_negativo

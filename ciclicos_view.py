@@ -267,6 +267,55 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
             # Construir Tablas de Alertas en la MISMISIMA página
             tables_list = []
 
+            # 0. Tabla Suma de DIF (Formato Específico Estándar de la Empresa)
+            tabla_dif_items = res.get("tabla_suma_dif", [])
+            if tabla_dif_items:
+                rows_dif = []
+                for item in tabla_dif_items:
+                    dif_val = item["total_dif"]
+                    dif_color = "#7CFC00" if dif_val > 0 else "#FF4500"
+                    dif_str = f"+{dif_val}" if dif_val > 0 else str(dif_val)
+                    rows_dif.append(ft.DataRow(cells=[
+                        ft.DataCell(ft.Text(item["upc"], weight="bold", color="white")),
+                        ft.DataCell(ft.Text(item["art"], color="#00FFFF")),
+                        ft.DataCell(ft.Text(item["marca"], color="white")),
+                        ft.DataCell(ft.Text(dif_str, weight="bold", color=dif_color))
+                    ]))
+                
+                total_neto = s.get("suma_dif_total", 0)
+                tot_color = "#7CFC00" if total_neto > 0 else ("#FF4500" if total_neto < 0 else "white")
+                tot_str = f"+{total_neto}" if total_neto > 0 else str(total_neto)
+                rows_dif.append(ft.DataRow(cells=[
+                    ft.DataCell(ft.Text("Total general", weight="bold", color="#FFD700", size=14)),
+                    ft.DataCell(ft.Text("")),
+                    ft.DataCell(ft.Text("")),
+                    ft.DataCell(ft.Text(tot_str, weight="bold", color=tot_color, size=14))
+                ]))
+
+                dt_dif = ft.DataTable(
+                    columns=[
+                        ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF")),
+                        ft.DataColumn(ft.Text("ART", weight="bold", color="#00FFFF")),
+                        ft.DataColumn(ft.Text("MARCA", weight="bold", color="#00FFFF")),
+                        ft.DataColumn(ft.Text("Total", weight="bold", color="#00FFFF")),
+                    ],
+                    rows=rows_dif,
+                    border=ft.Border.all(1, "#333333"),
+                    border_radius=8,
+                    vertical_lines=ft.BorderSide(1, "#222222"),
+                    horizontal_lines=ft.BorderSide(1, "#222222")
+                )
+
+                tables_list.append(
+                    ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="#FFD700", size=22),
+                            ft.Text("Suma de DIF (Resumen de Diferencias)", size=18, weight="bold", color="#FFD700")
+                        ], spacing=8),
+                        ft.Container(content=dt_dif, bgcolor="#0F0F1A", padding=10, border_radius=10)
+                    ], spacing=10)
+                )
+
             # 1. Tabla Falta en Escaneo
             if res["falta_en_escaneo"]:
                 rows = []
