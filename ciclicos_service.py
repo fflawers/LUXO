@@ -99,7 +99,7 @@ def limpiar_upc(upc_raw):
             
     # Eliminar cualquier caracter que no sea dígito
     cleaned = re.sub(r'\D', '', val_str)
-    # Normalizar quitando ceros a la izquierda (empareja 08053672879018 de SAP con 8053672879018 de escaneo)
+    # Normalizar ceros a la izquierda (empareja 08053672879018 con 8053672879018)
     return cleaned.lstrip('0')
 
 def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
@@ -136,13 +136,13 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     col_pzs_esc = 1  # Col B por defecto
     start_row_esc = 0
     
-    # Auto-detectar encabezados en las primeras 25 filas
+    # Auto-detectar encabezados en las primeras 25 filas buscando únicamente en las primeras 8 columnas (A a H)
     for idx_r, row in enumerate(rows_esc[:25]):
         if not row:
             continue
-        row_str_lower = [str(c).lower().strip() if c is not None else "" for c in row]
-        if any(k in row_str_lower for k in ["upc", "código", "codigo", "ean"]):
-            for idx_c, cell_str in enumerate(row_str_lower):
+        first_cols_lower = [str(c).lower().strip() if c is not None else "" for c in row[:8]]
+        if any(cell in ["upc", "código", "codigo", "ean", "barcode"] for cell in first_cols_lower):
+            for idx_c, cell_str in enumerate(first_cols_lower):
                 if cell_str in ["upc", "código", "codigo", "ean", "barcode"]:
                     col_upc_esc = idx_c
                 elif cell_str in ["pzs", "piezas", "cant", "cantidad", "conteo", "pz"]:
