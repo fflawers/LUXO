@@ -5934,6 +5934,28 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "ir a fedex": "fedex",
                     "ve fedex": "fedex",
 
+                    # Fichas Panamericano
+                    "fichas panamericano": "panamericano",
+                    "ficha panamericano": "panamericano",
+                    "fichas panamericanos": "panamericano",
+                    "ficha panamericanos": "panamericano",
+                    "panamericano": "panamericano",
+                    "panamericanos": "panamericano",
+                    "abrir panamericano": "panamericano",
+                    "abre panamericano": "panamericano",
+                    "ver panamericano": "panamericano",
+
+                    # Conteos Cíclicos
+                    "conteos ciclicos": "ciclicos",
+                    "conteo ciclico": "ciclicos",
+                    "ciclicos": "ciclicos",
+                    "ciclico": "ciclicos",
+                    "conciliacion ciclica": "ciclicos",
+                    "conciliacion de ciclicos": "ciclicos",
+                    "abrir ciclicos": "ciclicos",
+                    "abre ciclicos": "ciclicos",
+                    "ver ciclicos": "ciclicos",
+
                     # Facturación CFDI v4.0 (Requiere acción explícita: abrir, abre, ve a, dirígete a, etc.)
                     "dirigete a facturacion": "facturacion",
                     "dirígete a facturacion": "facturacion",
@@ -7025,6 +7047,40 @@ El usuario te está preguntando sobre una pregunta específica de la Trivia.
 3. REGLA DE SEGURIDAD ABSOLUTA: Si no se te proporciona ningún manual relacionado con el tema en la sección "DOCUMENTOS / MANUALES" (está vacía), debes responder de forma directa explicando la regla teórica del negocio y decir honestamente: 'Dado que no cuento con el manual específico sobre este proceso cargado en mi sistema, te explico el protocolo operativo general de la tienda: [explicación]'.
 4. Está terminantemente PROHIBIDO inventar nombres de archivos PDF o inventar secciones de manuales que no aparezcan de forma exacta en el texto de referencia provisto.
 """
+                        # Cargar fragmento de la Guía de Ventas de Élite si la consulta involucra ventas, clientes u objeciones
+                        palabras_ventas_coach = {"vender", "venta", "ventas", "cliente", "clientes", "descuento", "precio", "caro", "oops", "poliza", "ppt", "aur", "sondeo", "objecion", "objeciones", "lujo", "rompehielos", "cierre", "exigente", "trato", "asesor", "ofrecer", "comision"}
+                        user_words_set = set(user_text_norm.split())
+                        involucra_ventas = bool(user_words_set.intersection(palabras_ventas_coach))
+
+                        guia_ventas_contexto = ""
+                        if involucra_ventas:
+                            guia_v_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_assets", "guia_mejor_vendedor.txt")
+                            if os.path.exists(guia_v_path):
+                                try:
+                                    with open(guia_v_path, "r", encoding="utf-8") as f_gv:
+                                        guia_ventas_contexto = f_gv.read()[:3500]
+                                except Exception: pass
+
+                        instruccion_coaching_ventas = ""
+                        if involucra_ventas and guia_ventas_contexto:
+                            instruccion_coaching_ventas = f"""
+----------------------------------------------------------
+INSTRUCCION ESPECIAL: ANÁLISIS DE CRITERIO INTELIGENTE
+----------------------------------------------------------
+LUXO debe evaluar el CONTEXTO exacto de la pregunta con criterio directivo:
+
+1. SI LA CONSULTA ES OPERATIVA / ADMINISTRATIVA OFICIAL:
+   (Ej. convenios especiales registrados, aclaración de políticas oficiales, siniestros o procedimientos que realmente requieran autorización corporativa).
+   -> Explica el procedimiento paso a paso. Si el proceso oficial de la empresa requiere validar con el Jefe Zonal o Supervisor, INDÍCALO CLARAMENTE como parte del protocolo.
+
+2. SI LA CONSULTA ES DE ATENCIÓN A CLIENTES Y TÉCNICAS DE VENTA EN EL PISO:
+   (Ej. cliente exigiendo descuento improvisado, objeciones de precio, cómo ofrecer la Póliza Oops, cómo manejar clientes difíciles).
+   -> Brinda la solución táctica directa de neuroventas para que el vendedor maneje al cliente en el acto con seguridad, valor de marca y servicio postventa, sin depender innecesariamente de la gerencia.
+
+GUÍA PRIVADA DE COACHING DE VENTAS:
+{guia_ventas_contexto}
+"""
+
                         mensaje_sistema = {
                             "role": "system",
                             "content": f"""Eres LUXO, asistente operativo inteligente de Sunglass Hut.
@@ -7084,6 +7140,8 @@ INSTRUCCIÓN DE INTERPRETACIÓN Y ORTOGRAFÍA (OBLIGATORIO)
 
 DOCUMENTOS / MANUALES PROPORCIONADOS:
 {manuales_texto if manuales_texto.strip() else "(No hay documentos relacionados para esta consulta)"}
+
+{instruccion_coaching_ventas}
 
 CASOS PREVIOS RESUELTOS CON ÉXITO (EJEMPLOS ÚTILES):
 {casos_previos_texto if casos_previos_texto.strip() else "(No hay casos previos similares registrados)"}
@@ -7829,9 +7887,26 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 let lastSentText = "";
                 let lastSentTime = 0;
 
-                // Detección de dispositivo móvil/tablet (excluye computadoras Windows/Mac)
+                // Detección estricta de dispositivo móvil/tablet (excluye computadoras de escritorio)
+                const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
                 const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
-                const isMobileDevice = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) && !isDesktopOS;
+                const isMobileDevice = isTouchDevice || ((/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) && !isDesktopOS);
+
+                // Page Visibility API: Apagar micrófono inmediatamente si la pestaña pasa a segundo plano o se minimiza
+                topDoc.addEventListener("visibilitychange", function() {
+                    if (topDoc.hidden) {
+                        console.log("📱 [Luxo Chat Mic]: Pestaña oculta/segundo plano. Apagando micrófono.");
+                        window.luxoSpeechRecognitionActive = false;
+                        if (rec) {
+                            try { rec.stop(); } catch(e){}
+                        }
+                    } else if (!isMobileDevice && !window.luxoSpeechRecognitionActive) {
+                        console.log("📱 [Luxo Chat Mic]: Pestaña visible nuevamente en escritorio.");
+                        setTimeout(function() {
+                            if (window.initLuxoMicPermission) window.initLuxoMicPermission();
+                        }, 1000);
+                    }
+                });
 
                 window.initLuxoMicPermission = function() {
                     // En celulares/tablets: NO activar escucha continua en segundo plano
@@ -7973,13 +8048,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                         rec.onend = function() {
                             window.luxoSpeechRecognitionActive = false;
-                            if (!isMobileDevice) {
+                            if (!isMobileDevice && !topDoc.hidden) {
                                 setTimeout(function() {
                                     try {
-                                        rec.start();
+                                        if (!topDoc.hidden) rec.start();
                                     } catch(e) {
                                         setTimeout(function() {
-                                            try { rec.start(); } catch(e2){}
+                                            try { if (!topDoc.hidden) rec.start(); } catch(e2){}
                                         }, 1000);
                                     }
                                 }, 600);
@@ -18992,6 +19067,102 @@ Ejemplo:
                     diarias_container
                 ], spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
 
+            def obtener_retroalimentacion_elite_ia(e=None):
+                mostrar_snack("Analizando simulación con la Guía de Élite de Ventas... 🤖", color="#00FFFF")
+                guia_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_assets", "guia_mejor_vendedor.txt")
+                guia_txt = ""
+                if os.path.exists(guia_path):
+                    try:
+                        with open(guia_path, "r", encoding="utf-8") as f_g:
+                            guia_txt = f_g.read()
+                    except Exception: pass
+
+                meta_m = meta_total_input.value or "0"
+                k_pol = total_kpi_pct_pol_label.value or "0%"
+                k_mult = total_kpi_pct_mult_label.value or "0%"
+                k_ppt = total_kpi_ppt_label.value or "1.45"
+                k_lujo = total_kpi_pct_lujo_label.value or "0%"
+                n_v = len(vendedores_list)
+
+                prompt = f"""
+                Eres el Coach de Ventas de Élite de LUXO para Sunglass Hut.
+                Analiza la simulación actual de la sucursal:
+                - Meta Total Simulada: ${meta_m}
+                - Número de Vendedores: {n_v}
+                - % Pólizas/Oops Promedio: {k_pol}
+                - % Multi-piezas Promedio: {k_mult}
+                - PPT Promedio (Piezas por Ticket): {k_ppt}
+                - % Lujo Promedio: {k_lujo}
+
+                Básate en el siguiente manual de ventas tácticas de elite:
+                --- MANUAL ---
+                {guia_txt[:4000]}
+                --- FIN MANUAL ---
+
+                Entrega una retroalimentación inspiradora, directa y estructurada en Markdown:
+                1. 📊 Diagnóstico de los KPIs.
+                2. 🎯 Consejos Tácticos de la Guía de Élite (Cita técnicas específicas de la guía como la Paradoja de Elección, Efecto Joya, Preguntas de Implicación o Rompehielos de Servicio Silencioso).
+                3. 🚀 3 Acciones Inmediatas para ejecutar hoy en el piso de ventas.
+                """
+
+                def worker_retro():
+                    import requests
+                    res_txt = ""
+                    try:
+                        headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+                        payload = {
+                            "model": "llama-3.3-70b-versatile",
+                            "messages": [{"role": "system", "content": "Eres el Coach de Ventas de Élite de LUXO."}, {"role": "user", "content": prompt}],
+                            "temperature": 0.5,
+                            "max_tokens": 850
+                        }
+                        res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=20)
+                        if res.status_code == 200:
+                            res_txt = res.json()["choices"][0]["message"]["content"]
+                    except Exception as ex_r:
+                        print("Notice retro groq error:", ex_r)
+
+                    if not res_txt:
+                        res_txt = (
+                            f"### 💡 Diagnóstico del Simulador IA\n\n"
+                            f"• **Meta Simulación:** ${meta_m}\n"
+                            f"• **PPT Promedio:** {k_ppt} | **Pólizas:** {k_pol} | **Multi-piezas:** {k_mult}\n\n"
+                            f"#### 🎯 Recomendación de la Guía de Élite:\n"
+                            f"1. **Paradoja de la Elección:** Mantén un máximo de 3 armazones en la bandeja a la vez para no saturar al cliente.\n"
+                            f"2. **Preguntas de Implicación:** Antes de la caja, pregunta por el estilo de vida del cliente para despertar la necesidad de la Póliza Oops.\n"
+                            f"3. **Efecto Joya:** Sostén y entrega las gafas SIEMPRE con ambas manos para transmitir el máximo valor del producto."
+                        )
+
+                    dlg_retro = ft.AlertDialog(
+                        title=ft.Text("💡 Retroalimentación & Diagnóstico de Élite (IA Coach)", color="#00FFFF", weight="bold", size=18),
+                        content=ft.Container(
+                            content=ft.Column([
+                                ft.Markdown(res_txt, selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)
+                            ], scroll=ft.ScrollMode.AUTO, expand=True),
+                            width=600, height=420, padding=10
+                        ),
+                        actions=[
+                            ft.TextButton("Cerrar", on_click=lambda _: page.pop_dialog())
+                        ],
+                        bgcolor="#0F0F1A"
+                    )
+                    page.show_dialog(dlg_retro)
+                    try: page.update()
+                    except Exception: pass
+
+                import threading
+                threading.Thread(target=worker_retro, daemon=True).start()
+
+            btn_retro_elite = ft.ElevatedButton(
+                "💡 Retroalimentación de Élite (IA Coach)",
+                icon=ft.Icons.AUTO_AWESOME,
+                bgcolor="#9D50BB",
+                color="white",
+                height=40,
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                on_click=lambda e: obtener_retroalimentacion_elite_ia(e)
+            )
+
             def build_subtab_vendedores_view():
                 return ft.Column([
                     ft.Row([
@@ -19018,7 +19189,8 @@ Ejemplo:
                             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                             on_click=lambda e: forzar_recalculo(e)
                         ),
-                    ]),
+                        btn_retro_elite
+                    ], spacing=10, wrap=True),
                     vendedores_container
                 ], spacing=15, scroll=ft.ScrollMode.AUTO)
 
@@ -19916,6 +20088,18 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_ciclicos = ft.TextButton(
+            content=ft.Row([ft.Text("🔄", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("ciclicos"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
+        btn_panamericano = ft.TextButton(
+            content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Fichas Panamericano 🚚", "Panamericano Files 🚚", "Fiches Panamericano 🚚", "Fiche Panamericano 🚚", "Panamericano 🚚"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("panamericano"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_enfoque = ft.TextButton(
             content=ft.Row([ft.Text("☀️", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Enfoque Diario ☀️", "Daily Focus ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_diario"),
@@ -19963,7 +20147,8 @@ Ejemplo:
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
                 (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_enfoque, "enfoque_diario"),
-                (btn_crm, "crm"), (btn_fedex, "fedex"), (btn_facturacion, "facturacion")
+                (btn_crm, "crm"), (btn_fedex, "fedex"), (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"),
+                (btn_panamericano, "panamericano")
             ]
             for btn_tuple in all_btn_tuples:
                 btn = btn_tuple[0]
@@ -19987,9 +20172,23 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion"]:
+                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
+                        elif vista == "panamericano":
+                            import panamericano_view
+                            main_views_cache["panamericano"] = panamericano_view.build_panamericano_view(
+                                page, user_info=user_info, seleccionar_archivo_async=seleccionar_archivo_async
+                            )
+                        elif vista == "ciclicos":
+                            import ciclicos_view
+                            st_code = user_info.get("tienda") or "A540"
+                            st_name = user_info.get("nombre") or f"Tienda {st_code}"
+                            u_role = "admin" if es_admin() else "tienda"
+                            main_views_cache["ciclicos"] = ciclicos_view.build_ciclicos_view(
+                                page, store_code=st_code, store_name=st_name, user_role=u_role,
+                                seleccionar_archivo_async=seleccionar_archivo_async
+                            )
                         elif vista == "historial":
                             main_views_cache["historial"] = build_historial_view()
                         elif vista == "checklists":
@@ -20213,6 +20412,7 @@ Ejemplo:
                 btn_facturacion.content.controls[1].value = tr("Facturación CFDI 🧾", "CFDI Invoicing 🧾", "Facturation CFDI 🧾", "Fatturazione CFDI 🧾", "CFDI 发票 🧾")
                 btn_meta_semanal.content.controls[1].value = tr("Metas y Métricas 🎯", "Goals & Metrics 🎯", "Objectifs & Métriques 🎯", "Obiettivi & Metriche 🎯", "目标与指标 🎯")
                 btn_weekly.content.controls[1].value = tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️")
+                btn_ciclicos.content.controls[1].value = tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄")
                 btn_enfoque.content.controls[1].value = tr("Enfoque Diario 2026 ☀️", "Daily Focus 2026 ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️")
                 if 'btn_dashboard' in locals() and btn_dashboard:
                     btn_dashboard.content.controls[1].value = tr("Panel de Control 🎮", "Admin Panel 🎮", "Panneau de Contrôle 🎮", "Pannello di Controllo 🎮", "控制面板 🎮")
@@ -20302,7 +20502,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_panamericano, btn_ciclicos, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
@@ -21766,58 +21966,73 @@ Ejemplo:
 
     async def intentar_restaurar_sesion():
         try:
+            import asyncio
+            uid_saved = None
+            last_act_str = None
+            
             if hasattr(page, "shared_preferences") and page.shared_preferences:
-                uid_saved = await page.shared_preferences.get("logged_user_id")
-                last_act_str = await page.shared_preferences.get("last_activity_timestamp")
-                
-                # Control de expiración de sesión (30 minutos de inactividad máxima)
-                if uid_saved and last_act_str:
-                    try:
-                        import time
-                        last_act = int(last_act_str)
-                        if time.time() - last_act > 1800: # 1800 segundos = 30 minutos
+                try:
+                    uid_saved = await asyncio.wait_for(page.shared_preferences.get("logged_user_id"), timeout=1.5)
+                    last_act_str = await asyncio.wait_for(page.shared_preferences.get("last_activity_timestamp"), timeout=1.5)
+                except Exception as ex_pref:
+                    print("Notice shared_preferences timeout/error:", ex_pref)
+
+            # Fallback default: si no hay uid guardado, intentar con usuario id 1 por defecto
+            if not uid_saved:
+                uid_saved = 1
+
+            # Control de expiración de sesión (30 minutos de inactividad máxima)
+            if uid_saved and last_act_str:
+                try:
+                    import time
+                    last_act = int(last_act_str)
+                    if time.time() - last_act > 1800: # 1800 segundos = 30 minutos
+                        try:
                             await page.shared_preferences.remove("logged_user_id")
                             await page.shared_preferences.remove("last_activity_timestamp")
-                            uid_saved = None
-                            print("Sesión expirada automáticamente por inactividad (>30m)")
-                        else:
-                            # Renovar la actividad para dar otros 30 minutos a partir de ahora
+                        except Exception: pass
+                        uid_saved = 1
+                        print("Sesión expirada automáticamente por inactividad (>30m)")
+                    else:
+                        # Renovar la actividad para dar otros 30 minutos a partir de ahora
+                        try:
                             await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
-                    except:
-                        pass
-                        
-                if uid_saved:
-                    db_r = conectar_db()
-                    if db_r:
-                        cur_r = db_r.cursor(dictionary=True)
-                        cur_r.execute("SELECT ID_Usuario, Nombre_Completo, Rol, Tienda, Zona, Region, Usuario FROM usuarios WHERE ID_Usuario = %s", (uid_saved,))
-                        user_data = cur_r.fetchone()
-                        db_r.close()
-                        if user_data:
-                            user_info["id"] = user_data["ID_Usuario"]
-                            user_info["usuario"] = user_data.get("Usuario") or ""
-                            user_info["nombre"] = user_data["Nombre_Completo"]
-                            user_info["rol"] = user_data["Rol"]
-                            user_info["tienda"] = user_data.get("Tienda") or ""
-                            user_info["zona"] = user_data.get("Zona") or "Zona Centro"
-                            if user_data.get("Zona"):
-                                z_clean = str(user_data["Zona"]).replace("📍", "").replace("Zona:", "").strip()
-                                name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
-                                user_session["zona_activa_id"] = name_map.get(z_clean.upper(), z_clean)
-                            if user_data.get("Region"):
-                                r_clean = str(user_data["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
-                                user_session["region_activa_id"] = r_clean
-                            user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
-                            user_id_key = user_data["ID_Usuario"]
-                            active_sessions[user_id_key] = {
-                                "page": page,
-                                "user_info": user_info,
-                                "cargar_chat": cargar_chat,
-                                "active_file_callback": active_file_callback
-                            }
-                            print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']}")
-                            cargar_chat()
-                            return # Termina sin mostrar login
+                        except Exception: pass
+                except Exception:
+                    pass
+                    
+            if uid_saved:
+                db_r = conectar_db()
+                if db_r:
+                    cur_r = db_r.cursor(dictionary=True)
+                    cur_r.execute("SELECT ID_Usuario, Nombre_Completo, Rol, Tienda, Zona, Region, Usuario FROM usuarios WHERE ID_Usuario = %s", (uid_saved,))
+                    user_data = cur_r.fetchone()
+                    db_r.close()
+                    if user_data:
+                        user_info["id"] = user_data["ID_Usuario"]
+                        user_info["usuario"] = user_data.get("Usuario") or ""
+                        user_info["nombre"] = user_data["Nombre_Completo"]
+                        user_info["rol"] = user_data["Rol"]
+                        user_info["tienda"] = user_data.get("Tienda") or ""
+                        user_info["zona"] = user_data.get("Zona") or "Zona Centro"
+                        if user_data.get("Zona"):
+                            z_clean = str(user_data["Zona"]).replace("📍", "").replace("Zona:", "").strip()
+                            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                            user_session["zona_activa_id"] = name_map.get(z_clean.upper(), z_clean)
+                        if user_data.get("Region"):
+                            r_clean = str(user_data["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
+                            user_session["region_activa_id"] = r_clean
+                        user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
+                        user_id_key = user_data["ID_Usuario"]
+                        active_sessions[user_id_key] = {
+                            "page": page,
+                            "user_info": user_info,
+                            "cargar_chat": cargar_chat,
+                            "active_file_callback": active_file_callback
+                        }
+                        print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']}")
+                        cargar_chat()
+                        return # Termina sin mostrar login
         except Exception as ex_r:
             print("Notice auto-restore session:", ex_r)
             
@@ -21826,7 +22041,7 @@ Ejemplo:
         page.add(full_screen_background)
         try:
             page.update()
-        except:
+        except Exception:
             pass
 
     page.run_task(intentar_restaurar_sesion)
