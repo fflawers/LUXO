@@ -819,6 +819,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
         db = db_fn()
         tiendas = []
         registros = {}
+        horas_limite_dict = {}
         if db:
             try:
                 crear_tabla_operacion_diaria_if_not_exists(db)
@@ -831,6 +832,17 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
                 """, (fecha_consulta[0],))
                 rows = cursor.fetchall()
                 registros = {str(r["Numero_Tienda"]).strip(): r for r in rows}
+
+                # Cargar todas las horas limite en 1 sola consulta sin crear conexiones repetidas
+                try:
+                    cursor.execute("SELECT id, nombre_tienda, hora_limite_apertura FROM tiendas")
+                    for t_row in cursor.fetchall():
+                        h_val = t_row.get("hora_limite_apertura")
+                        if h_val:
+                            if t_row.get("id"): horas_limite_dict[str(t_row["id"]).strip()] = str(h_val).strip()
+                            if t_row.get("nombre_tienda"): horas_limite_dict[str(t_row["nombre_tienda"]).strip()] = str(h_val).strip()
+                except Exception: pass
+
                 db.close()
             except Exception as ex:
                 print("Error al refrescar tabla admin:", ex)
@@ -841,6 +853,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
             return
             
         rows_data = []
+        default_hora_limite = obtener_hora_limite_apertura()
         for store in tiendas:
             reg = registros.get(store)
             
@@ -899,7 +912,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
             else:
                 cierre_cell = ft.Text("SIN CIERRE", color="#aaaaaa", italic=True, size=10 if is_mobile_w else 11)
                 
-            hora_lim_tienda = obtener_hora_limite_apertura(store)
+            hora_lim_tienda = horas_limite_dict.get(store) or default_hora_limite
             tf_store_hora = ft.TextField(
                 value=hora_lim_tienda,
                 width=75 if is_mobile_w else 85,
