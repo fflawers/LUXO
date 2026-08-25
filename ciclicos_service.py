@@ -320,10 +320,16 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
                 "mensaje": f"Este código lo escaneaste ({cant_esc} pza(s)) pero en tu inventario SAP no figura o tiene registrado menos ({cant_sap} pza(s))."
             })
 
-    # Cálculo de varianza (%) usando Total Piezas Escaneadas o SAP
-    base_divisor = total_escaneo_pzas if total_escaneo_pzas > 0 else total_sap_pzas
-    if base_divisor > 0:
-        varianza_pct = round((diferencias_absolutas / base_divisor) * 100, 2)
+    # Ordenar la tabla Suma de DIF: Primero Positivos (+), luego Negativos (-)
+    tabla_suma_dif.sort(key=lambda x: (-x["total_dif"], x["upc"]))
+
+    # Cálculo de varianza (%) basado en piezas del segmento/conteo o total escaneado
+    # Si hay coincidencias de marca o escaneo, calcular sobre la base contada (ej. 7 / 427 = 1.64%)
+    pzas_conteo_marca = sum(conteo_escaneo[u] for u in conteo_escaneo if datos_sap.get(u))
+    divisor_varianza = pzas_conteo_marca if pzas_conteo_marca > 0 else (total_escaneo_pzas if total_escaneo_pzas > 0 else total_sap_pzas)
+    
+    if divisor_varianza > 0:
+        varianza_pct = round((diferencias_absolutas / divisor_varianza) * 100, 2)
     else:
         varianza_pct = 0.0
 

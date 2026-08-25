@@ -296,7 +296,6 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                         dif_str = f"+{dif_val}" if dif_val > 0 else str(dif_val)
                         rows_dif.append(ft.DataRow(cells=[
                             ft.DataCell(ft.Text(item["upc"], weight="bold", color="white")),
-                            ft.DataCell(ft.Text(item["art"], color="#00FFFF")),
                             ft.DataCell(ft.Text(item["marca"], color="white")),
                             ft.DataCell(ft.Text(dif_str, weight="bold", color=dif_color))
                         ]))
@@ -307,14 +306,12 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     rows_dif.append(ft.DataRow(cells=[
                         ft.DataCell(ft.Text("Total general", weight="bold", color="#FFD700", size=14)),
                         ft.DataCell(ft.Text("")),
-                        ft.DataCell(ft.Text("")),
                         ft.DataCell(ft.Text(tot_str, weight="bold", color=tot_color, size=14))
                     ]))
 
                     dt_dif = ft.DataTable(
                         columns=[
                             ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF")),
-                            ft.DataColumn(ft.Text("ART", weight="bold", color="#00FFFF")),
                             ft.DataColumn(ft.Text("MARCA", weight="bold", color="#00FFFF")),
                             ft.DataColumn(ft.Text("Total", weight="bold", color="#00FFFF")),
                         ],
