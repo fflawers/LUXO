@@ -209,232 +209,255 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
             except Exception: pass
             return
 
-        try:
-            res = cs.procesar_conciliacion_ciclico(path_esc, path_sap)
-            resultado_conciliacion["value"] = res
-            
-            # REGLA EXPLICITA 1: Varianza 0% es VERDE (#16a34a), cualquier otro número (>0%) es ROJO (#dc2626)
-            s = res["summary"]
-            var_pct = s["varianza_pct"]
-            color_var = "#16a34a" if var_pct == 0.0 else "#dc2626"
-
-            card_var = ft.Card(
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.Text("Varianza Global", size=13, weight="bold", color="#888888"),
-                        ft.Text(f"{var_pct}%", size=28, weight="bold", color=color_var),
-                        ft.Text(f"Piezas SAP: {s['total_sap_pzas']} | Escaneo: {s['total_escaneo_pzas']}", size=11, color="#888888")
-                    ], horizontal_alignment="center"),
-                    padding=15, width=220
-                )
+        # Mostrar animación de carga inmediata (ProgressRing / Reloj giratorio)
+        container_resumen.controls = [
+            ft.Container(
+                content=ft.Row([
+                    ft.ProgressRing(width=28, height=28, color="#00FFFF", stroke_width=3),
+                    ft.Text("Procesando y cruzando inventarios... Por favor espera ⏳", color="#00FFFF", size=14, weight="bold")
+                ], spacing=12, alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor="#0F0F1A",
+                padding=20,
+                border_radius=10,
+                border=ft.Border.all(1.5, "#00FFFF"),
+                width=500
             )
+        ]
+        container_tablas.controls = []
+        try: page.update()
+        except Exception: pass
 
-            card_falta_esc = ft.Card(
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.Text("Falta en tu Escaneo", size=13, weight="bold", color="#dc2626"),
-                        ft.Text(str(s["total_falta_escaneo"]), size=28, weight="bold", color="#dc2626"),
-                        ft.Text("Códigos en SAP no escaneados", size=11, color="#888888")
-                    ], horizontal_alignment="center"),
-                    padding=15, width=220
-                )
-            )
-
-            card_falta_sap = ft.Card(
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.Text("No está en SAP", size=13, weight="bold", color="#2563eb"),
-                        ft.Text(str(s["total_falta_sap"]), size=28, weight="bold", color="#2563eb"),
-                        ft.Text("Escaneados no hallados en SAP", size=11, color="#888888")
-                    ], horizontal_alignment="center"),
-                    padding=15, width=220
-                )
-            )
-
-            card_neg = ft.Card(
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.Text("Stock Negativo SAP", size=13, weight="bold", color="#ea580c"),
-                        ft.Text(str(s["total_negativos"]), size=28, weight="bold", color="#ea580c"),
-                        ft.Text("Piezas en negativo", size=11, color="#888888")
-                    ], horizontal_alignment="center"),
-                    padding=15, width=220
-                )
-            )
-
-            container_resumen.controls = [card_var, card_falta_esc, card_falta_sap, card_neg]
-
-            # Construir Tablas de Alertas en la MISMISIMA página
-            tables_list = []
-
-            # 0. Tabla Suma de DIF (Formato Específico Estándar de la Empresa)
-            tabla_dif_items = res.get("tabla_suma_dif", [])
-            if tabla_dif_items:
-                rows_dif = []
-                for item in tabla_dif_items:
-                    dif_val = item["total_dif"]
-                    dif_color = "#7CFC00" if dif_val > 0 else "#FF4500"
-                    dif_str = f"+{dif_val}" if dif_val > 0 else str(dif_val)
-                    rows_dif.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(item["upc"], weight="bold", color="white")),
-                        ft.DataCell(ft.Text(item["art"], color="#00FFFF")),
-                        ft.DataCell(ft.Text(item["marca"], color="white")),
-                        ft.DataCell(ft.Text(dif_str, weight="bold", color=dif_color))
-                    ]))
+        def worker_conciliacion():
+            try:
+                res = cs.procesar_conciliacion_ciclico(path_esc, path_sap)
+                resultado_conciliacion["value"] = res
                 
-                total_neto = s.get("suma_dif_total", 0)
-                tot_color = "#7CFC00" if total_neto > 0 else ("#FF4500" if total_neto < 0 else "white")
-                tot_str = f"+{total_neto}" if total_neto > 0 else str(total_neto)
-                rows_dif.append(ft.DataRow(cells=[
-                    ft.DataCell(ft.Text("Total general", weight="bold", color="#FFD700", size=14)),
-                    ft.DataCell(ft.Text("")),
-                    ft.DataCell(ft.Text("")),
-                    ft.DataCell(ft.Text(tot_str, weight="bold", color=tot_color, size=14))
-                ]))
+                # REGLA EXPLICITA 1: Varianza 0% es VERDE (#16a34a), cualquier otro número (>0%) es ROJO (#dc2626)
+                s = res["summary"]
+                var_pct = s["varianza_pct"]
+                color_var = "#16a34a" if var_pct == 0.0 else "#dc2626"
 
-                dt_dif = ft.DataTable(
-                    columns=[
-                        ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF")),
-                        ft.DataColumn(ft.Text("ART", weight="bold", color="#00FFFF")),
-                        ft.DataColumn(ft.Text("MARCA", weight="bold", color="#00FFFF")),
-                        ft.DataColumn(ft.Text("Total", weight="bold", color="#00FFFF")),
-                    ],
-                    rows=rows_dif,
-                    border=ft.Border.all(1, "#333333"),
-                    border_radius=8,
-                    vertical_lines=ft.BorderSide(1, "#222222"),
-                    horizontal_lines=ft.BorderSide(1, "#222222")
+                card_var = ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text("Varianza Global", size=13, weight="bold", color="#888888"),
+                            ft.Text(f"{var_pct}%", size=28, weight="bold", color=color_var),
+                            ft.Text(f"Piezas SAP: {s['total_sap_pzas']} | Escaneo: {s['total_escaneo_pzas']}", size=11, color="#888888")
+                        ], horizontal_alignment="center"),
+                        padding=15, width=220
+                    )
                 )
 
-                tables_list.append(
-                    ft.Column([
-                        ft.Row([
-                            ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="#FFD700", size=22),
-                            ft.Text("Suma de DIF (Resumen de Diferencias)", size=18, weight="bold", color="#FFD700")
-                        ], spacing=8),
-                        ft.Container(content=dt_dif, bgcolor="#0F0F1A", padding=10, border_radius=10)
-                    ], spacing=10)
+                card_falta_esc = ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text("Falta en tu Escaneo", size=13, weight="bold", color="#dc2626"),
+                            ft.Text(str(s["total_falta_escaneo"]), size=28, weight="bold", color="#dc2626"),
+                            ft.Text("Códigos en SAP no escaneados", size=11, color="#888888")
+                        ], horizontal_alignment="center"),
+                        padding=15, width=220
+                    )
                 )
 
-            # 1. Tabla Falta en Escaneo
-            if res["falta_en_escaneo"]:
-                rows = []
-                for item in res["falta_en_escaneo"]:
-                    rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(item["upc"], weight="bold")),
-                        ft.DataCell(ft.Text(item["descripcion"])),
-                        ft.DataCell(ft.Text(str(item["cant_sap"]), color="#2563eb")),
-                        ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#888888")),
-                        ft.DataCell(ft.Text(item["mensaje"], color="#dc2626"))
+                card_falta_sap = ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text("No está en SAP", size=13, weight="bold", color="#2563eb"),
+                            ft.Text(str(s["total_falta_sap"]), size=28, weight="bold", color="#2563eb"),
+                            ft.Text("Escaneados no hallados en SAP", size=11, color="#888888")
+                        ], horizontal_alignment="center"),
+                        padding=15, width=220
+                    )
+                )
+
+                card_neg = ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text("Stock Negativo SAP", size=13, weight="bold", color="#ea580c"),
+                            ft.Text(str(s["total_negativos"]), size=28, weight="bold", color="#ea580c"),
+                            ft.Text("Piezas en negativo", size=11, color="#888888")
+                        ], horizontal_alignment="center"),
+                        padding=15, width=220
+                    )
+                )
+
+                container_resumen.controls = [card_var, card_falta_esc, card_falta_sap, card_neg]
+
+                # Construir Tablas de Alertas en la MISMISIMA página
+                tables_list = []
+
+                # 0. Tabla Suma de DIF (Formato Específico Estándar de la Empresa)
+                tabla_dif_items = res.get("tabla_suma_dif", [])
+                if tabla_dif_items:
+                    rows_dif = []
+                    for item in tabla_dif_items:
+                        dif_val = item["total_dif"]
+                        dif_color = "#7CFC00" if dif_val > 0 else "#FF4500"
+                        dif_str = f"+{dif_val}" if dif_val > 0 else str(dif_val)
+                        rows_dif.append(ft.DataRow(cells=[
+                            ft.DataCell(ft.Text(item["upc"], weight="bold", color="white")),
+                            ft.DataCell(ft.Text(item["art"], color="#00FFFF")),
+                            ft.DataCell(ft.Text(item["marca"], color="white")),
+                            ft.DataCell(ft.Text(dif_str, weight="bold", color=dif_color))
+                        ]))
+                    
+                    total_neto = s.get("suma_dif_total", 0)
+                    tot_color = "#7CFC00" if total_neto > 0 else ("#FF4500" if total_neto < 0 else "white")
+                    tot_str = f"+{total_neto}" if total_neto > 0 else str(total_neto)
+                    rows_dif.append(ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("Total general", weight="bold", color="#FFD700", size=14)),
+                        ft.DataCell(ft.Text("")),
+                        ft.DataCell(ft.Text("")),
+                        ft.DataCell(ft.Text(tot_str, weight="bold", color=tot_color, size=14))
                     ]))
-                dt = ft.DataTable(
-                    columns=[
-                        ft.DataColumn(ft.Text("UPC")),
-                        ft.DataColumn(ft.Text("Descripción Gafa")),
-                        ft.DataColumn(ft.Text("SAP")),
-                        ft.DataColumn(ft.Text("Escaneo")),
-                        ft.DataColumn(ft.Text("Alerta / Diagnóstico"))
-                    ],
-                    rows=rows
-                )
-                tables_list.append(ft.Column([
-                    ft.Text("🔴 Códigos que no están en tu escaneo (Faltantes)", size=16, weight="bold", color="#dc2626"),
-                    ft.Container(content=dt, border=ft.Border.all(1, "#fca5a5"), border_radius=8, padding=5)
-                ]))
 
-            # 2. Tabla Falta en SAP
-            if res["falta_en_sap"]:
-                rows = []
-                for item in res["falta_en_sap"]:
-                    rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(item["upc"], weight="bold")),
-                        ft.DataCell(ft.Text(item["descripcion"])),
-                        ft.DataCell(ft.Text(str(item["cant_sap"]), color="#888888")),
-                        ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#16a34a")),
-                        ft.DataCell(ft.Text(item["mensaje"], color="#2563eb"))
+                    dt_dif = ft.DataTable(
+                        columns=[
+                            ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF")),
+                            ft.DataColumn(ft.Text("ART", weight="bold", color="#00FFFF")),
+                            ft.DataColumn(ft.Text("MARCA", weight="bold", color="#00FFFF")),
+                            ft.DataColumn(ft.Text("Total", weight="bold", color="#00FFFF")),
+                        ],
+                        rows=rows_dif,
+                        border=ft.Border.all(1, "#333333"),
+                        border_radius=8,
+                        vertical_lines=ft.BorderSide(1, "#222222"),
+                        horizontal_lines=ft.BorderSide(1, "#222222")
+                    )
+
+                    tables_list.append(
+                        ft.Column([
+                            ft.Row([
+                                ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="#FFD700", size=22),
+                                ft.Text("Suma de DIF (Resumen de Diferencias)", size=18, weight="bold", color="#FFD700")
+                            ], spacing=8),
+                            ft.Container(content=dt_dif, bgcolor="#0F0F1A", padding=10, border_radius=10)
+                        ], spacing=10)
+                    )
+
+                # 1. Tabla Falta en Escaneo
+                if res["falta_en_escaneo"]:
+                    rows = []
+                    for item in res["falta_en_escaneo"]:
+                        rows.append(ft.DataRow(cells=[
+                            ft.DataCell(ft.Text(item["upc"], weight="bold")),
+                            ft.DataCell(ft.Text(item["descripcion"])),
+                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#2563eb")),
+                            ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#888888")),
+                            ft.DataCell(ft.Text(item["mensaje"], color="#dc2626"))
+                        ]))
+                    dt = ft.DataTable(
+                        columns=[
+                            ft.DataColumn(ft.Text("UPC")),
+                            ft.DataColumn(ft.Text("Descripción Gafa")),
+                            ft.DataColumn(ft.Text("SAP")),
+                            ft.DataColumn(ft.Text("Escaneo")),
+                            ft.DataColumn(ft.Text("Alerta / Diagnóstico"))
+                        ],
+                        rows=rows
+                    )
+                    tables_list.append(ft.Column([
+                        ft.Text("🔴 Códigos que no están en tu escaneo (Faltantes)", size=16, weight="bold", color="#dc2626"),
+                        ft.Container(content=dt, border=ft.Border.all(1, "#fca5a5"), border_radius=8, padding=5)
                     ]))
-                dt = ft.DataTable(
-                    columns=[
-                        ft.DataColumn(ft.Text("UPC")),
-                        ft.DataColumn(ft.Text("Descripción Gafa")),
-                        ft.DataColumn(ft.Text("SAP")),
-                        ft.DataColumn(ft.Text("Escaneo")),
-                        ft.DataColumn(ft.Text("Alerta / Diagnóstico"))
-                    ],
-                    rows=rows
-                )
-                tables_list.append(ft.Column([
-                    ft.Text("🔵 Códigos escaneados que no están en tu SAP (Sobrantes / No registrados)", size=16, weight="bold", color="#2563eb"),
-                    ft.Container(content=dt, border=ft.Border.all(1, "#93c5fd"), border_radius=8, padding=5)
-                ]))
 
-            # 3. Tabla Stock Negativo
-            if res["stock_negativo"]:
-                rows = []
-                for item in res["stock_negativo"]:
-                    rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(item["upc"], weight="bold")),
-                        ft.DataCell(ft.Text(item["descripcion"])),
-                        ft.DataCell(ft.Text(str(item["cant_sap"]), color="#dc2626", weight="bold")),
-                        ft.DataCell(ft.Text(str(item["cant_escaneo"]))),
-                        ft.DataCell(ft.Text(item["mensaje"], color="#ea580c"))
+                # 2. Tabla Falta en SAP
+                if res["falta_en_sap"]:
+                    rows = []
+                    for item in res["falta_en_sap"]:
+                        rows.append(ft.DataRow(cells=[
+                            ft.DataCell(ft.Text(item["upc"], weight="bold")),
+                            ft.DataCell(ft.Text(item["descripcion"])),
+                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#888888")),
+                            ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#16a34a")),
+                            ft.DataCell(ft.Text(item["mensaje"], color="#2563eb"))
+                        ]))
+                    dt = ft.DataTable(
+                        columns=[
+                            ft.DataColumn(ft.Text("UPC")),
+                            ft.DataColumn(ft.Text("Descripción Gafa")),
+                            ft.DataColumn(ft.Text("SAP")),
+                            ft.DataColumn(ft.Text("Escaneo")),
+                            ft.DataColumn(ft.Text("Alerta / Diagnóstico"))
+                        ],
+                        rows=rows
+                    )
+                    tables_list.append(ft.Column([
+                        ft.Text("🔵 Códigos escaneados que no están en tu SAP (Sobrantes / No registrados)", size=16, weight="bold", color="#2563eb"),
+                        ft.Container(content=dt, border=ft.Border.all(1, "#93c5fd"), border_radius=8, padding=5)
                     ]))
-                dt = ft.DataTable(
-                    columns=[
-                        ft.DataColumn(ft.Text("UPC")),
-                        ft.DataColumn(ft.Text("Descripción Gafa")),
-                        ft.DataColumn(ft.Text("SAP")),
-                        ft.DataColumn(ft.Text("Escaneo")),
-                        ft.DataColumn(ft.Text("Alerta / Diagnóstico"))
-                    ],
-                    rows=rows
+
+                # 3. Tabla Stock Negativo
+                if res["stock_negativo"]:
+                    rows = []
+                    for item in res["stock_negativo"]:
+                        rows.append(ft.DataRow(cells=[
+                            ft.DataCell(ft.Text(item["upc"], weight="bold")),
+                            ft.DataCell(ft.Text(item["descripcion"])),
+                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#dc2626", weight="bold")),
+                            ft.DataCell(ft.Text(str(item["cant_escaneo"]))),
+                            ft.DataCell(ft.Text(item["mensaje"], color="#ea580c"))
+                        ]))
+                    dt = ft.DataTable(
+                        columns=[
+                            ft.DataColumn(ft.Text("UPC")),
+                            ft.DataColumn(ft.Text("Descripción Gafa")),
+                            ft.DataColumn(ft.Text("SAP")),
+                            ft.DataColumn(ft.Text("Escaneo")),
+                            ft.DataColumn(ft.Text("Alerta / Diagnóstico"))
+                        ],
+                        rows=rows
+                    )
+                    tables_list.append(ft.Column([
+                        ft.Text("⚠️ Piezas con Stock Negativo en SAP", size=16, weight="bold", color="#ea580c"),
+                        ft.Container(content=dt, border=ft.Border.all(1, "#fdba74"), border_radius=8, padding=5)
+                    ]))
+
+                if not tables_list:
+                    tables_list.append(ft.Container(
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, color="#16a34a", size=30),
+                            ft.Text("¡Excelente! No hay ninguna diferencia entre el escaneo y el reporte de SAP.", size=16, color="#15803d", weight="bold")
+                        ]),
+                        padding=20, bgcolor="#f0fdf4", border_radius=10
+                    ))
+
+                container_tablas.controls = tables_list
+
+                # REGLA EXPLICITA 2 & 3: GUARDADO AUTOMATICO E INMEDIATO EN BASE DE DATOS
+                marca_val = txt_marca.value.strip() or "General"
+                coment_val = txt_comentarios.value.strip()
+                
+                ok, msg_or_id = cs.guardar_ciclico_db(
+                    codigo_tienda=store_code,
+                    nombre_tienda=store_name,
+                    marca=marca_val,
+                    resumen=res["summary"],
+                    falta_esc=res["falta_en_escaneo"],
+                    falta_sap=res["falta_en_sap"],
+                    negativos=res["stock_negativo"],
+                    comentarios=coment_val,
+                    usuario="Tienda"
                 )
-                tables_list.append(ft.Column([
-                    ft.Text("⚠️ Piezas con Stock Negativo en SAP", size=16, weight="bold", color="#ea580c"),
-                    ft.Container(content=dt, border=ft.Border.all(1, "#fdba74"), border_radius=8, padding=5)
-                ]))
 
-            if not tables_list:
-                tables_list.append(ft.Container(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.CHECK_CIRCLE, color="#16a34a", size=30),
-                        ft.Text("¡Excelente! No hay ninguna diferencia entre el escaneo y el reporte de SAP.", size=16, color="#15803d", weight="bold")
-                    ]),
-                    padding=20, bgcolor="#f0fdf4", border_radius=10
-                ))
+                if ok:
+                    page.snack_bar = ft.SnackBar(ft.Text(f"🎉 Cíclico #{msg_or_id} conciliado y guardado automáticamente en LUXO."), open=True)
+                    cargar_historial(update_page=False)
+                else:
+                    page.snack_bar = ft.SnackBar(ft.Text(f"⚠️ Conciliado en pantalla, aviso de guardado: {msg_or_id}"), open=True)
 
-            container_tablas.controls = tables_list
+                try: page.update()
+                except Exception: pass
 
-            # REGLA EXPLICITA 2 & 3: GUARDADO AUTOMATICO E INMEDIATO EN BASE DE DATOS
-            marca_val = txt_marca.value.strip() or "General"
-            coment_val = txt_comentarios.value.strip()
-            
-            ok, msg_or_id = cs.guardar_ciclico_db(
-                codigo_tienda=store_code,
-                nombre_tienda=store_name,
-                marca=marca_val,
-                resumen=res["summary"],
-                falta_esc=res["falta_en_escaneo"],
-                falta_sap=res["falta_en_sap"],
-                negativos=res["stock_negativo"],
-                comentarios=coment_val,
-                usuario="Tienda"
-            )
+            except Exception as ex:
+                print("Error en conciliar_click:", ex)
+                container_resumen.controls = []
+                page.snack_bar = ft.SnackBar(ft.Text(f"❌ Error al procesar archivos: {ex}"), open=True)
+                try: page.update()
+                except Exception: pass
 
-            if ok:
-                page.snack_bar = ft.SnackBar(ft.Text(f"🎉 Cíclico #{msg_or_id} conciliado y guardado automáticamente en LUXO."), open=True)
-                cargar_historial(update_page=False)
-            else:
-                page.snack_bar = ft.SnackBar(ft.Text(f"⚠️ Conciliado en pantalla, aviso de guardado: {msg_or_id}"), open=True)
-
-            try: page.update()
-            except Exception: pass
-
-        except Exception as ex:
-            print("Error en conciliar_click:", ex)
-            page.snack_bar = ft.SnackBar(ft.Text(f"❌ Error al procesar archivos: {ex}"), open=True)
-            try: page.update()
-            except Exception: pass
+        import threading
+        threading.Thread(target=worker_conciliacion, daemon=True).start()
 
     btn_conciliar = ft.ElevatedButton(
         "⚡ Conciliar Cíclico",
