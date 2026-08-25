@@ -8088,16 +8088,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                         rec.onend = function() {
                             window.luxoSpeechRecognitionActive = false;
-                            if (!isMobileDevice && !topDoc.hidden) {
+                            if (!isMobileDevice && !topDoc.hidden && window.luxoManualDictating) {
                                 setTimeout(function() {
                                     try {
-                                        if (!topDoc.hidden) rec.start();
-                                    } catch(e) {
-                                        setTimeout(function() {
-                                            try { if (!topDoc.hidden) rec.start(); } catch(e2){}
-                                        }, 1000);
-                                    }
-                                }, 600);
+                                        if (!topDoc.hidden && window.luxoManualDictating) rec.start();
+                                    } catch(e){}
+                                }, 2000);
                             }
                         };
 
@@ -9961,10 +9957,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             content = container.content
                             chk = None
                             if isinstance(content, ft.Row) and content.controls:
-                                # Modo Admin: Row([Checkbox, IconButton])
                                 chk = content.controls[0]
                             elif isinstance(content, ft.Checkbox):
-                                # Modo Asociado: Checkbox directo
                                 chk = content
                             
                             if isinstance(chk, ft.Checkbox):
@@ -9979,7 +9973,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     p_text.value = f"{t('progress')}: {int(val * 100)}% ({completados} {t('of')} {total} {t('completed')})"
                 except Exception as ex:
                     print("ERROR CALCULAR PROGRESO CHECKLIST:", ex)
-                page.update()
+                try: page.update()
+                except Exception: pass
 
             def mostrar_retro_venta_exitosa():
                 consejos = [
