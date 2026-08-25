@@ -151,20 +151,12 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
             f_fecha = datetime.fromtimestamp(a["mtime"]).strftime("%d/%m/%Y %H:%M")
             f_encoded = urllib.parse.quote(f_nom)
             url_dl = f"/dl?file={f_encoded}&original={f_encoded}"
+            url_view = f"/dl?file={f_encoded}&original={f_encoded}&inline=1"
 
             # Resaltar si coincide con la tienda activa
             es_mi_tienda = bool(st_code and st_code.lower() in f_nom.lower())
             border_col = "#00FFFF" if es_mi_tienda else "#333344"
             bg_col = "#0f172a" if es_mi_tienda else "#141424"
-
-            def make_ver_modal(nombre_archivo=f_nom):
-                def _click(e):
-                    try:
-                        url_view = f"/dl?file={urllib.parse.quote(nombre_archivo)}&original={urllib.parse.quote(nombre_archivo)}&inline=1"
-                        page.launch_url(url_view)
-                    except Exception as ex_v:
-                        print("Notice abrir panamericano view:", ex_v)
-                return _click
 
             items.append(
                 ft.Container(
@@ -183,8 +175,10 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
                         ft.Row([
                             ft.ElevatedButton(
                                 "👁️ Ver Ficha",
-                                style=ft.ButtonStyle(color="white", bgcolor="#2563eb"),
-                                on_click=make_ver_modal(f_nom)
+                                icon=ft.Icons.VISIBILITY,
+                                url=url_view,
+                                url_target="_blank",
+                                style=ft.ButtonStyle(color="white", bgcolor="#2563eb")
                             ),
                             ft.ElevatedButton(
                                 "📥 Descargar",

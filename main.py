@@ -467,18 +467,28 @@ def configurar_rutas_fastapi(app):
             ".mp4": "video/mp4", ".mov": "video/quicktime", ".avi": "video/x-msvideo",
         }
         media_type = mime_map.get(ext, "application/octet-stream")
-        safe_ascii_name = display_name.encode('ascii', 'ignore').decode('ascii') or "descarga"
+        safe_ascii_name = display_name.encode('ascii', 'ignore').decode('ascii') or "archivo"
         encoded_name = _up.quote(display_name)
-        disposition_type = "inline" if inline == 1 else "attachment"
-        return FileResponse(
-            path=filepath,
-            filename=display_name,
-            media_type=media_type,
-            headers={
-                "Content-Disposition": f'{disposition_type}; filename="{safe_ascii_name}"; filename*=UTF-8\'\'{encoded_name}',
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+
+        if inline == 1:
+            return FileResponse(
+                path=filepath,
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f'inline; filename="{safe_ascii_name}"; filename*=UTF-8\'\'{encoded_name}',
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+        else:
+            return FileResponse(
+                path=filepath,
+                filename=display_name,
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{safe_ascii_name}"; filename*=UTF-8\'\'{encoded_name}',
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
 
     @app.get("/api/download_enfoque_pdf/{day}")
     async def download_enfoque_pdf_route(day: str):
