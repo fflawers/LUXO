@@ -119,32 +119,49 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     if not os.path.exists(file_sap_path):
         raise FileNotFoundError(f"No se encontró el archivo de SAP: {file_sap_path}")
 
-    # 1. Leer Escaneo Físico (Col A: UPC, Col B: Piezas)
+    # 1. Leer Escaneo Físico (Soporte Multi-Formato Inteligente)
     wb_esc = openpyxl.load_workbook(file_escaneo_path, data_only=True)
+    
+    # Búsqueda de hoja 'Scan' si existe (para el formato especial Solara/Multi-hoja), de lo contrario usa la activa
     sheet_esc = wb_esc.active
-    
-    conteo_escaneo = {} # {upc_limpio: cantidad_piezas}
-    
+    for s_name in wb_esc.sheetnames:
+        if s_name.strip().lower() == "scan":
+            sheet_esc = wb_esc[s_name]
+            break
+            
     rows_esc = list(sheet_esc.iter_rows(values_only=True))
     
-    # Omitir fila 1 si es encabezado (contiene 'upc' o 'piezas')
+    col_upc_esc = 0  # Col A por defecto
+    col_pzs_esc = 1  # Col B por defecto
     start_row_esc = 0
-    if rows_esc and rows_esc[0]:
-        first_row_str = " ".join([str(c).lower() for c in rows_esc[0] if c is not None])
-        if "upc" in first_row_str or "piezas" in first_row_str or "codigo" in first_row_str:
-            start_row_esc = 1
-            
-    for row in rows_esc[start_row_esc:]:
-        if not row or row[0] is None:
+    
+    # Auto-detectar encabezados en las primeras 25 filas
+    for idx_r, row in enumerate(rows_esc[:25]):
+        if not row:
             continue
-        upc_clean = limpiar_upc(row[0])
+        row_str_lower = [str(c).lower().strip() if c is not None else "" for c in row]
+        if any(k in row_str_lower for k in ["upc", "código", "codigo", "ean"]):
+            for idx_c, cell_str in enumerate(row_str_lower):
+                if cell_str in ["upc", "código", "codigo", "ean", "barcode"]:
+                    col_upc_esc = idx_c
+                elif cell_str in ["pzs", "piezas", "cant", "cantidad", "conteo", "pz"]:
+                    col_pzs_esc = idx_c
+            start_row_esc = idx_r + 1
+            break
+            
+    conteo_escaneo = {} # {upc_limpio: cantidad_piezas}
+    
+    for row in rows_esc[start_row_esc:]:
+        if not row or len(row) <= col_upc_esc or row[col_upc_esc] is None:
+            continue
+        upc_clean = limpiar_upc(row[col_upc_esc])
         if len(upc_clean) < 5:
             continue
             
         cant_pzas = 1
-        if len(row) > 1 and row[1] is not None:
+        if col_pzs_esc < len(row) and row[col_pzs_esc] is not None:
             try:
-                cant_pzas = int(float(str(row[1]).strip()))
+                cant_pzas = int(float(str(row[col_pzs_esc]).strip()))
             except Exception:
                 cant_pzas = 1
                 
