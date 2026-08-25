@@ -8537,13 +8537,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     
                     completed_sum = 0
                     if total_stores_zone > 0:
-                        for g_z in gerentes_zona:
-                            cursor.execute("""
-                                SELECT COUNT(DISTINCT ID_Plantilla) as cnt 
+                        ids_u = [g_z["ID_Usuario"] for g_z in gerentes_zona if g_z.get("ID_Usuario")]
+                        if ids_u:
+                            placeholders_u = ",".join(["%s"] * len(ids_u))
+                            cursor.execute(f"""
+                                SELECT COUNT(DISTINCT ID_Usuario, ID_Plantilla) as cnt 
                                 FROM registro_checklist 
-                                WHERE ID_Usuario = %s AND Fecha = CURDATE() AND Completado = 1
-                            """, (g_z["ID_Usuario"],))
-                            completed_sum += cursor.fetchone()["cnt"]
+                                WHERE Fecha = CURDATE() AND Completado = 1 AND ID_Usuario IN ({placeholders_u})
+                            """, ids_u)
+                            res_c = cursor.fetchone()
+                            completed_sum = res_c["cnt"] if res_c and res_c.get("cnt") else 0
                         checklist_pct = (completed_sum / (total_stores_zone * total_plantillas)) * 100
                     else:
                         checklist_pct = 0.0
