@@ -33,13 +33,21 @@ def crear_tablas_panamericano_if_not_exists():
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 codigo_tienda VARCHAR(50),
                 nombre_tienda VARCHAR(100),
-                nombre_archivo VARCHAR(255) NOT NULL,
-                ruta_archivo VARCHAR(255) NOT NULL,
+                nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+                ruta_archivo VARCHAR(255) DEFAULT '',
                 tamano_bytes BIGINT DEFAULT 0,
+                contenido_blob LONGBLOB,
                 fecha_subida DATETIME DEFAULT CURRENT_TIMESTAMP,
                 subido_por VARCHAR(100)
             )
         """)
+        try:
+            cursor.execute("SHOW COLUMNS FROM fichas_panamericano")
+            cols_res = cursor.fetchall()
+            cols = [r[0] if isinstance(r, (tuple, list)) else r.get("Field") for r in cols_res]
+            if "contenido_blob" not in cols:
+                cursor.execute("ALTER TABLE fichas_panamericano ADD COLUMN contenido_blob LONGBLOB")
+        except Exception: pass
         db.commit()
         db.close()
         return True
@@ -51,9 +59,57 @@ def asegurar_directorio():
     os.makedirs(PANAMERICANO_DIR, exist_ok=True)
     crear_tablas_panamericano_if_not_exists()
 
+def guardar_ficha_en_db(filename, file_path, subido_por="admin"):
+    try:
+        if not os.path.exists(file_path):
+            return
+        f_size = os.path.getsize(file_path)
+        with open(file_path, "rb") as f_in:
+            blob_data = f_in.read()
+
+        db = conectar_db()
+        if db:
+            cursor = db.cursor()
+            cursor.execute("DELETE FROM fichas_panamericano WHERE nombre_archivo = %s", (filename,))
+            cursor.execute("""
+                INSERT INTO fichas_panamericano 
+                (codigo_tienda, nombre_archivo, ruta_archivo, tamano_bytes, contenido_blob, subido_por)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (filename[:20], filename, file_path, f_size, blob_data, subido_por))
+            db.commit()
+            db.close()
+    except Exception as ex_g:
+        print("Error guardando ficha en DB:", ex_g)
+
 def obtener_archivos_panamericano():
     asegurar_directorio()
     archivos = []
+    # 1. Intentar leer desde la Base de Datos MySQL (persistente en la Nube)
+    try:
+        db = conectar_db()
+        if db:
+            cursor = db.cursor(dictionary=True)
+            cursor.execute("SELECT id, nombre_archivo, tamano_bytes, fecha_subida FROM fichas_panamericano ORDER BY nombre_archivo ASC")
+            rows = cursor.fetchall()
+            db.close()
+            for r in rows:
+                f_name = r["nombre_archivo"]
+                ext = os.path.splitext(f_name)[1].lower()
+                mtime = r["fecha_subida"].timestamp() if r.get("fecha_subida") else 0
+                archivos.append({
+                    "id": r["id"],
+                    "nombre": f_name,
+                    "path": os.path.join(PANAMERICANO_DIR, f_name),
+                    "mtime": mtime,
+                    "size": r["tamano_bytes"] or 0,
+                    "ext": ext
+                })
+            if archivos:
+                return archivos
+    except Exception as ex_db:
+        print("Notice obtener_archivos_panamericano db:", ex_db)
+
+    # 2. Fallback a archivos en disco local
     try:
         if os.path.exists(PANAMERICANO_DIR):
             for f in os.listdir(PANAMERICANO_DIR):
@@ -72,7 +128,7 @@ def obtener_archivos_panamericano():
                         })
             archivos.sort(key=lambda x: x["nombre"].lower())
     except Exception as ex:
-        print("Notice obtener_archivos_panamericano:", ex)
+        print("Notice obtener_archivos_panamericano disk:", ex)
     return archivos
 
 def procesar_zip_panamericano(zip_path):
@@ -87,6 +143,7 @@ def procesar_zip_panamericano(zip_path):
                         target_path = os.path.join(PANAMERICANO_DIR, filename)
                         with zip_ref.open(member) as source, open(target_path, "wb") as target:
                             target.write(source.read())
+                        guardar_ficha_en_db(filename, target_path)
                         extraidos += 1
     except Exception as ex:
         print("Error al extraer ZIP Panamericano:", ex)
@@ -211,6 +268,7 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
         if os.path.abspath(ruta) != os.path.abspath(target):
             import shutil
             shutil.copy2(ruta, target)
+        guardar_ficha_en_db(f_name, target)
         page.snack_bar = ft.SnackBar(ft.Text(f"✅ Ficha Panamericano '{f_name}' subida correctamente."), open=True)
         render_fichas(update_page=True)
 

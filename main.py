@@ -445,6 +445,26 @@ def configurar_rutas_fastapi(app):
                     filepath = up_path
 
         if not os.path.exists(filepath):
+            # Intentar recuperar el archivo desde la Base de Datos MySQL si el contenedor de Render se reinició
+            try:
+                from panamericano_view import conectar_db as conectar_db_pan
+                db_pan = conectar_db_pan()
+                if db_pan:
+                    cur_p = db_pan.cursor(dictionary=True)
+                    cur_p.execute("SELECT contenido_blob FROM fichas_panamericano WHERE nombre_archivo = %s", (safe,))
+                    r_p = cur_p.fetchone()
+                    db_pan.close()
+                    if r_p and r_p.get("contenido_blob"):
+                        pan_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "panamericano")
+                        os.makedirs(pan_dir, exist_ok=True)
+                        target_restore = os.path.join(pan_dir, safe)
+                        with open(target_restore, "wb") as f_out:
+                            f_out.write(r_p["contenido_blob"])
+                        filepath = target_restore
+            except Exception as ex_r:
+                print("Error recuperando blob de Panamericano desde MySQL:", ex_r)
+
+        if not os.path.exists(filepath):
             m_id = re.match(r"^manual_(\d+)", safe)
             if m_id:
                 try:
