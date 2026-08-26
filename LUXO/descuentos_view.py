@@ -322,15 +322,21 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
             )
 
         # Control de Pestañas Independientes Adaptativo Celular
-        tab_pendientes_content = ft.Column([
-            ft.Row([dd_filtro_marca_pend, dd_filtro_tipo_pend], spacing=8, wrap=True),
-            dt_pendientes_ctrl
-        ], spacing=8)
+        tab_pendientes_content = ft.Container(
+            content=ft.Column([
+                ft.Row([dd_filtro_marca_pend, dd_filtro_tipo_pend], spacing=8, wrap=True),
+                dt_pendientes_ctrl
+            ], spacing=8),
+            padding=ft.padding.only(top=10)
+        )
 
-        tab_encontradas_content = ft.Column([
-            ft.Row([dd_filtro_marca_enc, dd_filtro_tipo_enc], spacing=8, wrap=True),
-            dt_encontradas_ctrl
-        ], spacing=8)
+        tab_encontradas_content = ft.Container(
+            content=ft.Column([
+                ft.Row([dd_filtro_marca_enc, dd_filtro_tipo_enc], spacing=8, wrap=True),
+                dt_encontradas_ctrl
+            ], spacing=8),
+            padding=ft.padding.only(top=10)
+        )
 
         tabs_control = ft.Tabs(
             selected_index=0,
