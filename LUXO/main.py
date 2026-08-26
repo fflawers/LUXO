@@ -21593,14 +21593,17 @@ Ejemplo:
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     reproducir_saludo_login(res["Nombre_Completo"])
                     
-                    # Guardar sesión de forma en memoria active_sessions
+                    # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
-                    active_sessions[user_id_key] = {
+                    sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                    sess_dict = {
                         "page": page,
                         "user_info": user_info,
                         "cargar_chat": cargar_chat,
                         "active_file_callback": active_file_callback
                     }
+                    active_sessions[sess_token] = sess_dict
+                    active_sessions[user_id_key] = sess_dict
 
                     # --- REGISTRAR INICIO DE SESIÓN ---
                     ip_client = getattr(page, "client_ip", None) or "Desconocido"
@@ -22103,12 +22106,15 @@ Ejemplo:
                             user_session["region_activa_id"] = r_clean
                         user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
                         user_id_key = user_data["ID_Usuario"]
-                        active_sessions[user_id_key] = {
+                        sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                        sess_dict = {
                             "page": page,
                             "user_info": user_info,
                             "cargar_chat": cargar_chat,
                             "active_file_callback": active_file_callback
                         }
+                        active_sessions[sess_token] = sess_dict
+                        active_sessions[user_id_key] = sess_dict
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']}")
                         cargar_chat()
                         return # Termina sin mostrar login
