@@ -169,7 +169,7 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
         width=320
     )
 
-    container_fichas = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+    container_fichas = ft.Column(spacing=10, expand=True)
 
     def render_fichas(update_page=True):
         archivos = obtener_archivos_panamericano()
@@ -352,4 +352,4 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
         ], spacing=10, wrap=True),
         ft.Divider(height=10, color="transparent"),
         container_fichas
-    ], expand=True, spacing=12)
+    ], expand=True, scroll=ft.ScrollMode.AUTO, spacing=12)
