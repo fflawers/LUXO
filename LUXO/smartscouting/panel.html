@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartScouting · Panel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='10' fill='%2300D084'/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css">
+<script src="tema.js"></script>
+<style>
+body{background-image:radial-gradient(900px 520px at 8% -10%, rgba(0,208,132,.07), transparent 60%);}
+.hero{max-width:1000px;margin:0 auto;padding:52px 24px 12px;}
+.saludo{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;}
+.hero h1{font-size:30px;font-weight:800;letter-spacing:-.035em;margin-bottom:10px;}
+.hero p{font-size:13.5px;color:var(--t2);line-height:1.65;max-width:560px;}
+.mods{max-width:1000px;margin:0 auto;padding:32px 24px 70px;display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+.mod{display:block;text-decoration:none;color:inherit;background:var(--s1);border:0.5px solid var(--border);
+  border-radius:14px;padding:26px;transition:border-color .18s,transform .18s,background .18s;}
+.mod:hover{border-color:var(--ac-b);transform:translateY(-2px);background:var(--s2);}
+.mod-ic{width:44px;height:44px;border-radius:11px;background:var(--ac-dim);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;margin-bottom:18px;}
+.mod h2{font-size:17px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px;}
+.mod p{font-size:12.5px;color:var(--t3);line-height:1.65;margin-bottom:16px;}
+.mod ul{list-style:none;display:flex;flex-direction:column;gap:7px;margin-bottom:20px;}
+.mod li{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--t2);}
+.mod li::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+.mod-go{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.08em;}
+.stats{max-width:1000px;margin:0 auto;padding:0 24px 60px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.stat{background:var(--s1);border:0.5px solid var(--border);border-radius:12px;padding:16px 18px;}
+.stat-l{font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px;}
+.stat-v{font-size:24px;font-weight:800;font-family:var(--mono);letter-spacing:-.03em;color:var(--t1);}
+.stat-v.mut{color:var(--t4);font-size:16px;}
+@media(max-width:760px){.mods,.stats{grid-template-columns:1fr;}.hero h1{font-size:24px;}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tb-left"><div class="logo"><div class="logo-dot"></div><span class="logo-txt">SmartScouting</span></div></div>
+  <div class="tb-right">
+    <div class="user-pill">
+      <div class="user-av" id="av">··</div>
+      <span class="user-nm" id="nm">Cargando…</span>
+      <span class="rol-tag admin">Administrador</span>
+    </div>
+    <button class="btn btn-sec btn-sm" id="respaldo" style="height:34px" title="Descarga un archivo con usuarios, configuración y cotizaciones">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Respaldo
+    </button>
+    <button class="btn btn-sec btn-sm" data-tema-icono style="height:34px;width:34px;padding:0"></button>
+    <button class="btn btn-sec btn-sm" id="salir" style="height:34px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      Salir
+    </button>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="saludo" id="saludo">Panel de administración</div>
+  <h1>¿Qué quieres hacer hoy?</h1>
+  <p>Desde aquí controlas las dos partes del sistema: el análisis de productos y las cuentas de quienes pueden entrar.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-l">Usuarios registrados</div><div class="stat-v mut" id="s-usuarios">…</div></div>
+  <div class="stat"><div class="stat-l">Cotizaciones en el sistema</div><div class="stat-v mut" id="s-cotiz">…</div></div>
+  <div class="stat"><div class="stat-l">Configuración actualizada</div><div class="stat-v mut" id="s-config">…</div></div>
+</div>
+
+<div class="mods">
+  <a class="mod" href="app.html">
+    <div class="mod-ic">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h4"/></svg>
+    </div>
+    <h2>Calculadora de scouting</h2>
+    <p>Analiza productos, compara los tres canales de venta y guarda las cotizaciones.</p>
+    <ul>
+      <li>Margen neto y ROI por plataforma</li>
+      <li>Comisiones y variables editables</li>
+      <li>Historial completo del equipo</li>
+    </ul>
+    <span class="mod-go">Abrir módulo
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </span>
+  </a>
+
+  <a class="mod" href="usuarios.html">
+    <div class="mod-ic">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+    </div>
+    <h2>Creación de usuarios</h2>
+    <p>Da de alta a las personas del equipo y define a qué pueden entrar.</p>
+    <ul>
+      <li>Alta con nombre, apellidos, edad y correo</li>
+      <li>Contraseña asignada al registrarlos</li>
+      <li>Activar, desactivar y cambiar el rol</li>
+    </ul>
+    <span class="mod-go">Abrir módulo
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </span>
+  </a>
+</div>
+
+<script src="config.js"></script>
+<script src="db.js"></script>
+<script>
+(async ()=>{
+  const p = await db.proteger('admin');
+  if(!p) return;
+
+  document.getElementById('nm').textContent = p.nombre + ' ' + p.apellidos;
+  document.getElementById('av').textContent = (p.nombre[0] + (p.apellidos[0]||'')).toUpperCase();
+
+  const h = new Date().getHours();
+  document.getElementById('saludo').textContent =
+    (h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches') + ', ' + p.nombre;
+
+  const [us, ct, fecha] = await Promise.all([
+    db.listarUsuarios(),
+    db.contarCotizaciones(),
+    db.fechaConfig()
+  ]);
+
+  const pon = (id, txt, mut) => {
+    const el = document.getElementById(id);
+    el.textContent = txt; el.classList.toggle('mut', !!mut);
+  };
+  pon('s-usuarios', us.ok ? String(us.filas.filter(u=>u.activo).length) : '—', !us.ok);
+  pon('s-cotiz', ct != null ? String(ct) : '—', ct == null);
+  pon('s-config', fecha
+    ? new Date(fecha).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})
+    : 'Sin cambios', true);
+})();
+
+document.getElementById('respaldo').addEventListener('click', async ()=>{
+  const datos = await db.exportarTodo();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(datos,null,2)],{type:'application/json'}));
+  a.download = 'smartscouting-respaldo-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click(); URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('salir').addEventListener('click', async ()=>{
+  await db.salir(); location.replace('index.html');
+});
+</script>
+</body>
+</html>

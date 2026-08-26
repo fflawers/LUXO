@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Prueba de Micrófono LUXO</title>
+    <style>
+        body {
+            background-color: #0F172A;
+            color: #F8FAFC;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: #1E293B;
+            border: 2px solid #00FFCC;
+            box-shadow: 0 10px 30px rgba(0, 255, 204, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 { color: #00FFCC; font-size: 24px; margin-bottom: 10px; }
+        p { color: #94A3B8; font-size: 14px; line-height: 1.5; }
+        .btn-mic {
+            background: linear-gradient(135deg, #00FFCC, #0088FF);
+            color: #0F172A;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 255, 204, 0.4);
+            margin: 20px 0;
+            transition: transform 0.2s;
+        }
+        .btn-mic:hover { transform: scale(1.05); }
+        .wave-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 50px;
+            margin: 20px 0;
+        }
+        .bar {
+            width: 8px;
+            height: 15px;
+            background-color: #475569;
+            border-radius: 4px;
+            transition: height 0.05s, background-color 0.05s;
+        }
+        .status {
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .status-ok { background: #064E3B; color: #34D399; }
+        .status-err { background: #7F1D1D; color: #FCA5A5; }
+        .transcript-box {
+            background: #0F172A;
+            border: 1px solid #334155;
+            padding: 15px;
+            border-radius: 10px;
+            min-height: 50px;
+            color: #E2E8F0;
+            font-style: italic;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>🎙️ Probador de Micrófono LUXO</h1>
+    <p>Haz clic en el botón de abajo para activar el micrófono y verificar la barra de sonido en tiempo real.</p>
+
+    <button class="btn-mic" onclick="probarMic()">PROBAR MICRÓFONO AHORA 🎙️</button>
+
+    <div class="wave-box" id="waveContainer">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+    </div>
+
+    <div id="statusBox" class="status" style="display:none;"></div>
+    <div id="transcriptBox" class="transcript-box">Lo que hables aparecerá aquí...</div>
+</div>
+
+<script>
+let audioCtx = null;
+let micStream = null;
+
+function probarMic() {
+    const statusBox = document.getElementById('statusBox');
+    const transcriptBox = document.getElementById('transcriptBox');
+    statusBox.style.display = 'block';
+    statusBox.className = 'status';
+    statusBox.innerText = 'Solicitando acceso al micrófono...';
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        micStream = stream;
+        statusBox.className = 'status status-ok';
+        statusBox.innerText = '✅ ¡Micrófono Conectado! Habla por tu micrófono.';
+
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioCtx.createAnalyser();
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        analyser.fftSize = 32;
+
+        const bars = document.querySelectorAll('.bar');
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        function updateWaves() {
+            if (!micStream) return;
+            analyser.getByteFrequencyData(dataArray);
+            bars.forEach((b, i) => {
+                const val = dataArray[i % dataArray.length] || 0;
+                const h = Math.max(10, (val / 255) * 50);
+                b.style.height = h + 'px';
+                b.style.backgroundColor = val > 20 ? '#00FFCC' : '#475569';
+            });
+            requestAnimationFrame(updateWaves);
+        }
+        updateWaves();
+
+        // Probar reconocimiento de voz
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            let rec = new SpeechRecognition();
+            rec.lang = 'es-MX';
+            rec.continuous = true;
+            rec.interimResults = true;
+            rec.onresult = function(e) {
+                let t = e.results[e.results.length - 1][0].transcript;
+                transcriptBox.innerText = '"' + t + '"';
+            };
+            rec.start();
+        }
+    }).catch(err => {
+        statusBox.className = 'status status-err';
+        statusBox.innerText = '❌ ERROR: ' + err.message + '. Por favor permite el micrófono en la barra del navegador.';
+    });
+}
+</script>
+
+</body>
+</html>

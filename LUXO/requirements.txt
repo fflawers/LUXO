@@ -1,0 +1,13 @@
+flet
+flet-video
+mysql-connector-python
+PyMuPDF
+openpyxl
+python-dotenv
+bcrypt
+requests
+fastapi
+uvicorn
+SpeechRecognition
+pyaudio
+python-multipart

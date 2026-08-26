@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba de Voz - Oye LUXO</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #0c0c14;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+            padding: 20px;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid #D8B4FE;
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(216, 180, 254, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        .mic-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6E48AA, #9D50BB);
+            border: 4px solid #00FFFF;
+            color: white;
+            font-size: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+            transition: all 0.3s ease;
+        }
+        .mic-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.8);
+        }
+        .mic-btn.active {
+            animation: pulse 1.5s infinite;
+            background: linear-gradient(135deg, #00FFFF, #6E48AA);
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.7); }
+            70% { box-shadow: 0 0 0 25px rgba(0, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 255, 0); }
+        }
+        h1 { color: #D8B4FE; margin-bottom: 10px; font-size: 26px; }
+        p { color: #aaaaaa; font-size: 15px; margin-bottom: 20px; line-height: 1.5; }
+        .status {
+            margin-top: 15px;
+            padding: 12px 20px;
+            border-radius: 12px;
+            background: #1c1c28;
+            border: 1px solid #333;
+            color: #00FFFF;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .transcript-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: #000000;
+            border-radius: 12px;
+            border: 1px solid #444;
+            min-height: 60px;
+            color: #7CFC00;
+            font-family: monospace;
+            font-size: 16px;
+            word-break: break-word;
+        }
+        .beep-indicator {
+            display: none;
+            margin-top: 15px;
+            padding: 10px;
+            background: #22c55e;
+            color: black;
+            font-weight: bold;
+            border-radius: 8px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🎙️ Probador "Oye LUXO"</h1>
+        <p>Toca el micrófono para activar la escucha constante. Luego di en voz alta:<br><strong style="color:#00FFFF;">"Oye LUXO"</strong></p>
+        
+        <div id="micBtn" class="mic-btn">🎙️</div>
+        
+        <div id="status" class="status">Haz clic en el micrófono para iniciar</div>
+        <div id="beepIndicator" class="beep-indicator">🔔 ¡BEEP 880Hz DETECTADO!</div>
+
+        <div style="text-align: left; margin-top: 15px; color: #888; font-size: 12px;">Lo que escucha el micrófono en vivo:</div>
+        <div id="transcript" class="transcript-box">Esperando voz...</div>
+    </div>
+
+    <script>
+        const micBtn = document.getElementById('micBtn');
+        const status = document.getElementById('status');
+        const transcriptDiv = document.getElementById('transcript');
+        const beepIndicator = document.getElementById('beepIndicator');
+
+        let audioCtx = null;
+        let rec = null;
+        let isListening = false;
+
+        function initAudioContext() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            } catch(e){}
+        }
+
+        function playBeep() {
+            initAudioContext();
+            try {
+                const ctx = audioCtx;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                gain.gain.setValueAtTime(0.9, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.4);
+
+                // Feedback visual de pitido
+                beepIndicator.style.display = 'block';
+                setTimeout(() => { beepIndicator.style.display = 'none'; }, 1500);
+            } catch(e) {
+                console.log("Error BEEP:", e);
+            }
+        }
+
+        function startListening() {
+            initAudioContext();
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
+            if (!SpeechRecognition) {
+                status.innerText = "❌ Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.";
+                status.style.color = "#ff4444";
+                return;
+            }
+
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    stream.getTracks().forEach(t => t.stop());
+                    runRecognition(SpeechRecognition);
+                })
+                .catch(err => {
+                    status.innerText = "❌ Permiso de micrófono denegado. Haz clic en el candado 🔒 de la URL y permite el micrófono.";
+                    status.style.color = "#ff4444";
+                });
+            } else {
+                runRecognition(SpeechRecognition);
+            }
+        }
+
+        function runRecognition(SpeechRecognition) {
+            try {
+                if (rec) {
+                    rec.stop();
+                }
+                rec = new SpeechRecognition();
+                rec.continuous = true;
+                rec.interimResults = true;
+                rec.lang = 'es-MX';
+
+                rec.onstart = function() {
+                    isListening = true;
+                    micBtn.classList.add('active');
+                    status.innerText = "🎤 Escuchando... Di 'Oye LUXO'";
+                    status.style.color = "#00FFFF";
+                };
+
+                rec.onresult = function(event) {
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        const text = event.results[i][0].transcript;
+                        transcriptDiv.innerText = text;
+                        const lower = text.toLowerCase();
+
+                        if (lower.includes('oye luxo') || lower.includes('hola luxo') || lower.includes('luxo') || lower.includes('lujo') || lower.includes('luco')) {
+                            playBeep();
+                        }
+                    }
+                };
+
+                rec.onerror = function(e) {
+                    console.log("Error rec:", e);
+                    if (e.error === 'not-allowed') {
+                        status.innerText = "❌ Micrófono bloqueado. Activa el micrófono en la barra del navegador.";
+                        status.style.color = "#ff4444";
+                    }
+                };
+
+                rec.onend = function() {
+                    if (isListening) {
+                        setTimeout(() => { try { rec.start(); } catch(ex){} }, 300);
+                    }
+                };
+
+                rec.start();
+                playBeep(); // Pitido inicial para probar el sonido de la bocina
+            } catch(e) {
+                status.innerText = "Error: " + e.message;
+            }
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (!isListening) {
+                startListening();
+            } else {
+                playBeep();
+            }
+        });
+    </script>
+</body>
+</html>

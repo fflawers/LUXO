@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 21164, in procesar_login
+    cargar_chat()
+  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 20555, in cargar_chat
+    dd_region_activa = crear_dropdown_region(user_session.get("zona_activa_id", "0"), user_session.get("region_activa_id", "0"))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 20491, in crear_dropdown_region
+    value=val,
+          ^^^
+NameError: name 'val' is not defined. Did you mean: 'eval'?

@@ -1,0 +1,1426 @@
+{
+  "zonas": [
+    {
+      "id": 1,
+      "nombre_zona": "ZONA CENTRO",
+      "gerente_zona": "CORONA TINOCO JULIO CESAR"
+    },
+    {
+      "id": 2,
+      "nombre_zona": "ZONA NORTE",
+      "gerente_zona": "ESCOBEDO VILLA KARINA MARLEN"
+    },
+    {
+      "id": 3,
+      "nombre_zona": "ZONA OCCIDENTE",
+      "gerente_zona": "SANCHEZ ROQUE JENIFFER ALEJANDRA"
+    },
+    {
+      "id": 4,
+      "nombre_zona": "ZONA SUR",
+      "gerente_zona": "VALENCIA TRUJILLO OMAR"
+    }
+  ],
+  "regiones": [
+    {
+      "id": 1,
+      "nombre_region": "AICM",
+      "zona_id": 1,
+      "gerente_area": "VILLA MARTINEZ YANARELI"
+    },
+    {
+      "id": 2,
+      "nombre_region": "DF CENTRO",
+      "zona_id": 1,
+      "gerente_area": "JUAREZ GONZALEZ MIGUEL ANGEL"
+    },
+    {
+      "id": 3,
+      "nombre_region": "DF NORTE",
+      "zona_id": 1,
+      "gerente_area": "TELLEZ ESQUIVEL LUIS GERARDO"
+    },
+    {
+      "id": 4,
+      "nombre_region": "VALLE",
+      "zona_id": 1,
+      "gerente_area": "SAN PEDRO GUEVARA MANUEL"
+    },
+    {
+      "id": 5,
+      "nombre_region": "MTY",
+      "zona_id": 2,
+      "gerente_area": "MILLAN GARCIA FABIAN DE JESUS"
+    },
+    {
+      "id": 6,
+      "nombre_region": "NORESTE",
+      "zona_id": 2,
+      "gerente_area": "LOPEZ NAVA JOSE LUIS"
+    },
+    {
+      "id": 7,
+      "nombre_region": "NORTE",
+      "zona_id": 2,
+      "gerente_area": "CARRANZA IBARRA KARLA LIZBETH"
+    },
+    {
+      "id": 8,
+      "nombre_region": "PACIFICO",
+      "zona_id": 2,
+      "gerente_area": "ROA GARCIA JOSE FERNANDO"
+    },
+    {
+      "id": 9,
+      "nombre_region": "BAJIO",
+      "zona_id": 3,
+      "gerente_area": "JAIME GAMIÑO MARIA DE JESUS"
+    },
+    {
+      "id": 10,
+      "nombre_region": "GDL",
+      "zona_id": 3,
+      "gerente_area": "CARDONA CEPEDA DANIEL"
+    },
+    {
+      "id": 11,
+      "nombre_region": "OCCIDENTE",
+      "zona_id": 3,
+      "gerente_area": "CORTES ALVAREZ THALIA ADANARIT"
+    },
+    {
+      "id": 12,
+      "nombre_region": "ACUN",
+      "zona_id": 4,
+      "gerente_area": "TBD"
+    },
+    {
+      "id": 13,
+      "nombre_region": "CUN",
+      "zona_id": 4,
+      "gerente_area": "HUERTA BARRON ROSAURA"
+    },
+    {
+      "id": 14,
+      "nombre_region": "PLAYA",
+      "zona_id": 4,
+      "gerente_area": "GALVAN VILLEGAS ALDO"
+    },
+    {
+      "id": 15,
+      "nombre_region": "GOLFO",
+      "zona_id": 4,
+      "gerente_area": "SALINAS XOCHITLA EVELYN ANDREA"
+    },
+    {
+      "id": 16,
+      "nombre_region": "PENINSULA",
+      "zona_id": 4,
+      "gerente_area": "GARCIA MENA GUILLERMO ADRIAN"
+    }
+  ],
+  "tiendas": [
+    {
+      "id": 2281,
+      "nombre_tienda": "AMERICAS VER",
+      "region_id": 15,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2383,
+      "nombre_tienda": "TEZONTLE 2",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2529,
+      "nombre_tienda": "GDL OUTLET",
+      "region_id": 11,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 2561,
+      "nombre_tienda": "LERMA OUTLET",
+      "region_id": 2,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 2719,
+      "nombre_tienda": "AGDL T1D",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2726,
+      "nombre_tienda": "GAL MAZ",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2875,
+      "nombre_tienda": "CUN T2A",
+      "region_id": 12,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2876,
+      "nombre_tienda": "CUN T2B",
+      "region_id": 12,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2877,
+      "nombre_tienda": "CUN T2C",
+      "region_id": 12,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 2878,
+      "nombre_tienda": "CUN T2D",
+      "region_id": 12,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2879,
+      "nombre_tienda": "CUN T3A",
+      "region_id": 12,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2880,
+      "nombre_tienda": "CUN T3B",
+      "region_id": 12,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2881,
+      "nombre_tienda": "CZM T1",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2882,
+      "nombre_tienda": "HUA T1",
+      "region_id": 15,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2883,
+      "nombre_tienda": "MER T1",
+      "region_id": 16,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2885,
+      "nombre_tienda": "OAX T1",
+      "region_id": 15,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2886,
+      "nombre_tienda": "TAB T1",
+      "region_id": 16,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2887,
+      "nombre_tienda": "VER T1",
+      "region_id": 15,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2900,
+      "nombre_tienda": "PLAYA PASEO",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 2902,
+      "nombre_tienda": "CDJ T1",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2903,
+      "nombre_tienda": "CHI T1",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2905,
+      "nombre_tienda": "TIJ T1A",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 2945,
+      "nombre_tienda": "PLAYA 10",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3009,
+      "nombre_tienda": "CLN FORUM",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3010,
+      "nombre_tienda": "APVR",
+      "region_id": 10,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3019,
+      "nombre_tienda": "PARQUE TOR",
+      "region_id": 3,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3028,
+      "nombre_tienda": "OASIS COY",
+      "region_id": 4,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3035,
+      "nombre_tienda": "PVR GAL",
+      "region_id": 10,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3049,
+      "nombre_tienda": "AGDL T1A",
+      "region_id": 11,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3051,
+      "nombre_tienda": "CDJ",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3067,
+      "nombre_tienda": "AGDL T1B",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3080,
+      "nombre_tienda": "PP KIOSCO",
+      "region_id": 11,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3138,
+      "nombre_tienda": "CLN FORUM 2",
+      "region_id": 8,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3150,
+      "nombre_tienda": "ACA3",
+      "region_id": 4,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3151,
+      "nombre_tienda": "AND2",
+      "region_id": 10,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3154,
+      "nombre_tienda": "CHI1",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3155,
+      "nombre_tienda": "CHI2",
+      "region_id": 6,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3160,
+      "nombre_tienda": "GG4",
+      "region_id": 10,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3162,
+      "nombre_tienda": "GP3",
+      "region_id": 10,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3164,
+      "nombre_tienda": "MER1",
+      "region_id": 16,
+      "segmento": "Silver"
+    },
+    {
+      "id": 3167,
+      "nombre_tienda": "MER4",
+      "region_id": 16,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3169,
+      "nombre_tienda": "MTY1",
+      "region_id": 5,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3170,
+      "nombre_tienda": "MTY2",
+      "region_id": 5,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3178,
+      "nombre_tienda": "MTY4",
+      "region_id": 5,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3179,
+      "nombre_tienda": "MTY5",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3180,
+      "nombre_tienda": "MTY6",
+      "region_id": 6,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3181,
+      "nombre_tienda": "MTY7",
+      "region_id": 5,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3196,
+      "nombre_tienda": "ACLN",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3200,
+      "nombre_tienda": "LEON OUTLET",
+      "region_id": 9,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 3201,
+      "nombre_tienda": "MAZ T1",
+      "region_id": 8,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3203,
+      "nombre_tienda": "CABO1",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3204,
+      "nombre_tienda": "CABO2",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3206,
+      "nombre_tienda": "CABO3",
+      "region_id": 8,
+      "segmento": "Silver"
+    },
+    {
+      "id": 3238,
+      "nombre_tienda": "URUAPAN",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3259,
+      "nombre_tienda": "GG STZA",
+      "region_id": 10,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3260,
+      "nombre_tienda": "AND3",
+      "region_id": 10,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3280,
+      "nombre_tienda": "GDL FORUM",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3282,
+      "nombre_tienda": "TAB2",
+      "region_id": 16,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3287,
+      "nombre_tienda": "MTY TA",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3289,
+      "nombre_tienda": "MTY TB",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3290,
+      "nombre_tienda": "CUN2",
+      "region_id": 13,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3295,
+      "nombre_tienda": "CUN3",
+      "region_id": 13,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3296,
+      "nombre_tienda": "MTY TC",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3347,
+      "nombre_tienda": "HMO T1",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3348,
+      "nombre_tienda": "PVR T1",
+      "region_id": 10,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3456,
+      "nombre_tienda": "LEON T1",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3464,
+      "nombre_tienda": "COL1",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3482,
+      "nombre_tienda": "CD CAR 1",
+      "region_id": 16,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3487,
+      "nombre_tienda": "QRO1",
+      "region_id": 1,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3488,
+      "nombre_tienda": "ATIZAPAN 1",
+      "region_id": 3,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3491,
+      "nombre_tienda": "HMO1",
+      "region_id": 7,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 3497,
+      "nombre_tienda": "GDL FORUM 2",
+      "region_id": 11,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3500,
+      "nombre_tienda": "SAMARA",
+      "region_id": 2,
+      "segmento": "Silver"
+    },
+    {
+      "id": 3502,
+      "nombre_tienda": "INTERLOMAS 1",
+      "region_id": 3,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3504,
+      "nombre_tienda": "TOR1",
+      "region_id": 5,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3506,
+      "nombre_tienda": "222 A",
+      "region_id": 2,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3507,
+      "nombre_tienda": "LINDAVISTA 2",
+      "region_id": 3,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3508,
+      "nombre_tienda": "P DELTA 1",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3511,
+      "nombre_tienda": "MTY11",
+      "region_id": 5,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3516,
+      "nombre_tienda": "LERMA OUTLET 2",
+      "region_id": 2,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 3518,
+      "nombre_tienda": "ZAC1",
+      "region_id": 9,
+      "segmento": "Silver"
+    },
+    {
+      "id": 3519,
+      "nombre_tienda": "STA FE 1",
+      "region_id": 2,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3523,
+      "nombre_tienda": "MTY9",
+      "region_id": 6,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3526,
+      "nombre_tienda": "COATZA 1",
+      "region_id": 15,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3542,
+      "nombre_tienda": "GAL PACH",
+      "region_id": 3,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3556,
+      "nombre_tienda": "CUN5",
+      "region_id": 13,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3557,
+      "nombre_tienda": "METEPEC 1",
+      "region_id": 2,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3567,
+      "nombre_tienda": "MTY TA2",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3574,
+      "nombre_tienda": "GAL TOL",
+      "region_id": 2,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3582,
+      "nombre_tienda": "SLP2",
+      "region_id": 5,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3583,
+      "nombre_tienda": "SATELITE 1",
+      "region_id": 3,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3584,
+      "nombre_tienda": "SAN MIGUEL 1",
+      "region_id": 1,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3585,
+      "nombre_tienda": "STA FE 2",
+      "region_id": 2,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3586,
+      "nombre_tienda": "PUNTA NORTE 1",
+      "region_id": 3,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 3600,
+      "nombre_tienda": "CUN6",
+      "region_id": 13,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3617,
+      "nombre_tienda": "SLP1",
+      "region_id": 5,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3625,
+      "nombre_tienda": "PLAYA AME",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3645,
+      "nombre_tienda": "VALLEJO",
+      "region_id": 3,
+      "segmento": "Gold"
+    },
+    {
+      "id": 3754,
+      "nombre_tienda": "CAMPECHE",
+      "region_id": 16,
+      "segmento": "Silver"
+    },
+    {
+      "id": 3770,
+      "nombre_tienda": "GG5",
+      "region_id": 10,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 3911,
+      "nombre_tienda": "SALAMANCA",
+      "region_id": 9,
+      "segmento": "Silver"
+    },
+    {
+      "id": 4018,
+      "nombre_tienda": "ANGELOPOLIS",
+      "region_id": 4,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 4040,
+      "nombre_tienda": "PERISUR",
+      "region_id": 4,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 4066,
+      "nombre_tienda": "PUEBLA OUTLET",
+      "region_id": 4,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 4222,
+      "nombre_tienda": "ANDAMAR VER",
+      "region_id": 15,
+      "segmento": "Gold"
+    },
+    {
+      "id": 4849,
+      "nombre_tienda": "VER T1B",
+      "region_id": 15,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 4862,
+      "nombre_tienda": "MEXICALI T1",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5006,
+      "nombre_tienda": "MTY8",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5078,
+      "nombre_tienda": "CUN FBO",
+      "region_id": 12,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5079,
+      "nombre_tienda": "TAB",
+      "region_id": 16,
+      "segmento": "Gold"
+    },
+    {
+      "id": 5080,
+      "nombre_tienda": "TIJ",
+      "region_id": 7,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 5081,
+      "nombre_tienda": "PLAYA CH",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 5107,
+      "nombre_tienda": "CIBELES",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5112,
+      "nombre_tienda": "LEON MEDIANA",
+      "region_id": 9,
+      "segmento": "Gold"
+    },
+    {
+      "id": 5203,
+      "nombre_tienda": "PLAYA ZOLAR",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 5205,
+      "nombre_tienda": "PLAYA 16",
+      "region_id": 14,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5207,
+      "nombre_tienda": "CUN1",
+      "region_id": 13,
+      "segmento": "Gold"
+    },
+    {
+      "id": 5208,
+      "nombre_tienda": "AICM T1A",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5215,
+      "nombre_tienda": "AICM T1D",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5238,
+      "nombre_tienda": "ZIHUATANEJO T1",
+      "region_id": 4,
+      "segmento": "Gold"
+    },
+    {
+      "id": 5256,
+      "nombre_tienda": "PUNTA NORTE 2",
+      "region_id": 3,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 5342,
+      "nombre_tienda": "PLAYA CORAZON",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 5352,
+      "nombre_tienda": "CABO T1",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5378,
+      "nombre_tienda": "AICM T1F",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5379,
+      "nombre_tienda": "AICM T2A",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5385,
+      "nombre_tienda": "AICM T2B",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5399,
+      "nombre_tienda": "AICM T2D",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5610,
+      "nombre_tienda": "MOR ALTOZANO",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5632,
+      "nombre_tienda": "LEON GDE",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 5638,
+      "nombre_tienda": "AGS",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 7048,
+      "nombre_tienda": "CABO4",
+      "region_id": 8,
+      "segmento": "Silver"
+    },
+    {
+      "id": 7049,
+      "nombre_tienda": "ANTARA",
+      "region_id": 2,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 7051,
+      "nombre_tienda": "LA PAZ T1",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 7058,
+      "nombre_tienda": "CUN T2E",
+      "region_id": 12,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 7060,
+      "nombre_tienda": "MTY ESFERA",
+      "region_id": 5,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 7061,
+      "nombre_tienda": "MTY LA FE",
+      "region_id": 6,
+      "segmento": "Gold"
+    },
+    {
+      "id": 7062,
+      "nombre_tienda": "TIJ 2",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8471,
+      "nombre_tienda": "CUN OUTLET",
+      "region_id": 13,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 8474,
+      "nombre_tienda": "MASARYK",
+      "region_id": 2,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 8491,
+      "nombre_tienda": "ENSENADA",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8604,
+      "nombre_tienda": "SENTURA ZAMORA",
+      "region_id": 10,
+      "segmento": "Gold"
+    },
+    {
+      "id": 8686,
+      "nombre_tienda": "MTY FASHION DRIVE",
+      "region_id": 5,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8691,
+      "nombre_tienda": "FORUM CUERNAVACA",
+      "region_id": 4,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 8692,
+      "nombre_tienda": "LA ISLA PVR",
+      "region_id": 10,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8784,
+      "nombre_tienda": "MOR T1",
+      "region_id": 9,
+      "segmento": "Gold"
+    },
+    {
+      "id": 8820,
+      "nombre_tienda": "NOGALES",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8822,
+      "nombre_tienda": "OAXACA VALLE",
+      "region_id": 15,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8823,
+      "nombre_tienda": "HUATULCO BAHIAS",
+      "region_id": 15,
+      "segmento": "Gold"
+    },
+    {
+      "id": 8829,
+      "nombre_tienda": "ANTEA",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8838,
+      "nombre_tienda": "FORUM TEPIC",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8839,
+      "nombre_tienda": "FORTUNA",
+      "region_id": 3,
+      "segmento": "Silver"
+    },
+    {
+      "id": 8845,
+      "nombre_tienda": "TIJ T1C",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8851,
+      "nombre_tienda": "PUERTO CANCUN",
+      "region_id": 13,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8881,
+      "nombre_tienda": "LA PAZ CENTRO",
+      "region_id": 8,
+      "segmento": "Silver"
+    },
+    {
+      "id": 8882,
+      "nombre_tienda": "PLAZA PATRIA",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 8885,
+      "nombre_tienda": "LA VICTORIA",
+      "region_id": 1,
+      "segmento": "Gold"
+    },
+    {
+      "id": 8897,
+      "nombre_tienda": "MTY OUTLET",
+      "region_id": 6,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 8902,
+      "nombre_tienda": "SALTILLO 1",
+      "region_id": 5,
+      "segmento": "Gold"
+    },
+    {
+      "id": 8983,
+      "nombre_tienda": "PUNTA LANGOSTA",
+      "region_id": 14,
+      "segmento": "Gold"
+    },
+    {
+      "id": 8992,
+      "nombre_tienda": "CUN T3C",
+      "region_id": 12,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 9006,
+      "nombre_tienda": "AVERANDA",
+      "region_id": 4,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9037,
+      "nombre_tienda": "AGDL T2A",
+      "region_id": 11,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9054,
+      "nombre_tienda": "MANACAR",
+      "region_id": 4,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9056,
+      "nombre_tienda": "PASEO DURANGO",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9063,
+      "nombre_tienda": "PASEO ACOXPA",
+      "region_id": 4,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9095,
+      "nombre_tienda": "AMBAR TUXTLA",
+      "region_id": 16,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9116,
+      "nombre_tienda": "PASEO ZIHUATANEJO",
+      "region_id": 4,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9176,
+      "nombre_tienda": "MALECON VALLARTA",
+      "region_id": 10,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9183,
+      "nombre_tienda": "CUN T4B",
+      "region_id": 12,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9184,
+      "nombre_tienda": "CUN T4A",
+      "region_id": 12,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9191,
+      "nombre_tienda": "LA ISLA MERIDA",
+      "region_id": 16,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9253,
+      "nombre_tienda": "AGDL T2B",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9277,
+      "nombre_tienda": "AMP INTERLOMAS",
+      "region_id": 3,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9279,
+      "nombre_tienda": "LOS MOCHIS",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9341,
+      "nombre_tienda": "AGDL T2C",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9342,
+      "nombre_tienda": "SOLARA PUEBLA",
+      "region_id": 4,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9343,
+      "nombre_tienda": "PASEO CHIHUAHUA",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9344,
+      "nombre_tienda": "ANTENAS",
+      "region_id": 2,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9345,
+      "nombre_tienda": "ALAMEDA TIJ",
+      "region_id": 7,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9393,
+      "nombre_tienda": "PLAZA CIBELES",
+      "region_id": 9,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9428,
+      "nombre_tienda": "EXPLANADA PUEBLA",
+      "region_id": 4,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9506,
+      "nombre_tienda": "SLP AERO",
+      "region_id": 5,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9507,
+      "nombre_tienda": "PASEO QRO",
+      "region_id": 1,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9536,
+      "nombre_tienda": "PUNTO VALLE KIOSCO",
+      "region_id": 5,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9537,
+      "nombre_tienda": "PUNTO VALLE",
+      "region_id": 5,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9539,
+      "nombre_tienda": "TOWN SQUARE METEPEC",
+      "region_id": 2,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9551,
+      "nombre_tienda": "HARBOR MERIDA",
+      "region_id": 16,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9562,
+      "nombre_tienda": "LANDMARK GDL",
+      "region_id": 10,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9563,
+      "nombre_tienda": "QRO PREM OUTLET",
+      "region_id": 1,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 9593,
+      "nombre_tienda": "MIDTOWN JALISCO",
+      "region_id": 11,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 9602,
+      "nombre_tienda": "AMERICAS XALAPA",
+      "region_id": 15,
+      "segmento": "Gold"
+    },
+    {
+      "id": 9603,
+      "nombre_tienda": "ANTENAS 2",
+      "region_id": 2,
+      "segmento": "Gold"
+    },
+    {
+      "id": 10540,
+      "nombre_tienda": "LA ISLA CUN 2",
+      "region_id": 13,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 10615,
+      "nombre_tienda": "ENCUENTRO OCEANIA",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 10637,
+      "nombre_tienda": "GAL MERIDA",
+      "region_id": 16,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 10876,
+      "nombre_tienda": "MOR AME KIOSKO",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 10955,
+      "nombre_tienda": "ALTACIA LEON",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 12943,
+      "nombre_tienda": "CUN T4C",
+      "region_id": 12,
+      "segmento": "Gold"
+    },
+    {
+      "id": 12964,
+      "nombre_tienda": "EXPLANADA PACHUCA",
+      "region_id": 3,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 14499,
+      "nombre_tienda": "GAL SANTA ANITA",
+      "region_id": 11,
+      "segmento": "Gold"
+    },
+    {
+      "id": 15364,
+      "nombre_tienda": "MOR AMERICAS",
+      "region_id": 9,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 15536,
+      "nombre_tienda": "ALTAMA TAMPICO",
+      "region_id": 15,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 15610,
+      "nombre_tienda": "PENINSULA TIJ",
+      "region_id": 7,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 25163,
+      "nombre_tienda": "MTY TA3",
+      "region_id": 6,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 25164,
+      "nombre_tienda": "SLP PARK",
+      "region_id": 5,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 25237,
+      "nombre_tienda": "LA CEIBA",
+      "region_id": 8,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 25245,
+      "nombre_tienda": "TULUM KAPEN HA",
+      "region_id": 14,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 25858,
+      "nombre_tienda": "LANDMARK TIJUANA",
+      "region_id": 7,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 25859,
+      "nombre_tienda": "OUTLET RIVERA MAYA",
+      "region_id": 13,
+      "segmento": "Outlet"
+    },
+    {
+      "id": 25977,
+      "nombre_tienda": "AIFA",
+      "region_id": 1,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 26153,
+      "nombre_tienda": "TIJ T1B",
+      "region_id": 7,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 26246,
+      "nombre_tienda": "GAL METEPEC AMP",
+      "region_id": 2,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 26369,
+      "nombre_tienda": "ANDENES HMO",
+      "region_id": 7,
+      "segmento": "Gold"
+    },
+    {
+      "id": 26382,
+      "nombre_tienda": "PARQUE TEPEYAC",
+      "region_id": 3,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 26503,
+      "nombre_tienda": "ANIMA CABOS",
+      "region_id": 8,
+      "segmento": "Diamond"
+    },
+    {
+      "id": 26558,
+      "nombre_tienda": "LA ISLA MER 2",
+      "region_id": 16,
+      "segmento": "Platinum"
+    },
+    {
+      "id": 27405,
+      "nombre_tienda": "PLAZA SAN LUIS SOLARIS",
+      "region_id": 5,
+      "segmento": "Gold"
+    }
+  ]
+}
