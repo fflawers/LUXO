@@ -5996,6 +5996,23 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "abre ciclicos": "ciclicos",
                     "ver ciclicos": "ciclicos",
 
+                    # Descuentos y Promociones
+                    "descuentos": "descuentos",
+                    "descuento": "descuentos",
+                    "promociones": "descuentos",
+                    "promocion": "descuentos",
+                    "ofertas": "descuentos",
+                    "oferta": "descuentos",
+                    "abrir descuentos": "descuentos",
+                    "abre descuentos": "descuentos",
+                    "ver descuentos": "descuentos",
+                    "ir a descuentos": "descuentos",
+                    "ve a descuentos": "descuentos",
+                    "abrir promociones": "descuentos",
+                    "abre promociones": "descuentos",
+                    "abrir ofertas": "descuentos",
+                    "abre ofertas": "descuentos",
+
                     # Facturación CFDI v4.0 (Requiere acción explícita: abrir, abre, ve a, dirígete a, etc.)
                     "dirigete a facturacion": "facturacion",
                     "dirígete a facturacion": "facturacion",
@@ -8943,7 +8960,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         FROM tiendas t
                         JOIN regiones r ON t.region_id = r.id
                         JOIN zonas z ON r.zona_id = z.id
-                        LEFT JOIN usuarios usr ON (usr.Usuario LIKE CONCAT('%%', t.id, '%%') OR LOWER(usr.Tienda) LIKE CONCAT('%%', LOWER(t.nombre_tienda), '%%') OR LOWER(t.nombre_tienda) LIKE CONCAT('%%', LOWER(usr.Tienda), '%%'))
+                        LEFT JOIN usuarios usr ON (
+                            usr.Usuario LIKE CONCAT('%%', t.id, '%%') 
+                            OR LOWER(usr.Tienda) LIKE CONCAT('%%', LOWER(t.nombre_tienda), '%%') 
+                            OR LOWER(t.nombre_tienda) LIKE CONCAT('%%', LOWER(usr.Tienda), '%%')
+                            OR usr.Usuario LIKE CONCAT('%%', t.nombre_tienda, '%%')
+                        )
                         LEFT JOIN historial_conversaciones h ON h.ID_Usuario = usr.ID_Usuario
                         {where_sql}
                         GROUP BY t.id, t.nombre_tienda
@@ -20132,6 +20154,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_descuentos = ft.TextButton(
+            content=ft.Row([ft.Text("🏷️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Descuentos 🏷️", "Discounts 🏷️", "Remises 🏷️", "Sconti 🏷️", "折扣 🏷️"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("descuentos"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_panamericano = ft.TextButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Fichas Panamericano 🚚", "Panamericano Files 🚚", "Fiches Panamericano 🚚", "Fiche Panamericano 🚚", "Panamericano 🚚"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("panamericano"),
@@ -20210,7 +20238,7 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano"]:
+                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
                         elif vista == "panamericano":
@@ -20224,6 +20252,17 @@ Ejemplo:
                             st_name = user_info.get("nombre") or f"Tienda {st_code}"
                             u_role = "admin" if es_admin() else "tienda"
                             main_views_cache["ciclicos"] = ciclicos_view.build_ciclicos_view(
+                                page, store_code=st_code, store_name=st_name, user_role=u_role,
+                                seleccionar_archivo_async=seleccionar_archivo_async
+                            )
+                        elif vista == "descuentos":
+                            import descuentos_view
+                            st_u = str(user_info.get("usuario") or "").strip()
+                            st_digits = "".join(filter(str.isdigit, st_u))
+                            st_code = st_digits if st_digits else str(user_info.get("codigo_tienda") or user_info.get("tienda") or "A540").strip()
+                            st_name = str(user_info.get("tienda") or user_info.get("nombre_tienda") or f"Tienda {st_code}").strip()
+                            u_role = "admin" if es_admin() else "tienda"
+                            main_views_cache["descuentos"] = descuentos_view.build_descuentos_view(
                                 page, store_code=st_code, store_name=st_name, user_role=u_role,
                                 seleccionar_archivo_async=seleccionar_archivo_async
                             )
@@ -20540,7 +20579,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_panamericano, btn_ciclicos, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
