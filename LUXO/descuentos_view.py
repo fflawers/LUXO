@@ -544,12 +544,12 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
                 content=ft.Text(f"🏪 Sucursal Activa: {tienda_activa_label} ({tienda_activa_code})", weight="bold", color="#00FFFF", size=13),
                 bgcolor="#0F0F1A", padding=8, border_radius=8, border=ft.Border.all(1, "#00FFFF")
             )
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
         ft.Text("Módulo de localización rápida con sistema de cola dinámica y pestaña de ubicados.", color="#aaaaaa", size=13),
         card_carga_admin if es_admin else ft.Container(),
         ft.Divider(height=10, color="#333333"),
         ft.Row(search_bar_controls + [ft.Container(content=txt_conteo_badge, padding=10)], spacing=12, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
         container_tabs_principal
-    ], scroll=ft.ScrollMode.AUTO, expand=True, spacing=15)
+    ], expand=True, spacing=15)
 
 
