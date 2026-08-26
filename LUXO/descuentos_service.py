@@ -4,6 +4,11 @@ import re
 import urllib.parse
 import mysql.connector
 
+def _normalizar_texto(val):
+    if val is None:
+        return ""
+    return str(val).strip().lower()
+
 def conectar_db():
     try:
         import main
