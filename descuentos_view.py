@@ -214,15 +214,19 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
                 bgcolor="#0F172A", padding=4, border_radius=6, border=ft.Border.all(1, "#0284c7")
             )
 
+            row_cell_upc = ft.DataCell(
+                ft.Container(content=ft.Text(upc_str, weight="bold", size=11, selectable=True), width=105)
+            )
+
             d_row = ft.DataRow(
                 cells=[
                     ft.DataCell(chk_pend),
                     ft.DataCell(make_google_btn(upc_str)),
                     row_cell_upc,
-                    ft.DataCell(ft.Text(desc_str, selectable=True, size=12)),
                     ft.DataCell(tag_descuento),
+                    ft.DataCell(ft.Text(desc_str, selectable=True, size=11)),
                     ft.DataCell(tag_tienda_excel),
-                    ft.DataCell(ft.Text(f"{stock_val} pz(s)", weight="bold", color="#16a34a", size=12))
+                    ft.DataCell(ft.Text(f"{stock_val} pz(s)", weight="bold", color="#16a34a", size=11))
                 ]
             )
             chk_pend.on_change = make_mark_pend_cb(rec_id)
@@ -238,15 +242,17 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
             )
         else:
             dt_pendientes = ft.DataTable(
-                column_spacing=12,
+                column_spacing=6,
+                data_row_min_height=36,
+                data_row_max_height=42,
                 columns=[
-                    ft.DataColumn(ft.Text("☑️ Ubicar", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("🌎", weight="bold", size=15)),
-                    ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("Descripción / Modelo", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("🏷️ Descuento", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("🏪 Sucursal Excel", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("Stock", weight="bold", color="#00FFFF", size=12))
+                    ft.DataColumn(ft.Text("☑️", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("🌎", weight="bold", size=13)),
+                    ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("🏷️ Descuento", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("Descripción / Modelo", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("🏪 Sucursal Excel", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("Stock", weight="bold", color="#00FFFF", size=11))
                 ],
                 rows=detail_pendientes,
                 border=ft.Border.all(1, "#333344"),
@@ -256,7 +262,7 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
             )
             dt_pendientes_ctrl = ft.Container(
                 content=ft.Row([dt_pendientes], scroll=ft.ScrollMode.AUTO),
-                bgcolor="#0F0F1A", padding=8, border_radius=10
+                bgcolor="#0F0F1A", padding=5, border_radius=10
             )
 
         # --- 2. RENDERIZAR PESTAÑA ENCONTRADAS (LIGERA HASTA 50 FILAS) ---
@@ -280,7 +286,7 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
             chk_enc = ft.Checkbox(value=True, tooltip="Desmarcar para devolver a Pendientes")
 
             row_cell_upc = ft.DataCell(
-                ft.Container(content=ft.Text(upc_str, weight="bold", size=11, selectable=True), width=120)
+                ft.Container(content=ft.Text(upc_str, weight="bold", size=11, selectable=True), width=105)
             )
 
             d_row_enc = ft.DataRow(
@@ -288,9 +294,9 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
                 cells=[
                     ft.DataCell(chk_enc),
                     row_cell_upc,
-                    ft.DataCell(ft.Text(desc_str, selectable=True, size=12)),
                     ft.DataCell(ft.Text(descuento_str, weight="bold", color="#FFD700", size=11)),
-                    ft.DataCell(ft.Text(f"{stock_val} pz(s)", weight="bold", color="#16a34a", size=12))
+                    ft.DataCell(ft.Text(desc_str, selectable=True, size=11)),
+                    ft.DataCell(ft.Text(f"{stock_val} pz(s)", weight="bold", color="#16a34a", size=11))
                 ]
             )
             chk_enc.on_change = make_unmark_enc_cb(rec_id)
@@ -306,13 +312,15 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
             )
         else:
             dt_encontradas = ft.DataTable(
-                column_spacing=12,
+                column_spacing=6,
+                data_row_min_height=36,
+                data_row_max_height=42,
                 columns=[
-                    ft.DataColumn(ft.Text("☑️ Encontrado", weight="bold", color="#16a34a", size=12)),
-                    ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("Descripción / Modelo", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("🏷️ Descuento", weight="bold", color="#00FFFF", size=12)),
-                    ft.DataColumn(ft.Text("Stock", weight="bold", color="#00FFFF", size=12))
+                    ft.DataColumn(ft.Text("☑️ Encontrado", weight="bold", color="#16a34a", size=11)),
+                    ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("🏷️ Descuento", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("Descripción / Modelo", weight="bold", color="#00FFFF", size=11)),
+                    ft.DataColumn(ft.Text("Stock", weight="bold", color="#00FFFF", size=11))
                 ],
                 rows=detail_encontradas,
                 border=ft.Border.all(1, "#16a34a"),
@@ -541,7 +549,7 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
     # Vista Principal del Módulo de Descuentos
     return ft.Column([
         ft.Row([
-            ft.Text("🏷️ DESCUENTOS Y PROMOCIONES", size=24, color="#00FFFF", weight="bold"),
+            ft.Text("🏷️ DESCUENTOS Y PROMOCIONES", size=20, color="#00FFFF", weight="bold"),
             ft.Container(
                 content=ft.Text(f"🏪 Sucursal Activa: {tienda_activa_label} ({tienda_activa_code})", weight="bold", color="#00FFFF", size=13),
                 bgcolor="#0F0F1A", padding=8, border_radius=8, border=ft.Border.all(1, "#00FFFF")
@@ -552,6 +560,6 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
         ft.Divider(height=10, color="#333333"),
         ft.Row(search_bar_controls + [ft.Container(content=txt_conteo_badge, padding=10)], spacing=12, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
         container_tabs_principal
-    ], expand=True, spacing=15)
+    ], expand=True, scroll=ft.ScrollMode.AUTO, spacing=15)
 
 
