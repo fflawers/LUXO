@@ -330,16 +330,18 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
             content=ft.Column([
                 ft.Row([dd_filtro_marca_pend, dd_filtro_tipo_pend], spacing=8, wrap=True),
                 dt_pendientes_ctrl
-            ], spacing=8),
-            padding=8
+            ], spacing=8, scroll=ft.ScrollMode.AUTO, expand=True),
+            padding=8,
+            expand=True
         )
 
         tab_encontradas_content = ft.Container(
             content=ft.Column([
                 ft.Row([dd_filtro_marca_enc, dd_filtro_tipo_enc], spacing=8, wrap=True),
                 dt_encontradas_ctrl
-            ], spacing=8),
-            padding=8
+            ], spacing=8, scroll=ft.ScrollMode.AUTO, expand=True),
+            padding=8,
+            expand=True
         )
 
         tabs_control = ft.Tabs(
