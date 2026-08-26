@@ -81,7 +81,7 @@ def procesar_excel_descuentos(ruta_excel, progress_callback=None):
     crear_tabla_descuentos_if_not_exists()
 
     if progress_callback:
-        progress_callback(5, "Abriendo archivo Excel semanal...")
+        progress_callback(6, "Abriendo y decodificando Excel semanal...")
 
     try:
         wb = openpyxl.load_workbook(ruta_excel, data_only=True, read_only=True)
@@ -89,13 +89,20 @@ def procesar_excel_descuentos(ruta_excel, progress_callback=None):
     except Exception as ex:
         return False, f"Error al abrir Excel: {ex}"
 
-    # Leer filas del sheet
-    rows = list(sheet.iter_rows(values_only=True))
-    if not rows:
+    rows_iter = sheet.iter_rows(values_only=True)
+    
+    # Leer las primeras 15 filas para detectar la estructura de columnas
+    header_sample = []
+    for _ in range(15):
+        try:
+            r = next(rows_iter)
+            if r: header_sample.append(r)
+        except StopIteration:
+            break
+
+    if not header_sample:
         wb.close()
         return False, "El archivo Excel está vacío."
-
-    total_file_rows = len(rows)
 
     # 1. Encontrar la fila de encabezados (revisar primeras 10 filas)
     header_idx = 0
@@ -107,7 +114,7 @@ def procesar_excel_descuentos(ruta_excel, progress_callback=None):
     kw_descuento = ["flash", "descuento", "tipo_descuento", "% descuento", "promo", "oferta", "descto", "porcentaje", "pct", "estrategia"]
     kw_stock = ["piez", "piezas", "cantidad", "stock", "cant", "existencia", "qty", "unidades", "pz"]
 
-    for idx, r in enumerate(rows[:10]):
+    for idx, r in enumerate(header_sample[:10]):
         if not r: continue
         r_norm = [_normalizar_texto(cell) for cell in r]
         matches = 0
@@ -121,7 +128,7 @@ def procesar_excel_descuentos(ruta_excel, progress_callback=None):
 
     if header_row is None:
         header_idx = 0
-        header_row = [_normalizar_texto(cell) for cell in rows[0]]
+        header_row = [_normalizar_texto(cell) for cell in header_sample[0]]
 
     # Mapas de índice de columna
     col_tienda = -1
@@ -148,49 +155,27 @@ def procesar_excel_descuentos(ruta_excel, progress_callback=None):
         elif col_stock == -1 and any(k in val for k in kw_stock):
             col_stock = c_idx
 
-    data_rows = rows[header_idx + 1:]
-    if data_rows and (col_upc == -1 or col_tienda == -1):
-        sample = data_rows[:20]
-        num_cols = len(header_row)
-        for c in range(num_cols):
-            sample_vals = [str(r[c]).strip() for r in sample if r and len(r) > c and r[c] is not None]
-            if not sample_vals: continue
-            
-            if col_upc == -1 and sum(1 for v in sample_vals if v.isdigit() and len(v) >= 8) > len(sample_vals) * 0.5:
-                col_upc = c
-            elif col_tienda == -1 and sum(1 for v in sample_vals if len(v) <= 10 and ("a" in v.lower() or v.isdigit())) > len(sample_vals) * 0.5:
-                col_tienda = c
-
     if col_upc == -1:
         col_upc = 6 if len(header_row) > 6 else 0
     if col_tienda == -1:
         col_tienda = 1 if len(header_row) > 1 else 0
 
-    # Extraer registros con porcentaje de avance
-    total_data = len(data_rows)
+    # Extraer registros con porcentaje de avance continuo en streaming
     registros_to_insert = []
-    
-    for idx, r in enumerate(data_rows):
-        if idx % 3000 == 0 and progress_callback and total_data > 0:
-            pct = 10 + int((idx / total_data) * 50)
-            progress_callback(pct, f"Leyendo Excel: {idx:,} de {total_data:,} filas ({pct}%)...")
+    row_count = 0
 
-        if not r: continue
-        
+    # Procesar filas restantes de la muestra inicial que eran datos
+    for r in header_sample[header_idx + 1:]:
+        row_count += 1
         upc_val = str(r[col_upc]).strip() if col_upc < len(r) and r[col_upc] is not None else ""
-        if not upc_val or upc_val.lower() == "none":
-            continue
-
-        if upc_val.endswith(".0"):
-            upc_val = upc_val[:-2]
+        if not upc_val or upc_val.lower() == "none": continue
+        if upc_val.endswith(".0"): upc_val = upc_val[:-2]
 
         tienda_val = str(r[col_tienda]).strip() if col_tienda >= 0 and col_tienda < len(r) and r[col_tienda] is not None else "GENERAL"
-        if tienda_val.endswith(".0"):
-            tienda_val = tienda_val[:-2]
+        if tienda_val.endswith(".0"): tienda_val = tienda_val[:-2]
 
         nombre_tienda_val = str(r[col_nombre_tienda]).strip() if col_nombre_tienda >= 0 and col_nombre_tienda < len(r) and r[col_nombre_tienda] is not None else tienda_val
-        if nombre_tienda_val.endswith(".0"):
-            nombre_tienda_val = nombre_tienda_val[:-2]
+        if nombre_tienda_val.endswith(".0"): nombre_tienda_val = nombre_tienda_val[:-2]
 
         desc_val = str(r[col_desc]).strip() if col_desc >= 0 and col_desc < len(r) and r[col_desc] is not None else "Sin descripción"
         raw_descuento = r[col_descuento] if col_descuento >= 0 and col_descuento < len(r) else "OFERTA"
@@ -198,14 +183,40 @@ def procesar_excel_descuentos(ruta_excel, progress_callback=None):
 
         stock_val = 1
         if col_stock >= 0 and col_stock < len(r) and r[col_stock] is not None:
-            try:
-                stock_val = int(float(r[col_stock]))
-            except Exception:
-                stock_val = 1
+            try: stock_val = int(float(r[col_stock]))
+            except Exception: stock_val = 1
 
-        registros_to_insert.append((
-            tienda_val, nombre_tienda_val, upc_val, desc_val, descuento_val, stock_val
-        ))
+        registros_to_insert.append((tienda_val, nombre_tienda_val, upc_val, desc_val, descuento_val, stock_val))
+
+    # Procesar el resto del archivo mediante streaming (sin colapsar la RAM)
+    for r in rows_iter:
+        row_count += 1
+        if row_count % 2000 == 0 and progress_callback:
+            # Estimar progreso aproximado sobre ~50k filas
+            pct = min(60, 10 + int((row_count / 50000.0) * 50))
+            progress_callback(pct, f"Procesando Excel streaming: {row_count:,} filas ({pct}%)...")
+
+        if not r: continue
+        upc_val = str(r[col_upc]).strip() if col_upc < len(r) and r[col_upc] is not None else ""
+        if not upc_val or upc_val.lower() == "none": continue
+        if upc_val.endswith(".0"): upc_val = upc_val[:-2]
+
+        tienda_val = str(r[col_tienda]).strip() if col_tienda >= 0 and col_tienda < len(r) and r[col_tienda] is not None else "GENERAL"
+        if tienda_val.endswith(".0"): tienda_val = tienda_val[:-2]
+
+        nombre_tienda_val = str(r[col_nombre_tienda]).strip() if col_nombre_tienda >= 0 and col_nombre_tienda < len(r) and r[col_nombre_tienda] is not None else tienda_val
+        if nombre_tienda_val.endswith(".0"): nombre_tienda_val = nombre_tienda_val[:-2]
+
+        desc_val = str(r[col_desc]).strip() if col_desc >= 0 and col_desc < len(r) and r[col_desc] is not None else "Sin descripción"
+        raw_descuento = r[col_descuento] if col_descuento >= 0 and col_descuento < len(r) else "OFERTA"
+        descuento_val = normalizar_tipo_descuento(raw_descuento)
+
+        stock_val = 1
+        if col_stock >= 0 and col_stock < len(r) and r[col_stock] is not None:
+            try: stock_val = int(float(r[col_stock]))
+            except Exception: stock_val = 1
+
+        registros_to_insert.append((tienda_val, nombre_tienda_val, upc_val, desc_val, descuento_val, stock_val))
 
     wb.close()
 
