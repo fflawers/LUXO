@@ -295,18 +295,18 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                         dif_color = "#7CFC00" if dif_val > 0 else "#FF4500"
                         dif_str = f"+{dif_val}" if dif_val > 0 else str(dif_val)
                         rows_dif.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold", color="white")),
-                            ft.DataCell(ft.Text(item["marca"], color="white")),
-                            ft.DataCell(ft.Text(dif_str, weight="bold", color=dif_color))
+                            ft.DataCell(ft.Text(item["upc"], weight="bold", color="white", selectable=True)),
+                            ft.DataCell(ft.Text(item["marca"], color="white", selectable=True)),
+                            ft.DataCell(ft.Text(dif_str, weight="bold", color=dif_color, selectable=True))
                         ]))
                     
                     total_neto = s.get("suma_dif_total", 0)
                     tot_color = "#7CFC00" if total_neto > 0 else ("#FF4500" if total_neto < 0 else "white")
                     tot_str = f"+{total_neto}" if total_neto > 0 else str(total_neto)
                     rows_dif.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text("Total general", weight="bold", color="#FFD700", size=14)),
+                        ft.DataCell(ft.Text("Total general", weight="bold", color="#FFD700", size=14, selectable=True)),
                         ft.DataCell(ft.Text("")),
-                        ft.DataCell(ft.Text(tot_str, weight="bold", color=tot_color, size=14))
+                        ft.DataCell(ft.Text(tot_str, weight="bold", color=tot_color, size=14, selectable=True))
                     ]))
 
                     dt_dif = ft.DataTable(
@@ -337,11 +337,11 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     rows = []
                     for item in res["falta_en_escaneo"]:
                         rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold")),
-                            ft.DataCell(ft.Text(item["descripcion"])),
-                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#2563eb")),
-                            ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#888888")),
-                            ft.DataCell(ft.Text(item["mensaje"], color="#dc2626"))
+                            ft.DataCell(ft.Text(item["upc"], weight="bold", selectable=True)),
+                            ft.DataCell(ft.Text(item["descripcion"], selectable=True)),
+                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#2563eb", selectable=True)),
+                            ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#888888", selectable=True)),
+                            ft.DataCell(ft.Text(item["mensaje"], color="#dc2626", selectable=True))
                         ]))
                     dt = ft.DataTable(
                         columns=[
@@ -363,11 +363,11 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     rows = []
                     for item in res["falta_en_sap"]:
                         rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold")),
-                            ft.DataCell(ft.Text(item["descripcion"])),
-                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#888888")),
-                            ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#16a34a")),
-                            ft.DataCell(ft.Text(item["mensaje"], color="#2563eb"))
+                            ft.DataCell(ft.Text(item["upc"], weight="bold", selectable=True)),
+                            ft.DataCell(ft.Text(item["descripcion"], selectable=True)),
+                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#888888", selectable=True)),
+                            ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#16a34a", selectable=True)),
+                            ft.DataCell(ft.Text(item["mensaje"], color="#2563eb", selectable=True))
                         ]))
                     dt = ft.DataTable(
                         columns=[
@@ -389,11 +389,11 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     rows = []
                     for item in res["stock_negativo"]:
                         rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold")),
-                            ft.DataCell(ft.Text(item["descripcion"])),
-                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#dc2626", weight="bold")),
-                            ft.DataCell(ft.Text(str(item["cant_escaneo"]))),
-                            ft.DataCell(ft.Text(item["mensaje"], color="#ea580c"))
+                            ft.DataCell(ft.Text(item["upc"], weight="bold", selectable=True)),
+                            ft.DataCell(ft.Text(item["descripcion"], selectable=True)),
+                            ft.DataCell(ft.Text(str(item["cant_sap"]), color="#dc2626", weight="bold", selectable=True)),
+                            ft.DataCell(ft.Text(str(item["cant_escaneo"]), selectable=True)),
+                            ft.DataCell(ft.Text(item["mensaje"], color="#ea580c", selectable=True))
                         ]))
                     dt = ft.DataTable(
                         columns=[
@@ -525,12 +525,12 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     for d in detalles:
                         color_tipo = "#dc2626" if d.get("tipo_alerta") == "FALTA_EN_ESCANEO" else ("#2563eb" if d.get("tipo_alerta") == "FALTA_EN_SAP" else "#ea580c")
                         detail_rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(d.get("upc","")), weight="bold")),
-                            ft.DataCell(ft.Text(str(d.get("descripcion","") or ""))),
-                            ft.DataCell(ft.Text(str(d.get("cantidad_sap", 0)))),
-                            ft.DataCell(ft.Text(str(d.get("cantidad_escaneo", 0)))),
-                            ft.DataCell(ft.Text(str(d.get("tipo_alerta","")), color=color_tipo, weight="bold")),
-                            ft.DataCell(ft.Text(str(d.get("comentario_item","") or "")))
+                            ft.DataCell(ft.Text(str(d.get("upc","")), weight="bold", selectable=True)),
+                            ft.DataCell(ft.Text(str(d.get("descripcion","") or ""), selectable=True)),
+                            ft.DataCell(ft.Text(str(d.get("cantidad_sap", 0)), selectable=True)),
+                            ft.DataCell(ft.Text(str(d.get("cantidad_escaneo", 0)), selectable=True)),
+                            ft.DataCell(ft.Text(str(d.get("tipo_alerta","")), color=color_tipo, weight="bold", selectable=True)),
+                            ft.DataCell(ft.Text(str(d.get("comentario_item","") or ""), selectable=True))
                         ]))
                 else:
                     detail_rows.append(ft.DataRow(cells=[
