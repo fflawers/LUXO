@@ -511,10 +511,10 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
         ft.Divider(),
         container_resumen,
         container_tablas
-    ], scroll=ft.ScrollMode.AUTO, expand=True, spacing=15)
+    ], spacing=15)
 
     # VISTA 2: Historial con Despliegue Integrado
-    container_historial_rows = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+    container_historial_rows = ft.Column(spacing=10)
 
     def cargar_historial(update_page=False):
         try:
@@ -634,7 +634,7 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                                 ft.Column([
                                     ft.Text(f"Cíclico #{c_id} - {m_nombre} ({t_nombre})", weight="bold", size=15),
                                     ft.Text(f"📅 Fecha: {f_fecha} | 💬 {coment}", size=12, color="#888888")
-                                ], expand=True),
+                                ]),
                                 ft.Row([
                                     ft.Column([
                                         ft.Text(f"Varianza: {var}%", weight="bold", color=col_var, size=14),
@@ -660,16 +660,16 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
     
     view_historial = ft.Column([
         ft.Row([
-            ft.Text("📊 Historial de Conteos Cíclicos", size=20, weight="bold", expand=True),
+            ft.Text("📊 Historial de Conteos Cíclicos", size=20, weight="bold"),
             btn_refresh_historial
-        ]),
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
         container_historial_rows
-    ], expand=True, spacing=15)
+    ], spacing=15)
 
     cargar_historial(update_page=False)
 
     # Subpestanas Robustas Personalizadas
-    subtab_content = ft.Container(content=view_captura, expand=True)
+    subtab_content = ft.Container(content=view_captura)
 
     def switch_to_captura(e):
         subtab_content.content = view_captura
@@ -703,10 +703,10 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
     # Vista Principal del Módulo de Cíclicos
     return ft.Column([
         ft.Row([
-            ft.Text("🔄 CONTEOS CÍCLICOS DE INVENTARIO", size=24, color="#00FFFF", weight="bold"),
-        ]),
+            ft.Text("🔄 CONTEOS CÍCLICOS DE INVENTARIO", size=20, color="#00FFFF", weight="bold"),
+        ], wrap=True),
         ft.Text("Módulo de conciliación rápida entre tu escaneo físico y el reporte de inventario SAP.", color="#aaaaaa", size=13),
-        ft.Row([btn_tab_captura, btn_tab_historial], spacing=10),
+        ft.Row([btn_tab_captura, btn_tab_historial], spacing=10, wrap=True),
         ft.Divider(height=10, color="#333333"),
         subtab_content
-    ], expand=True, spacing=12)
+    ], expand=True, scroll=ft.ScrollMode.AUTO, spacing=12)
