@@ -632,14 +632,16 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                         content=ft.Column([
                             ft.Row([
                                 ft.Column([
-                                    ft.Text(f"Cíclico #{c_id} - {m_nombre} ({t_nombre})", weight="bold", size=14),
+                                    ft.Text(f"Cíclico #{c_id} - {m_nombre} ({t_nombre})", weight="bold", size=15),
                                     ft.Text(f"📅 Fecha: {f_fecha} | 💬 {coment}", size=12, color="#888888")
-                                ]),
-                                ft.Column([
-                                    ft.Text(f"Varianza: {var}%", weight="bold", color=col_var, size=14),
-                                    ft.Text(f"SAP: {r['total_sap_pzas']} pzas | Escaneo: {r['total_escaneo_pzas']} pzas", size=11, color="#888888")
-                                ]),
-                                btn_toggle
+                                ], expand=True),
+                                ft.Row([
+                                    ft.Column([
+                                        ft.Text(f"Varianza: {var}%", weight="bold", color=col_var, size=14),
+                                        ft.Text(f"SAP: {r['total_sap_pzas']} pzas | Escaneo: {r['total_escaneo_pzas']} pzas", size=11, color="#888888")
+                                    ]),
+                                    btn_toggle
+                                ], spacing=12, wrap=True)
                             ], wrap=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=10),
                             container_detalle
                         ], spacing=8),
