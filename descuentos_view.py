@@ -126,7 +126,11 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
         c_target = txt_tienda_admin.value.strip() if (es_admin and txt_tienda_admin.value) else tienda_activa_code
         query_search = txt_buscar_upc.value.strip() if txt_buscar_upc.value else ""
 
-        rows_db = ds.obtener_descuentos_por_tienda(codigo_tienda=c_target if c_target else None, query_search=query_search if query_search else None)
+        try:
+            rows_db = ds.obtener_descuentos_por_tienda(codigo_tienda=c_target if c_target else None, query_search=query_search if query_search else None)
+        except Exception as ex_fetch:
+            print("Notice fetch descuentos error:", ex_fetch)
+            rows_db = []
 
         total_modelos = len(rows_db)
         total_piezas = sum(int(r.get("stock_tienda", 1) or 1) for r in rows_db)

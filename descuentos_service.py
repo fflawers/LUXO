@@ -6,6 +6,12 @@ import mysql.connector
 
 def conectar_db():
     try:
+        import main
+        db = main.conectar_db()
+        if db and db.is_connected():
+            return db
+    except Exception: pass
+    try:
         return mysql.connector.connect(
             host=os.getenv("DB_HOST", "localhost"),
             user=os.getenv("DB_USER", "root"),
