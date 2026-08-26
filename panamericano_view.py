@@ -166,7 +166,7 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
         border_color="#00FFFF",
         focused_border_color="#D8B4FE",
         color="white",
-        width=400
+        width=320
     )
 
     container_fichas = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
@@ -217,18 +217,20 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
 
             items.append(
                 ft.Container(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.PICTURE_AS_PDF if a["ext"] == ".pdf" else ft.Icons.INSERT_DRIVE_FILE, color="#00FFFF" if es_mi_tienda else "#6E48AA", size=28),
-                        ft.Column([
-                            ft.Row([
-                                ft.Text(f_nom, weight="bold", size=14, color="white"),
-                                ft.Container(
-                                    content=ft.Text("Mi Tienda ⭐", color="black", weight="bold", size=10),
-                                    bgcolor="#00FFFF", padding=ft.padding.Padding(6,2,6,2), border_radius=4, visible=es_mi_tienda
-                                )
-                            ], spacing=8),
-                            ft.Text(f"📅 Modificado: {f_fecha} | 📁 Tamaño: {f_size_kb}", size=11, color="#888888")
-                        ], expand=True),
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.PICTURE_AS_PDF if a["ext"] == ".pdf" else ft.Icons.INSERT_DRIVE_FILE, color="#00FFFF" if es_mi_tienda else "#6E48AA", size=26),
+                            ft.Column([
+                                ft.Row([
+                                    ft.Text(f_nom, weight="bold", size=14, color="white"),
+                                    ft.Container(
+                                        content=ft.Text("Mi Tienda ⭐", color="black", weight="bold", size=10),
+                                        bgcolor="#00FFFF", padding=ft.padding.Padding(6,2,6,2), border_radius=4, visible=es_mi_tienda
+                                    )
+                                ], spacing=6, wrap=True),
+                                ft.Text(f"📅 Modificado: {f_fecha} | 📁 Tamaño: {f_size_kb}", size=11, color="#888888")
+                            ], expand=True)
+                        ], spacing=8, wrap=True),
                         ft.Row([
                             ft.ElevatedButton(
                                 "👁️ Ver Ficha",
@@ -242,8 +244,8 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
                                 url=url_dl,
                                 style=ft.ButtonStyle(color="white", bgcolor="#16a34a")
                             )
-                        ], spacing=8)
-                    ]),
+                        ], spacing=8, wrap=True, alignment=ft.MainAxisAlignment.END)
+                    ], spacing=10),
                     padding=12,
                     border=ft.Border.all(1.5 if es_mi_tienda else 1, border_col),
                     border_radius=10,
@@ -338,9 +340,9 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
 
     return ft.Column([
         ft.Row([
-            ft.Text("🚚 FICHAS PANAMERICANO POR TIENDA", size=24, color="#00FFFF", weight="bold"),
+            ft.Text("🚚 FICHAS PANAMERICANO POR TIENDA", size=20, color="#00FFFF", weight="bold"),
             btn_refresh
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
         ft.Text("Repositorio dedicado para consultar y descargar la Ficha de Panamericano correspondiente a cada sucursal.", color="#aaaaaa", size=13),
         ft.Divider(height=10, color="#333333"),
         ft.Row([
