@@ -3,6 +3,7 @@ import os
 import glob
 import zipfile
 import urllib.parse
+import base64
 from datetime import datetime
 
 import mysql.connector
@@ -160,8 +161,8 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
 
     # Input de Búsqueda
     txt_buscar = ft.TextField(
-        hint_text="🔍 Buscar Ficha Panamericano por Número o Nombre de Tienda (ej. A540, 540, Vallejo)...",
-        value=st_code if u_role != "admin" else "",
+        hint_text="🔍 Buscar Ficha Panamericano por Número o Nombre de Tienda...",
+        value="",
         dense=True,
         border_color="#00FFFF",
         focused_border_color="#D8B4FE",
@@ -169,7 +170,7 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
         width=320
     )
 
-    container_fichas = ft.Column(spacing=10, expand=True)
+    container_fichas = ft.Column(spacing=10)
 
     def render_fichas(update_page=True):
         archivos = obtener_archivos_panamericano()
@@ -186,14 +187,14 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
                 container_fichas.controls = [
                     ft.Container(
                         content=ft.Text(f"⚠️ No se encontró ninguna Ficha Panamericano para: '{txt_buscar.value}'.", color="#aaaaaa", italic=True),
-                        padding=15
+                        padding=15, bgcolor="#141424", border_radius=8, border=ft.Border.all(1, "#333344")
                     )
                 ]
             else:
                 container_fichas.controls = [
                     ft.Container(
                         content=ft.Text("📦 No hay Fichas Panamericano cargadas aún. Usa los botones para subir PDFs o un ZIP masivo.", color="#aaaaaa", italic=True),
-                        padding=15
+                        padding=15, bgcolor="#141424", border_radius=8, border=ft.Border.all(1, "#333344")
                     )
                 ]
             if update_page:
@@ -204,16 +205,22 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
         items = []
         for a in filtered:
             f_nom = a["nombre"]
+            f_encoded = urllib.parse.quote(f_nom)
             f_size_kb = f"{a['size'] / 1024:.1f} KB" if a['size'] < 1024*1024 else f"{a['size'] / (1024*1024):.2f} MB"
             f_fecha = datetime.fromtimestamp(a["mtime"]).strftime("%d/%m/%Y %H:%M")
-            f_encoded = urllib.parse.quote(f_nom)
-            url_dl = f"/dl?file={f_encoded}&original={f_encoded}"
-            url_view = f"/dl?file={f_encoded}&original={f_encoded}&inline=1"
-
-            # Resaltar si coincide con la tienda activa
+            f_path_real = a["path"]
             es_mi_tienda = bool(st_code and st_code.lower() in f_nom.lower())
             border_col = "#00FFFF" if es_mi_tienda else "#333344"
             bg_col = "#0f172a" if es_mi_tienda else "#141424"
+            url_dl = f"/dl?file={f_encoded}&original={f_encoded}"
+            url_view = f"/dl?file={f_encoded}&original={f_encoded}&inline=1"
+
+            btn_ver = ft.ElevatedButton(
+                "👁️ Ver Ficha",
+                icon=ft.Icons.VISIBILITY,
+                url=url_view,
+                style=ft.ButtonStyle(color="white", bgcolor="#2563eb")
+            )
 
             items.append(
                 ft.Container(
@@ -229,15 +236,10 @@ def build_panamericano_view(page: ft.Page, user_info=None, seleccionar_archivo_a
                                     )
                                 ], spacing=6, wrap=True),
                                 ft.Text(f"📅 Modificado: {f_fecha} | 📁 Tamaño: {f_size_kb}", size=11, color="#888888")
-                            ], expand=True)
+                            ])
                         ], spacing=8, wrap=True),
                         ft.Row([
-                            ft.ElevatedButton(
-                                "👁️ Ver Ficha",
-                                icon=ft.Icons.VISIBILITY,
-                                url=url_view,
-                                style=ft.ButtonStyle(color="white", bgcolor="#2563eb")
-                            ),
+                            btn_ver,
                             ft.ElevatedButton(
                                 "📥 Descargar",
                                 icon=ft.Icons.DOWNLOAD,

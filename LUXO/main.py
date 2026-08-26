@@ -7246,6 +7246,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 data = res.json()
                                 if "choices" in data and data["choices"]:
                                     respuesta = data["choices"][0]["message"]["content"]
+                                    if respuesta and "<think>" in respuesta:
+                                        respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
                                 else:
                                     respuesta = "Ocurrió un error consultando la IA."
                             except Exception as e:
