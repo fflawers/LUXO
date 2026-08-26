@@ -1,6 +1,7 @@
 import flet as ft
 import os
 import glob
+import urllib.parse
 import ciclicos_service as cs
 
 def seleccionar_archivo_nativo(titulo="Seleccionar archivo Excel"):
@@ -286,6 +287,16 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                 # Construir Tablas de Alertas en la MISMISIMA página
                 tables_list = []
 
+                def make_google_btn(u_code):
+                    clean_u = str(u_code).strip()
+                    search_url = f"https://www.google.com/search?tbm=isch&q={urllib.parse.quote(clean_u)}"
+                    return ft.Container(
+                        content=ft.Text("🌎", size=18),
+                        url=search_url,
+                        tooltip=f"Ver foto de {clean_u} en Google Imágenes 🖼️",
+                        padding=2
+                    )
+
                 # 0. Tabla Suma de DIF (Formato Específico Estándar de la Empresa)
                 tabla_dif_items = res.get("tabla_suma_dif", [])
                 if tabla_dif_items:
@@ -295,7 +306,8 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                         dif_color = "#7CFC00" if dif_val > 0 else "#FF4500"
                         dif_str = f"+{dif_val}" if dif_val > 0 else str(dif_val)
                         rows_dif.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold", color="white", selectable=True)),
+                            ft.DataCell(make_google_btn(item["upc"])),
+                            ft.DataCell(ft.Container(content=ft.Text(item["upc"], weight="bold", color="white", size=11, selectable=True), width=130)),
                             ft.DataCell(ft.Text(item["marca"], color="white", selectable=True)),
                             ft.DataCell(ft.Text(dif_str, weight="bold", color=dif_color, selectable=True))
                         ]))
@@ -304,13 +316,16 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     tot_color = "#7CFC00" if total_neto > 0 else ("#FF4500" if total_neto < 0 else "white")
                     tot_str = f"+{total_neto}" if total_neto > 0 else str(total_neto)
                     rows_dif.append(ft.DataRow(cells=[
+                        ft.DataCell(ft.Text("")),
                         ft.DataCell(ft.Text("Total general", weight="bold", color="#FFD700", size=14, selectable=True)),
                         ft.DataCell(ft.Text("")),
                         ft.DataCell(ft.Text(tot_str, weight="bold", color=tot_color, size=14, selectable=True))
                     ]))
 
                     dt_dif = ft.DataTable(
+                        column_spacing=25,
                         columns=[
+                            ft.DataColumn(ft.Text("🌎", weight="bold", size=16)),
                             ft.DataColumn(ft.Text("UPC", weight="bold", color="#00FFFF")),
                             ft.DataColumn(ft.Text("MARCA", weight="bold", color="#00FFFF")),
                             ft.DataColumn(ft.Text("Total", weight="bold", color="#00FFFF")),
@@ -337,14 +352,17 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     rows = []
                     for item in res["falta_en_escaneo"]:
                         rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold", selectable=True)),
+                            ft.DataCell(make_google_btn(item["upc"])),
+                            ft.DataCell(ft.Container(content=ft.Text(item["upc"], weight="bold", size=11, selectable=True), width=130)),
                             ft.DataCell(ft.Text(item["descripcion"], selectable=True)),
                             ft.DataCell(ft.Text(str(item["cant_sap"]), color="#2563eb", selectable=True)),
                             ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#888888", selectable=True)),
                             ft.DataCell(ft.Text(item["mensaje"], color="#dc2626", selectable=True))
                         ]))
                     dt = ft.DataTable(
+                        column_spacing=25,
                         columns=[
+                            ft.DataColumn(ft.Text("🌎", weight="bold", size=16)),
                             ft.DataColumn(ft.Text("UPC")),
                             ft.DataColumn(ft.Text("Descripción Gafa")),
                             ft.DataColumn(ft.Text("SAP")),
@@ -363,14 +381,17 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     rows = []
                     for item in res["falta_en_sap"]:
                         rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold", selectable=True)),
+                            ft.DataCell(make_google_btn(item["upc"])),
+                            ft.DataCell(ft.Container(content=ft.Text(item["upc"], weight="bold", size=11, selectable=True), width=130)),
                             ft.DataCell(ft.Text(item["descripcion"], selectable=True)),
                             ft.DataCell(ft.Text(str(item["cant_sap"]), color="#888888", selectable=True)),
                             ft.DataCell(ft.Text(str(item["cant_escaneo"]), color="#16a34a", selectable=True)),
                             ft.DataCell(ft.Text(item["mensaje"], color="#2563eb", selectable=True))
                         ]))
                     dt = ft.DataTable(
+                        column_spacing=25,
                         columns=[
+                            ft.DataColumn(ft.Text("🌎", weight="bold", size=16)),
                             ft.DataColumn(ft.Text("UPC")),
                             ft.DataColumn(ft.Text("Descripción Gafa")),
                             ft.DataColumn(ft.Text("SAP")),
@@ -389,7 +410,8 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                     rows = []
                     for item in res["stock_negativo"]:
                         rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(item["upc"], weight="bold", selectable=True)),
+                            ft.DataCell(make_google_btn(item["upc"])),
+                            ft.DataCell(ft.Container(content=ft.Text(item["upc"], weight="bold", size=11, selectable=True), width=130)),
                             ft.DataCell(ft.Text(item["descripcion"], selectable=True)),
                             ft.DataCell(ft.Text(str(item["cant_sap"]), color="#dc2626", weight="bold", selectable=True)),
                             ft.DataCell(ft.Text(str(item["cant_escaneo"]), selectable=True)),
@@ -397,6 +419,7 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                         ]))
                     dt = ft.DataTable(
                         columns=[
+                            ft.DataColumn(ft.Text("🌎", weight="bold", size=16)),
                             ft.DataColumn(ft.Text("UPC")),
                             ft.DataColumn(ft.Text("Descripción Gafa")),
                             ft.DataColumn(ft.Text("SAP")),
@@ -518,60 +541,91 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                 # REGLA EXPLICITA 1: Varianza 0% es VERDE, cualquier otro número es ROJO
                 col_var = "#16a34a" if var == 0.0 else "#dc2626"
 
-                # Obtener detalles del cíclico
-                detalles = cs.obtener_detalle_ciclico(c_id)
-                detail_rows = []
-                if detalles:
-                    for d in detalles:
-                        color_tipo = "#dc2626" if d.get("tipo_alerta") == "FALTA_EN_ESCANEO" else ("#2563eb" if d.get("tipo_alerta") == "FALTA_EN_SAP" else "#ea580c")
-                        detail_rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(d.get("upc","")), weight="bold", selectable=True)),
-                            ft.DataCell(ft.Text(str(d.get("descripcion","") or ""), selectable=True)),
-                            ft.DataCell(ft.Text(str(d.get("cantidad_sap", 0)), selectable=True)),
-                            ft.DataCell(ft.Text(str(d.get("cantidad_escaneo", 0)), selectable=True)),
-                            ft.DataCell(ft.Text(str(d.get("tipo_alerta","")), color=color_tipo, weight="bold", selectable=True)),
-                            ft.DataCell(ft.Text(str(d.get("comentario_item","") or ""), selectable=True))
-                        ]))
-                else:
-                    detail_rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text("N/A", weight="bold")),
-                        ft.DataCell(ft.Text("Sin discrepancias registradas")),
-                        ft.DataCell(ft.Text("-")),
-                        ft.DataCell(ft.Text("-")),
-                        ft.DataCell(ft.Text("OK", color="#16a34a", weight="bold")),
-                        ft.DataCell(ft.Text("Sin observaciones"))
-                    ]))
-
-                dt_detail = ft.DataTable(
-                    columns=[
-                        ft.DataColumn(ft.Text("UPC")),
-                        ft.DataColumn(ft.Text("Descripción")),
-                        ft.DataColumn(ft.Text("SAP")),
-                        ft.DataColumn(ft.Text("Escaneo")),
-                        ft.DataColumn(ft.Text("Tipo Alerta")),
-                        ft.DataColumn(ft.Text("Diagnóstico"))
-                    ],
-                    rows=detail_rows
-                )
-
-                # Contenedor desplegable integrado para la auditoría
+                # Contenedor desplegable integrado para la auditoría (Carga Diferida / Lazy Loading)
                 container_detalle = ft.Container(
-                    content=ft.Column([
-                        ft.Text(f"📋 Desglose Completo de Auditoría - Cíclico #{c_id}", weight="bold", size=14, color="#00FFFF"),
-                        ft.Container(content=dt_detail, border=ft.Border.all(1, "#333344"), border_radius=8, padding=5)
-                    ], spacing=10),
+                    content=None,
                     padding=10,
                     visible=False,
                     bgcolor="#0d0d18",
                     border_radius=8
                 )
 
-                def make_toggle_click(c_box):
+                def make_toggle_click(c_box, btn_ref, cyclic_id=c_id):
                     def _handler(e):
+                        if not c_box.content:
+                            detalles = cs.obtener_detalle_ciclico(cyclic_id)
+                            detail_rows = []
+                            if detalles:
+                                for d in detalles:
+                                    upc_str = str(d.get("upc","")).strip()
+                                    color_tipo = "#dc2626" if d.get("tipo_alerta") == "FALTA_EN_ESCANEO" else ("#2563eb" if d.get("tipo_alerta") == "FALTA_EN_SAP" else "#ea580c")
+                                    
+                                    btn_g = ft.Container(
+                                        content=ft.Text("🌎", size=18),
+                                        url=f"https://www.google.com/search?tbm=isch&q={urllib.parse.quote(upc_str)}",
+                                        tooltip=f"Ver foto de {upc_str} en Google Imágenes 🖼️",
+                                        padding=2
+                                    )
+                                    
+                                    detail_rows.append(ft.DataRow(cells=[
+                                        ft.DataCell(btn_g),
+                                        ft.DataCell(ft.Container(content=ft.Text(upc_str, weight="bold", size=11, selectable=True), width=130)),
+                                        ft.DataCell(ft.Text(str(d.get("descripcion","") or ""), selectable=True)),
+                                        ft.DataCell(ft.Text(str(d.get("cantidad_sap", 0)), selectable=True)),
+                                        ft.DataCell(ft.Text(str(d.get("cantidad_escaneo", 0)), selectable=True)),
+                                        ft.DataCell(ft.Text(str(d.get("tipo_alerta","")), color=color_tipo, weight="bold", selectable=True)),
+                                        ft.DataCell(ft.Text(str(d.get("comentario_item","") or ""), selectable=True))
+                                    ]))
+                            else:
+                                detail_rows.append(ft.DataRow(cells=[
+                                    ft.DataCell(ft.Text("")),
+                                    ft.DataCell(ft.Text("N/A", weight="bold")),
+                                    ft.DataCell(ft.Text("Sin discrepancias registradas")),
+                                    ft.DataCell(ft.Text("-")),
+                                    ft.DataCell(ft.Text("-")),
+                                    ft.DataCell(ft.Text("OK", color="#16a34a", weight="bold")),
+                                    ft.DataCell(ft.Text("Sin observaciones"))
+                                ]))
+
+                            dt_detail = ft.DataTable(
+                                column_spacing=25,
+                                columns=[
+                                    ft.DataColumn(ft.Text("🌎", weight="bold", size=16)),
+                                    ft.DataColumn(ft.Text("UPC")),
+                                    ft.DataColumn(ft.Text("Descripción")),
+                                    ft.DataColumn(ft.Text("SAP")),
+                                    ft.DataColumn(ft.Text("Escaneo")),
+                                    ft.DataColumn(ft.Text("Tipo Alerta")),
+                                    ft.DataColumn(ft.Text("Diagnóstico"))
+                                ],
+                                rows=detail_rows
+                            )
+                            c_box.content = ft.Column([
+                                ft.Text(f"📋 Desglose Completo de Auditoría - Cíclico #{cyclic_id}", weight="bold", size=14, color="#00FFFF"),
+                                ft.Container(content=dt_detail, border=ft.Border.all(1, "#333344"), border_radius=8, padding=5)
+                            ], spacing=10)
+
                         c_box.visible = not c_box.visible
-                        try: page.update()
-                        except Exception: pass
+                        if c_box.visible:
+                            btn_ref.text = "👁️ Ocultar Detalle"
+                            btn_ref.icon = ft.Icons.UNFOLD_LESS
+                        else:
+                            btn_ref.text = "👁️ Ver Detalle"
+                            btn_ref.icon = ft.Icons.UNFOLD_MORE
+                        try:
+                            c_box.update()
+                            btn_ref.update()
+                        except Exception:
+                            try: page.update()
+                            except Exception: pass
                     return _handler
+
+                btn_toggle = ft.ElevatedButton(
+                    "👁️ Ver Detalle",
+                    icon=ft.Icons.UNFOLD_MORE,
+                    style=ft.ButtonStyle(color="white", bgcolor="#2563eb")
+                )
+                btn_toggle.on_click = make_toggle_click(container_detalle, btn_toggle, c_id)
 
                 items.append(
                     ft.Container(
@@ -585,12 +639,7 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                                     ft.Text(f"Varianza: {var}%", weight="bold", color=col_var, size=14),
                                     ft.Text(f"SAP: {r['total_sap_pzas']} pzas | Escaneo: {r['total_escaneo_pzas']} pzas", size=11, color="#888888")
                                 ]),
-                                ft.ElevatedButton(
-                                    "👁️ Ver Detalle",
-                                    icon=ft.Icons.UNFOLD_MORE,
-                                    style=ft.ButtonStyle(color="white", bgcolor="#2563eb"),
-                                    on_click=make_toggle_click(container_detalle)
-                                )
+                                btn_toggle
                             ]),
                             container_detalle
                         ], spacing=8),
