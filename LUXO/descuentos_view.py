@@ -384,7 +384,7 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
                                 tab_encontradas_content
                             ]
                         ),
-                        height=580
+                        height=980
                     )
                 ]
             )
