@@ -32,7 +32,7 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
     # Filtros Pestaña 1: Pendientes por Ubicar
     dd_filtro_marca_pend = ft.Dropdown(
         label="🏷️ Marca (Pendientes)",
-        width=170,
+        width=210,
         dense=True,
         options=[ft.dropdown.Option("TODAS", "Todas las Marcas")],
         value="TODAS"
@@ -56,7 +56,7 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
     # Filtros Pestaña 2: Encontradas
     dd_filtro_marca_enc = ft.Dropdown(
         label="🏷️ Marca (Encontradas)",
-        width=170,
+        width=210,
         dense=True,
         options=[ft.dropdown.Option("TODAS", "Todas las Marcas")],
         value="TODAS"
@@ -142,30 +142,30 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
         # Aplicar Filtros Independientes a Pendientes
         sel_m_p = dd_filtro_marca_pend.value
         if sel_m_p and sel_m_p != "TODAS":
-            list_pendientes_raw = [r for r in list_pendientes_raw if str(r.get("descripcion", "")).strip().upper() == sel_m_p.upper()]
+            list_pendientes_raw = [r for r in list_pendientes_raw if sel_m_p.upper() in str(r.get("descripcion", "")).upper()]
 
         sel_t_p = dd_filtro_tipo_pend.value
         if sel_t_p and sel_t_p != "TODOS":
             if sel_t_p == "20%":
-                list_pendientes_raw = [r for r in list_pendientes_raw if "20%" in str(r.get("tipo_descuento", "")).upper() or "0.2" in str(r.get("tipo_descuento", ""))]
+                list_pendientes_raw = [r for r in list_pendientes_raw if "20" in str(r.get("tipo_descuento", "")).upper() or "0.2" in str(r.get("tipo_descuento", ""))]
             elif sel_t_p == "30%":
-                list_pendientes_raw = [r for r in list_pendientes_raw if "30%" in str(r.get("tipo_descuento", "")).upper() or "0.3" in str(r.get("tipo_descuento", ""))]
+                list_pendientes_raw = [r for r in list_pendientes_raw if "30" in str(r.get("tipo_descuento", "")).upper() or "0.3" in str(r.get("tipo_descuento", ""))]
             elif sel_t_p == "ESTRATEGIA":
-                list_pendientes_raw = [r for r in list_pendientes_raw if "ESTRATEGIA" in str(r.get("tipo_descuento", "")).upper()]
+                list_pendientes_raw = [r for r in list_pendientes_raw if "ESTRATEGIA" in str(r.get("tipo_descuento", "")).upper() or "50" in str(r.get("tipo_descuento", "")) or "0.5" in str(r.get("tipo_descuento", ""))]
 
         # Aplicar Filtros Independientes a Encontradas
         sel_m_e = dd_filtro_marca_enc.value
         if sel_m_e and sel_m_e != "TODAS":
-            list_encontradas_raw = [r for r in list_encontradas_raw if str(r.get("descripcion", "")).strip().upper() == sel_m_e.upper()]
+            list_encontradas_raw = [r for r in list_encontradas_raw if sel_m_e.upper() in str(r.get("descripcion", "")).upper()]
 
         sel_t_e = dd_filtro_tipo_enc.value
         if sel_t_e and sel_t_e != "TODOS":
             if sel_t_e == "20%":
-                list_encontradas_raw = [r for r in list_encontradas_raw if "20%" in str(r.get("tipo_descuento", "")).upper() or "0.2" in str(r.get("tipo_descuento", ""))]
+                list_encontradas_raw = [r for r in list_encontradas_raw if "20" in str(r.get("tipo_descuento", "")).upper() or "0.2" in str(r.get("tipo_descuento", ""))]
             elif sel_t_e == "30%":
-                list_encontradas_raw = [r for r in list_encontradas_raw if "30%" in str(r.get("tipo_descuento", "")).upper() or "0.3" in str(r.get("tipo_descuento", ""))]
+                list_encontradas_raw = [r for r in list_encontradas_raw if "30" in str(r.get("tipo_descuento", "")).upper() or "0.3" in str(r.get("tipo_descuento", ""))]
             elif sel_t_e == "ESTRATEGIA":
-                list_encontradas_raw = [r for r in list_encontradas_raw if "ESTRATEGIA" in str(r.get("tipo_descuento", "")).upper()]
+                list_encontradas_raw = [r for r in list_encontradas_raw if "ESTRATEGIA" in str(r.get("tipo_descuento", "")).upper() or "50" in str(r.get("tipo_descuento", "")) or "0.5" in str(r.get("tipo_descuento", ""))]
 
         txt_conteo_badge.value = f"📋 Pendientes: {len(list_pendientes_raw)} | ☑️ Ubicados: {len(list_encontradas_raw)} | 📦 Total: {total_piezas:,} pz(s)"
 
@@ -333,23 +333,35 @@ def build_descuentos_view(page: ft.Page, store_code="A540", store_name="Tienda A
                 bgcolor="#0A180A", padding=8, border_radius=10
             )
 
+        btn_refresh_pend = ft.IconButton(
+            icon=ft.Icons.REFRESH,
+            icon_color="#00FFFF",
+            tooltip="🔄 Recargar y aplicar filtros",
+            on_click=lambda _: cargar_tabla_descuentos(update_page=True)
+        )
+
+        btn_refresh_enc = ft.IconButton(
+            icon=ft.Icons.REFRESH,
+            icon_color="#00FFFF",
+            tooltip="🔄 Recargar y aplicar filtros",
+            on_click=lambda _: cargar_tabla_descuentos(update_page=True)
+        )
+
         # Control de Pestañas Independientes Adaptativo Celular
         tab_pendientes_content = ft.Container(
             content=ft.Column([
-                ft.Row([dd_filtro_marca_pend, dd_filtro_tipo_pend], spacing=8, wrap=True),
+                ft.Row([dd_filtro_marca_pend, dd_filtro_tipo_pend, btn_refresh_pend], spacing=8, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 dt_pendientes_ctrl
-            ], spacing=8, scroll=ft.ScrollMode.AUTO, expand=True),
-            padding=8,
-            expand=True
+            ], spacing=8),
+            padding=5
         )
 
         tab_encontradas_content = ft.Container(
             content=ft.Column([
-                ft.Row([dd_filtro_marca_enc, dd_filtro_tipo_enc], spacing=8, wrap=True),
+                ft.Row([dd_filtro_marca_enc, dd_filtro_tipo_enc, btn_refresh_enc], spacing=8, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 dt_encontradas_ctrl
-            ], spacing=8, scroll=ft.ScrollMode.AUTO, expand=True),
-            padding=8,
-            expand=True
+            ], spacing=8),
+            padding=5
         )
 
         tabs_control = ft.Tabs(

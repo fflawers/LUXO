@@ -20964,19 +20964,24 @@ Ejemplo:
             def _save_pref_zona_region(uid, z_id, r_id):
                 if not uid:
                     return
+                z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
+                name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                z_norm = name_map.get(z_clean.upper(), z_clean)
+                r_clean = str(r_id).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
+                
+                # Actualizar el diccionario de sesión actual inmediatamente
+                user_session["zona_activa_id"] = z_norm
+                user_session["region_activa_id"] = r_clean
+                
                 def _save():
                     try:
                         db_p = conectar_db()
                         if db_p:
-                            z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
-                            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
-                            z_norm = name_map.get(z_clean.upper(), z_clean)
-                            r_clean = str(r_id).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
                             cur_p = db_p.cursor()
                             cur_p.execute("UPDATE usuarios SET Zona = %s, Region = %s WHERE ID_Usuario = %s", (z_norm, r_clean, uid))
                             db_p.commit()
                             db_p.close()
-                            print(f"💾 Preferencias de Zona={z_norm} y Región={r_clean} guardadas en BD para usuario ID={uid}")
+                            print(f"💾 Preferencias de Zona={z_norm} y Región={r_clean} guardadas permanentemente en BD para usuario ID={uid}")
                     except Exception as ex_p:
                         print("Notice save zona/region DB:", ex_p)
                 import threading
@@ -20984,17 +20989,14 @@ Ejemplo:
 
             def on_r_change(e):
                 r_val = e.control.value if (e and getattr(e, "control", None) and e.control.value is not None) else (dd.value or "0")
-                old_r = user_session.get("region_activa_id", "0")
-                if r_val == old_r:
-                    return
                 user_session["region_activa_id"] = r_val
                 print(f"🗺️ Región Activa cambiada a ID={r_val} por usuario={user_info.get('id')}")
                 if es_admin():
                     try:
-                        z_curr = user_session.get("zona_activa_id", "0")
+                        z_curr = user_session.get("zona_activa_id", "1")
                         operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_curr, region_id=r_val, get_zona_region_fn=obtener_zona_region_activa)
                     except Exception: pass
-                _save_pref_zona_region(user_info.get("id"), user_session.get("zona_activa_id", "0"), r_val)
+                _save_pref_zona_region(user_info.get("id"), user_session.get("zona_activa_id", "1"), r_val)
                 main_views_cache.clear()
                 cambiar_vista(active_view[0])
                 try:
@@ -21023,28 +21025,27 @@ Ejemplo:
             return dd
 
         def on_zona_activa_change(e):
-            z_val = e.control.value if (e and getattr(e, "control", None) and e.control.value is not None) else (dd_zona_activa.value or "0")
-            old_z = user_session.get("zona_activa_id", "0")
-            if z_val == old_z:
-                return
-            user_session["zona_activa_id"] = z_val
+            z_val = e.control.value if (e and getattr(e, "control", None) and e.control.value is not None) else (dd_zona_activa.value or "1")
+            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+            z_norm = name_map.get(str(z_val).upper(), z_val)
+            user_session["zona_activa_id"] = z_norm
             user_session["region_activa_id"] = "0"
             r_val = "0"
-            print(f"📍 Zona Activa cambiada a ID/val={z_val} (Región: {r_val}) por usuario={user_info.get('id')}")
+            print(f"📍 Zona Activa cambiada a ID/val={z_norm} (Región: {r_val}) por usuario={user_info.get('id')}")
 
             # Recrear el control de regiones fresco con las opciones filtradas para la zona seleccionada
             nonlocal dd_region_activa
-            dd_region_activa = crear_dropdown_region(z_val, r_val)
+            dd_region_activa = crear_dropdown_region(z_norm, r_val)
             dd_region_container.content = dd_region_activa
 
             actualizar_top_appbar_layout()
 
             if es_admin():
                 try:
-                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_val, region_id=r_val, get_zona_region_fn=obtener_zona_region_activa)
+                    operacion_tiendas.actualizar_estrella_aperturas(page, star_icon_container, conectar_db, zona_id=z_norm, region_id=r_val, get_zona_region_fn=obtener_zona_region_activa)
                 except Exception: pass
 
-            _save_pref_zona_region(user_info.get("id"), z_val, r_val)
+            _save_pref_zona_region(user_info.get("id"), z_norm, r_val)
 
             main_views_cache.clear()
             cambiar_vista(active_view[0])
@@ -21054,9 +21055,13 @@ Ejemplo:
 
         is_mob_init = (page.width < 768) if (page and page.width) else False
 
+        raw_z_init = str(user_session.get("zona_activa_id", "1")).strip()
+        z_name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+        val_z_init = z_name_map.get(raw_z_init.upper(), raw_z_init)
+
         dd_zona_activa = ft.Dropdown(
             options=obtener_opciones_zonas_db(),
-            value=user_session.get("zona_activa_id", "0"),
+            value=val_z_init if val_z_init in ["0", "1", "2", "3", "4"] else "1",
             width=None if is_mob_init else 210,
             expand=1 if is_mob_init else False,
             height=42,
@@ -22059,10 +22064,6 @@ Ejemplo:
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
-            # Fallback default: si no hay uid guardado, intentar con usuario id 1 por defecto
-            if not uid_saved:
-                uid_saved = 1
-
             # Control de expiración de sesión (30 minutos de inactividad máxima)
             if uid_saved and last_act_str:
                 try:
@@ -22073,7 +22074,7 @@ Ejemplo:
                             await page.shared_preferences.remove("logged_user_id")
                             await page.shared_preferences.remove("last_activity_timestamp")
                         except Exception: pass
-                        uid_saved = 1
+                        uid_saved = None
                         print("Sesión expirada automáticamente por inactividad (>30m)")
                     else:
                         # Renovar la actividad para dar otros 30 minutos a partir de ahora

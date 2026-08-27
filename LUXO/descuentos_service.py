@@ -325,7 +325,7 @@ def obtener_descuentos_por_tienda(codigo_tienda=None, query_search=None):
 
 def obtener_marcas_y_descuentos_disponibles(codigo_tienda=None):
     """
-    Obtiene las marcas y tipos de descuento únicos para poblar los filtros estilo Excel.
+    Obtiene las marcas limpias y tipos de descuento únicos para poblar los filtros estilo Excel.
     """
     db = conectar_db()
     if not db:
@@ -336,14 +336,23 @@ def obtener_marcas_y_descuentos_disponibles(codigo_tienda=None):
         params = []
         if codigo_tienda and str(codigo_tienda).strip() and str(codigo_tienda).upper() != "TODAS":
             c_clean = str(codigo_tienda).strip()
-            where_clause = "WHERE codigo_tienda = %s OR nombre_tienda = %s"
-            params = [c_clean, c_clean]
+            digits_only = "".join(filter(str.isdigit, c_clean))
+            if digits_only:
+                where_clause = "WHERE codigo_tienda = %s OR nombre_tienda = %s OR codigo_tienda = %s OR nombre_tienda LIKE %s"
+                params = [digits_only, c_clean, c_clean, f"%{c_clean}%"]
+            else:
+                where_clause = "WHERE codigo_tienda = %s OR nombre_tienda = %s OR nombre_tienda LIKE %s"
+                params = [c_clean, c_clean, f"%{c_clean}%"]
         
-        cursor.execute(f"SELECT DISTINCT descripcion FROM descuentos_semanales {where_clause} ORDER BY descripcion ASC", tuple(params))
-        marcas = [r["descripcion"] for r in cursor.fetchall() if r["descripcion"]]
+        cursor.execute(f"SELECT DISTINCT SUBSTRING_INDEX(descripcion, ' ', 1) AS marca FROM descuentos_semanales {where_clause} HAVING marca IS NOT NULL AND marca != '' ORDER BY marca ASC", tuple(params))
+        marcas = [r["marca"].strip() for r in cursor.fetchall() if r.get("marca") and str(r["marca"]).strip()]
+
+        if not marcas:
+            cursor.execute("SELECT DISTINCT SUBSTRING_INDEX(descripcion, ' ', 1) AS marca FROM descuentos_semanales HAVING marca IS NOT NULL AND marca != '' ORDER BY marca ASC")
+            marcas = [r["marca"].strip() for r in cursor.fetchall() if r.get("marca") and str(r["marca"]).strip()]
 
         cursor.execute(f"SELECT DISTINCT tipo_descuento FROM descuentos_semanales {where_clause} ORDER BY tipo_descuento ASC", tuple(params))
-        tipos = [r["tipo_descuento"] for r in cursor.fetchall() if r["tipo_descuento"]]
+        tipos = [r["tipo_descuento"] for r in cursor.fetchall() if r.get("tipo_descuento")]
 
         db.close()
         return marcas, tipos
