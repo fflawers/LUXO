@@ -61,24 +61,71 @@ def rotate_groq_key():
 
 def generar_respuesta_simulador_fallback(messages, system_prompt=""):
     prompt_str = str(system_prompt).lower()
-    last_msg = messages[-1]["content"].lower() if messages else ""
-    user_turn_count = sum(1 for m in messages if m.get("role") == "user")
+    user_msgs = [m.get("content", "").strip() for m in messages if m.get("role") == "user"]
+    last_msg = user_msgs[-1].lower() if user_msgs else ""
+    user_turn_count = len(user_msgs)
 
-    # Caso 1: Evaluación final
+    # Detectar si el vendedor no ha realizado labor de venta (bajo esfuerzo / saludos repetitivos)
+    es_bajo_esfuerzo = False
+    if user_msgs:
+        palabras_clave_ventas = ["polarizado", "garantía", "garantia", "micas", "uv", "descuento", "promoción", "promocion", "precio", "costo", "estuche", "limpieza", "versace", "ray-ban", "oakley", "prada", "persol", "chromance", "meta", "correo", "datos", "registro", "fisionomía", "estilo", "presupuesto", "nombre", "llevo", "tarjeta", "efectivo", "soy", "mucho gusto"]
+        tiene_palabra_clave = any(kw in " ".join(user_msgs).lower() for kw in palabras_clave_ventas)
+        avg_len = sum(len(m) for m in user_msgs) / len(user_msgs)
+        if not tiene_palabra_clave or avg_len < 12:
+            es_bajo_esfuerzo = True
+
+    # CASO 1: EVALUACIÓN DE DESEMPEÑO (AUDITORÍA DE RETROALIMENTACIÓN)
     if "evaluar" in prompt_str or "score:" in prompt_str or "auditor" in prompt_str or "evaluación" in prompt_str:
-        return (
-            "SCORE: 88\n\n"
-            "📊 EVALUACIÓN DE DESEMPEÑO (SISTEMA LUXO - NEUROVENTAS SUNGLASS HUT):\n\n"
-            "1. Escucha Activa y Regla 80/20 (Excelente): El asesor escuchó la consulta inicial del cliente y estableció empatía al presentarse de manera educada.\n"
-            "2. Venta por Transformación (Muy Bueno): Destacó el valor diferencial de las micas y los beneficios fisionómicos de la marca.\n"
-            "3. Manejo de Objeciones (Excelente): Respondió con firmeza y elegancia ante la objeción de precio usando la técnica 'Sí, y...'.\n"
-            "4. Captura CRM y Servicios de Valor (Bueno): Mencionó el servicio de ajuste fisionómico y la garantía oficial.\n"
-            "5. Cierre y Señales GO: Identificó el interés del cliente y procedió al cierre de la venta.\n\n"
-            "💡 Recomendación del Coach: Mantener el enfoque consultivo y no exceder los 3 armazones en bandeja a la vez."
-        )
+        if es_bajo_esfuerzo or user_turn_count < 2:
+            return (
+                "SCORE: 15\n\n"
+                "⚠️ REPROBADO (EVALUACIÓN DE DESEMPEÑO - NEUROVENTAS SUNGLASS HUT):\n\n"
+                "El vendedor tuvo un desempeño reprobatorio (Score 15/100) al responder únicamente saludos genéricos (como 'hola') o frases cortas sin contenido comercial, sin realizar ningún tipo de indagación ni atención real al cliente.\n\n"
+                "1. Escucha Activa y Regla 80/20 (0/20): No realizó preguntas de sondeo ni escuchó las necesidades expresadas por el cliente.\n"
+                "2. Venta por Transformación (0/20): No presentó beneficios, fisionomía ni valor de la marca.\n"
+                "3. Manejo de Objeciones (0/20): Ignoró por completo las dudas u objeciones de precio planteadas por el visitante.\n"
+                "4. Captura CRM y Servicios (0/20): No solicitó datos de contacto, correo ni ofreció garantía o servicio de ultrasonido.\n"
+                "5. Cierre Comercial (0/20): Cero intento de cierre de venta.\n\n"
+                "💡 Recomendación del Coach: Es indispensable involucrarse activamente en la venta. Saluda una sola vez, identifícate y pasa de inmediato a indagar el estilo de vida del cliente usando las técnicas del Manual de Neuroventas."
+            )
+        else:
+            texto_vendedor = " ".join(user_msgs).lower()
+            score = 45
+            puntos_motivos = []
 
-    # Caso 2: Primer mensaje de inicio (saludo inicial del roleplay)
-    if user_turn_count <= 1 and ("hola" in last_msg or last_msg == "hola, buenas tardes."):
+            if "nombre" in texto_vendedor or "mucho gusto" in texto_vendedor or "soy" in texto_vendedor:
+                score += 10
+                puntos_motivos.append("• Se presentó de manera educada y profesional (+10 pts)")
+            if "polarizado" in texto_vendedor or "uv" in texto_vendedor or "micas" in texto_vendedor or "tecnología" in texto_vendedor:
+                score += 15
+                puntos_motivos.append("• Explicó beneficios de tecnología/polarizados (+15 pts)")
+            if "garantía" in texto_vendedor or "garantia" in texto_vendedor or "correo" in texto_vendedor or "crm" in texto_vendedor:
+                score += 15
+                puntos_motivos.append("• Mencionó garantía oficial o captura CRM (+15 pts)")
+            if "llevo" in texto_vendedor or "estuche" in texto_vendedor or "tarjeta" in texto_vendedor or "cierre" in texto_vendedor or "promoción" in texto_vendedor:
+                score += 10
+                puntos_motivos.append("• Intentó el cierre comercial de la venta (+10 pts)")
+
+            score = min(score, 95)
+            desglose = "\n".join(puntos_motivos) if puntos_motivos else "• El vendedor mantuvo una interacción básica."
+
+            return (
+                f"SCORE: {score}\n\n"
+                f"📊 EVALUACIÓN DE DESEMPEÑO (SISTEMA LUXO - NEUROVENTAS SUNGLASS HUT):\n\n"
+                f"El asesor demostró un esfuerzo de venta {'destacado' if score >= 75 else 'intermedio'}.\n\n"
+                f"Puntos Clave Evaluados:\n{desglose}\n\n"
+                f"💡 Recomendación del Coach: Para alcanzar los 100 puntos, recuerda aplicar la regla 80/20, mantener máximo 3 armazones en bandeja y ofrecer siempre el kit de limpieza para subir el UPT."
+            )
+
+    # CASO 2: SIMULACIÓN DE CLIENTE (RESPUESTAS REALISTAS Y HUMANAS)
+    if es_bajo_esfuerzo and user_turn_count >= 2:
+        if user_turn_count == 2:
+            return "Oye disculpa... ¿por qué me vuelves a decir 'hola'? Ya te saludé. Te estaba preguntando sobre este modelo y su precio, ¿me vas a asesorar bien o no?"
+        else:
+            return "Sinceramente siento que no me estás prestando atención y solo repites lo mismo. Preferiría que me atienda otro asesor. Hasta luego."
+
+    # Primer saludo del roleplay
+    if user_turn_count <= 1:
         if "apurado" in prompt_str or "vuelo" in prompt_str:
             return "¡Hola, buenas tardes! La verdad vengo muy apurado porque mi vuelo a la playa sale en unas cuantas horas. Necesito unas gafas clásicas polarizadas como unas Ray-Ban Aviator. ¿Las tienes disponibles para verlas rápido?"
         elif "caro" in prompt_str or "precio" in prompt_str:
@@ -94,19 +141,19 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
         else:
             return "¡Hola, buenas tardes! Disculpa, estaba viendo estas gafas en la vitrina. ¿Me podrías platicar un poco más sobre este modelo y sus características?"
 
-    # Caso 3: Respuestas conversacionales dinámicas según la respuesta del vendedor
+    # Turnos siguientes según contenido del vendedor
     if "nombre" in last_msg or "llamas" in last_msg or "quien eres" in last_msg or "mucho gusto" in last_msg or "soy" in last_msg:
-        return "Mucho gusto. Pues mira, como te comentaba, me llamaron mucho la atención estos lentes pero quiero entender bien sus beneficios para estar seguro de mi decisión."
+        return "Mucho gusto. Pues mira, me llamaron la atención estos lentes, pero me gustaría entender bien por qué el costo o qué beneficio me da esta marca frente a otras."
     elif "correo" in last_msg or "datos" in last_msg or "registro" in last_msg or "garantía" in last_msg or "garantia" in last_msg:
-        return "Claro que sí, me parece excelente contar con la garantía oficial. Mi correo es cliente.ejemplo@gmail.com. ¿Qué otro beneficio incluye la garantía?"
+        return "Me parece muy bien lo de la garantía. Mi correo es cliente.ejemplo@gmail.com. ¿Qué cubre exactamente si se me llegan a rayar o soltar un tornillo?"
     elif "polarizado" in last_msg or "uv" in last_msg or "protección" in last_msg or "tecnología" in last_msg or "micas" in last_msg:
-        return "Ah, entiendo perfecto. No sabía que la mica polarizada eliminaba los reflejos molestos al manejar. Eso suena bastante útil."
+        return "Ah, entiendo. No sabía que la mica polarizada eliminaba los reflejos en el asfalto. Eso me sirve mucho para cuando manejo de tarde."
     elif "descuento" in last_msg or "promoción" in last_msg or "precio" in last_msg or "cuanto" in last_msg or "costo" in last_msg:
-        return "Entiendo que la calidad y los materiales respaldan el valor. ¿Tienen alguna opción de meses sin intereses o kit de limpieza que incluya la compra?"
+        return "Entiendo los materiales de alta calidad. ¿Tienen opción de pagar a meses sin intereses o algún paquete que incluya el estuche o kit de limpieza?"
     elif "sí" in last_msg or "si" in last_msg or "llevo" in last_msg or "gusta" in last_msg or "cierre" in last_msg or "tarjeta" in last_msg:
-        return "¡Me convenciste! La verdad se ven muy bien y la atención ha sido excelente. Me los llevo, por favor empácalos en su estuche."
+        return "¡Excelente atención! Me convenciste con la explicación del lente. Me los llevo, por favor."
     else:
-        return "Entiendo tu punto como asesor. ¿Me podrías mostrar qué otras opciones o colores tienes en esta misma línea para compararlos?"
+        return "Entiendo tu punto como asesor. ¿Me podrías mostrar qué otras opciones de armazón tienes en esta misma vitrina para compararlos?"
 
 
 def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
