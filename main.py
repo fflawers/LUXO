@@ -7432,12 +7432,33 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         content_trunc = msg["content"]
                         if len(content_trunc) > 800:
                             content_trunc = content_trunc[:800] + "\n[...]"
-                        historial_filtrado.append({"role": msg["role"], "content": content_trunc})
-                    ok_chat, respuesta_chat, status_chat = consultar_groq_api(historial_filtrado, system_prompt=mensaje_sistema["content"], temperature=0.35, timeout=15)
-                    if ok_chat and respuesta_chat:
-                        respuesta = respuesta_chat
-                    else:
-                        respuesta = f"Error de conexión con la IA ({status_chat})."
+                    payload = {
+                        "model": GROQ_MODEL,
+                        "messages": mensajes_api
+                    }
+
+                    try:
+                        headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+                        res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
+                        if res.status_code == 429 and rotate_groq_key():
+                            headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+                            res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
+                        if res.status_code == 200:
+                            try:
+                                data = res.json()
+                                if "choices" in data and data["choices"]:
+                                    respuesta = data["choices"][0]["message"]["content"]
+                                else:
+                                    respuesta = "Ocurrió un error consultando la IA."
+                            except Exception as e:
+                                print("AI PARSE ERROR:", e)
+                                respuesta = "Ocurrió un error consultando la IA."
+                        else:
+                            print("AI CONNECTION ERROR:", res.status_code, res.text)
+                            respuesta = f"Error de conexión con la IA ({res.status_code})."
+                    except Exception as re_err:
+                        print("API REQUEST EXCEPTION:", re_err)
+                        respuesta = "Error de conexión: No se pudo establecer contacto con el servidor de Inteligencia Artificial. Por favor, verifica tu conexión a internet e inténtalo de nuevo."
 
 
                     historial_sesion.append({"role": "assistant", "content": respuesta})
