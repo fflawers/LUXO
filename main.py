@@ -15115,22 +15115,53 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 btn_agregar
             ], spacing=10, vertical_alignment="center", wrap=True)
 
-            return ft.Column([
-                ft.Text("Configuración de Tienda 👥", size=20, color="#D8B4FE", weight="bold"),
-                ft.Text(
-                    "Registra y gestiona a los colaboradores de la tienda.",
-                    color="#aaaaaa", size=12
-                ),
-                ft.Divider(height=10, color="#333333"),
-                banner_gerente,
-                ft.Container(height=6),
-                form_section,
-                ft.Container(height=10),
-                ft.Text("Lista de Personal Activo:", color="#D8B4FE", size=14, weight="bold"),
-                vendedores_list
-            ], scroll=ft.ScrollMode.AUTO)
+        MANUAL_NEUROVENTAS_LUXO = """
+=== MANUAL DE VENTAS DE ÉLITE Y NEUROVENTAS SUNGLASS HUT (SISTEMA LUXO) ===
 
+1. PILARES DE LA VENTA DE CALIDAD:
+- Regla 80/20: Escuchar el 80% del tiempo y hablar solo el 20%.
+- Vender la transformación: Enfocarse en cómo hace sentir la pieza, la imagen profesional y cómo resalta la fisionomía (no solo listar características).
+- Enfoque Consultivo: Diagnóstico preciso del estilo de vida y fisionomía del cliente para cero remordimiento de compra.
+- Ecosistema LUXO: Apoyarse en datos y tecnología para liberar tiempo y conectar humanamente.
 
+2. TÉCNICAS DE APERTURA Y ROMPEHIELOS:
+- Nunca usar "¿Le puedo ayudar en algo?".
+- Regla de 3 segundos y descompresión (espacio de aclimatación de 3-5 metros).
+- Rompehielos de servicio silencioso: Ofrecer ajustar o limpiar con ultrasonido las gafas que ya trae puestas.
+- Apertura basada en el producto ("Esa colección de carey acaba de llegar esta semana, los materiales son súper ligeros").
+- Invitación a la acción: "Pruébatelos frente al espejo sin ningún compromiso" y poner la bandeja a su alcance.
+
+3. ADEMANES Y LENGUAJE CORPORAL DE ÉLITE:
+- Efecto Joya: Sostener y entregar los lentes SIEMPRE con AMBAS MANOS por el marco o varillas (nunca tocar las micas).
+- Gestos de Apertura: Palmas a la vista, mano abierta para direccionar (JAMÁS señalar con el índice).
+- Espejeo (Rapport Físico): Sincronizar suavemente la postura y energía del cliente.
+- Errores No Verbales Prohibidos: Apoyarse en vitrinas, tocar micas, brazos cruzados, mirar el celular o reloj.
+
+4. GATILLOS PSICOLÓGICOS Y NEUROVENTAS:
+- Principio de Contraste: Mostrar primero la pieza de mayor valor.
+- Paradoja de Elección: Mantener un MÁXIMO DE 3 ARMAZONES en la bandeja a la vez. Si le gusta un 4to, retirar uno anterior.
+- Prueba Social: "Este diseño ha sido el favorito de la temporada porque estiliza el rostro".
+- Reciprocidad: Ofrecer valor antes de pedir la venta (limpieza/ajuste gratis).
+- Evitar la trampa del 'No': Usar la técnica del "Sí, y..." ("Ese modelo en negro es un clásico; para mantener esa línea elegante, esta variante en gris plomo da un contraste increíble").
+- Manejo del Ego del Cliente Experto: Validar y reorientar sin corregir agresivamente ("Tienes toda la razón en que antes distorsionaban... por eso la tecnología actual evolucionó").
+- 'El cliente ama comprar pero odia que le vendan': Crear la ilusión de control dando opciones limitadas para que el cliente sienta que el cierre fue su propia idea.
+- Cero vocabulario de fricción: Cambiar "gasto" por "inversión" o "adquisición".
+
+5. PREGUNTAS DE SONDEO Y SEÑALES "GO":
+- Preguntas abiertas (qué, cómo, cuál, para qué) para descubrir la necesidad real.
+- Preguntas de implicación para crear necesidad (ej. reflejo del sol al manejar -> polarizados/Chromance).
+- Preguntas cerradas para confirmar y acotar.
+- Señales Verbales: Preguntas de posesión (garantía, estuche), disponibilidad de colores, validación de terceros, cálculos de pago/promociones.
+- Señales No Verbales: Apropiación física (separar el lente o mantenerlo cerca), prueba repetida del mismo modelo, cambio de postura relajada, examen detallado de bisagras.
+- Al detectar la señal "GO", CORTAR EL DISCURSO Y PASAR DE INMEDIATO AL CIERRE ("¿Te los llevas puestos o te los pongo en su estuche?").
+
+6. MANEJO DE PERFILES COMPLEJOS:
+- Negociador Agresivo (Exige descuento): Firmeza inquebrantable + silencio. "El precio es cerrado porque respalda la autenticidad y garantía directa". Vender el servicio postventa (ajustes/limpiezas futuras sin costo).
+- Buscador de Estatus ('Amigo del dueño'): Elevar su ego pero usar la marca como escudo ("Por clientes de su nivel, la marca nos exige protocolos estrictos desde corporativo...").
+- Perfeccionista Extremo ('Nadie lo ha tocado'): Ritual de entrega. Sacar la caja sellada, hacer el unboxing frente a él a dos manos y entregarlo a contraluz.
+- Analítico Silencioso: Respetar su espacio (2 metros), cero plática vana, darle un solo dato técnico contundente (ej. "Titanio aeroespacial de menos de 15g") y alejarse.
+- Prejuicioso: Destruir el prejuicio con autoridad técnica implacable (calibre de armazón, índice de refracción, ingeniería de bisagras).
+"""
 
         def build_simulador_view():
             vendedor_dropdown = EmojiDropdown(
@@ -15315,7 +15346,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     eval_prompt += f"\n{msg['role'].upper()}: {msg['content']}"
                 
                 messages = [{"role": "user", "content": eval_prompt}]
-                system_prompt = "Eres un auditor operativo experto en ventas y servicio premium de Sunglass Hut."
+                system_prompt = f"""Eres un auditor operativo, coach de ventas de élite y evaluador experto de Sunglass Hut.
+Tu función es evaluar la conversación de venta utilizando estrictamente los principios, técnicas de neuroventas, sondeo y protocolos del siguiente manual:
+
+{MANUAL_NEUROVENTAS_LUXO}
+
+Evalúa de forma rigurosa pero altamente formativa en español. Tu respuesta DEBE comenzar obligatoriamente con el Score en formato 'SCORE: [Número 0-100]'.
+"""
                 
                 ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15)
                 if ok and eval_text:
