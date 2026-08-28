@@ -117,7 +117,18 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
                 f"💡 Recomendación del Coach: Para alcanzar los 100 puntos, recuerda aplicar la regla 80/20, mantener máximo 3 armazones en bandeja y ofrecer siempre el kit de limpieza para subir el UPT."
             )
 
-    # CASO 2: SIMULACIÓN DE CLIENTE (RESPUESTAS REALISTAS Y HUMANAS)
+    # CASO 3: ASISTENTE OPERATIVO LUXO AI (CHAT VIRTUAL)
+    if "asistente operativo inteligente" in prompt_str or "eres luxo" in prompt_str:
+        if "corte" in last_msg or "caja" in last_msg:
+            return "📋 **Procedimiento de Corte de Caja:**\n1. Ingresa al sistema POS y selecciona 'Corte Parcial / Cierre de Turno'.\n2. Realiza el arqueo físico de efectivo agrupando por denominación.\n3. Imprime la tira de corte z y verifica que los váuchers coincidan con las ventas con tarjeta.\n4. Si hay discrepancia, notifica al Gerente de Tienda antes de realizar el depósito."
+        elif "garantía" in last_msg or "garantia" in last_msg or "póliza" in last_msg or "oops" in last_msg:
+            return "🛡️ **Política de Garantía Sunglass Hut (Póliza Oops):**\n1. La garantía por defecto de fábrica aplica dentro de los primeros 12 meses con ticket original.\n2. Para daño accidental (Póliza Oops), el cliente obtiene el 50% de descuento en la reposición del mismo modelo o equivalente dentro de los primeros 12 meses.\n3. Registra siempre el correo del cliente en el sistema CRM al momento del cierre para validar su cobertura."
+        elif "hola" in last_msg or "buenas" in last_msg or "qué haces" in last_msg or "quien eres" in last_msg:
+            return "¡Hola! 👋 Soy **LUXO**, tu copiloto operativo inteligente de Sunglass Hut. Estoy aquí para apoyarte con cualquier duda de procedimientos en tienda, cortes de caja, políticas de garantía o estrategias de neuroventas. ¿En qué te ayudo hoy?"
+        else:
+            return "¡Hola! Con gusto te apoyo. Como tu asistente operativo LUXO, recuerda que puedes consultarme procedimientos de caja, garantías, atención a siniestros o recomendaciones de neuroventas para el piso de tienda. ¿En qué tema necesitas orientación?"
+
+    # CASO 4: SIMULACIÓN DE CLIENTE (RESPUESTAS REALISTAS Y HUMANAS)
     if es_bajo_esfuerzo and user_turn_count >= 2:
         if user_turn_count == 2:
             return "Oye disculpa... ¿por qué me vuelves a decir 'hola'? Ya te saludé. Te estaba preguntando sobre este modelo y su precio, ¿me vas a asesorar bien o no?"
@@ -7422,47 +7433,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         if len(content_trunc) > 800:
                             content_trunc = content_trunc[:800] + "\n[...]"
                         historial_filtrado.append({"role": msg["role"], "content": content_trunc})
-                    mensajes_api.extend(historial_filtrado)
-
-                    payload = {
-                        "model": GROQ_MODEL,
-                        "messages": mensajes_api,
-                        "temperature": 0.35
-                    }
-
-
-                    try:
-                        headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
-                        res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                        # Si hay error 429 (cuota agotada), rotar a llave de respaldo y reintentar
-                        if res.status_code == 429 and rotate_groq_key():
-                            headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
-                            res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                        elif res.status_code == 404:
-                            # Si el modelo guardado no existe en Groq, probamos con modelos estándar activos
-                            for fallback_model in ["groq/compound", "groq/compound-mini", "qwen/qwen3.6-27b"]:
-                                payload["model"] = fallback_model
-                                res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                                if res.status_code == 200:
-                                    break
-                        if res.status_code == 200:
-                            try:
-                                data = res.json()
-                                if "choices" in data and data["choices"]:
-                                    respuesta = data["choices"][0]["message"]["content"]
-                                    if respuesta and "<think>" in respuesta:
-                                        respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
-                                else:
-                                    respuesta = "Ocurrió un error consultando la IA."
-                            except Exception as e:
-                                print("AI PARSE ERROR:", e)
-                                respuesta = "Ocurrió un error consultando la IA."
-                        else:
-                            print("AI CONNECTION ERROR:", res.status_code, res.text)
-                            respuesta = f"Error de conexión con la IA ({res.status_code})."
-                    except Exception as re_err:
-                        print("API REQUEST EXCEPTION:", re_err)
-                        respuesta = "Error de conexión: No se pudo establecer contacto con el servidor de Inteligencia Artificial. Por favor, verifica tu conexión a internet e inténtalo de nuevo."
+                    ok_chat, respuesta_chat, status_chat = consultar_groq_api(historial_filtrado, system_prompt=mensaje_sistema["content"], temperature=0.35, timeout=15)
+                    if ok_chat and respuesta_chat:
+                        respuesta = respuesta_chat
+                    else:
+                        respuesta = f"Error de conexión con la IA ({status_chat})."
 
 
                     historial_sesion.append({"role": "assistant", "content": respuesta})
