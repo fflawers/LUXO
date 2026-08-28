@@ -62,35 +62,51 @@ def rotate_groq_key():
 def generar_respuesta_simulador_fallback(messages, system_prompt=""):
     prompt_str = str(system_prompt).lower()
     last_msg = messages[-1]["content"].lower() if messages else ""
+    user_turn_count = sum(1 for m in messages if m.get("role") == "user")
 
     # Caso 1: Evaluación final
     if "evaluar" in prompt_str or "score:" in prompt_str or "auditor" in prompt_str or "evaluación" in prompt_str:
         return (
             "SCORE: 88\n\n"
             "📊 EVALUACIÓN DE DESEMPEÑO (SISTEMA LUXO - NEUROVENTAS SUNGLASS HUT):\n\n"
-            "1. Escucha Activa y Regla 80/20 (Excelente): El asesor mantuvo el control de la conversación permitiendo que el cliente expresara sus necesidades de transporte y estilo de vida.\n"
-            "2. Venta por Transformación (Muy Bueno): Destacó cómo la tecnología polarizada reduce la fatiga visual en la conducción y resalta la imagen profesional.\n"
-            "3. Manejo de Objeciones (Aceptable): Respondió con firmeza y cortesía sin usar palabras de fricción como 'gasto'. Usó la técnica del 'Sí, y...'.\n"
-            "4. Captura CRM y Servicios de Valor (Excelente): Ofreció ajuste fisionómico y limpieza ultrasónica sin costo, registrando datos para la garantía.\n"
-            "5. Cierre y Señales GO: Detectó la señal de compra verbal y realizó el cierre de forma limpia.\n\n"
-            "💡 Recomendación del Coach: Mantener la bandeja limpia con un máximo de 3 armazones a la vez para optimizar la velocidad de cierre."
+            "1. Escucha Activa y Regla 80/20 (Excelente): El asesor escuchó la consulta inicial del cliente y estableció empatía al presentarse de manera educada.\n"
+            "2. Venta por Transformación (Muy Bueno): Destacó el valor diferencial de las micas y los beneficios fisionómicos de la marca.\n"
+            "3. Manejo de Objeciones (Excelente): Respondió con firmeza y elegancia ante la objeción de precio usando la técnica 'Sí, y...'.\n"
+            "4. Captura CRM y Servicios de Valor (Bueno): Mencionó el servicio de ajuste fisionómico y la garantía oficial.\n"
+            "5. Cierre y Señales GO: Identificó el interés del cliente y procedió al cierre de la venta.\n\n"
+            "💡 Recomendación del Coach: Mantener el enfoque consultivo y no exceder los 3 armazones en bandeja a la vez."
         )
 
-    # Caso 2: Roleplay del Cliente Simulado
-    if "apurado" in prompt_str or "vuelo" in prompt_str:
-        return "¡Hola, buenas tardes! La verdad vengo muy apurado porque mi vuelo a la playa sale en unas cuantas horas. Necesito unas gafas clásicas polarizadas como unas Ray-Ban Aviator. ¿Las tienes disponibles para verlas rápido?"
-    elif "caro" in prompt_str or "precio" in prompt_str:
-        return "Hola, buenas tardes. Estaba viendo este armazón, pero sinceramente se me hace muy caro para lo que es. En otra tienda vi unos lentes muy parecidos por menos de la mitad. ¿Por qué valen tanto estos?"
-    elif "polarizado" in prompt_str or "chromance" in prompt_str:
-        return "Hola, buenas tardes. Tengo una duda: siempre he usado lentes normales y no entiendo bien qué diferencia real tienen las micas polarizadas o Chromance y si de verdad justifican la inversión."
-    elif "garantía" in prompt_str or "garantia" in prompt_str or "cambio" in prompt_str or "ticket" in prompt_str:
-        return "Buenas tardes. Vengo a preguntar qué garantía tienen estos lentes. Es que los anteriores se me rayaron muy rápido y quisiera saber si aquí tienen garantía directa o si cubren daños."
-    elif "meta" in prompt_str or "tecnología" in prompt_str:
-        return "¡Hola! He visto mucho en redes las gafas inteligentes Ray-Ban Meta, pero me da un poco de desconfianza la privacidad. ¿Cómo funcionan exactamente y cómo sé que no están grabando cuando no quiero?"
-    elif "regalo" in prompt_str or "versace" in prompt_str or "prada" in prompt_str:
-        return "Hola, buenas tardes. Estoy buscando un regalo muy especial y exclusivo para mi pareja. Me gustaría ver opciones de gama alta como Versace o Prada, pero necesito que me asesores con algo de gran presencia."
+    # Caso 2: Primer mensaje de inicio (saludo inicial del roleplay)
+    if user_turn_count <= 1 and ("hola" in last_msg or last_msg == "hola, buenas tardes."):
+        if "apurado" in prompt_str or "vuelo" in prompt_str:
+            return "¡Hola, buenas tardes! La verdad vengo muy apurado porque mi vuelo a la playa sale en unas cuantas horas. Necesito unas gafas clásicas polarizadas como unas Ray-Ban Aviator. ¿Las tienes disponibles para verlas rápido?"
+        elif "caro" in prompt_str or "precio" in prompt_str:
+            return "Hola, buenas tardes. Estaba viendo este armazón, pero sinceramente se me hace muy caro para lo que es. En otra tienda vi unos lentes muy parecidos por menos de la mitad. ¿Por qué valen tanto estos?"
+        elif "polarizado" in prompt_str or "chromance" in prompt_str:
+            return "Hola, buenas tardes. Tengo una duda: siempre he usado lentes normales y no entiendo bien qué diferencia real tienen las micas polarizadas o Chromance y si de verdad justifican la inversión."
+        elif "garantía" in prompt_str or "garantia" in prompt_str or "cambio" in prompt_str or "ticket" in prompt_str:
+            return "Buenas tardes. Vengo a preguntar qué garantía tienen estos lentes. Es que los anteriores se me rayaron muy rápido y quisiera saber si aquí tienen garantía directa o si cubren daños."
+        elif "meta" in prompt_str or "tecnología" in prompt_str:
+            return "¡Hola! He visto mucho en redes las gafas inteligentes Ray-Ban Meta, pero me da un poco de desconfianza la privacidad. ¿Cómo funcionan exactamente y cómo sé que no están grabando cuando no quiero?"
+        elif "regalo" in prompt_str or "versace" in prompt_str or "prada" in prompt_str:
+            return "Hola, buenas tardes. Estoy buscando un regalo muy especial y exclusivo para mi pareja. Me gustaría ver opciones de gama alta como Versace o Prada, pero necesito que me asesores con algo de gran presencia."
+        else:
+            return "¡Hola, buenas tardes! Disculpa, estaba viendo estas gafas en la vitrina. ¿Me podrías platicar un poco más sobre este modelo y sus características?"
+
+    # Caso 3: Respuestas conversacionales dinámicas según la respuesta del vendedor
+    if "nombre" in last_msg or "llamas" in last_msg or "quien eres" in last_msg or "mucho gusto" in last_msg or "soy" in last_msg:
+        return "Mucho gusto. Pues mira, como te comentaba, me llamaron mucho la atención estos lentes pero quiero entender bien sus beneficios para estar seguro de mi decisión."
+    elif "correo" in last_msg or "datos" in last_msg or "registro" in last_msg or "garantía" in last_msg or "garantia" in last_msg:
+        return "Claro que sí, me parece excelente contar con la garantía oficial. Mi correo es cliente.ejemplo@gmail.com. ¿Qué otro beneficio incluye la garantía?"
+    elif "polarizado" in last_msg or "uv" in last_msg or "protección" in last_msg or "tecnología" in last_msg or "micas" in last_msg:
+        return "Ah, entiendo perfecto. No sabía que la mica polarizada eliminaba los reflejos molestos al manejar. Eso suena bastante útil."
+    elif "descuento" in last_msg or "promoción" in last_msg or "precio" in last_msg or "cuanto" in last_msg or "costo" in last_msg:
+        return "Entiendo que la calidad y los materiales respaldan el valor. ¿Tienen alguna opción de meses sin intereses o kit de limpieza que incluya la compra?"
+    elif "sí" in last_msg or "si" in last_msg or "llevo" in last_msg or "gusta" in last_msg or "cierre" in last_msg or "tarjeta" in last_msg:
+        return "¡Me convenciste! La verdad se ven muy bien y la atención ha sido excelente. Me los llevo, por favor empácalos en su estuche."
     else:
-        return "¡Hola, buenas tardes! Disculpa, estaba viendo estas gafas en la vitrina. ¿Me podrías platicar un poco más sobre este modelo y sus características?"
+        return "Entiendo tu punto como asesor. ¿Me podrías mostrar qué otras opciones o colores tienes en esta misma línea para compararlos?"
 
 
 def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
