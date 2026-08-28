@@ -7432,18 +7432,26 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         content_trunc = msg["content"]
                         if len(content_trunc) > 800:
                             content_trunc = content_trunc[:800] + "\n[...]"
-                    payload = {
-                        "model": GROQ_MODEL,
-                        "messages": mensajes_api
-                    }
+                    models_to_try = [GROQ_MODEL, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
+                    seen_models = set()
+                    models_to_try = [m for m in models_to_try if m and not (m in seen_models or seen_models.add(m))]
 
+                    res = None
                     try:
-                        headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
-                        res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                        if res.status_code == 429 and rotate_groq_key():
+                        for m_name in models_to_try:
+                            payload = {
+                                "model": m_name,
+                                "messages": mensajes_api
+                            }
                             headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
                             res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                        if res.status_code == 200:
+                            if res.status_code == 429 and rotate_groq_key():
+                                headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+                                res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
+                            if res.status_code == 200:
+                                break
+
+                        if res and res.status_code == 200:
                             try:
                                 data = res.json()
                                 if "choices" in data and data["choices"]:
@@ -7454,8 +7462,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 print("AI PARSE ERROR:", e)
                                 respuesta = "Ocurrió un error consultando la IA."
                         else:
-                            print("AI CONNECTION ERROR:", res.status_code, res.text)
-                            respuesta = f"Error de conexión con la IA ({res.status_code})."
+                            status_code = res.status_code if res else 404
+                            print("AI CONNECTION ERROR:", status_code, res.text if res else "")
+                            respuesta = f"Error de conexión con la IA ({status_code})."
                     except Exception as re_err:
                         print("API REQUEST EXCEPTION:", re_err)
                         respuesta = "Error de conexión: No se pudo establecer contacto con el servidor de Inteligencia Artificial. Por favor, verifica tu conexión a internet e inténtalo de nuevo."
