@@ -7432,39 +7432,44 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         content_trunc = msg["content"]
                         if len(content_trunc) > 800:
                             content_trunc = content_trunc[:800] + "\n[...]"
-                    models_to_try = [GROQ_MODEL, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
-                    seen_models = set()
-                    models_to_try = [m for m in models_to_try if m and not (m in seen_models or seen_models.add(m))]
+                        historial_filtrado.append({"role": msg["role"], "content": content_trunc})
+                    mensajes_api.extend(historial_filtrado)
 
-                    res = None
+                    payload = {
+                        "model": GROQ_MODEL,
+                        "messages": mensajes_api,
+                        "temperature": 0.35
+                    }
+
                     try:
-                        for m_name in models_to_try:
-                            payload = {
-                                "model": m_name,
-                                "messages": mensajes_api
-                            }
+                        headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+                        res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
+                        # Si hay error 429 (cuota agotada), rotar a llave de respaldo y reintentar
+                        if res.status_code == 429 and rotate_groq_key():
                             headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
                             res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                            if res.status_code == 429 and rotate_groq_key():
-                                headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
+                        elif res.status_code in (404, 400):
+                            # Si el modelo guardado no existe en Groq, probamos con modelos estándar activos
+                            for fallback_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]:
+                                payload["model"] = fallback_model
                                 res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                            if res.status_code == 200:
-                                break
-
-                        if res and res.status_code == 200:
+                                if res.status_code == 200:
+                                    break
+                        if res.status_code == 200:
                             try:
                                 data = res.json()
                                 if "choices" in data and data["choices"]:
                                     respuesta = data["choices"][0]["message"]["content"]
+                                    if respuesta and "<think>" in respuesta:
+                                        respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
                                 else:
                                     respuesta = "Ocurrió un error consultando la IA."
                             except Exception as e:
                                 print("AI PARSE ERROR:", e)
                                 respuesta = "Ocurrió un error consultando la IA."
                         else:
-                            status_code = res.status_code if res else 404
-                            print("AI CONNECTION ERROR:", status_code, res.text if res else "")
-                            respuesta = f"Error de conexión con la IA ({status_code})."
+                            print("AI CONNECTION ERROR:", res.status_code, res.text)
+                            respuesta = f"Error de conexión con la IA ({res.status_code})."
                     except Exception as re_err:
                         print("API REQUEST EXCEPTION:", re_err)
                         respuesta = "Error de conexión: No se pudo establecer contacto con el servidor de Inteligencia Artificial. Por favor, verifica tu conexión a internet e inténtalo de nuevo."
