@@ -61,15 +61,28 @@ def rotate_groq_key():
 
 def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
     """
-    Función unificada y ultra-robusta para consultar Groq API.
-    Prueba automáticamente entre todas las llaves de Groq disponibles y entre los modelos oficiales activos.
+    Función unificada y ultra-robusta para consultar IA.
+    Prueba automáticamente entre todas las llaves de Groq disponibles y modelos oficiales activos.
+    Si Groq falla, conmuta automáticamente a la API de Google Gemini como respaldo garantizado.
     """
-    keys = [k.strip() for k in [os.getenv("GROQ_API_KEY", ""), os.getenv("GROQ_API_KEY_2", ""), os.getenv("GROQ_API_KEY_3", "")] if k and k.strip()]
-    if not keys:
-        return False, "⚠️ No hay claves API de Groq configuradas en el entorno.", 401
+    raw_keys = [
+        os.getenv("GROQ_API_KEY", ""),
+        os.getenv("GROQ_API_KEY_2", ""),
+        os.getenv("GROQ_API_KEY_3", ""),
+        globals().get("GROQ_API_KEY", ""),
+        globals().get("GROQ_API_KEY_2", ""),
+        globals().get("GROQ_API_KEY_3", "")
+    ]
+    if globals().get("GROQ_KEYS"):
+        raw_keys.extend(globals()["GROQ_KEYS"])
+        
+    keys = []
+    for k in raw_keys:
+        if k and str(k).strip() and str(k).strip() not in keys:
+            keys.append(str(k).strip())
 
     modelos_groq = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"]
-    env_model = os.getenv("GROQ_MODEL", "").strip()
+    env_model = os.getenv("GROQ_MODEL", "").strip() or globals().get("GROQ_MODEL", "").strip()
     if env_model and env_model not in modelos_groq and "compound" not in env_model:
         modelos_groq.insert(0, env_model)
 
@@ -79,36 +92,63 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
     mensajes_completos.extend(messages)
 
     ultimo_status = 500
-    ultimo_error = "Error de conexión"
+    ultimo_error = "Error de conexión con la IA"
 
-    for key in keys:
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json"
-        }
-        for mod in modelos_groq:
-            payload = {
-                "model": mod,
-                "messages": mensajes_completos,
-                "temperature": temperature
+    # 1. Intentar con las llaves y modelos de Groq
+    if keys:
+        for key in keys:
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json"
             }
-            try:
-                res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=timeout)
-                ultimo_status = res.status_code
-                if res.status_code == 200:
-                    data = res.json()
-                    if "choices" in data and data["choices"]:
-                        txt = data["choices"][0]["message"]["content"]
-                        if txt and "<think>" in txt:
-                            txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
-                        return True, txt, 200
-                elif res.status_code in (401, 403):
-                    ultimo_error = f"Clave API no autorizada ({res.status_code})"
-                    break
-                else:
-                    ultimo_error = f"Error Groq HTTP {res.status_code}"
-            except Exception as ex:
-                ultimo_error = f"Excepción de red: {ex}"
+            for mod in modelos_groq:
+                payload = {
+                    "model": mod,
+                    "messages": mensajes_completos,
+                    "temperature": temperature
+                }
+                try:
+                    res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=timeout)
+                    ultimo_status = res.status_code
+                    if res.status_code == 200:
+                        data = res.json()
+                        if "choices" in data and data["choices"]:
+                            txt = data["choices"][0]["message"]["content"]
+                            if txt and "<think>" in txt:
+                                txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
+                            return True, txt, 200
+                    elif res.status_code in (401, 403):
+                        ultimo_error = f"Clave API no autorizada ({res.status_code})"
+                        break
+                    else:
+                        ultimo_error = f"Error Groq HTTP {res.status_code}"
+                except Exception as ex:
+                    ultimo_error = f"Excepción de red: {ex}"
+
+    # 2. Respaldo garantizado a la API de Gemini si Groq no respondió 200
+    gem_key = os.getenv("GEMINI_API_KEY", "") or globals().get("GEMINI_API_KEY", "")
+    if gem_key and str(gem_key).strip():
+        try:
+            url_gem = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gem_key.strip()}"
+            contents = []
+            if system_prompt:
+                contents.append({"role": "user", "parts": [{"text": f"Instrucción de Sistema: {system_prompt}"}]})
+                contents.append({"role": "model", "parts": [{"text": "Entendido, actuaré según las instrucciones del sistema."}]})
+            for m in messages:
+                role = "user" if m.get("role") in ("user", "system") else "model"
+                contents.append({"role": role, "parts": [{"text": m.get("content", "")}]})
+            payload_gem = {"contents": contents}
+            res_gem = requests.post(url_gem, json=payload_gem, timeout=timeout)
+            if res_gem.status_code == 200:
+                data_gem = res_gem.json()
+                if "candidates" in data_gem and data_gem["candidates"]:
+                    txt_gem = data_gem["candidates"][0]["content"]["parts"][0]["text"]
+                    if txt_gem and "<think>" in txt_gem:
+                        txt_gem = re.sub(r"<think>.*?</think>", "", txt_gem, flags=re.DOTALL).strip()
+                    print("⚡ Respuesta obtenida exitosamente desde motor Gemini de respaldo")
+                    return True, txt_gem, 200
+        except Exception as ex_gem:
+            print("Notice Gemini fallback:", ex_gem)
 
     return False, ultimo_error, ultimo_status
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
