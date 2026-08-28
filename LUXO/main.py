@@ -62,8 +62,8 @@ def rotate_groq_key():
 def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
     """
     Función unificada y ultra-robusta para consultar IA.
-    Prueba automáticamente entre todas las llaves de Groq disponibles y modelos oficiales activos.
-    Si Groq falla, conmuta automáticamente a la API de Google Gemini como respaldo garantizado.
+    Detecta automáticamente si la clave es de Groq (gsk_) o de OpenRouter (sk-or-) y enruta a la API correcta.
+    Si ambas fallan o no hay cuota, conmuta automáticamente a la API de Google Gemini como respaldo garantizado.
     """
     raw_keys = [
         os.getenv("GROQ_API_KEY", ""),
@@ -81,11 +81,6 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
         if k and str(k).strip() and str(k).strip() not in keys:
             keys.append(str(k).strip())
 
-    modelos_groq = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"]
-    env_model = os.getenv("GROQ_MODEL", "").strip() or globals().get("GROQ_MODEL", "").strip()
-    if env_model and env_model not in modelos_groq and "compound" not in env_model:
-        modelos_groq.insert(0, env_model)
-
     mensajes_completos = []
     if system_prompt:
         mensajes_completos.append({"role": "system", "content": system_prompt})
@@ -94,21 +89,31 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
     ultimo_status = 500
     ultimo_error = "Error de conexión con la IA"
 
-    # 1. Intentar con las llaves y modelos de Groq
+    # 1. Intentar con las llaves disponibles (Groq u OpenRouter)
     if keys:
         for key in keys:
             headers = {
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json"
             }
-            for mod in modelos_groq:
+            if key.startswith("sk-or-"):
+                target_url = "https://openrouter.ai/api/v1/chat/completions"
+                modelos_to_use = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-lite-001", "qwen/qwen-2.5-72b-instruct"]
+            else:
+                target_url = URL_GROQ
+                modelos_to_use = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"]
+                env_model = os.getenv("GROQ_MODEL", "").strip() or globals().get("GROQ_MODEL", "").strip()
+                if env_model and env_model not in modelos_to_use and "compound" not in env_model:
+                    modelos_to_use.insert(0, env_model)
+
+            for mod in modelos_to_use:
                 payload = {
                     "model": mod,
                     "messages": mensajes_completos,
                     "temperature": temperature
                 }
                 try:
-                    res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=timeout)
+                    res = requests.post(target_url, headers=headers, json=payload, timeout=timeout)
                     ultimo_status = res.status_code
                     if res.status_code == 200:
                         data = res.json()
@@ -121,11 +126,11 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
                         ultimo_error = f"Clave API no autorizada ({res.status_code})"
                         break
                     else:
-                        ultimo_error = f"Error Groq HTTP {res.status_code}"
+                        ultimo_error = f"Error HTTP {res.status_code}: {res.text[:100]}"
                 except Exception as ex:
                     ultimo_error = f"Excepción de red: {ex}"
 
-    # 2. Respaldo garantizado a la API de Gemini si Groq no respondió 200
+    # 2. Respaldo garantizado a la API de Gemini si los anteriores no respondieron 200
     gem_key = os.getenv("GEMINI_API_KEY", "") or globals().get("GEMINI_API_KEY", "")
     if gem_key and str(gem_key).strip():
         try:
@@ -15194,6 +15199,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ft.dropdown.Option("Cliente Reclamando Garantía - Lentes Rayados", "Cliente molesto que viene a exigir el cambio o garantía gratis de sus gafas porque los lentes están completamente rayados debido a mal uso (los limpió con su playera o los dejó caer), e insiste en que es defecto de fábrica")
                 ]
             )
+            if cliente_dropdown.options_list:
+                cliente_dropdown.value = getattr(cliente_dropdown.options_list[0], "key", None) or getattr(cliente_dropdown.options_list[0], "value", None) or str(cliente_dropdown.options_list[0])
 
             chat_history = []
             sim_chat_column = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
@@ -15248,6 +15255,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ]
 
                 vendedor_dropdown.options = opciones
+                if opciones:
+                    vendedor_dropdown.value = getattr(opciones[0], "key", None) or getattr(opciones[0], "value", None) or str(opciones[0])
 
             cargar_vendedores_dropdown()
 
