@@ -15145,7 +15145,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 agregar_mensaje_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
                 
                 headers = {
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Authorization": f"Bearer {get_groq_key()}",
                     "Content-Type": "application/json"
                 }
                 
@@ -15166,12 +15166,17 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 
                 try:
                     res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
+                    if (res.status_code == 429 or res.status_code == 401) and rotate_groq_key():
+                        headers["Authorization"] = f"Bearer {get_groq_key()}"
+                        res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
                     if res.status_code == 200:
                         ia_response = res.json()["choices"][0]["message"]["content"]
+                        if ia_response and "<think>" in ia_response:
+                            ia_response = re.sub(r"<think>.*?</think>", "", ia_response, flags=re.DOTALL).strip()
                         chat_history.append({"role": "assistant", "content": ia_response})
                         agregar_mensaje_chat("Cliente", ia_response, ft.Icons.SUPPORT_AGENT, "#00FFFF")
                     else:
-                        agregar_mensaje_chat("Cliente", "[Error de comunicación con el simulador]", ft.Icons.ERROR, "red")
+                        agregar_mensaje_chat("Cliente", f"[Error de comunicación con la IA ({res.status_code})]", ft.Icons.ERROR, "red")
                 except Exception as ex_sim:
                     print("Error simulacion API:", ex_sim)
                     agregar_mensaje_chat("Cliente", "[Error de conexión del simulador]", ft.Icons.ERROR, "red")
@@ -15187,7 +15192,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 agregar_mensaje_chat("Sistema", "Analizando el desempeño de la simulación de venta. Por favor espera...", ft.Icons.INFO, "#00FFFF")
                 
                 headers = {
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Authorization": f"Bearer {get_groq_key()}",
                     "Content-Type": "application/json"
                 }
                 
@@ -15246,8 +15251,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 
                 try:
                     res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=15)
+                    if (res.status_code == 429 or res.status_code == 401) and rotate_groq_key():
+                        headers["Authorization"] = f"Bearer {get_groq_key()}"
+                        res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=15)
                     if res.status_code == 200:
                         eval_text = res.json()["choices"][0]["message"]["content"]
+                        if eval_text and "<think>" in eval_text:
+                            eval_text = re.sub(r"<think>.*?</think>", "", eval_text, flags=re.DOTALL).strip()
                         
                         score_val = 70
                         match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
@@ -15270,7 +15280,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         
                         mostrar_evaluacion_dialog(score_val, eval_text)
                     else:
-                        mostrar_snack("Error de conexión al evaluar", "red")
+                        mostrar_snack(f"Error de conexión al evaluar ({res.status_code})", "red")
                 except Exception as ex_eval:
                     print("Error evaluacion:", ex_eval)
                     mostrar_snack("Error al procesar la evaluación", "red")
@@ -15309,7 +15319,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 sim_chat_column.controls.clear()
                 
                 headers = {
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Authorization": f"Bearer {get_groq_key()}",
                     "Content-Type": "application/json"
                 }
                 system_prompt = f"Eres un cliente de Sunglass Hut entrando a la tienda. Tu perfil es: '{perfil_cliente_txt[0]}'. Escribe tu primer saludo o consulta breve al asesor de ventas (vendedor)."
@@ -15320,8 +15330,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 
                 try:
                     res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
+                    if (res.status_code == 429 or res.status_code == 401) and rotate_groq_key():
+                        headers["Authorization"] = f"Bearer {get_groq_key()}"
+                        res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
                     if res.status_code == 200:
                         first_msg = res.json()["choices"][0]["message"]["content"]
+                        if first_msg and "<think>" in first_msg:
+                            first_msg = re.sub(r"<think>.*?</think>", "", first_msg, flags=re.DOTALL).strip()
                         chat_history.append({"role": "assistant", "content": first_msg})
                         
                         config_area.visible = False
@@ -15332,7 +15347,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         
                         agregar_mensaje_chat("Cliente", first_msg, ft.Icons.SUPPORT_AGENT, "#00FFFF")
                     else:
-                        mostrar_snack("Error de conexión al iniciar simulación", "red")
+                        if not get_groq_key():
+                            mostrar_snack("⚠️ La clave API de la IA no está configurada en este equipo local", "red")
+                        else:
+                            mostrar_snack(f"Error de conexión con la IA ({res.status_code})", "red")
                 except Exception as ex_init:
                     print("Error init sim:", ex_init)
                     mostrar_snack("Error al iniciar el simulador", "red")
