@@ -34,19 +34,25 @@ GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")
 GROQ_API_KEY_3 = os.getenv("GROQ_API_KEY_3", "")
 GROQ_KEYS = [k for k in [GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3] if k]  # lista de llaves activas
 _groq_key_index = 0  # índice de la llave activa actual
-GROQ_MODEL = os.getenv("GROQ_MODEL", "groq/compound-mini")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 URL_GROQ = "https://api.groq.com/openai/v1/chat/completions"
 
 def get_groq_key():
     """Devuelve la llave de Groq activa. Si hay varias, rota entre ellas en caso de 429."""
-    global _groq_key_index
+    global _groq_key_index, GROQ_KEYS
+    active = [k for k in [os.getenv("GROQ_API_KEY", ""), os.getenv("GROQ_API_KEY_2", ""), os.getenv("GROQ_API_KEY_3", "")] if k]
+    if active:
+        GROQ_KEYS = active
     if not GROQ_KEYS:
-        return GROQ_API_KEY
+        return os.getenv("GROQ_API_KEY", "")
     return GROQ_KEYS[_groq_key_index % len(GROQ_KEYS)]
 
 def rotate_groq_key():
     """Rota a la siguiente llave de Groq disponible (se llama cuando hay error 429)."""
-    global _groq_key_index
+    global _groq_key_index, GROQ_KEYS
+    active = [k for k in [os.getenv("GROQ_API_KEY", ""), os.getenv("GROQ_API_KEY_2", ""), os.getenv("GROQ_API_KEY_3", "")] if k]
+    if active:
+        GROQ_KEYS = active
     if len(GROQ_KEYS) > 1:
         _groq_key_index = (_groq_key_index + 1) % len(GROQ_KEYS)
         print(f"⚡ Groq 429 - Rotando a llave #{_groq_key_index + 1}")
@@ -15333,6 +15339,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     if (res.status_code == 429 or res.status_code == 401) and rotate_groq_key():
                         headers["Authorization"] = f"Bearer {get_groq_key()}"
                         res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
+                    if res.status_code != 200:
+                        for fb_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"]:
+                            payload["model"] = fb_model
+                            res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
+                            if res.status_code == 200:
+                                break
                     if res.status_code == 200:
                         first_msg = res.json()["choices"][0]["message"]["content"]
                         if first_msg and "<think>" in first_msg:
