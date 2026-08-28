@@ -58,6 +58,59 @@ def rotate_groq_key():
         print(f"⚡ Groq 429 - Rotando a llave #{_groq_key_index + 1}")
         return True
     return False
+
+def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
+    """
+    Función unificada y ultra-robusta para consultar Groq API.
+    Prueba automáticamente entre todas las llaves de Groq disponibles y entre los modelos oficiales activos.
+    """
+    keys = [k.strip() for k in [os.getenv("GROQ_API_KEY", ""), os.getenv("GROQ_API_KEY_2", ""), os.getenv("GROQ_API_KEY_3", "")] if k and k.strip()]
+    if not keys:
+        return False, "⚠️ No hay claves API de Groq configuradas en el entorno.", 401
+
+    modelos_groq = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"]
+    env_model = os.getenv("GROQ_MODEL", "").strip()
+    if env_model and env_model not in modelos_groq and "compound" not in env_model:
+        modelos_groq.insert(0, env_model)
+
+    mensajes_completos = []
+    if system_prompt:
+        mensajes_completos.append({"role": "system", "content": system_prompt})
+    mensajes_completos.extend(messages)
+
+    ultimo_status = 500
+    ultimo_error = "Error de conexión"
+
+    for key in keys:
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json"
+        }
+        for mod in modelos_groq:
+            payload = {
+                "model": mod,
+                "messages": mensajes_completos,
+                "temperature": temperature
+            }
+            try:
+                res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=timeout)
+                ultimo_status = res.status_code
+                if res.status_code == 200:
+                    data = res.json()
+                    if "choices" in data and data["choices"]:
+                        txt = data["choices"][0]["message"]["content"]
+                        if txt and "<think>" in txt:
+                            txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
+                        return True, txt, 200
+                elif res.status_code in (401, 403):
+                    ultimo_error = f"Clave API no autorizada ({res.status_code})"
+                    break
+                else:
+                    ultimo_error = f"Error Groq HTTP {res.status_code}"
+            except Exception as ex:
+                ultimo_error = f"Excepción de red: {ex}"
+
+    return False, ultimo_error, ultimo_status
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Configuración de Base de Datos MySQL (leída desde .env)
@@ -15150,11 +15203,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 chat_history.append({"role": "user", "content": msg_txt})
                 agregar_mensaje_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
                 
-                headers = {
-                    "Authorization": f"Bearer {get_groq_key()}",
-                    "Content-Type": "application/json"
-                }
-                
                 system_prompt = f"""Eres un cliente de Sunglass Hut. Tu perfil es: '{perfil_cliente_txt[0]}'.
                 Estás interactuando con el asesor de ventas en la tienda física.
                 Responde de forma natural, realista, breve y conversacional (máximo 2 a 3 oraciones por mensaje).
@@ -15162,30 +15210,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 Mantén la interacción fluida. Si sientes que la atención es mala, sé difícil. Si es buena, muéstrate cooperativo.
                 """
                 
-                mensajes_api = [{"role": "system", "content": system_prompt}]
-                mensajes_api.extend(chat_history[-10:])
+                mensajes_api = chat_history[-10:]
                 
-                payload = {
-                    "model": GROQ_MODEL,
-                    "messages": mensajes_api
-                }
-                
-                try:
-                    res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
-                    if (res.status_code == 429 or res.status_code == 401) and rotate_groq_key():
-                        headers["Authorization"] = f"Bearer {get_groq_key()}"
-                        res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
-                    if res.status_code == 200:
-                        ia_response = res.json()["choices"][0]["message"]["content"]
-                        if ia_response and "<think>" in ia_response:
-                            ia_response = re.sub(r"<think>.*?</think>", "", ia_response, flags=re.DOTALL).strip()
-                        chat_history.append({"role": "assistant", "content": ia_response})
-                        agregar_mensaje_chat("Cliente", ia_response, ft.Icons.SUPPORT_AGENT, "#00FFFF")
-                    else:
-                        agregar_mensaje_chat("Cliente", f"[Error de comunicación con la IA ({res.status_code})]", ft.Icons.ERROR, "red")
-                except Exception as ex_sim:
-                    print("Error simulacion API:", ex_sim)
-                    agregar_mensaje_chat("Cliente", "[Error de conexión del simulador]", ft.Icons.ERROR, "red")
+                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, timeout=12)
+                if ok and respuesta:
+                    chat_history.append({"role": "assistant", "content": respuesta})
+                    agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                else:
+                    agregar_mensaje_chat("Cliente", f"[Error de comunicación con la IA ({status})]", ft.Icons.ERROR, "red")
 
             btn_enviar.on_click = enviar_mensaje_simulacion
 
@@ -15196,11 +15228,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 page.update()
                 
                 agregar_mensaje_chat("Sistema", "Analizando el desempeño de la simulación de venta. Por favor espera...", ft.Icons.INFO, "#00FFFF")
-                
-                headers = {
-                    "Authorization": f"Bearer {get_groq_key()}",
-                    "Content-Type": "application/json"
-                }
                 
                 perfil_lower = perfil_cliente_txt[0].lower()
                 es_caso_servicio = "cambio" in perfil_lower or "reclamando" in perfil_lower or "ticket" in perfil_lower
@@ -15247,49 +15274,33 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 for msg in chat_history:
                     eval_prompt += f"\n{msg['role'].upper()}: {msg['content']}"
                 
-                payload = {
-                    "model": GROQ_MODEL,
-                    "messages": [
-                        {"role": "system", "content": "Eres un auditor operativo experto en ventas y servicio premium de Sunglass Hut."},
-                        {"role": "user", "content": eval_prompt}
-                    ]
-                }
+                messages = [{"role": "user", "content": eval_prompt}]
+                system_prompt = "Eres un auditor operativo experto en ventas y servicio premium de Sunglass Hut."
                 
-                try:
-                    res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=15)
-                    if (res.status_code == 429 or res.status_code == 401) and rotate_groq_key():
-                        headers["Authorization"] = f"Bearer {get_groq_key()}"
-                        res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=15)
-                    if res.status_code == 200:
-                        eval_text = res.json()["choices"][0]["message"]["content"]
-                        if eval_text and "<think>" in eval_text:
-                            eval_text = re.sub(r"<think>.*?</think>", "", eval_text, flags=re.DOTALL).strip()
-                        
-                        score_val = 70
-                        match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
-                        if match_score:
-                            score_val = int(match_score.group(1))
-                        
-                        try:
-                            v_id_val = int(vendedor_dropdown.value) if vendedor_dropdown.value and str(vendedor_dropdown.value).isdigit() else 1
-                            db = conectar_db()
-                            if db:
-                                cursor = db.cursor()
-                                cursor.execute("""
-                                    INSERT INTO evaluaciones_simulador (ID_Vendedor, Cliente_Simulado, Score_Evaluacion, Feedback_Detallado)
-                                    VALUES (%s, %s, %s, %s)
-                                """, (v_id_val, cliente_dropdown.value, score_val, eval_text))
-                                db.commit()
-                                db.close()
-                        except Exception as ex_db_eval:
-                            print("Error guardando eval en DB:", ex_db_eval)
-                        
-                        mostrar_evaluacion_dialog(score_val, eval_text)
-                    else:
-                        mostrar_snack(f"Error de conexión al evaluar ({res.status_code})", "red")
-                except Exception as ex_eval:
-                    print("Error evaluacion:", ex_eval)
-                    mostrar_snack("Error al procesar la evaluación", "red")
+                ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15)
+                if ok and eval_text:
+                    score_val = 70
+                    match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
+                    if match_score:
+                        score_val = int(match_score.group(1))
+                    
+                    try:
+                        v_id_val = int(vendedor_dropdown.value) if vendedor_dropdown.value and str(vendedor_dropdown.value).isdigit() else 1
+                        db = conectar_db()
+                        if db:
+                            cursor = db.cursor()
+                            cursor.execute("""
+                                INSERT INTO evaluaciones_simulador (ID_Vendedor, Cliente_Simulado, Score_Evaluacion, Feedback_Detallado)
+                                VALUES (%s, %s, %s, %s)
+                            """, (v_id_val, cliente_dropdown.value, score_val, eval_text))
+                            db.commit()
+                            db.close()
+                    except Exception as ex_db_eval:
+                        print("Error guardando eval en DB:", ex_db_eval)
+                    
+                    mostrar_evaluacion_dialog(score_val, eval_text)
+                else:
+                    mostrar_snack(f"Error de conexión al evaluar ({status})", "red")
 
             def mostrar_evaluacion_dialog(score, feedback):
                 dlg = ft.AlertDialog(
@@ -15324,48 +15335,20 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 chat_history.clear()
                 sim_chat_column.controls.clear()
                 
-                headers = {
-                    "Authorization": f"Bearer {get_groq_key()}",
-                    "Content-Type": "application/json"
-                }
                 system_prompt = f"Eres un cliente de Sunglass Hut entrando a la tienda. Tu perfil es: '{perfil_cliente_txt[0]}'. Escribe tu primer saludo o consulta breve al asesor de ventas (vendedor)."
-                payload = {
-                    "model": GROQ_MODEL,
-                    "messages": [{"role": "user", "content": system_prompt}]
-                }
+                messages = [{"role": "user", "content": "Hola, buenas tardes."}]
                 
-                try:
-                    res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
-                    if (res.status_code == 429 or res.status_code == 401) and rotate_groq_key():
-                        headers["Authorization"] = f"Bearer {get_groq_key()}"
-                        res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
-                    if res.status_code != 200:
-                        for fb_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"]:
-                            payload["model"] = fb_model
-                            res = requests.post(URL_GROQ, headers=headers, json=payload, timeout=12)
-                            if res.status_code == 200:
-                                break
-                    if res.status_code == 200:
-                        first_msg = res.json()["choices"][0]["message"]["content"]
-                        if first_msg and "<think>" in first_msg:
-                            first_msg = re.sub(r"<think>.*?</think>", "", first_msg, flags=re.DOTALL).strip()
-                        chat_history.append({"role": "assistant", "content": first_msg})
-                        
-                        config_area.visible = False
-                        chat_area.visible = True
-                        user_input.disabled = False
-                        btn_enviar.disabled = False
-                        btn_finalizar.disabled = False
-                        
-                        agregar_mensaje_chat("Cliente", first_msg, ft.Icons.SUPPORT_AGENT, "#00FFFF")
-                    else:
-                        if not get_groq_key():
-                            mostrar_snack("⚠️ La clave API de la IA no está configurada en este equipo local", "red")
-                        else:
-                            mostrar_snack(f"Error de conexión con la IA ({res.status_code})", "red")
-                except Exception as ex_init:
-                    print("Error init sim:", ex_init)
-                    mostrar_snack("Error al iniciar el simulador", "red")
+                ok, respuesta, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=12)
+                if ok and respuesta:
+                    chat_history.append({"role": "assistant", "content": respuesta})
+                    config_area.visible = False
+                    chat_area.visible = True
+                    user_input.disabled = False
+                    btn_enviar.disabled = False
+                    btn_finalizar.disabled = False
+                    agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                else:
+                    mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             btn_iniciar = ft.ElevatedButton(
                 "Iniciar Roleplay ➕",
