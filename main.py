@@ -40,7 +40,7 @@ GROQ_API_KEY_3 = os.getenv("GROQ_API_KEY_3", _K3)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", _KG)
 GROQ_KEYS = [k for k in [GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3] if k]  # lista de llaves activas
 _groq_key_index = 0  # índice de la llave activa actual
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "groq/compound")
 URL_GROQ = "https://api.groq.com/openai/v1/chat/completions"
 
 def get_groq_key():
@@ -7456,7 +7456,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
                         elif res.status_code in (404, 400):
                             # Si el modelo guardado no existe en Groq, probamos con modelos estándar activos
-                            for fallback_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]:
+                            for fallback_model in ["groq/compound", "groq/compound-mini", "openai/gpt-oss-120b", "qwen/qwen3.6-27b", "llama-3.3-70b-versatile"]:
                                 payload["model"] = fallback_model
                                 res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
                                 if res.status_code == 200:
