@@ -2160,6 +2160,9 @@ def configurar_rutas_fastapi(app):
                         
                     input_msg.value = text
                     try:
+                        input_msg.update()
+                    except Exception: pass
+                    try:
                         page.update()
                     except Exception as ex:
                         print(f"WARN page.update() falló: {ex}")
@@ -8126,9 +8129,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     try {
                         const cnt = count || 1;
                         const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        if (ctx.state === 'suspended') {
+                            ctx.resume().catch(function(){});
+                        }
                         function emitTone(freq, duration, delay) {
                             setTimeout(function() {
                                 try {
+                                    if (ctx.state === 'suspended') { ctx.resume().catch(function(){}); }
                                     const osc = ctx.createOscillator();
                                     const gain = ctx.createGain();
                                     osc.type = 'sine';
