@@ -147,19 +147,27 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
     if any(k in last_msg for k in ["nailon", "ligero", "resistente", "fibra", "titanio", "material", "calidad", "armazón"]):
         return "*(El cliente sostiene el armazón con cuidado y siente su peso)* \"Órale, sí se siente bastante ligero y resistente este material... A ver, ¿me los puedo probar frente al espejo para ver cómo me lucen puestas?\""
 
-    # 4. Reacción a explicación de garantías
+    # 4. Reacción a promociones/descuentos/2da gafa/40%
+    if any(k in last_msg for k in ["descuento", "40%", "promoción", "promocion", "oferta", "segunda", "dos"]):
+        return "*(El cliente observa interesado las opciones)* \"¡Órale! El descuento en la segunda gafa suena excelente. Muéstrame qué otro armazón de esta vitrina combina bien para llevarme el par completo.\""
+
+    # 5. Reacción a afirmaciones/respuestas positivas ("sí claro", "con gusto", "muestra", "opciones")
+    if any(k in last_msg for k in ["sí", "si", "claro", "con gusto", "muestra", "opciones", "vitrina", "mira"]):
+        return "*(El cliente se acerca al exhibidor observando las monturas)* \"Me llama la atención este otro modelo con marco más oscuro. ¿Qué diferencia tiene en las micas respecto al que me acabas de mostrar?\""
+
+    # 6. Reacción a explicación de garantías
     if any(k in last_msg for k in ["garantía", "garantia", "oops", "daño", "póliza", "cobertura", "accidente", "defecto"]):
         return "*(El cliente se quita los lentes cuidando las varillas y los coloca sobre la bandeja)* \"Me parece excelente la garantía de cobertura. Mi correo es carlos.cliente@gmail.com para el registro. ¿Tienen el kit de limpieza o estuche rígido para llevármelos completos?\""
 
-    # 5. Reacción a oferta de kit de limpieza o venta cruzada
+    # 7. Reacción a oferta de kit de limpieza o venta cruzada
     if any(k in last_msg for k in ["kit", "limpieza", "estuche", "upt", "paño", "líquido", "liquido", "adicional"]):
         return "*(El cliente asiente satisfecho)* \"Perfecto, agrégame el kit de limpieza para mantener las micas impecables. Me convenciste con la atención, ¿dónde realizo el pago?\""
 
-    # 6. Reacción a forma de pago / cobro
+    # 8. Reacción a forma de pago / cobro
     if any(k in last_msg for k in ["tarjeta", "pago", "efectivo", "caja", "llevo", "cobro", "total"]):
         return "*(El cliente sonríe y saca su tarjeta)* \"Pago con tarjeta de crédito, por favor. Muchas gracias por la excelente atención.\""
 
-    if es_bajo_esfuerzo and user_turn_count >= 3:
+    if es_bajo_esfuerzo and user_turn_count >= 5:
         return "Sinceramente siento que no me estás prestando atención y solo repites lo mismo. Preferiría que me atienda otro asesor. Hasta luego."
 
     # Primer saludo del roleplay (Entrada a la tienda)
@@ -177,7 +185,14 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
         else:
             return "*(El cliente entra a la tienda y observa los exhibidores con curiosidad)* \"¡Hola, buenas tardes! Disculpa, estaba viendo estas gafas en la vitrina. ¿Me podrías platicar un poco más sobre este modelo y sus características?\""
 
-    return "*(El cliente observa atentamente al vendedor)* \"Entiendo tu punto como asesor. ¿Me podrías mostrar qué otras opciones de armazón tienes en esta misma vitrina para compararlos?\""
+    # Respuestas dinámicas rotativas para evitar repeticiones en el catch-all
+    respuestas_variadas = [
+        "*(El cliente observa atentamente la gafa)* \"Entiendo tu punto como asesor. Me gustaría ver cómo luce en mi rostro frente al espejo. ¿Tienen espejo cerca?\"",
+        "*(El cliente sostiene el armazón)* \"Se siente de excelente calidad. ¿Qué color de mica me recomendarías según mi tipo de piel y cara?\"",
+        "*(El cliente observa el acabado)* \"Me gusta mucho el diseño. Si me llevo esta gafa hoy, ¿incluye estuche de la marca y paño de microfibra?\"",
+        "*(El cliente sonríe interesado)* \"Suena bastante bien todo lo que me explicas. Muéstrame qué otras alternativas parecidas tienes para tomar la decisión final.\""
+    ]
+    return respuestas_variadas[user_turn_count % len(respuestas_variadas)]
 
 
 def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
@@ -15411,7 +15426,7 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                 
                 mensajes_api = chat_history[-6:]
                 
-                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=6)
+                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15)
                 if ok and respuesta:
                     chat_history.append({"role": "assistant", "content": respuesta})
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
@@ -15488,7 +15503,8 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                     """
                 
                 for msg in chat_history:
-                    eval_prompt += f"\n{msg['role'].upper()}: {msg['content']}"
+                    rol_label = "VENDEDOR (ASESOR DE VENTAS)" if msg['role'] == 'user' else "CLIENTE (COMPRADOR SIMULADO)"
+                    eval_prompt += f"\n{rol_label}: {msg['content']}"
                 
                 messages = [{"role": "user", "content": eval_prompt}]
                 system_prompt = f"""Eres un auditor operativo, coach de ventas de élite y evaluador experto de Sunglass Hut.
