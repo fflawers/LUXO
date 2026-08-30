@@ -82,46 +82,37 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
 
     # CASO 1: EVALUACIÓN DE DESEMPEÑO (AUDITORÍA DE RETROALIMENTACIÓN)
     if "evaluar" in prompt_str or "score:" in prompt_str or "auditor" in prompt_str or "evaluación" in prompt_str:
-        if es_bajo_esfuerzo or user_turn_count < 2:
-            return (
-                "SCORE: 15\n\n"
-                "⚠️ REPROBADO (EVALUACIÓN DE DESEMPEÑO - NEUROVENTAS SUNGLASS HUT):\n\n"
-                "El vendedor tuvo un desempeño reprobatorio (Score 15/100) al responder únicamente saludos genéricos (como 'hola') o frases cortas sin contenido comercial, sin realizar ningún tipo de indagación ni atención real al cliente.\n\n"
-                "1. Escucha Activa y Regla 80/20 (0/20): No realizó preguntas de sondeo ni escuchó las necesidades expresadas por el cliente.\n"
-                "2. Venta por Transformación (0/20): No presentó beneficios, fisionomía ni valor de la marca.\n"
-                "3. Manejo de Objeciones (0/20): Ignoró por completo las dudas u objeciones de precio planteadas por el visitante.\n"
-                "4. Captura CRM y Servicios (0/20): No solicitó datos de contacto, correo ni ofreció garantía o servicio de ultrasonido.\n"
-                "5. Cierre Comercial (0/20): Cero intento de cierre de venta.\n\n"
-                "💡 Recomendación del Coach: Es indispensable involucrarse activamente en la venta. Saluda una sola vez, identifícate y pasa de inmediato a indagar el estilo de vida del cliente usando las técnicas del Manual de Neuroventas."
-            )
-        else:
-            texto_vendedor = " ".join(user_msgs).lower()
-            score = 45
-            puntos_motivos = []
+        texto_vendedor = " ".join(user_msgs).lower()
+        full_text = prompt_str + " " + texto_vendedor
+        score = 65
+        puntos_motivos = []
 
-            if "nombre" in texto_vendedor or "mucho gusto" in texto_vendedor or "soy" in texto_vendedor:
-                score += 10
-                puntos_motivos.append("• Se presentó de manera educada y profesional (+10 pts)")
-            if "polarizado" in texto_vendedor or "uv" in texto_vendedor or "micas" in texto_vendedor or "tecnología" in texto_vendedor:
-                score += 15
-                puntos_motivos.append("• Explicó beneficios de tecnología/polarizados (+15 pts)")
-            if "garantía" in texto_vendedor or "garantia" in texto_vendedor or "correo" in texto_vendedor or "crm" in texto_vendedor:
-                score += 15
-                puntos_motivos.append("• Mencionó garantía oficial o captura CRM (+15 pts)")
-            if "llevo" in texto_vendedor or "estuche" in texto_vendedor or "tarjeta" in texto_vendedor or "cierre" in texto_vendedor or "promoción" in texto_vendedor:
-                score += 10
-                puntos_motivos.append("• Intentó el cierre comercial de la venta (+10 pts)")
+        if any(k in full_text for k in ["nombre", "mucho gusto", "soy", "bienvenido"]):
+            score += 10
+            puntos_motivos.append("• Se presentó amablemente y dio apertura profesional (+10 pts)")
+        if any(k in full_text for k in ["polarizado", "uv", "micas", "tecnología", "chromance", "material", "nailon", "ligero"]):
+            score += 10
+            puntos_motivos.append("• Explicó beneficios de tecnología, material o polarizados (+10 pts)")
+        if any(k in full_text for k in ["garantía", "garantia", "correo", "crm", "registro", "oops"]):
+            score += 10
+            puntos_motivos.append("• Mencionó la garantía oficial Sunglass Hut o registro CRM (+10 pts)")
+        if any(k in full_text for k in ["kit", "limpieza", "estuche", "upt", "segunda", "40%", "descuento", "promoción", "promocion"]):
+            score += 10
+            puntos_motivos.append("• Realizó venta cruzada (UPT) ofreciendo kit de limpieza o promoción de 2do par (+10 pts)")
+        if any(k in full_text for k in ["llevo", "tarjeta", "efectivo", "cierre", "pago", "cobro", "total"]):
+            score += 10
+            puntos_motivos.append("• Concretó el cierre comercial de la venta (+10 pts)")
 
-            score = min(score, 95)
-            desglose = "\n".join(puntos_motivos) if puntos_motivos else "• El vendedor mantuvo una interacción básica."
+        score = max(min(score, 98), 70)
+        desglose = "\n".join(puntos_motivos) if puntos_motivos else "• El asesor demostró atención comercial continua durante la interacción."
 
-            return (
-                f"SCORE: {score}\n\n"
-                f"📊 EVALUACIÓN DE DESEMPEÑO (SISTEMA LUXO - NEUROVENTAS SUNGLASS HUT):\n\n"
-                f"El asesor demostró un esfuerzo de venta {'destacado' if score >= 75 else 'intermedio'}.\n\n"
-                f"Puntos Clave Evaluados:\n{desglose}\n\n"
-                f"💡 Recomendación del Coach: Para alcanzar los 100 puntos, recuerda aplicar la regla 80/20, mantener máximo 3 armazones en bandeja y ofrecer siempre el kit de limpieza para subir el UPT."
-            )
+        return (
+            f"SCORE: {score}\n\n"
+            f"📊 EVALUACIÓN DE DESEMPEÑO (SISTEMA LUXO - NEUROVENTAS SUNGLASS HUT):\n\n"
+            f"El asesor demostró un esfuerzo de venta {'destacado y efectivo' if score >= 80 else 'bueno'}.\n\n"
+            f"Puntos Clave Evaluados:\n{desglose}\n\n"
+            f"💡 Recomendación del Coach: ¡Excelente trabajo en la simulación! Mantén siempre la regla 80/20 y recuerda ofrecer el kit de limpieza y el registro CRM para maximizar tus métricas en tienda."
+        )
 
     # CASO 3: ASISTENTE OPERATIVO LUXO AI (CHAT VIRTUAL)
     if "asistente operativo inteligente" in prompt_str or "eres luxo" in prompt_str:
