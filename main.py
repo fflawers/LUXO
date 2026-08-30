@@ -8284,6 +8284,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                             window.luxoManualDictating = false;
                                             setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
                                         }, 14000);
+                                        try { rec.stop(); } catch(e){}
                                     } else {
                                         if (!window.luxoManualDictating) {
                                             playBeep(1);
