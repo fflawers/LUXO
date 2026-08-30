@@ -134,50 +134,43 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
         else:
             return "¡Hola! Con gusto te apoyo. Como tu asistente operativo LUXO, recuerda que puedes consultarme procedimientos de caja, garantías, atención a siniestros o recomendaciones de neuroventas para el piso de tienda. ¿En qué tema necesitas orientación?"
 
-    # CASO 4: SIMULACIÓN DE CLIENTE (RESPUESTAS REALISTAS Y HUMANAS CON LENGUAJE NO VERBAL)
-    # 1. Si el vendedor se presenta por su nombre
-    if ("nombre" in last_msg or "llamas" in last_msg or "quien eres" in last_msg or "mucho gusto" in last_msg or "soy" in last_msg) and user_turn_count <= 2:
-        return "*(El cliente sonríe y saluda al vendedor)* \"Mucho gusto. Me llamo Carlos. Estaba viendo estas gafas en la vitrina, pero me gustaría entender qué las hace especiales o qué beneficios tienen para justificar el costo.\""
+    # CASO 4: SIMULACIÓN DE CLIENTE (RESPUESTAS REALISTAS Y HUMANAS)
+    if es_bajo_esfuerzo and user_turn_count >= 2:
+        if user_turn_count == 2:
+            return "Oye disculpa... ¿por qué me vuelves a decir 'hola'? Ya te saludé. Te estaba preguntando sobre este modelo y su precio, ¿me vas a asesorar bien o no?"
+        else:
+            return "Sinceramente siento que no me estás prestando atención y solo repites lo mismo. Preferiría que me atienda otro asesor. Hasta luego."
 
-    # 2. Reacción si el vendedor invita a probar las gafas o muestra demostración/imagen de polarizados
-    if any(k in last_msg for k in ["polariz", "probar", "pruéba", "pón", "mira", "imagen", "color", "diferencia", "espejo", "demostración", "tarjeta"]):
-        return "*(El cliente toma las gafas con ambas manos y se las prueba frente al espejo observando la tarjeta de prueba)* \"Órale, sí se nota bastante la diferencia en el contraste de color y el brillo desaparece por completo. Se ven muy bien... Oye, ¿qué garantía tienen si se desajustan o se me caen?\""
-
-    # 3. Reacción a explicación técnica de materiales (nailon, titanio, metal, resistencia, ligero)
-    if any(k in last_msg for k in ["nailon", "ligero", "resistente", "fibra", "titanio", "material", "calidad", "armazón"]):
-        return "*(El cliente sostiene el armazón con cuidado y siente su peso)* \"Órale, sí se siente bastante ligero y resistente este material... A ver, ¿me los puedo probar frente al espejo para ver cómo me lucen puestas?\""
-
-    # 4. Reacción a explicación de garantías
-    if any(k in last_msg for k in ["garantía", "garantia", "oops", "daño", "póliza", "cobertura", "accidente", "defecto"]):
-        return "*(El cliente se quita los lentes cuidando las varillas y los coloca sobre la bandeja)* \"Me parece excelente la garantía de cobertura. Mi correo es carlos.cliente@gmail.com para el registro. ¿Tienen el kit de limpieza o estuche rígido para llevármelos completos?\""
-
-    # 5. Reacción a oferta de kit de limpieza o venta cruzada
-    if any(k in last_msg for k in ["kit", "limpieza", "estuche", "upt", "paño", "líquido", "liquido", "adicional"]):
-        return "*(El cliente asiente satisfecho)* \"Perfecto, agrégame el kit de limpieza para mantener las micas impecables. Me convenciste con la atención, ¿dónde realizo el pago?\""
-
-    # 6. Reacción a forma de pago / cobro
-    if any(k in last_msg for k in ["tarjeta", "pago", "efectivo", "caja", "llevo", "cobro", "total"]):
-        return "*(El cliente sonríe y saca su tarjeta)* \"Pago con tarjeta de crédito, por favor. Muchas gracias por la excelente atención.\""
-
-    if es_bajo_esfuerzo and user_turn_count >= 3:
-        return "Sinceramente siento que no me estás prestando atención y solo repites lo mismo. Preferiría que me atienda otro asesor. Hasta luego."
-
-    # Primer saludo del roleplay (Entrada a la tienda)
+    # Primer saludo del roleplay
     if user_turn_count <= 1:
         if "apurado" in prompt_str or "vuelo" in prompt_str:
-            return "*(El cliente entra a la tienda y mira su reloj con prisa)* \"¡Hola, buenas tardes! La verdad vengo muy apurado porque mi vuelo sale en unas cuantas horas. Necesito unas gafas clásicas polarizadas como unas Ray-Ban Aviator. ¿Las tienes disponibles?\""
+            return "¡Hola, buenas tardes! La verdad vengo muy apurado porque mi vuelo a la playa sale en unas cuantas horas. Necesito unas gafas clásicas polarizadas como unas Ray-Ban Aviator. ¿Las tienes disponibles para verlas rápido?"
         elif "caro" in prompt_str or "precio" in prompt_str:
-            return "*(El cliente entra a la tienda, camina hacia el exhibidor y observa un armazón en la vitrina)* \"Hola, buenas tardes. Estaba viendo este armazón, pero sinceramente se me hace muy caro para lo que es. En otra tienda vi unos lentes muy parecidos por menos de la mitad. ¿Por qué valen tanto estos?\""
+            return "Hola, buenas tardes. Estaba viendo este armazón, pero sinceramente se me hace muy caro para lo que es. En otra tienda vi unos lentes muy parecidos por menos de la mitad. ¿Por qué valen tanto estos?"
         elif "polarizado" in prompt_str or "chromance" in prompt_str:
-            return "*(El cliente se acerca a la vitrina y observa las micas con atención)* \"Hola, buenas tardes. Tengo una duda: siempre he usado lentes normales y no entiendo bien qué diferencia real tienen las micas polarizadas o Chromance y si de verdad valen la pena.\""
+            return "Hola, buenas tardes. Tengo una duda: siempre he usado lentes normales y no entiendo bien qué diferencia real tienen las micas polarizadas o Chromance y si de verdad justifican la inversión."
         elif "garantía" in prompt_str or "garantia" in prompt_str or "cambio" in prompt_str or "ticket" in prompt_str:
-            return "*(El cliente ingresa a la tienda mostrando una gafa usada)* \"Buenas tardes. Vengo a preguntar qué garantía tienen estos lentes. Es que los anteriores se me rayaron muy rápido y quisiera saber si aquí tienen garantía directa.\""
+            return "Buenas tardes. Vengo a preguntar qué garantía tienen estos lentes. Es que los anteriores se me rayaron muy rápido y quisiera saber si aquí tienen garantía directa o si cubren daños."
         elif "meta" in prompt_str or "tecnología" in prompt_str:
-            return "*(El cliente camina hacia el mueble de gafas inteligentes)* \"¡Hola! He visto mucho las gafas Ray-Ban Meta, pero me da desconfianza la privacidad. ¿Cómo funcionan exactamente y cómo sé que no están grabando?\""
+            return "¡Hola! He visto mucho en redes las gafas inteligentes Ray-Ban Meta, pero me da un poco de desconfianza la privacidad. ¿Cómo funcionan exactamente y cómo sé que no están grabando cuando no quiero?"
+        elif "regalo" in prompt_str or "versace" in prompt_str or "prada" in prompt_str:
+            return "Hola, buenas tardes. Estoy buscando un regalo muy especial y exclusivo para mi pareja. Me gustaría ver opciones de gama alta como Versace o Prada, pero necesito que me asesores con algo de gran presencia."
         else:
-            return "*(El cliente entra a la tienda y observa los exhibidores con curiosidad)* \"¡Hola, buenas tardes! Disculpa, estaba viendo estas gafas en la vitrina. ¿Me podrías platicar un poco más sobre este modelo y sus características?\""
+            return "¡Hola, buenas tardes! Disculpa, estaba viendo estas gafas en la vitrina. ¿Me podrías platicar un poco más sobre este modelo y sus características?"
 
-    return "*(El cliente observa atentamente al vendedor)* \"Entiendo tu punto como asesor. ¿Me podrías mostrar qué otras opciones de armazón tienes en esta misma vitrina para compararlos?\""
+    # Turnos siguientes según contenido del vendedor
+    if "nombre" in last_msg or "llamas" in last_msg or "quien eres" in last_msg or "mucho gusto" in last_msg or "soy" in last_msg:
+        return "Mucho gusto. Pues mira, me llamaron la atención estos lentes, pero me gustaría entender bien por qué el costo o qué beneficio me da esta marca frente a otras."
+    elif "correo" in last_msg or "datos" in last_msg or "registro" in last_msg or "garantía" in last_msg or "garantia" in last_msg:
+        return "Me parece muy bien lo de la garantía. Mi correo es cliente.ejemplo@gmail.com. ¿Qué cubre exactamente si se me llegan a rayar o soltar un tornillo?"
+    elif "polarizado" in last_msg or "uv" in last_msg or "protección" in last_msg or "tecnología" in last_msg or "micas" in last_msg:
+        return "Ah, entiendo. No sabía que la mica polarizada eliminaba los reflejos en el asfalto. Eso me sirve mucho para cuando manejo de tarde."
+    elif "descuento" in last_msg or "promoción" in last_msg or "precio" in last_msg or "cuanto" in last_msg or "costo" in last_msg:
+        return "Entiendo los materiales de alta calidad. ¿Tienen opción de pagar a meses sin intereses o algún paquete que incluya el estuche o kit de limpieza?"
+    elif "sí" in last_msg or "si" in last_msg or "llevo" in last_msg or "gusta" in last_msg or "cierre" in last_msg or "tarjeta" in last_msg:
+        return "¡Excelente atención! Me convenciste con la explicación del lente. Me los llevo, por favor."
+    else:
+        return "Entiendo tu punto como asesor. ¿Me podrías mostrar qué otras opciones de armazón tienes en esta misma vitrina para compararlos?"
 
 
 def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
@@ -2960,11 +2953,6 @@ def iniciar_hilo_escucha_luxo():
                                         if query and input_msg and enviar_mensaje_fn:
                                             print(f"🚀 Enviando pregunta a LUXO IA desde voz: '{query}'")
                                             input_msg.value = query
-                                            try: input_msg.update()
-                                            except Exception: pass
-                                            try:
-                                                if page_obj: page_obj.update()
-                                            except Exception: pass
                                             if platform.system() == "Windows":
                                                 try:
                                                     winsound.Beep(1500, 100)
@@ -2996,11 +2984,6 @@ def iniciar_hilo_escucha_luxo():
                                         if query and input_msg and enviar_mensaje_fn:
                                             print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
                                             input_msg.value = query
-                                            try: input_msg.update()
-                                            except Exception: pass
-                                            try:
-                                                if page_obj: page_obj.update()
-                                            except Exception: pass
                                             if platform.system() == "Windows":
                                                 try:
                                                     winsound.Beep(1500, 100)
@@ -7342,7 +7325,40 @@ El usuario te está preguntando sobre una pregunta específica de la Trivia.
 3. REGLA DE SEGURIDAD ABSOLUTA: Si no se te proporciona ningún manual relacionado con el tema en la sección "DOCUMENTOS / MANUALES" (está vacía), debes responder de forma directa explicando la regla teórica del negocio y decir honestamente: 'Dado que no cuento con el manual específico sobre este proceso cargado en mi sistema, te explico el protocolo operativo general de la tienda: [explicación]'.
 4. Está terminantemente PROHIBIDO inventar nombres de archivos PDF o inventar secciones de manuales que no aparezcan de forma exacta en el texto de referencia provisto.
 """
+                        # Cargar fragmento de la Guía de Ventas de Élite si la consulta involucra ventas, clientes u objeciones
+                        palabras_ventas_coach = {"vender", "venta", "ventas", "cliente", "clientes", "descuento", "precio", "caro", "oops", "poliza", "ppt", "aur", "sondeo", "objecion", "objeciones", "lujo", "rompehielos", "cierre", "exigente", "trato", "asesor", "ofrecer", "comision"}
+                        user_words_set = set(user_text_norm.split())
+                        involucra_ventas = bool(user_words_set.intersection(palabras_ventas_coach))
+
+                        guia_ventas_contexto = ""
+                        if involucra_ventas:
+                            guia_v_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_assets", "guia_mejor_vendedor.txt")
+                            if os.path.exists(guia_v_path):
+                                try:
+                                    with open(guia_v_path, "r", encoding="utf-8") as f_gv:
+                                        guia_ventas_contexto = f_gv.read()[:3500]
+                                except Exception: pass
+
                         instruccion_coaching_ventas = ""
+                        if involucra_ventas and guia_ventas_contexto:
+                            instruccion_coaching_ventas = f"""
+----------------------------------------------------------
+INSTRUCCION ESPECIAL: ANÁLISIS DE CRITERIO INTELIGENTE
+----------------------------------------------------------
+LUXO debe evaluar el CONTEXTO exacto de la pregunta con criterio directivo:
+
+1. SI LA CONSULTA ES OPERATIVA / ADMINISTRATIVA OFICIAL:
+   (Ej. convenios especiales registrados, aclaración de políticas oficiales, siniestros o procedimientos que realmente requieran autorización corporativa).
+   -> Explica el procedimiento paso a paso. Si el proceso oficial de la empresa requiere validar con el Jefe Zonal o Supervisor, INDÍCALO CLARAMENTE como parte del protocolo.
+
+2. SI LA CONSULTA ES DE ATENCIÓN A CLIENTES Y TÉCNICAS DE VENTA EN EL PISO:
+   (Ej. cliente exigiendo descuento improvisado, objeciones de precio, cómo ofrecer la Póliza Oops, cómo manejar clientes difíciles).
+   -> Brinda la solución táctica directa de neuroventas para que el vendedor maneje al cliente en el acto con seguridad, valor de marca y servicio postventa, sin depender innecesariamente de la gerencia.
+
+GUÍA PRIVADA DE COACHING DE VENTAS:
+{guia_ventas_contexto}
+"""
+
                         mensaje_sistema = {
                             "role": "system",
                             "content": f"""Eres LUXO, asistente operativo inteligente de Sunglass Hut.
@@ -7382,10 +7398,9 @@ INSTRUCCIÓN DE PERSONALIDAD Y SEGURIDAD (ESTILO SIMULADOR IA)
    - Si la información operativa sobre la empresa no aparece en los manuales provistos, explica amablemente de forma conversacional que esa consulta específica no se encuentra en el manual de la tienda y ofrece ayudar con otra duda operativa.
 
 3. Está strictly PROHIBIDO comenzar tu respuesta con muletillas como "Según el manual...", "De acuerdo con el documento..." — entrega la información de forma hablada y directa.
-4. REGLA ESTRICTA DE FÓRMULAS Y MATEMÁTICAS (MANDATORIO): Queda terminantemente PROHIBIDO usar código o sintaxis de LaTeX. Escribe SIEMPRE cualquier fórmula matemática o cálculo en texto plano limpio y legible. Ejemplo: Fórmula: PPT = Piezas Vendidas / Total de Tickets.
-5. Para respuestas basadas en manuales, cita al final de tu mensaje la fuente exacta en el idioma correspondiente.
-6. Para fórmulas matemáticas usa "entre" o "dividido entre" para divisiones, nunca "dividido por".
-7. NO traduzcas siglas (como AUR) si la traducción no está textualmente en el manual.
+4. Para respuestas basadas en manuales, cita al final de tu mensaje la fuente exacta en el idioma correspondiente.
+5. Para fórmulas matemáticas usa "entre" o "dividido entre" para divisiones, nunca "dividido por".
+6. NO traduzcas siglas (como AUR) si la traducción no está textualmente en el manual.
 
 ══════════════════════════════════════════════════════════
 INSTRUCCIÓN DE INTERPRETACIÓN Y ORTOGRAFÍA (OBLIGATORIO)
@@ -7417,12 +7432,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     historial_sesion.append({"role": "user", "content": user_text_expandido})
                     mensajes_api = [mensaje_sistema]
                     
-                    # Limitar memoria a los últimos 4 mensajes (2 turnos) y truncar a 250 caracteres max para garantizar cero error 413
+                    # Limitar memoria y truncar mensajes extremadamente largos para evitar error 413
                     historial_filtrado = []
-                    for msg in historial_sesion[-4:]:
+                    for msg in historial_sesion[-8:]:
                         content_trunc = msg["content"]
-                        if len(content_trunc) > 250:
-                            content_trunc = content_trunc[:250] + "\n[...]"
+                        if len(content_trunc) > 800:
+                            content_trunc = content_trunc[:800] + "\n[...]"
                         historial_filtrado.append({"role": msg["role"], "content": content_trunc})
                     mensajes_api.extend(historial_filtrado)
 
@@ -7453,12 +7468,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                     respuesta = data["choices"][0]["message"]["content"]
                                     if respuesta and "<think>" in respuesta:
                                         respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
-                                    # Formatear fórmulas de LaTeX a texto plano limpio para visualización perfecta en Flet
-                                    if respuesta:
-                                        respuesta = re.sub(r"\\\[\s*", "", respuesta)
-                                        respuesta = re.sub(r"\s*\\\]", "", respuesta)
-                                        respuesta = re.sub(r"\\text\{([^}]+)\}", r"\1", respuesta)
-                                        respuesta = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"\1 / \2", respuesta)
                                 else:
                                     respuesta = "Ocurrió un error consultando la IA."
                             except Exception as e:
@@ -15273,20 +15282,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 - Perfeccionista Extremo ('Nadie lo ha tocado'): Ritual de entrega. Sacar la caja sellada, hacer el unboxing frente a él a dos manos y entregarlo a contraluz.
 - Analítico Silencioso: Respetar su espacio (2 metros), cero plática vana, darle un solo dato técnico contundente (ej. "Titanio aeroespacial de menos de 15g") y alejarse.
 - Prejuicioso: Destruir el prejuicio con autoridad técnica implacable (calibre de armazón, índice de refracción, ingeniería de bisagras).
-
-7. PROTOCOLOS DE PREVENCIÓN DE ROBO Y SEGURIDAD SUNGLASS HUT:
-- Parejas y Grupos Distractores: Entran juntos y se separan de inmediato. Uno distrae al vendedor al fondo/caja y el otro roba en otra zona. Mantener control visual panorámico.
-- Trampa del Fondo de Tienda / Espalda: Cliente con plática vana, ropa provocativa o preguntas absurdas que intenta llevarte al fondo. JAMÁS dar la espalda a la entrada ni a la vitrina frontal.
-- Indicadores No Verbales de Riesgo: Ropa fuera de temporada (abrigos en calor) o bolsas de compra grandes y vacías por dentro.
-- Cambiazo ('Catafixia'): Sustituir disimuladamente un lente de marca por una copia de tianguis en el exhibidor.
-- Familias y Distracción en Caja: Desorden de piezas en bandeja. Mientras cobran una pieza barata, otro oculta una pieza de $10,000+ MXN. Prohibido descuidar el piso al cobrar.
-- Prohibida la Venta en Equipo en Caja: El segundo vendedor NUNCA debe meterse a la caja a "ayudar" si hay clientes en el piso de venta.
-- Prohibido Abandonar Piso estando Solo: Vendedor solo en tienda JAMÁS va a bodega a buscar modelos; únicamente vende lo exhibido.
-- Alineación de Etiquetas y Control de Huecos: Rellenar huecos al instante. Etiquetas siempre alineadas en una sola dirección para detectar inmediatamente si falta un lente o hicieron cambiazo.
-- Uso Estratégico de Espejos: Usar el reflejo de los espejos para vigilar ambos lados de la tienda disimuladamente.
-- Saludo Desde Caja: Al cobrar solo y entrar un cliente, saludar de inmediato: "En un momento los atiendo, estoy a sus órdenes" sin perder el control visual del piso.
-- Desplazamiento Acompañado ('Jalar al cliente'): Guiar físicamente al cliente hacia el mueble de la marca; jamás dejar que camine solo a otra pared.
-- Protocolo Anti-Extorsión Telefónica y Fraude: Corporativo/Contabilidad JAMÁS marca a celulares personales ni exige depósitos en efectivo, transferencias ni sacar mercancía fuera de tienda. Amenazas de clausura/embargo son 100% FALSAS (Sunglass Hut cuenta con despacho contable y jurídico propio). Cualquier llamada legítima de corporativo sabe exactamente por quién preguntar.
 """
 
         def build_simulador_view():
@@ -15317,11 +15312,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ft.dropdown.Option("Padre Indeciso - Regalo Adolescente", "Padre o madre de familia que busca un regalo de cumpleaños para su hijo adolescente, no sabe qué marca está de moda (Oakley o Ray-Ban Meta) y necesita asesoría paciente sobre tendencias juveniles"),
                     ft.dropdown.Option("Deportista - Presupuesto Ajustado", "Deportista aficionado que busca gafas de sol de alto rendimiento para correr o ciclismo (Oakley Sutro), conoce los beneficios técnicos del lente pero tiene un presupuesto muy limitado y busca la opción de menor costo"),
                     ft.dropdown.Option("Ejecutivo - Imagen Profesional", "Profesional corporativo que busca unas gafas elegantes y sobrias para usar con vestimenta formal de negocios (Persol o Prada), valora la discreción, calidad de materiales e imagen profesional"),
-                    ft.dropdown.Option("Cliente Reclamando Garantía - Lentes Rayados", "Cliente molesto que viene a exigir el cambio o garantía gratis de sus gafas porque los lentes están completamente rayados debido a mal uso (los limpió con su playera o los dejó caer), e insiste en que es defecto de fábrica"),
-                    ft.dropdown.Option("🛡️ Prevención: Pareja Distractora al Fondo", "Pareja que ingresa a Sunglass Hut y se separa de inmediato; uno te lleva al fondo con preguntas vagas mientras el otro merodea la entrada"),
-                    ft.dropdown.Option("🛡️ Prevención: Intento de Cambiazo (Catafixia)", "Cliente sospechoso manipulando disimuladamente una gafa Ray-Ban para sustituirla por una réplica de tianguis en el exhibidor"),
-                    ft.dropdown.Option("🛡️ Prevención: Familia Numerosa y Distracción en Caja", "Grupo familiar elegante pidiendo ver múltiples armazones, creando desorden en la bandeja y buscando distracción durante el cobro"),
-                    ft.dropdown.Option("🛡️ Prevención: Llamada de Extorsión y Falso Corporativo", "Falso ejecutivo o supuesto auditor de corporativo llamando por teléfono exigiendo depósitos urgentes o sacar mercancía de la tienda bajo amenaza de clausura")
+                    ft.dropdown.Option("Cliente Reclamando Garantía - Lentes Rayados", "Cliente molesto que viene a exigir el cambio o garantía gratis de sus gafas porque los lentes están completamente rayados debido a mal uso (los limpió con su playera o los dejó caer), e insiste en que es defecto de fábrica")
                 ]
             )
             if cliente_dropdown.options_list:
@@ -15408,26 +15399,22 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 chat_history.append({"role": "user", "content": msg_txt})
                 agregar_mensaje_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
                 
-                system_prompt = f"""Eres un cliente real de Sunglass Hut en un roleplay de ventas. Tu perfil es: '{perfil_cliente_txt[0]}'.
-REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
-1. REACCIÓN ESTRICTA AL VENDEDOR: Responde ÚNICAMENTE a lo que el vendedor te acaba de decir en su último mensaje. Si el vendedor te ofrece probarte los lentes o ver una imagen polarizada, PRUÉBALOS y reacciona a los colores o el contraste.
-2. CERO REPETICIONES: NUNCA repitas frases o preguntas que ya dijiste en turnos anteriores.
-3. LENGUAJE NO VERBAL COHERENTE: Incluye siempre tus gestos y acciones físicas entre asteriscos (Ejemplo: *(El cliente se prueba las gafas frente al espejo)*).
-4. RESPUESTAS BREVES Y NATURALES: Escribe de 1 a 2 oraciones en español coloquial de tienda.
-"""
+                system_prompt = f"""Eres un cliente de Sunglass Hut. Tu perfil es: '{perfil_cliente_txt[0]}'.
+                Estás interactuando con el asesor de ventas en la tienda física.
+                Responde de forma natural, realista, breve y conversacional (máximo 2 a 3 oraciones por mensaje).
+                No salgas del personaje. Si el vendedor te ofrece promociones, kits o garantías, reacciona según tu perfil de cliente.
+                Mantén la interacción fluida. Si sientes que la atención es mala, sé difícil. Si es buena, muéstrate cooperativo.
+                """
                 
-                mensajes_api = chat_history[-6:]
+                mensajes_api = chat_history[-10:]
                 
-                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=6)
+                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, timeout=12)
                 if ok and respuesta:
                     chat_history.append({"role": "assistant", "content": respuesta})
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
                 else:
-                    respuesta_fallback = generar_respuesta_simulador_fallback(mensajes_api, system_prompt)
-                    chat_history.append({"role": "assistant", "content": respuesta_fallback})
-                    agregar_mensaje_chat("Cliente", respuesta_fallback, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                    agregar_mensaje_chat("Cliente", f"[Error de comunicación con la IA ({status})]", ft.Icons.ERROR, "red")
 
-            user_input.on_submit = enviar_mensaje_simulacion
             btn_enviar.on_click = enviar_mensaje_simulacion
 
             def finalizar_simulacion_click(e):
@@ -15440,7 +15427,6 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                 
                 perfil_lower = perfil_cliente_txt[0].lower()
                 es_caso_servicio = "cambio" in perfil_lower or "reclamando" in perfil_lower or "ticket" in perfil_lower
-                es_caso_seguridad = "prevención" in perfil_lower or "robo" in perfil_lower or "cambiazo" in perfil_lower or "distracción" in perfil_lower
                 
                 if es_caso_servicio:
                     eval_prompt = """Analiza la siguiente conversación de roleplay de servicio al cliente en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente que viene a realizar un CAMBIO de producto sin ticket de compra o presenta una queja.
@@ -15451,47 +15437,34 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                     4. Protocolo de atención ante conflictos (¿Evitó discutir y mantuvo una postura profesional y resolutiva?).
                     5. Cierre formal del caso (¿Dejó claros los pasos a seguir o canalizó formalmente el caso a soporte/gerencia de forma educada?).
                     
-                    NOTA IMPORTANTE: Al ser un caso de reclamación/servicio, NO penalices ni exijas venta cruzada (UPT) o el cierre de una venta comercial.
+                    NOTA IMPORTANTE: Al ser un caso de reclamación/servicio, NO penalices ni exijas venta cruzada (UPT) o el cierre de una venta comercial, ya que el objetivo principal es la atención post-venta y resolución de un problema operativo.
                     
                     Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
                     SCORE: [Número]
                     [Salto de línea]
-                    Comentarios detallados de la evaluación en Markdown...
-                    """
-                elif es_caso_seguridad:
-                    eval_prompt = """Analiza la siguiente conversación de roleplay de Prevención de Robo y Seguridad Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente sospechoso o grupo distractor.
-                    Evalúa el desempeño del vendedor según los Protocolos de Seguridad Sunglass Hut:
-                    1. Control de Huecos y Bandeja (¿Mantuvo el límite de máximo 3 armazones en bandeja a la vez?).
-                    2. Control Visual y Presencia (¿Mantuvo el control visual de la tienda y la entrada sin dar la espalda al cliente ni al exhibidor?).
-                    3. Desplazamiento Acompañado ('Jalar al cliente') (¿Acompañó al cliente al mueble correspondiente sin dejarlo caminar solo?).
-                    4. Manejo de Distracciones y Saludo desde Caja (¿Saludó de inmediato a nuevos visitantes y evitó ser sacado de su zona de control?).
-                    5. Profesionalismo y Templanza (¿Mantuvo una postura atenta, amable y preventiva sin caer en confrontación ni acusaciones directas agresivas?).
+                    Comentarios detallados de la evaluación...
                     
-                    Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
-                    SCORE: [Número]
-                    [Salto de línea]
-                    Comentarios detallados de la evaluación en Markdown...
+                    Sé riguroso y constructivo en tu retroalimentación en español.
+                    
+                    CONVERSACIÓN A EVALUAR:
                     """
                 else:
                     eval_prompt = """Analiza la siguiente conversación de roleplay de venta en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente.
-                    Evalúa el desempeño del vendedor en base a los 12 Criterios Oficiales de Auditoría de Tienda Sunglass Hut (100 Puntos Máx):
-                    1. Presentación del vendedor por nombre (10 pts)
-                    2. Pedir/Indagar el nombre del cliente (10 pts)
-                    3. Rompehielos y Apertura (10 pts)
-                    4. Preguntas de sondeo abiertas y cerradas (10 pts)
-                    5. Invitación a ponerse/probarse las gafas (10 pts)
-                    6. Demostración y explicación del polarizado/Chromance (10 pts)
-                    7. Ofrecer el Ajuste Perfecto (5 pts)
-                    8. Actitud de servicio y Regla 80/20 (10 pts)
-                    9. Ofrecer Kit de Limpieza y explicar el beneficio técnico (10 pts)
-                    10. Venta Cruzada / UPT (tratar de vender 2do par) (10 pts)
-                    11. Despedida por el nombre del cliente (10 pts)
-                    12. Invitar a regresar a la tienda (compre o no) (5 pts)
+                    Evalúa el desempeño del vendedor en base a estos puntos:
+                    1. Trato al cliente (Amabilidad, escucha activa).
+                    2. Manejo de objeciones y conocimiento del producto.
+                    3. Venta cruzada (¿Ofreció kit de limpieza o estuche adicional para subir el UPT?).
+                    4. Captura de datos CRM para la garantía (¿Pidió el correo electrónico?).
+                    5. Cierre formal de la venta.
 
                     Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
                     SCORE: [Número]
                     [Salto de línea]
-                    Desglose detallado de los 12 criterios con viñetas en formato Markdown...
+                    Comentarios detallados de la evaluación...
+                    
+                    Sé riguroso y constructivo en tu retroalimentación en español.
+                    
+                    CONVERSACIÓN A EVALUAR:
                     """
                 
                 for msg in chat_history:
@@ -15503,7 +15476,7 @@ Tu función es evaluar la conversación de venta utilizando estrictamente los pr
 
 {MANUAL_NEUROVENTAS_LUXO}
 
-Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. Tu respuesta DEBE comenzar obligatoriamente con el Score en formato 'SCORE: [Número 0-100]'.
+Evalúa de forma rigurosa pero altamente formativa en español. Tu respuesta DEBE comenzar obligatoriamente con el Score en formato 'SCORE: [Número 0-100]'.
 """
                 
                 ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15)
@@ -15532,17 +15505,14 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                     mostrar_snack(f"Error de conexión al evaluar ({status})", "red")
 
             def mostrar_evaluacion_dialog(score, feedback):
-                md_content = ft.Markdown(
-                    feedback,
-                    selectable=True,
-                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB
-                )
                 dlg = ft.AlertDialog(
                     title=ft.Text(f"Evaluación del Simulador: Score {score}/100 📊", color="#00FFFF", weight="bold", size=18),
                     content=ft.Container(
-                        content=ft.Column([md_content], scroll=ft.ScrollMode.AUTO),
-                        width=550,
-                        height=420
+                        content=ft.Column([
+                            ft.Text(feedback, color="white", size=13, selectable=True),
+                        ], scroll=ft.ScrollMode.AUTO),
+                        width=500,
+                        height=350
                     ),
                     actions=[
                         ft.TextButton("Entendido", on_click=lambda e: (page.pop_dialog(), cambiar_vista("simulador")))
@@ -15567,17 +15537,11 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                 chat_history.clear()
                 sim_chat_column.controls.clear()
                 
-                system_prompt = f"""Eres un cliente que entra a la tienda Sunglass Hut. Tu perfil es: '{perfil_cliente_txt[0]}'.
-REGLAS PARA TU MENSAJE INICIAL:
-1. NUNCA digas que sostienes o tienes la gafa en la mano. Lo realista es que entras caminando a la tienda, te acercas a una vitrina o exhibidor y observas un armazón que te llamó la atención.
-2. Incluye siempre tu acción física de entrada entre comillas o asteriscos (Ejemplo: *(El cliente entra a la tienda, camina hacia el exhibidor y observa un armazón en la vitrina)*).
-3. Escribe tu saludo o comentario inicial breve sobre lo que ves (máximo 2 oraciones).
-"""
+                system_prompt = f"Eres un cliente de Sunglass Hut entrando a la tienda. Tu perfil es: '{perfil_cliente_txt[0]}'. Escribe tu primer saludo o consulta breve al asesor de ventas (vendedor)."
                 messages = [{"role": "user", "content": "Hola, buenas tardes."}]
                 
                 ok, respuesta, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=12)
                 if ok and respuesta:
-                    chat_history.append({"role": "user", "content": "Hola, buenas tardes."})
                     chat_history.append({"role": "assistant", "content": respuesta})
                     config_area.visible = False
                     chat_area.visible = True
