@@ -8325,12 +8325,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
                         rec.onend = function() {
                             window.luxoSpeechRecognitionActive = false;
-                            if (!isMobileDevice && !topDoc.hidden && window.luxoManualDictating) {
+                            if (!isMobileDevice && !topDoc.hidden) {
                                 setTimeout(function() {
                                     try {
-                                        if (!topDoc.hidden && window.luxoManualDictating) rec.start();
+                                        if (!topDoc.hidden && !window.luxoSpeechRecognitionActive) {
+                                            rec.start();
+                                        }
                                     } catch(e){}
-                                }, 2000);
+                                }, 800);
                             }
                         };
 
