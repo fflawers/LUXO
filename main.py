@@ -7397,15 +7397,15 @@ INSTRUCCIÓN DE INTERPRETACIÓN Y ORTOGRAFÍA (OBLIGATORIO)
 4. Entiende estas abreviaciones comunes: "q" = que, "k" = que, "x" = por, "pa" = para, "tmb" = también, "pls" = por favor, "neta" = verdad, "chido" = bueno, "jale" = trabajo, "morro" = joven, "ntp" = no te preocupes, "tkt" = ticket, "cel" = celular, "pto" = punto, "xq" = porque, "ps" = pues, "bn" = bien, "msj" = mensaje, "fav" = favor, "dpto" = departamento, "gcia" = gerencia.
 
 DOCUMENTOS / MANUALES PROPORCIONADOS:
-{manuales_texto if manuales_texto.strip() else "(No hay documentos relacionados para esta consulta)"}
+{manuales_texto[:2500] if manuales_texto.strip() else "(No hay documentos relacionados para esta consulta)"}
 
 {instruccion_coaching_ventas}
 
 CASOS PREVIOS RESUELTOS CON ÉXITO (EJEMPLOS ÚTILES):
-{casos_previos_texto if casos_previos_texto.strip() else "(No hay casos previos similares registrados)"}
+{casos_previos_texto[:1000] if casos_previos_texto.strip() else "(No hay casos previos similares registrados)"}
 
 EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
-{casos_fallidos_texto if casos_fallidos_texto.strip() else "(No hay ejemplos de respuestas incorrectas previas registrados)"}
+{casos_fallidos_texto[:1000] if casos_fallidos_texto.strip() else "(No hay ejemplos de respuestas incorrectas previas registrados)"}
 """
                         }
 
@@ -7434,9 +7434,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         if res.status_code == 429 and rotate_groq_key():
                             headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
                             res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                        elif res.status_code in (404, 400):
-                            # Si el modelo guardado no existe en Groq, probamos con modelos estándar activos
-                            for fallback_model in ["groq/compound", "groq/compound-mini", "openai/gpt-oss-120b", "qwen/qwen3.6-27b", "llama-3.3-70b-versatile"]:
+                        elif res.status_code in (404, 400, 413):
+                            # Si hay error 413 (payload grande) o modelo no activo, probar con modelos livianos
+                            for fallback_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]:
                                 payload["model"] = fallback_model
                                 res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
                                 if res.status_code == 200:
@@ -7461,10 +7461,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 respuesta = "Ocurrió un error consultando la IA."
                         else:
                             print("AI CONNECTION ERROR:", res.status_code, res.text)
-                            respuesta = f"Error de conexión con la IA ({res.status_code})."
+                            # Si las llamadas de red fallan o dan 413, usar el motor de IA inteligente de respaldo
+                            ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt=mensaje_sistema["content"], timeout=10)
+                            respuesta = resp_fb if (ok_fb and resp_fb) else "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
                     except Exception as re_err:
                         print("API REQUEST EXCEPTION:", re_err)
-                        respuesta = "Error de conexión: No se pudo establecer contacto con el servidor de Inteligencia Artificial. Por favor, verifica tu conexión a internet e inténtalo de nuevo."
+                        ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt="Eres LUXO, asistente operativo Sunglass Hut.", timeout=10)
+                        respuesta = resp_fb if (ok_fb and resp_fb) else "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
 
 
                     historial_sesion.append({"role": "assistant", "content": respuesta})
