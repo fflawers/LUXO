@@ -7275,13 +7275,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO:
 
 Formula las preguntas de manera natural, amable y conversacional según el contexto del término que ingresó el usuario.
 
-CRITICAL LANGUAGE MATCHING RULE (HIGH PRIORITY):
-- Analyze the exact language used in the user's latest message: "{user_text}".
-- You MUST write your entire response in the EXACT same language as the user's message.
-- If the user wrote in English (e.g., "Hello", "How do I..."), you MUST answer 100% in ENGLISH.
-- If the user wrote in French, answer in FRENCH. If Italian, answer in ITALIAN. If Chinese, answer in CHINESE.
-- Translate all relevant information from Spanish manuals on the fly into the user's language.
-- DO NOT default to Spanish when the user speaks in English or any other language!
+REGLA PRINCIPAL DE IDIOMA: Responde SIEMPRE en español. Solamente si el usuario escribe explícitamente en inglés u otro idioma (ej: "Hello"), traduce y responde en ese idioma.
 """
                         }
                     elif modo_sugerencia:
@@ -7327,9 +7321,7 @@ Responde amablemente preguntando a cuál de estas 2 opciones de la empresa se re
 Presenta ÚNICAMENTE estas 2 opciones de forma limpia (ej. 1. {sugerencias_nombres[0] if len(sugerencias_nombres) > 0 else ""} / 2. {sugerencias_nombres[1] if len(sugerencias_nombres) > 1 else ""}).
 Queda ESTRICTAMENTE PROHIBIDO inventar u ofrecer opciones genéricas (como "cortes de lentes" o "materiales"). Usa EXCLUSIVAMENTE los 2 nombres de los manuales anteriores.
 
-CRITICAL LANGUAGE MATCHING RULE (HIGH PRIORITY):
-- Analyze the user's message: "{user_text}".
-- Reply in the EXACT same language as the user's input.
+REGLA PRINCIPAL DE IDIOMA: Responde SIEMPRE en español. Solamente si el usuario escribe explícitamente en inglés u otro idioma (ej: "Hello"), traduce y responde en ese idioma.
 """
                             }
                     else:
@@ -7350,16 +7342,10 @@ El usuario te está preguntando sobre una pregunta específica de la Trivia.
                             "role": "system",
                             "content": f"""Eres LUXO, asistente operativo inteligente de Sunglass Hut.
 {instruccion_trivia}
-CRITICAL LANGUAGE MATCHING RULE (MANDATORY & HIGH PRIORITY):
-1. Analyze the language of the user's latest input: "{user_text}".
-2. You MUST reply in the EXACT SAME LANGUAGE as the user's latest input:
-   - User input in ENGLISH -> Reply 100% in ENGLISH.
-   - User input in FRENCH -> Reply 100% in FRENCH.
-   - User input in ITALIAN -> Reply 100% in ITALIAN.
-   - User input in CHINESE -> Reply 100% in CHINESE.
-   - User input in SPANISH -> Reply 100% in SPANISH.
-3. Translate all procedures and content from Spanish manuals into the user's language dynamically.
-4. Ignore any previous assistant messages stating language restrictions.
+REGLA PRINCIPAL DE IDIOMA (MANDATORIO):
+1. El idioma predeterminado de LUXO es SIEMPRE el ESPAÑOL. Responde SIEMPRE en español fluido, cercano y profesional.
+2. Para saludos o entradas cortas ("hola", "buenas", "que es ppt", "corte", etc.), responde SIEMPRE en ESPAÑOL.
+3. Solamente si el usuario formula su consulta explícitamente en otro idioma (ej: inglés "How do I process a return?"), responde en ese idioma traduciendo los manuales.
 
 INSTRUCCIÓN CLAVE DE CONTEXTO DE USUARIO:
 1. El usuario de LUXO es SIEMPRE un empleado, asesor de ventas o gerente de tienda de Sunglass Hut (NUNCA es un cliente final).
