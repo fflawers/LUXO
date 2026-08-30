@@ -15334,10 +15334,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 color="white",
                 expand=True,
                 disabled=True,
-                multiline=True,
-                min_lines=1,
-                max_lines=4,
-                shift_enter=True
+                shift_enter=False
             )
             btn_enviar = ft.IconButton(
                 icon=ft.Icons.SEND,
@@ -15404,6 +15401,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 if not msg_txt:
                     return
                 user_input.value = ""
+                try:
+                    user_input.update()
+                except Exception: pass
                 chat_history.append({"role": "user", "content": msg_txt})
                 agregar_mensaje_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
                 
