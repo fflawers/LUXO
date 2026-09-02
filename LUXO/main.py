@@ -5887,7 +5887,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             if db:
                 cursor = db.cursor(dictionary=True)
                 cursor.execute("""
-                    SELECT Pregunta_Usuario, Respuesta_IA 
+                    SELECT Pregunta_Usuario, Respuesta_IA, ID_Manual 
                     FROM historial_conversaciones 
                     WHERE ID_Usuario = %s AND Fecha_Hora >= NOW() - INTERVAL 30 MINUTE
                     ORDER BY Fecha_Hora DESC 
@@ -5898,9 +5898,10 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 # Invertir para mostrarlos en orden cronológico (del más antiguo al más reciente dentro de los últimos 10)
                 historial.reverse()
                 for row in historial:
+                    resp_ia_text = row.get("Respuesta_IA") or ""
                     # 1. Agregar a la memoria del LLM
                     historial_sesion.append({"role": "user", "content": row["Pregunta_Usuario"]})
-                    historial_sesion.append({"role": "assistant", "content": row["Respuesta_IA"]})
+                    historial_sesion.append({"role": "assistant", "content": resp_ia_text})
                     
                     # 2. Agregar visualmente al chat de Flet
                     # Burbuja de Usuario
@@ -5925,26 +5926,103 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         )
                     )
                     
-                    # Burbuja de IA (LUXO)
-                    chat_display.controls.append(
-                        ft.Container(
-                            content=ft.Row([
-                                ft.Container(
-                                    content=ft.Image(src=avatar_luxo_base64, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if avatar_luxo_base64 else ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
-                                    width=35,
-                                    height=35,
-                                    border_radius=17.5,
-                                    bgcolor="#2A1B4E",
-                                    alignment=ft.alignment.Alignment(0, 0),
-                                    border=ft.Border.all(1.5, "#D8B4FE"),
-                                ),
-                                ft.Text(row['Respuesta_IA'], color="white", expand=True, selectable=True)
-                            ], vertical_alignment="start", spacing=10),
-                            bgcolor="#0F0F1A",
-                            padding=10,
-                            border_radius=10
+                    # Burbuja de IA (LUXO) con Markdown completo y Tarjetas Interactivas
+                    if "📍 Búsqueda Instantánea en Directorio" in resp_ia_text or "Búsqueda Instantánea en Directorio" in resp_ia_text:
+                        partes_excel = resp_ia_text.split("\n")
+                        campos_ui_hist = []
+                        for line_ex in partes_excel:
+                            if line_ex.startswith("📍 Búsqueda Instantánea") or line_ex.startswith("Búsqueda Instantánea"):
+                                continue
+                            elif ":" in line_ex:
+                                clave_ex, val_ex = line_ex.split(":", 1)
+                                campos_ui_hist.append(
+                                    ft.Row([
+                                        ft.Text(f"🔹 {clave_ex.replace('🔹', '').strip()}:", color="#D8B4FE", weight="bold", size=13),
+                                        ft.Text(val_ex.strip(), color="white", size=13, selectable=True),
+                                    ], spacing=5, wrap=True)
+                                )
+                            elif line_ex.strip():
+                                is_src = line_ex.startswith("📄 Fuente:")
+                                campos_ui_hist.append(ft.Text(line_ex.strip(), color="#888888" if is_src else "white", size=11 if is_src else 13, italic=is_src))
+
+                        chat_display.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
+                                        ft.Text("Búsqueda Instantánea en Directorio (0 Tokens)", color="#D8B4FE", weight="bold", size=14),
+                                    ], spacing=8),
+                                    ft.Divider(height=1, color="#333355"),
+                                    *campos_ui_hist,
+                                ], spacing=4),
+                                bgcolor="#1F1F30",
+                                padding=12,
+                                border_radius=10,
+                                border=ft.Border.all(1, "#D8B4FE33"),
+                            )
                         )
-                    )
+                    else:
+                        chat_display.controls.append(
+                            ft.Container(
+                                content=ft.Row([
+                                    ft.Container(
+                                        content=ft.Image(src=avatar_luxo_base64, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if avatar_luxo_base64 else ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
+                                        width=35,
+                                        height=35,
+                                        border_radius=17.5,
+                                        bgcolor="#2A1B4E",
+                                        alignment=ft.alignment.Alignment(0, 0),
+                                        border=ft.Border.all(1.5, "#D8B4FE"),
+                                    ),
+                                    ft.Markdown(f"**LUXO:** {resp_ia_text}", expand=True, selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)
+                                ], vertical_alignment="start", spacing=10),
+                                bgcolor="#0F0F1A",
+                                padding=10,
+                                border_radius=10
+                            )
+                        )
+                        
+                        id_man_hist = row.get("ID_Manual")
+                        nombre_pdf_hist = None
+                        if id_man_hist:
+                            nombre_pdf_hist = obtener_pdf_assets(id_man_hist)
+                        elif "Fuente:" in resp_ia_text:
+                            m_pdf = re.search(r"Fuente:\s*([^\n\r]+)", resp_ia_text)
+                            if m_pdf:
+                                nombre_pdf_hist = m_pdf.group(1).strip()
+                                
+                        if nombre_pdf_hist:
+                            import urllib.parse as _up3
+                            nombre_quoted = _up3.quote(nombre_pdf_hist)
+                            url_dl = f"/dl?file={nombre_quoted}&original={nombre_quoted}"
+                            url_view = f"/temp_pdfs/{nombre_quoted}"
+                            
+                            chat_display.controls.append(
+                                ft.Container(
+                                    content=ft.Column([
+                                        ft.Row([
+                                            ft.Icon(ft.Icons.PICTURE_AS_PDF, color="#D8B4FE"),
+                                            ft.Text(f"{nombre_pdf_hist}", color="white", weight="bold", size=13),
+                                        ], spacing=8),
+                                        ft.Row([
+                                            ft.ElevatedButton(
+                                                content=ft.Row([ft.Icon(ft.Icons.REMOVE_RED_EYE, size=16), ft.Text("Visualizar", size=12)], spacing=4),
+                                                on_click=lambda e, u=url_view: page.launch_url(u),
+                                                bgcolor="#6B46C1", color="white"
+                                            ),
+                                            ft.ElevatedButton(
+                                                content=ft.Row([ft.Icon(ft.Icons.FILE_DOWNLOAD, size=16), ft.Text("Descargar", size=12)], spacing=4),
+                                                on_click=lambda e, u=url_dl: page.launch_url(u),
+                                                bgcolor="#2B6CB0", color="white"
+                                            ),
+                                        ], spacing=10)
+                                    ], spacing=6),
+                                    bgcolor="#1A1A2E",
+                                    padding=10,
+                                    border_radius=8,
+                                    border=ft.Border.all(1, "#9D50BB55")
+                                )
+                            )
         except Exception as e:
             print("ERROR AL CARGAR HISTORIAL EN LA UI:", e)
 
