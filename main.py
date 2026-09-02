@@ -5962,46 +5962,62 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                             )
                         )
                     else:
+                        conv_id_hist = row.get("ID_Conversacion")
+                        fb_container_hist = ft.Container(alignment=ft.alignment.Alignment(-1, 0), expand=True)
+
+                        def on_thumbs_up_hist(ev, cid=conv_id_hist, fcont=fb_container_hist):
+                            if cid:
+                                registrar_feedback(cid, True, "", fcont)
+                                mostrar_snack("¡Gracias por calificar la respuesta!", color="#7CFC00")
+                                page.update()
+
+                        def on_thumbs_down_hist(ev, cid=conv_id_hist, fcont=fb_container_hist):
+                            if cid:
+                                registrar_feedback(cid, False, "", fcont)
+                                mostrar_snack("Gracias por tu retroalimentación", color="#FF4500")
+                                page.update()
+
                         def crear_spk_btn_hist(txt_speak):
                             btn_spk_h = ft.IconButton(icon=ft.Icons.VOLUME_UP_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Escuchar respuesta")
                             btn_p_h = ft.IconButton(icon=ft.Icons.PAUSE_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Pausar/Reanudar", disabled=True)
                             
                             def spk_click_h(e):
+                                txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt_speak).replace("\n", " ").replace('"', '').replace("'", '').strip()
+                                if len(txt_clean_speech) > 600:
+                                    txt_clean_speech = txt_clean_speech[:600] + "..."
                                 if page.web:
                                     try:
-                                        import json as _json_tts
-                                        txt_clean_speech = re.sub(r"\*+", "", txt_speak).replace("#", "").strip()
-                                        js_code = f"""
-                                        if ('speechSynthesis' in window) {{
-                                            if (window.speechSynthesis.speaking) {{
-                                                window.speechSynthesis.cancel();
-                                            }} else {{
-                                                var utter = new SpeechSynthesisUtterance({_json_tts.dumps(txt_clean_speech)});
-                                                utter.lang = 'es-MX';
-                                                window.speechSynthesis.speak(utter);
-                                            }}
-                                        }}
-                                        """
-                                        page.run_task(lambda: page.run_javascript(js_code))
+                                        js_code = f"javascript:(function(){{ if('speechSynthesis' in window){{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance('{txt_clean_speech}'); u.lang='es-MX'; window.speechSynthesis.speak(u); }} }})()"
+                                        page.launch_url(js_code)
                                     except Exception as ex_wtts:
                                         print("Web TTS error:", ex_wtts)
                                         start_speak(txt_speak, btn_spk_h, btn_p_h)
                                 else:
                                     start_speak(txt_speak, btn_spk_h, btn_p_h)
                                     
+                            def pause_click_h(e):
+                                if page.web:
+                                    try:
+                                        page.launch_url("javascript:(function(){ if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); } })()")
+                                    except Exception: pass
+                                else:
+                                    toggle_pause_speak()
+
                             btn_spk_h.on_click = spk_click_h
+                            btn_p_h.on_click = pause_click_h
                             return btn_spk_h, btn_p_h
 
                         b_spk_h, b_pause_h = crear_spk_btn_hist(resp_ia_text)
                         
                         fb_row_hist = ft.Row([
                             ft.Text("¿Te sirvió?", color="#aaaaaa", size=10),
-                            ft.IconButton(icon=ft.Icons.THUMB_UP_OUTLINED, icon_size=14, icon_color="#7CFC00", tooltip="Sí, fue útil"),
-                            ft.IconButton(icon=ft.Icons.THUMB_DOWN_OUTLINED, icon_size=14, icon_color="#FF4500", tooltip="No fue útil"),
+                            ft.IconButton(icon=ft.Icons.THUMB_UP_OUTLINED, icon_size=14, icon_color="#7CFC00", tooltip="Sí, fue útil", on_click=on_thumbs_up_hist),
+                            ft.IconButton(icon=ft.Icons.THUMB_DOWN_OUTLINED, icon_size=14, icon_color="#FF4500", tooltip="No fue útil", on_click=on_thumbs_down_hist),
                             ft.Text("|", color="#444466", size=10),
                             b_spk_h,
                             b_pause_h
                         ], spacing=2, alignment="start", vertical_alignment="center", wrap=False)
+                        fb_container_hist.content = fb_row_hist
 
                         chat_display.controls.append(
                             ft.Container(
@@ -6020,7 +6036,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                     ], vertical_alignment="start", spacing=10),
                                     ft.Row([
                                         ft.Container(width=45),
-                                        fb_row_hist
+                                        fb_container_hist
                                     ])
                                 ], spacing=4),
                                 bgcolor="#0F0F1A",
@@ -6042,7 +6058,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                             import urllib.parse as _up3
                             nombre_quoted = _up3.quote(nombre_pdf_hist)
                             url_dl = f"/dl?file={nombre_quoted}&original={nombre_quoted}"
-                            url_view = f"/temp_pdfs/{nombre_quoted}"
                             
                             chat_display.controls.append(
                                 ft.Container(
@@ -6050,17 +6065,23 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                         ft.Row([
                                             ft.Icon(ft.Icons.PICTURE_AS_PDF, color="#D8B4FE"),
                                             ft.Text(f"{nombre_pdf_hist}", color="white", weight="bold", size=13),
-                                        ], spacing=8),
+                                        ], spacing=5),
                                         ft.Row([
                                             ft.ElevatedButton(
-                                                content=ft.Row([ft.Icon(ft.Icons.REMOVE_RED_EYE, size=16), ft.Text("Visualizar", size=12)], spacing=4),
-                                                on_click=lambda e, u=url_view: page.launch_url(u),
-                                                bgcolor="#6B46C1", color="white"
+                                                t("view_pdf"),
+                                                icon=ft.Icons.VISIBILITY,
+                                                on_click=lambda e, s=nombre_pdf_hist, d=nombre_pdf_hist: abrir_visor_modal_global(s, d),
+                                                bgcolor="#6E48AA",
+                                                color="white",
+                                                expand=True
                                             ),
                                             ft.ElevatedButton(
-                                                content=ft.Row([ft.Icon(ft.Icons.FILE_DOWNLOAD, size=16), ft.Text("Descargar", size=12)], spacing=4),
-                                                on_click=lambda e, u=url_dl: page.launch_url(u),
-                                                bgcolor="#2B6CB0", color="white"
+                                                t("download_pdf"),
+                                                icon=ft.Icons.DOWNLOAD,
+                                                url=url_dl,
+                                                bgcolor="#204870",
+                                                color="white",
+                                                expand=True
                                             ),
                                         ], spacing=10)
                                     ], spacing=6),
@@ -7891,22 +7912,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     
                     def handle_speaker_click(e, txt=respuesta, bs=btn_speaker, bpp=btn_play_pause):
                         nonlocal current_speak_btn_speaker
+                        txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt).replace("\n", " ").replace('"', '').replace("'", '').strip()
+                        if len(txt_clean_speech) > 600:
+                            txt_clean_speech = txt_clean_speech[:600] + "..."
                         if page.web:
                             try:
-                                import json as _json_tts
-                                txt_clean_speech = re.sub(r"\*+", "", txt).replace("#", "").strip()
-                                js_code = f"""
-                                if ('speechSynthesis' in window) {{
-                                    if (window.speechSynthesis.speaking) {{
-                                        window.speechSynthesis.cancel();
-                                    }} else {{
-                                        var utter = new SpeechSynthesisUtterance({_json_tts.dumps(txt_clean_speech)});
-                                        utter.lang = 'es-MX';
-                                        window.speechSynthesis.speak(utter);
-                                    }}
-                                }}
-                                """
-                                page.run_task(lambda: page.run_javascript(js_code))
+                                js_code = f"javascript:(function(){{ if('speechSynthesis' in window){{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance('{txt_clean_speech}'); u.lang='es-MX'; window.speechSynthesis.speak(u); }} }})()"
+                                page.launch_url(js_code)
                             except Exception as ex_web_tts:
                                 print("Web TTS error:", ex_web_tts)
                                 start_speak(txt, bs, bpp)
@@ -7919,8 +7931,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     def handle_play_pause_click(e):
                         if page.web:
                             try:
-                                js_pause = "if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); }"
-                                page.run_task(lambda: page.run_javascript(js_pause))
+                                page.launch_url("javascript:(function(){ if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); } })()")
                             except Exception: pass
                         else:
                             toggle_pause_speak()
