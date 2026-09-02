@@ -7438,7 +7438,7 @@ Al responder CUALQUIER consulta del usuario sobre manuales o procedimientos, NO 
 
 1. DEDUCCIÓN DE LA PREGUNTA DIRECTA Y RESPONSABILIDAD:
    - Responde de forma clara y directa respondiendo primero a la intención principal de la duda (ej. si preguntan "¿Es importante X?", analiza el impacto del procedimiento y responde primero si es indispensable o no, explicando el por qué).
-   - Diferencia siempre la RESPONSABILIDAD DEL CLIENTE (conservación de tickets, plazos, empaques, acta de denuncia) de las ACCIONES DE CORTESÍA DEL ASESOR (ayudas facultativas en Ciao, rastreos por correo mas no obligatorios).
+   - REGLA INVIOLABLE DE TICKET Y CORTESÍA: El ticket de compra es 100% OBLIGATORIO para realizar cualquier cambio o devolución en Ciao. Queda estrictamente PROHIBIDO sugerir que un cambio o devolución se puede hacer sin ticket. La ÚNICA alternativa de cortesía de servicio al cliente consiste en APOYAR AL CLIENTE BUSCANDO O REIMPRIMIENDO EL TICKET en el sistema Ciao usando su correo electrónico (o direccionarlo a Atención a Clientes con la fecha exacta y tienda para solicitar reimpresión).
 
 2. SÍNTESIS DE MÚLTIPLES CASOS / MANUALES POR ESCENARIOS:
    - Si la consulta involucra múltiples situaciones o si encuentras varios casos o manuales relacionados en la sección "DOCUMENTOS / MANUALES", NO descartes ninguno. Organiza la respuesta dividiéndola por ESCENARIOS O CASOS CLAVE (ejemplo: Escenario A, Escenario B, Escenario C).
