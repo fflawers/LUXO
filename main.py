@@ -7869,6 +7869,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ])
                 ]
 
+                last_msg = user_text_clean if 'user_text_clean' in locals() else ""
                 if matched_asset and any(k in last_msg for k in ["guía visual", "guia visual", "diagrama", "imagen", "foto", "exhibición", "exhibicion", "demostración"]):
                     luxo_column_controls.append(
                         ft.Container(
@@ -8080,7 +8081,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             "input_msg": input_msg,
             "enviar_mensaje": enviar_mensaje,
             "page": page,
-            "is_mobile": is_mobile_w
+            "is_mobile": (getattr(page, "width", None) and page.width < 800) or False
         }
         if user_info.get("id"):
             active_sessions[user_info["id"]] = sess_data
@@ -13608,9 +13609,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         # DISEÑO DEL DASHBOARD (BARRA LATERAL Y CONTENIDO DINÁMICO)
         # =================================
 
+        is_mobile_w = (getattr(page, "width", None) and page.width < 800) or False
         content_area = ft.Container(
             expand=True,
-            padding=8 if is_mobile else 20,
+            padding=8 if is_mobile_w else 20,
             bgcolor="#070914",
             border_radius=15,
             border=ft.Border.all(1.5, "#E040FB"),
@@ -20661,6 +20663,8 @@ Ejemplo:
                     # Cerrar el menú lateral en móviles al cambiar de vista
                     if getattr(page, "width", None) and page.width < 800:
                         sidebar.visible = False
+                        if 'sidebar_drawer' in locals() and sidebar_drawer:
+                            sidebar_drawer.visible = False
                 except Exception as ex:
                     print(f"❌ Error cambiando a vista {vista}:", ex)
                     import traceback
@@ -21021,9 +21025,44 @@ Ejemplo:
             ]
         )
 
-        def toggle_sidebar(e):
-            sidebar.visible = not sidebar.visible
-            page.update()
+        sidebar_drawer = ft.Container(
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Text("MENÚ DE NAVEGACIÓN LUXO", color="#00FFFF", weight="bold", size=13),
+                        ft.IconButton(ft.Icons.CLOSE, icon_color="#00FFFF", on_click=lambda e: toggle_sidebar(e), tooltip="Cerrar Menú")
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    ft.Divider(height=10, color="#00FFFF"),
+                    ft.Container(
+                        content=sidebar,
+                        expand=True
+                    )
+                ], spacing=10),
+                width=300,
+                padding=10,
+                bgcolor="#090B16",
+                border_radius=15,
+                border=ft.Border.all(1.5, "#00FFFF")
+            ),
+            expand=True,
+            bgcolor="#000000B3",
+            visible=False
+        )
+
+        def toggle_sidebar(e=None):
+            is_mob = (getattr(page, "width", None) and page.width < 800) or False
+            if is_mob:
+                sidebar.visible = True
+                sidebar.width = 280
+                sidebar_drawer.visible = not sidebar_drawer.visible
+            else:
+                sidebar.width = 240
+                sidebar.visible = not sidebar.visible
+                sidebar_drawer.visible = False
+            try:
+                page.update()
+            except Exception:
+                pass
 
         btn_global_master_refresh = ft.Container(
             content=ft.Row([
@@ -21508,11 +21547,23 @@ Ejemplo:
             content_area
         ], expand=True, spacing=0)
 
-        dashboard_layout = ft.Row([
-            sidebar,
-            ft.VerticalDivider(width=1, color="#00FFFF"),
-            right_area
-        ], expand=True, spacing=12)
+        is_mobile = (getattr(page, "width", None) and page.width < 800) or False
+        sidebar.width = 280 if is_mobile else 240
+        sidebar.visible = True
+        sidebar_drawer.visible = False
+
+        if is_mobile:
+            top_appbar.visible = True
+            dashboard_layout = ft.Stack([
+                right_area,
+                sidebar_drawer
+            ], expand=True)
+        else:
+            dashboard_layout = ft.Row([
+                sidebar,
+                ft.VerticalDivider(width=1, color="#00FFFF"),
+                right_area
+            ], expand=True, spacing=12)
 
         page.controls.clear()
         page.bgcolor = "#05070D"
