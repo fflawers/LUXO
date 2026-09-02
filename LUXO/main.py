@@ -277,7 +277,10 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
                         if "choices" in data and data["choices"]:
                             txt = data["choices"][0]["message"]["content"]
                             if txt and "<think>" in txt:
-                                txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
+                                if "</think>" in txt:
+                                    txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
+                                else:
+                                    txt = re.sub(r"<think>.*", "", txt, flags=re.DOTALL).strip()
                             return True, txt, 200
                     elif res.status_code in (401, 403):
                         ultimo_error = f"Clave API no autorizada ({res.status_code})"
@@ -7421,10 +7424,12 @@ INSTRUCCIÓN CLAVE DE CONTEXTO DE USUARIO:
 3. Está terminantemente PROHIBIDO redactar respuestas con tono de servicio de atención al cliente final o promesas de experiencia de compra (ej. "estamos aquí para que tengas una experiencia inolvidable", "te ayudamos con tu compra").
 4. Debes dirigirte al usuario como empleado/gerente y proveer únicamente las instrucciones y protocolos técnicos y operativos detallados en los manuales para el personal.
 
-INSTRUCCIÓN DE FORMATO DIRECTO EN LA PRIMERA LÍNEA (MANDATORIO):
-1. La PRIMERA LÍNEA de tu respuesta debe ser la RESPUESTA O DEFINICIÓN DIRECTA EN NEGRITA (Resumen Ejecutivo) respondiendo la duda del usuario al instante sin dar rodeos.
-2. NUNCA incluyas la frase "DOCUMENTO:", "CONTENIDO DE REFERENCIA:", ni etiquetas técnicas de los manuales en tu respuesta al usuario.
-3. Desglosa los detalles o pasos a seguir en puntos enumerados limpios con tamaño de texto normal.
+INSTRUCCIÓN DE ADAPTACIÓN DINÁMICA DE LONGITUD Y FORMATO DIRECTO:
+1. La PRIMERA LÍNEA de tu respuesta debe ser la RESPUESTA O DEFINICIÓN DIRECTA EN NEGRITA (Resumen Ejecutivo) respondiendo la duda al instante sin dar rodeos.
+2. ADAPTACIÓN SEGÚN EL TIPO DE CONSULTA:
+   - Para políticas de garantías oficiales, procedimientos de devolución, siniestros o cortes de caja: Entregar la información técnica completa y todos los casos oficiales requeridos.
+   - Para dudas de conceptos, métricas o preguntas puntuales (ej. AUR, PPT, importancia de tarifa): Da un MÁXIMO de 2 a 3 puntos breves de 2 líneas cada uno sin redactar textos enciclopédicos.
+3. NUNCA incluyas la frase "DOCUMENTO:", "CONTENIDO DE REFERENCIA:", ni etiquetas técnicas del sistema.
 
 ══════════════════════════════════════════════════════════
 MOTOR DE RAZONAMIENTO LÓGICO UNIVERSAL Y DEDUCCIÓN POR ESCENARIOS
@@ -7503,8 +7508,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         ok_api, resp_api, status_api = consultar_groq_api(mensajes_api, system_prompt=mensaje_sistema["content"], timeout=15, modo="chat")
                         if ok_api and resp_api:
                             respuesta = resp_api
-                            if "<think>" in respuesta:
-                                respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
+                            if respuesta and "<think>" in respuesta:
+                                if "</think>" in respuesta:
+                                    respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
+                                else:
+                                    respuesta = re.sub(r"<think>.*", "", respuesta, flags=re.DOTALL).strip()
                             if respuesta:
                                 respuesta = re.sub(r"\\\[\s*", "", respuesta)
                                 respuesta = re.sub(r"\s*\\\]", "", respuesta)
@@ -7512,10 +7520,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 respuesta = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"\1 / \2", respuesta)
                         else:
                             respuesta = "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
-                    except Exception as re_err:
-                        print("API REQUEST EXCEPTION:", re_err)
-                        ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt="Eres LUXO, asistente operativo Sunglass Hut.", timeout=10, modo="chat")
-                        respuesta = resp_fb if (ok_fb and resp_fb) else "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
                     except Exception as re_err:
                         print("API REQUEST EXCEPTION:", re_err)
                         ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt="Eres LUXO, asistente operativo Sunglass Hut.", timeout=10, modo="chat")
