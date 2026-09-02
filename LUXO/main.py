@@ -261,9 +261,6 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
             else:
                 target_url = URL_GROQ
                 modelos_to_use = ["groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b"]
-                env_model = os.getenv("GROQ_MODEL", "").strip() or globals().get("GROQ_MODEL", "").strip()
-                if env_model and env_model not in modelos_to_use and "compound" not in env_model:
-                    modelos_to_use.insert(0, env_model)
 
             # Probar los modelos disponibles de la llave
             for mod in modelos_to_use:
@@ -282,15 +279,15 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
                             if txt and "<think>" in txt:
                                 txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
                             return True, txt, 200
-                    elif res.status_code in (401, 403, 429):
-                        ultimo_error = f"Clave API no autorizada o cuota excedida ({res.status_code})"
+                    elif res.status_code in (401, 403):
+                        ultimo_error = f"Clave API no autorizada ({res.status_code})"
                         break
                     else:
                         ultimo_error = f"Error HTTP {res.status_code}: {res.text[:100]}"
-                        break
+                        continue
                 except Exception as ex:
                     ultimo_error = f"Excepción de red: {ex}"
-                    break
+                    continue
 
     # 2. Respaldo a la API de Gemini si los anteriores no respondieron 200
     gem_key = os.getenv("GEMINI_API_KEY", "") or globals().get("GEMINI_API_KEY", "")
