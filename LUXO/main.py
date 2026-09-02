@@ -6418,12 +6418,9 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 chats_fallidos = cursor.fetchall()
                 db.close()
 
-                # =======================================================
-                # 3. INTENT ROUTING: Descarga directa de archivos y Desambiguación Inteligente
-                # =======================================================
-                palabras_descarga = {"pdf", "archivo", "formato", "documento", "descargar", "manual", "video", "imagen", "excel", "foto", "ficha", "contrato", "aviso", "renuncia", "alta", "politica", "politicas"}
-                user_words = set(user_text_norm.split())
-                intencion_descarga = bool(user_words.intersection(palabras_descarga)) or any(w in user_text_norm for w in ["tienes", "pasa", "pasame", "dame", "muestrame", "consigue", "trae", "busca", "buscame", "necesito"])
+                # Solicitud explícita de archivo PDF o descarga directa de documento
+                palabras_descarga = {"pdf", "descargar", "descarga", "bajar"}
+                intencion_descarga = ("pdf" in user_text_norm or "descargar" in user_text_norm or "descarga" in user_text_norm) and any(w in user_text_norm for w in ["pasame", "dame", "muestrame", "descargar", "ver", "mandame", "quiero", "necesito", "tienes", "pdf", "manual", "formato", "archivo", "documento"])
                 
                 if intencion_descarga:
                     stop_words = {
@@ -6805,12 +6802,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     idf_dict = RAG_IDF_CACHE or {}
                     excel_cache = list(RAG_EXCEL_CACHE) if RAG_EXCEL_CACHE else []
 
-                # --- ⚡ MOTOR DE BÚSQUEDA DIRECTO EN PYTHON PARA EXCEL (0 TOKENS) ---
-                print(f"[EXCEL-DEBUG] excel_cache len={len(excel_cache)}, query_palabras={query_palabras}")
-                # Verificar si la consulta busca datos estructurados
-                palabras_clave_excel = ["telefono", "gerente", "direccion", "tienda", "correo", "numero", "directorio"]
-                raices_clave = [obtener_raiz_espanol(p) for p in palabras_clave_excel]
-                es_consulta_excel = any(obtener_raiz_espanol(w) in raices_clave for w in query_palabras)
+                # Solicitud explícita de datos de directorio de sucursal (teléfono, gerente, dirección de tienda X)
+                es_consulta_excel = any(p in user_text_norm for p in ["telefono", "gerente", "direccion", "directorio", "correo de tienda"]) or bool(re.search(r"tienda\s+\d+", user_text_norm)) or bool(re.search(r"sucursal\s+\d+", user_text_norm))
                 print(f"[EXCEL-DEBUG] es_consulta_excel={es_consulta_excel}")
                 
                 if es_consulta_excel and excel_cache:
