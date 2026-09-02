@@ -5846,8 +5846,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         chat_display = ft.ListView(
             expand=True,
-            spacing=10,
-            padding=20,
+            spacing=8,
+            padding=ft.Padding(left=4, top=8, right=4, bottom=8),
             auto_scroll=True
         )
 
@@ -5863,27 +5863,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         clean_name = raw_n.split("(")[0].replace("SUCURSAL", "").replace("Sucursal", "").replace("TIENDA", "").replace("Tienda", "").strip()
         first_name = clean_name.split(" ")[0] if clean_name else "Interlomas"
-        
-        chat_display.controls.append(
-            ft.Container(
-                content=ft.Row([
-                    ft.Container(
-                        content=ft.Image(src=avatar_luxo_base64, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if avatar_luxo_base64 else ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
-                        width=35,
-                        height=35,
-                        border_radius=17.5,
-                        bgcolor="#2A1B4E",
-                        alignment=ft.alignment.Alignment(0, 0),
-                        border=ft.Border.all(1.5, "#D8B4FE"),
-                    ),
-                    ft.Text(f"LUXO: ¡Hola, {first_name}! 👋 Bienvenid@ a LUXO. ¿En qué te puedo ayudar el día de hoy?", color="white", weight="bold", expand=True, selectable=True),
-                ], vertical_alignment="start", spacing=10),
-                bgcolor="#1E1E2E",
-                padding=12,
-                border_radius=10,
-                border=ft.Border.all(1, "#D8B4FE")
-            )
-        )
         
         # Historial de conversación en memoria para enviar al LLM
 
@@ -6345,7 +6324,57 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 )
             )
             input_msg.value = ""
+
+            # 1. ATAJO INSTANTÁNEO PARA SALUDOS CORTOS (<0.01s)
+            user_text_clean = normalizar_texto(user_text)
+            if user_text_clean in ["hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "que tal", "saludos", "hola luxo", "hola lujo"]:
+                resp_instant = "¡Hola! 👋 Soy **LUXO**, tu asistente inteligente de Sunglass Hut. Estoy aquí para apoyarte con cualquier duda de procedimientos en tienda, cortes de caja, políticas de garantía oficiales y consulta de manuales en PDF. ¿En qué te ayudo hoy?"
+                chat_display.controls.append(
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Container(
+                                content=fv.Video(
+                                    playlist=[fv.VideoMedia(video_chat_url)],
+                                    playlist_mode=fv.PlaylistMode.LOOP,
+                                    autoplay=True,
+                                    muted=True,
+                                    controls=None,
+                                    expand=True,
+                                    fit=ft.BoxFit.COVER,
+                                    filter_quality=ft.FilterQuality.HIGH,
+                                ) if video_chat_exists else (
+                                    ft.Image(src=avatar_luxo_base64, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if avatar_luxo_base64 else ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20)
+                                ),
+                                width=40,
+                                height=40,
+                                border_radius=20,
+                                clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                                border=ft.Border.all(1.5, "#00FFFF"),
+                            ),
+                            ft.Markdown(f"**LUXO:** {resp_instant}", expand=True, selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB),
+                        ], vertical_alignment="start", spacing=10),
+                        bgcolor="#0F0F1A",
+                        padding=ft.Padding(left=8, top=10, right=8, bottom=10),
+                        border_radius=10
+                    )
+                )
+                page.update()
+                return
+
+            # 2. INDICADOR DE CARGA INMEDIATO EN 0.01s PARA OTRAS CONSULTAS
+            temp_loader = ft.Container(
+                content=ft.Row([
+                    ft.ProgressRing(width=16, height=16, stroke_width=2, color="#00FFFF"),
+                    ft.Text("LUXO está buscando en los manuales...", color="#00FFFF", size=13, italic=True)
+                ], spacing=10),
+                bgcolor="#0F0F1A",
+                padding=ft.Padding(left=8, top=10, right=8, bottom=10),
+                border_radius=10
+            )
+            chat_display.controls.append(temp_loader)
             page.update()
+            import time
+            time.sleep(0.05)
 
             try:
                 db = conectar_db()
@@ -7832,7 +7861,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             clip_behavior=ft.ClipBehavior.HARD_EDGE,
                             border=ft.Border.all(1.5, "#00FFFF"),
                         ),
-                        ft.Text(f"LUXO: {respuesta}", color="white", weight="bold", expand=True, selectable=True),
+                        ft.Markdown(f"**LUXO:** {respuesta}", expand=True, selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB),
                     ], vertical_alignment="start", spacing=10),
                     ft.Row([
                         ft.Container(width=60),
@@ -7840,8 +7869,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ])
                 ]
 
-
-                if matched_asset:
+                if matched_asset and any(k in last_msg for k in ["guía visual", "guia visual", "diagrama", "imagen", "foto", "exhibición", "exhibicion", "demostración"]):
                     luxo_column_controls.append(
                         ft.Container(
                             content=ft.Column([
@@ -7856,11 +7884,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         )
                     )
 
+                if 'temp_loader' in locals() and temp_loader in chat_display.controls:
+                    chat_display.controls.remove(temp_loader)
+
                 chat_display.controls.append(
                     ft.Container(
                         content=ft.Column(luxo_column_controls, spacing=5),
                         bgcolor="#0F0F1A",
-                        padding=10,
+                        padding=ft.Padding(left=8, top=10, right=8, bottom=10),
                         border_radius=10
                     )
                 )
@@ -8605,13 +8636,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     content=ft.SelectionArea(content=chat_display),
                     expand=True,
                     bgcolor="#080812",
-                    border_radius=20,
-                    padding=10,
-                    border=ft.Border.all(2, "#D8B4FE"),
+                    border_radius=16,
+                    padding=ft.Padding(left=4, top=6, right=4, bottom=6),
+                    border=ft.Border.all(1.5, "#D8B4FE"),
                     shadow=[
                         ft.BoxShadow(
                             color="#D8B4FE",
-                            blur_radius=15,
+                            blur_radius=10,
                             spread_radius=1,
                         )
                     ]
