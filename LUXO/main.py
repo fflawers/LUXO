@@ -260,7 +260,7 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
                 modelos_to_use = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct"]
             else:
                 target_url = URL_GROQ
-                modelos_to_use = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+                modelos_to_use = ["groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b"]
                 env_model = os.getenv("GROQ_MODEL", "").strip() or globals().get("GROQ_MODEL", "").strip()
                 if env_model and env_model not in modelos_to_use and "compound" not in env_model:
                     modelos_to_use.insert(0, env_model)
