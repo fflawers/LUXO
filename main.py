@@ -4797,9 +4797,23 @@ def main(page: ft.Page):
                 print("Error ejecutando JS:", ex)
         page.run_task(_exec_js)
 
+    active_web_audio = [None]
+
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
-        run_js("javascript:if('speechSynthesis' in window){window.speechSynthesis.cancel();} void(0);")
+        
+        if active_web_audio[0]:
+            try:
+                audio_ctrl = active_web_audio[0]
+                audio_ctrl.pause()
+                if audio_ctrl in page.overlay:
+                    page.overlay.remove(audio_ctrl)
+            except Exception: pass
+            active_web_audio[0] = None
+
+        try:
+            run_js("javascript:if('speechSynthesis' in window){window.speechSynthesis.cancel();} void(0);")
+        except Exception: pass
         
         if active_sapi_instance[0]:
             try:
@@ -4858,41 +4872,44 @@ def main(page: ft.Page):
                 pass
 
         try:
-            import re
+            import re, urllib.parse
             clean_text = re.sub(r'[*_#`~>\[\]\(\)]+', '', text)
-            clean_text = clean_text.replace('"', '').replace("'", "").strip()
-            
-            def reproducir_sapi_thread():
+            clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ').strip()
+            if len(clean_text) > 350:
+                clean_text = clean_text[:350] + "..."
+
+            if page.web:
                 try:
-                    import platform
-                    if platform.system() == "Windows":
-                        import win32com.client
-                        import pythoncom
-                        pythoncom.CoInitialize()
-                        speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                        active_sapi_instance[0] = speaker
-                        print(f"🔊 Lectura de voz nativa iniciada: '{clean_text[:60]}...'")
-                        speaker.Speak(clean_text, 1) # 1 = SVSFlagsAsync (asíncrono no bloqueante)
-                    elif platform.system() == "Darwin":
-                        import subprocess
-                        print(f"🔊 Lectura de voz en macOS iniciada: '{clean_text[:60]}...'")
-                        proc = subprocess.Popen(["say", clean_text])
-                        active_sapi_instance[0] = proc
-                except Exception as ex_spk:
-                    print("Error en reproductor nativo:", ex_spk)
+                    quoted = urllib.parse.quote(clean_text)
+                    tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl=es-MX&client=tw-ob&q={quoted}"
+                    audio_ctrl = ft.Audio(src=tts_url, autoplay=True)
+                    active_web_audio[0] = audio_ctrl
+                    page.overlay.append(audio_ctrl)
+                    page.update()
+                except Exception as ex_ft_aud:
+                    print("Error agregando ft.Audio:", ex_ft_aud)
+            else:
+                def reproducir_sapi_thread():
+                    try:
+                        import platform
+                        if platform.system() == "Windows":
+                            import win32com.client
+                            import pythoncom
+                            pythoncom.CoInitialize()
+                            speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                            active_sapi_instance[0] = speaker
+                            speaker.Speak(clean_text, 1)
+                        elif platform.system() == "Darwin":
+                            import subprocess
+                            proc = subprocess.Popen(["say", clean_text])
+                            active_sapi_instance[0] = proc
+                    except Exception as ex_spk:
+                        print("Error en reproductor nativo:", ex_spk)
 
-            # Usar TTS nativo del navegador vía JS para reproducir el audio en el navegador
-            try:
-                safe_text = clean_text.replace("'", "\\'").replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
-                js_code = f"javascript:if('speechSynthesis' in window){{window.speechSynthesis.cancel(); var msg = new SpeechSynthesisUtterance('{safe_text}'); msg.lang='es-MX'; window.speechSynthesis.speak(msg);}}void(0);"
-                ejecutar_js_flet(page, js_code)
-            except Exception as e_ft:
-                print("Error lanzando TTS en JS:", e_ft)
-
-            try:
-                t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
-                t_speak.start()
-            except Exception: pass
+                try:
+                    t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
+                    t_speak.start()
+                except Exception: pass
 
         except Exception as e:
             print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5984,26 +6001,13 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                             btn_p_h = ft.IconButton(icon=ft.Icons.PAUSE_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Pausar/Reanudar", disabled=True)
                             
                             def spk_click_h(e):
-                                txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt_speak).replace("\n", " ").replace("\\", "").replace("'", "\\'").replace('"', '\\"').strip()
-                                if len(txt_clean_speech) > 600:
-                                    txt_clean_speech = txt_clean_speech[:600] + "..."
-                                if page.web:
-                                    try:
-                                        js_code = f"javascript:(function(){{ if('speechSynthesis' in window){{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance('{txt_clean_speech}'); u.lang='es-MX'; window.speechSynthesis.speak(u); }} }})()"
-                                        page.launch_url(js_code)
-                                    except Exception as ex_wtts:
-                                        print("Web TTS error:", ex_wtts)
-                                        start_speak(txt_speak, btn_spk_h, btn_p_h)
+                                if current_speak_btn_speaker == btn_spk_h:
+                                    stop_current_speak()
                                 else:
                                     start_speak(txt_speak, btn_spk_h, btn_p_h)
                                     
                             def pause_click_h(e):
-                                if page.web:
-                                    try:
-                                        page.launch_url("javascript:(function(){ if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); } })()")
-                                    except Exception: pass
-                                else:
-                                    toggle_pause_speak()
+                                stop_current_speak()
 
                             btn_spk_h.on_click = spk_click_h
                             btn_p_h.on_click = pause_click_h
@@ -7914,29 +7918,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     
                     def handle_speaker_click(e, txt=respuesta, bs=btn_speaker, bpp=btn_play_pause):
                         nonlocal current_speak_btn_speaker
-                        txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt).replace("\n", " ").replace("\\", "").replace("'", "\\'").replace('"', '\\"').strip()
-                        if len(txt_clean_speech) > 600:
-                            txt_clean_speech = txt_clean_speech[:600] + "..."
-                        if page.web:
-                            try:
-                                js_code = f"javascript:(function(){{ if('speechSynthesis' in window){{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance('{txt_clean_speech}'); u.lang='es-MX'; window.speechSynthesis.speak(u); }} }})()"
-                                page.launch_url(js_code)
-                            except Exception as ex_web_tts:
-                                print("Web TTS error:", ex_web_tts)
-                                start_speak(txt, bs, bpp)
+                        if current_speak_btn_speaker == bs:
+                            stop_current_speak()
                         else:
-                            if current_speak_btn_speaker == bs:
-                                stop_current_speak()
-                            else:
-                                start_speak(txt, bs, bpp)
+                            start_speak(txt, bs, bpp)
                             
                     def handle_play_pause_click(e):
-                        if page.web:
-                            try:
-                                page.launch_url("javascript:(function(){ if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); } })()")
-                            except Exception: pass
-                        else:
-                            toggle_pause_speak()
+                        stop_current_speak()
 
                     btn_speaker.on_click = handle_speaker_click
                     btn_play_pause.on_click = handle_play_pause_click
