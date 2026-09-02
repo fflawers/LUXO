@@ -6327,8 +6327,16 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
             # 1. ATAJO INSTANTÁNEO PARA SALUDOS CORTOS (<0.01s)
             user_text_clean = normalizar_texto(user_text)
-            if user_text_clean in ["hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "que tal", "saludos", "hola luxo", "hola lujo"]:
+            greetings_es = ["hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "que tal", "saludos", "hola luxo", "hola lujo"]
+            greetings_en = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "hi luxo", "hello luxo"]
+            
+            resp_instant = None
+            if user_text_clean in greetings_es:
                 resp_instant = "¡Hola! 👋 Soy **LUXO**, tu asistente inteligente de Sunglass Hut. Estoy aquí para apoyarte con cualquier duda de procedimientos en tienda, cortes de caja, políticas de garantía oficiales y consulta de manuales en PDF. ¿En qué te ayudo hoy?"
+            elif user_text_clean in greetings_en or any(user_text_clean.startswith(k) for k in ["hi ", "hello ", "hey "]):
+                resp_instant = "Hello! 👋 I'm **LUXO**, your Sunglass Hut intelligent assistant. I'm here to help you with store procedures, register closeouts, warranty policies, and manual lookups. How can I help you today?"
+
+            if resp_instant:
                 chat_display.controls.append(
                     ft.Container(
                         content=ft.Row([
@@ -7404,9 +7412,9 @@ El usuario te está preguntando sobre una pregunta específica de la Trivia.
                             "content": f"""Eres LUXO, asistente operativo inteligente de Sunglass Hut.
 {instruccion_trivia}
 REGLA PRINCIPAL DE IDIOMA (MANDATORIO):
-1. El idioma predeterminado de LUXO es SIEMPRE el ESPAÑOL. Responde SIEMPRE en español fluido, cercano y profesional.
-2. Para saludos o entradas cortas ("hola", "buenas", "que es ppt", "corte", etc.), responde SIEMPRE en ESPAÑOL.
-3. Solamente si el usuario formula su consulta explícitamente en otro idioma (ej: inglés "How do I process a return?"), responde en ese idioma traduciendo los manuales.
+1. Detecta automáticamente el idioma de la consulta del usuario (Español, Inglés, Francés, Italiano, Alemán, Portugués, Chino, etc.).
+2. Responde SIEMPRE en el MISMO IDIOMA en el que el usuario haya escrito su mensaje. Si el usuario te escribe en inglés ("hi my name is moises", "what is ppt", "how do I process a return?"), responde 100% en inglés.
+3. Traduce fielmente la información de los manuales y procedimientos al idioma en el que el usuario formuló su pregunta.
 
 INSTRUCCIÓN CLAVE DE CONTEXTO DE USUARIO:
 1. El usuario de LUXO es SIEMPRE un empleado, asesor de ventas o gerente de tienda de Sunglass Hut (NUNCA es un cliente final).
