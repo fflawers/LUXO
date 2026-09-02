@@ -5962,27 +5962,29 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                             )
                         )
                     else:
-                        conv_id_hist = row.get("ID_Conversacion")
+                        conv_id_hist = row.get("ID_Conversacion") or row.get("id_conversacion") or row.get("ID_CONVERSACION") or row.get("id")
                         fb_container_hist = ft.Container(alignment=ft.alignment.Alignment(-1, 0), expand=True)
 
                         def on_thumbs_up_hist(ev, cid=conv_id_hist, fcont=fb_container_hist):
                             if cid:
                                 registrar_feedback(cid, True, "", fcont)
-                                mostrar_snack("¡Gracias por calificar la respuesta!", color="#7CFC00")
-                                page.update()
+                            fcont.content = ft.Text("¡Gracias por calificar la respuesta!", color="#7CFC00", size=11, italic=True)
+                            mostrar_snack("¡Gracias por calificar la respuesta!", color="#7CFC00")
+                            page.update()
 
                         def on_thumbs_down_hist(ev, cid=conv_id_hist, fcont=fb_container_hist):
                             if cid:
                                 registrar_feedback(cid, False, "", fcont)
-                                mostrar_snack("Gracias por tu retroalimentación", color="#FF4500")
-                                page.update()
+                            fcont.content = ft.Text("Gracias por tu retroalimentación", color="#FF4500", size=11, italic=True)
+                            mostrar_snack("Gracias por tu retroalimentación", color="#FF4500")
+                            page.update()
 
                         def crear_spk_btn_hist(txt_speak):
                             btn_spk_h = ft.IconButton(icon=ft.Icons.VOLUME_UP_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Escuchar respuesta")
                             btn_p_h = ft.IconButton(icon=ft.Icons.PAUSE_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Pausar/Reanudar", disabled=True)
                             
                             def spk_click_h(e):
-                                txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt_speak).replace("\n", " ").replace('"', '').replace("'", '').strip()
+                                txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt_speak).replace("\n", " ").replace("\\", "").replace("'", "\\'").replace('"', '\\"').strip()
                                 if len(txt_clean_speech) > 600:
                                     txt_clean_speech = txt_clean_speech[:600] + "..."
                                 if page.web:
@@ -7912,7 +7914,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     
                     def handle_speaker_click(e, txt=respuesta, bs=btn_speaker, bpp=btn_play_pause):
                         nonlocal current_speak_btn_speaker
-                        txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt).replace("\n", " ").replace('"', '').replace("'", '').strip()
+                        txt_clean_speech = re.sub(r"[\*\_#`]+", "", txt).replace("\n", " ").replace("\\", "").replace("'", "\\'").replace('"', '\\"').strip()
                         if len(txt_clean_speech) > 600:
                             txt_clean_speech = txt_clean_speech[:600] + "..."
                         if page.web:
