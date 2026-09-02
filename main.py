@@ -5962,20 +5962,67 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                             )
                         )
                     else:
+                        def crear_spk_btn_hist(txt_speak):
+                            btn_spk_h = ft.IconButton(icon=ft.Icons.VOLUME_UP_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Escuchar respuesta")
+                            btn_p_h = ft.IconButton(icon=ft.Icons.PAUSE_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Pausar/Reanudar", disabled=True)
+                            
+                            def spk_click_h(e):
+                                if page.web:
+                                    try:
+                                        import json as _json_tts
+                                        txt_clean_speech = re.sub(r"\*+", "", txt_speak).replace("#", "").strip()
+                                        js_code = f"""
+                                        if ('speechSynthesis' in window) {{
+                                            if (window.speechSynthesis.speaking) {{
+                                                window.speechSynthesis.cancel();
+                                            }} else {{
+                                                var utter = new SpeechSynthesisUtterance({_json_tts.dumps(txt_clean_speech)});
+                                                utter.lang = 'es-MX';
+                                                window.speechSynthesis.speak(utter);
+                                            }}
+                                        }}
+                                        """
+                                        page.run_task(lambda: page.run_javascript(js_code))
+                                    except Exception as ex_wtts:
+                                        print("Web TTS error:", ex_wtts)
+                                        start_speak(txt_speak, btn_spk_h, btn_p_h)
+                                else:
+                                    start_speak(txt_speak, btn_spk_h, btn_p_h)
+                                    
+                            btn_spk_h.on_click = spk_click_h
+                            return btn_spk_h, btn_p_h
+
+                        b_spk_h, b_pause_h = crear_spk_btn_hist(resp_ia_text)
+                        
+                        fb_row_hist = ft.Row([
+                            ft.Text("¿Te sirvió?", color="#aaaaaa", size=10),
+                            ft.IconButton(icon=ft.Icons.THUMB_UP_OUTLINED, icon_size=14, icon_color="#7CFC00", tooltip="Sí, fue útil"),
+                            ft.IconButton(icon=ft.Icons.THUMB_DOWN_OUTLINED, icon_size=14, icon_color="#FF4500", tooltip="No fue útil"),
+                            ft.Text("|", color="#444466", size=10),
+                            b_spk_h,
+                            b_pause_h
+                        ], spacing=2, alignment="start", vertical_alignment="center", wrap=False)
+
                         chat_display.controls.append(
                             ft.Container(
-                                content=ft.Row([
-                                    ft.Container(
-                                        content=ft.Image(src=avatar_luxo_base64, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if avatar_luxo_base64 else ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
-                                        width=35,
-                                        height=35,
-                                        border_radius=17.5,
-                                        bgcolor="#2A1B4E",
-                                        alignment=ft.alignment.Alignment(0, 0),
-                                        border=ft.Border.all(1.5, "#D8B4FE"),
-                                    ),
-                                    ft.Markdown(f"**LUXO:** {resp_ia_text}", expand=True, selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)
-                                ], vertical_alignment="start", spacing=10),
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Container(
+                                            content=ft.Image(src=avatar_luxo_base64, width=35, height=35, fit=ft.controls.box.BoxFit.COVER) if avatar_luxo_base64 else ft.Icon(ft.Icons.AUTO_AWESOME, color="#D8B4FE", size=20),
+                                            width=35,
+                                            height=35,
+                                            border_radius=17.5,
+                                            bgcolor="#2A1B4E",
+                                            alignment=ft.alignment.Alignment(0, 0),
+                                            border=ft.Border.all(1.5, "#D8B4FE"),
+                                        ),
+                                        ft.Markdown(f"**LUXO:** {resp_ia_text}", expand=True, selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)
+                                    ], vertical_alignment="start", spacing=10),
+                                    ft.Row([
+                                        ft.Container(width=45),
+                                        fb_row_hist
+                                    ])
+                                ], spacing=4),
                                 bgcolor="#0F0F1A",
                                 padding=10,
                                 border_radius=10
@@ -7844,36 +7891,63 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     
                     def handle_speaker_click(e, txt=respuesta, bs=btn_speaker, bpp=btn_play_pause):
                         nonlocal current_speak_btn_speaker
-                        if current_speak_btn_speaker == bs:
-                            stop_current_speak()
+                        if page.web:
+                            try:
+                                import json as _json_tts
+                                txt_clean_speech = re.sub(r"\*+", "", txt).replace("#", "").strip()
+                                js_code = f"""
+                                if ('speechSynthesis' in window) {{
+                                    if (window.speechSynthesis.speaking) {{
+                                        window.speechSynthesis.cancel();
+                                    }} else {{
+                                        var utter = new SpeechSynthesisUtterance({_json_tts.dumps(txt_clean_speech)});
+                                        utter.lang = 'es-MX';
+                                        window.speechSynthesis.speak(utter);
+                                    }}
+                                }}
+                                """
+                                page.run_task(lambda: page.run_javascript(js_code))
+                            except Exception as ex_web_tts:
+                                print("Web TTS error:", ex_web_tts)
+                                start_speak(txt, bs, bpp)
                         else:
-                            start_speak(txt, bs, bpp)
+                            if current_speak_btn_speaker == bs:
+                                stop_current_speak()
+                            else:
+                                start_speak(txt, bs, bpp)
                             
                     def handle_play_pause_click(e):
-                        toggle_pause_speak()
+                        if page.web:
+                            try:
+                                js_pause = "if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); }"
+                                page.run_task(lambda: page.run_javascript(js_pause))
+                            except Exception: pass
+                        else:
+                            toggle_pause_speak()
 
                     btn_speaker.on_click = handle_speaker_click
                     btn_play_pause.on_click = handle_play_pause_click
 
                     feedback_buttons = ft.Row([
-                        ft.Text("¿Te sirvió la respuesta?", color="#aaaaaa", size=11),
+                        ft.Text("¿Te sirvió?", color="#aaaaaa", size=10),
                         ft.IconButton(
                             icon=ft.Icons.THUMB_UP_OUTLINED,
-                            icon_size=15,
+                            icon_size=14,
                             icon_color="#7CFC00",
                             tooltip="Sí, fue útil",
                             on_click=on_thumbs_up
                         ),
                         ft.IconButton(
                             icon=ft.Icons.THUMB_DOWN_OUTLINED,
-                            icon_size=15,
+                            icon_size=14,
                             icon_color="#FF4500",
                             tooltip="No fue útil",
                             on_click=on_thumbs_down
                         ),
+                        ft.Text("|", color="#444466", size=10),
                         btn_speaker,
                         btn_play_pause
-                    ], spacing=5, alignment="start", vertical_alignment="center", wrap=True)
+                    ], spacing=2, alignment="start", vertical_alignment="center", wrap=False)
                     
                     feedback_container.content = feedback_buttons
 
