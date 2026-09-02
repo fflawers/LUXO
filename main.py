@@ -65,23 +65,48 @@ def rotate_groq_key():
         return True
     return False
 
-def generar_respuesta_simulador_fallback(messages, system_prompt=""):
+def generar_respuesta_simulador_fallback(messages, system_prompt="", modo="chat"):
     prompt_str = str(system_prompt).lower()
     user_msgs = [m.get("content", "").strip() for m in messages if m.get("role") == "user"]
     last_msg = user_msgs[-1].lower() if user_msgs else ""
     user_turn_count = len(user_msgs)
 
-    # Detectar si el vendedor no ha realizado labor de venta (bajo esfuerzo / saludos repetitivos)
-    es_bajo_esfuerzo = False
-    if user_msgs:
-        palabras_clave_ventas = ["polarizado", "garantía", "garantia", "micas", "uv", "descuento", "promoción", "promocion", "precio", "costo", "estuche", "limpieza", "versace", "ray-ban", "oakley", "prada", "persol", "chromance", "meta", "correo", "datos", "registro", "fisionomía", "estilo", "presupuesto", "nombre", "llevo", "tarjeta", "efectivo", "soy", "mucho gusto"]
-        tiene_palabra_clave = any(kw in " ".join(user_msgs).lower() for kw in palabras_clave_ventas)
-        avg_len = sum(len(m) for m in user_msgs) / len(user_msgs)
-        if not tiene_palabra_clave or avg_len < 12:
-            es_bajo_esfuerzo = True
+    # -------------------------------------------------------------
+    # MODO 1: CHAT GENERAL / ASISTENTE OPERATIVO LUXO AI (ESTRICTO: SIN SCORES NI ROLEPLAY)
+    # -------------------------------------------------------------
+    if modo == "chat":
+        if "corte" in last_msg or "caja" in last_msg:
+            return "📋 **Procedimiento de Corte de Caja:**\n1. Ingresa al sistema POS y selecciona 'Corte Parcial / Cierre de Turno'.\n2. Realiza el arqueo físico de efectivo agrupando por denominación.\n3. Imprime la tira de corte z y verifica que los váuchers coincidan con las ventas con tarjeta.\n4. Si hay discrepancia, notifica al Gerente de Tienda antes de realizar el depósito."
+        elif any(k in last_msg for k in ["garantía", "garantia", "póliza", "poliza", "oops", "robo", "ruptura", "ticket", "comprobante"]):
+            if "ticket" in last_msg or "comprobante" in last_msg:
+                return (
+                    "📋 **Regla Oficial sobre Ticket y Comprobantes de Compra:**\n\n"
+                    "1. **Responsabilidad del Cliente:**\n"
+                    "   • Conservar el ticket de compra es **responsabilidad del cliente**. Es el documento fundamental que demuestra que el producto fue adquirido en una tienda oficial Sunglass Hut y respalda la vigencia de la garantía.\n\n"
+                    "2. **Atención de Cortesía del Asesor (Opcional):**\n"
+                    "   • Si el cliente no trae su ticket, el asesor **puede apoyarlo buscando o reimprimiendo la venta en el sistema Ciao mediante su correo electrónico** como una atención de excelente servicio al cliente.\n"
+                    "   • *Nota Operativa:* Esta búsqueda por correo es un gesto de cortesía de servicio al cliente, **mas no es una obligación estricta del asesor**."
+                )
+            return (
+                "🛡️ **Política Oficial de Garantías Sunglass Hut (Promesa de la Gafa Perfecta):**\n\n"
+                "1. **Garantía por Defecto de Fabricación (2 Años):**\n"
+                "   • Cubre defectos de fabricación durante **2 años** con ticket de compra original y accesorios completos.\n"
+                "   • Se llena formato en la app de garantías y se envía a evaluación técnica (duración de 30 a 45 días hábiles).\n"
+                "   • *Nota importante:* Las micas NO están incluidas dentro de la garantía por defecto de fábrica.\n\n"
+                "2. **Coberturas OOPS (Vigencia de 1 Año):**\n"
+                "   • **Garantía por Robo:** El cliente debe presentar el **acta de denuncia** con los datos del ticket + ticket de compra. Se aplica un **50% de descuento** en la pieza de menor valor (la que trae o la que se lleve). Se retiene el acta de denuncia para respaldar el descuento.\n"
+                "   • **Garantía por Ruptura:** El cliente debe traer la pieza dañada (incluso en pedacitos). Se aplica un **50% de descuento** en la pieza de menor valor (misma pieza u otra). Se retiene la pieza dañada para respaldar el descuento.\n\n"
+                "💡 *Consejo Operativo:* Registra siempre el correo del cliente en el sistema CRM al momento del cierre para validar su cobertura en tienda."
+            )
+        elif "hola" in last_msg or "buenas" in last_msg or "qué haces" in last_msg or "quien eres" in last_msg:
+            return "¡Hola! 👋 Soy **LUXO**, tu copiloto operativo inteligente de Sunglass Hut. Estoy aquí para apoyarte con cualquier duda de procedimientos en tienda, cortes de caja, políticas de garantía oficiales y consulta de manuales en PDF. ¿En qué te ayudo hoy?"
+        else:
+            return "¡Hola! Con gusto te apoyo. Como tu asistente operativo LUXO, recuerda que puedes consultarme procedimientos de caja, garantías oficiales, atención a siniestros o consulta de manuales para el piso de tienda. ¿En qué tema necesitas orientación?"
 
-    # CASO 1: EVALUACIÓN DE DESEMPEÑO (AUDITORÍA DE RETROALIMENTACIÓN)
-    if "evaluar" in prompt_str or "score:" in prompt_str or "auditor" in prompt_str or "evaluación" in prompt_str:
+    # -------------------------------------------------------------
+    # MODO 2: EVALUACIÓN DE DESEMPEÑO DE SIMULACIÓN (ROLEPLAY FINALIZADO)
+    # -------------------------------------------------------------
+    if modo == "evaluacion" or (modo != "chat" and ("score:" in prompt_str or "auditor" in prompt_str or "evaluación" in prompt_str)):
         texto_vendedor = " ".join(user_msgs).lower()
         full_text = prompt_str + " " + texto_vendedor
         score = 65
@@ -114,18 +139,17 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
             f"💡 Recomendación del Coach: ¡Excelente trabajo en la simulación! Mantén siempre la regla 80/20 y recuerda ofrecer el kit de limpieza y el registro CRM para maximizar tus métricas en tienda."
         )
 
-    # CASO 3: ASISTENTE OPERATIVO LUXO AI (CHAT VIRTUAL)
-    if "asistente operativo inteligente" in prompt_str or "eres luxo" in prompt_str:
-        if "corte" in last_msg or "caja" in last_msg:
-            return "📋 **Procedimiento de Corte de Caja:**\n1. Ingresa al sistema POS y selecciona 'Corte Parcial / Cierre de Turno'.\n2. Realiza el arqueo físico de efectivo agrupando por denominación.\n3. Imprime la tira de corte z y verifica que los váuchers coincidan con las ventas con tarjeta.\n4. Si hay discrepancia, notifica al Gerente de Tienda antes de realizar el depósito."
-        elif "garantía" in last_msg or "garantia" in last_msg or "póliza" in last_msg or "oops" in last_msg:
-            return "🛡️ **Política de Garantía Sunglass Hut (Póliza Oops):**\n1. La garantía por defecto de fábrica aplica dentro de los primeros 12 meses con ticket original.\n2. Para daño accidental (Póliza Oops), el cliente obtiene el 50% de descuento en la reposición del mismo modelo o equivalente dentro de los primeros 12 meses.\n3. Registra siempre el correo del cliente en el sistema CRM al momento del cierre para validar su cobertura."
-        elif "hola" in last_msg or "buenas" in last_msg or "qué haces" in last_msg or "quien eres" in last_msg:
-            return "¡Hola! 👋 Soy **LUXO**, tu copiloto operativo inteligente de Sunglass Hut. Estoy aquí para apoyarte con cualquier duda de procedimientos en tienda, cortes de caja, políticas de garantía o estrategias de neuroventas. ¿En qué te ayudo hoy?"
-        else:
-            return "¡Hola! Con gusto te apoyo. Como tu asistente operativo LUXO, recuerda que puedes consultarme procedimientos de caja, garantías, atención a siniestros o recomendaciones de neuroventas para el piso de tienda. ¿En qué tema necesitas orientación?"
+    # -------------------------------------------------------------
+    # MODO 3: SIMULACIÓN DE CLIENTE (ROLEPLAY ACTIVO EN SIMULADOR IA)
+    # -------------------------------------------------------------
+    es_bajo_esfuerzo = False
+    if user_msgs:
+        palabras_clave_ventas = ["polarizado", "garantía", "garantia", "micas", "uv", "descuento", "promoción", "promocion", "precio", "costo", "estuche", "limpieza", "versace", "ray-ban", "oakley", "prada", "persol", "chromance", "meta", "correo", "datos", "registro", "fisionomía", "estilo", "presupuesto", "nombre", "llevo", "tarjeta", "efectivo", "soy", "mucho gusto"]
+        tiene_palabra_clave = any(kw in " ".join(user_msgs).lower() for kw in palabras_clave_ventas)
+        avg_len = sum(len(m) for m in user_msgs) / len(user_msgs)
+        if not tiene_palabra_clave or avg_len < 12:
+            es_bajo_esfuerzo = True
 
-    # CASO 4: SIMULACIÓN DE CLIENTE (RESPUESTAS REALISTAS Y HUMANAS CON LENGUAJE NO VERBAL)
     # 1. Si el vendedor se presenta por su nombre
     if ("nombre" in last_msg or "llamas" in last_msg or "quien eres" in last_msg or "mucho gusto" in last_msg or "soy" in last_msg) and user_turn_count <= 2:
         return "*(El cliente sonríe y saluda al vendedor)* \"Mucho gusto. Me llamo Carlos. Estaba viendo estas gafas en la vitrina, pero me gustaría entender qué las hace especiales o qué beneficios tienen para justificar el costo.\""
@@ -186,7 +210,7 @@ def generar_respuesta_simulador_fallback(messages, system_prompt=""):
     return respuestas_variadas[user_turn_count % len(respuestas_variadas)]
 
 
-def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15):
+def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4, modo="chat"):
     """
     Función unificada y ultra-robusta para consultar IA.
     Detecta automáticamente si la clave es de Groq (gsk_) o de OpenRouter (sk-or-) y enruta a la API correcta.
@@ -213,8 +237,7 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
         mensajes_completos.append({"role": "system", "content": system_prompt})
     mensajes_completos.extend(messages)
 
-    ultimo_status = 500
-    ultimo_error = "Error de conexión con la IA"
+    fast_timeout = min(timeout, 2.5)
 
     # 1. Intentar con las llaves disponibles (Groq u OpenRouter)
     if keys:
@@ -225,22 +248,23 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
             }
             if key.startswith("sk-or-"):
                 target_url = "https://openrouter.ai/api/v1/chat/completions"
-                modelos_to_use = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-lite-001", "qwen/qwen-2.5-72b-instruct"]
+                modelos_to_use = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct"]
             else:
                 target_url = URL_GROQ
-                modelos_to_use = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"]
+                modelos_to_use = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
                 env_model = os.getenv("GROQ_MODEL", "").strip() or globals().get("GROQ_MODEL", "").strip()
                 if env_model and env_model not in modelos_to_use and "compound" not in env_model:
                     modelos_to_use.insert(0, env_model)
 
-            for mod in modelos_to_use:
+            # Probar el modelo principal de la llave; si la llave falla/429/401, saltar de inmediato a la siguiente llave
+            for mod in modelos_to_use[:1]:
                 payload = {
                     "model": mod,
                     "messages": mensajes_completos,
                     "temperature": temperature
                 }
                 try:
-                    res = requests.post(target_url, headers=headers, json=payload, timeout=timeout)
+                    res = requests.post(target_url, headers=headers, json=payload, timeout=fast_timeout)
                     ultimo_status = res.status_code
                     if res.status_code == 200:
                         data = res.json()
@@ -249,13 +273,15 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
                             if txt and "<think>" in txt:
                                 txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
                             return True, txt, 200
-                    elif res.status_code in (401, 403):
-                        ultimo_error = f"Clave API no autorizada ({res.status_code})"
+                    elif res.status_code in (401, 403, 429):
+                        ultimo_error = f"Clave API no autorizada o cuota excedida ({res.status_code})"
                         break
                     else:
                         ultimo_error = f"Error HTTP {res.status_code}: {res.text[:100]}"
+                        break
                 except Exception as ex:
                     ultimo_error = f"Excepción de red: {ex}"
+                    break
 
     # 2. Respaldo a la API de Gemini si los anteriores no respondieron 200
     gem_key = os.getenv("GEMINI_API_KEY", "") or globals().get("GEMINI_API_KEY", "")
@@ -283,8 +309,8 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=15
             print("Notice Gemini fallback:", ex_gem)
 
     # 3. Salvaguarda final infalible (Generador Local de Respaldo)
-    txt_fallback = generar_respuesta_simulador_fallback(messages, system_prompt=system_prompt)
-    print("🛡️ Respuesta generada por salvaguarda local infalible de simulador")
+    txt_fallback = generar_respuesta_simulador_fallback(messages, system_prompt=system_prompt, modo=modo)
+    print(f"🛡️ Respuesta generada por salvaguarda local infalible (modo={modo})")
     return True, txt_fallback, 200
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
@@ -7360,7 +7386,21 @@ INSTRUCCIÓN CLAVE DE CONTEXTO DE USUARIO:
 4. Debes dirigirte al usuario como empleado/gerente y proveer únicamente las instrucciones y protocolos técnicos y operativos detallados en los manuales para el personal.
 
 INSTRUCCIÓN DE CONCISIÓN:
-Debes responder de manera directa, concisa y profesional. Queda estrictamente prohibido formular preguntas de aclaración o de sondeo si cuentas con la información en la sección de manuales proporcionada. Ve al grano inmediatamente.
+Debes responder de manera directa, concisa y profesional. Queda strictly prohibido formular preguntas de aclaración o de sondeo si cuentas con la información en la sección de manuales proporcionada. Ve al grano inmediatamente.
+
+══════════════════════════════════════════════════════════
+MOTOR DE RAZONAMIENTO LÓGICO UNIVERSAL Y DEDUCCIÓN POR ESCENARIOS
+══════════════════════════════════════════════════════════
+Al responder CUALQUIER consulta del usuario sobre manuales o procedimientos, NO te limites a hacer una búsqueda de palabras literales. Debes aplicar un razonamiento deductivo estructurado:
+
+1. DEDUCCIÓN DE LA PREGUNTA DIRECTA Y RESPONSABILIDAD:
+   - Responde de forma clara y directa respondiendo primero a la intención principal de la duda (ej. si preguntan "¿Es importante X?", analiza el impacto del procedimiento y responde primero si es indispensable o no, explicando el por qué).
+   - Diferencia siempre la RESPONSABILIDAD DEL CLIENTE (conservación de tickets, plazos, empaques, acta de denuncia) de las ACCIONES DE CORTESÍA DEL ASESOR (ayudas facultativas en Ciao, rastreos por correo mas no obligatorios).
+
+2. SÍNTESIS DE MÚLTIPLES CASOS / MANUALES POR ESCENARIOS:
+   - Si la consulta involucra múltiples situaciones o si encuentras varios casos o manuales relacionados en la sección "DOCUMENTOS / MANUALES", NO descartes ninguno. Organiza la respuesta dividiéndola por ESCENARIOS O CASOS CLAVE (ejemplo: Escenario A, Escenario B, Escenario C).
+   - Para cada escenario, entrega: Situación del Cliente -> Regla Oficial -> Alternativa de Cortesía del Asesor -> Pasos a seguir.
+   - Cita amablemente los manuales o documentos de referencia consultados al final del mensaje.
 
 
 ══════════════════════════════════════════════════════════
@@ -7462,11 +7502,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         else:
                             print("AI CONNECTION ERROR:", res.status_code, res.text)
                             # Si las llamadas de red fallan o dan 413, usar el motor de IA inteligente de respaldo
-                            ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt=mensaje_sistema["content"], timeout=10)
+                            ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt=mensaje_sistema["content"], timeout=10, modo="chat")
                             respuesta = resp_fb if (ok_fb and resp_fb) else "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
                     except Exception as re_err:
                         print("API REQUEST EXCEPTION:", re_err)
-                        ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt="Eres LUXO, asistente operativo Sunglass Hut.", timeout=10)
+                        ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt="Eres LUXO, asistente operativo Sunglass Hut.", timeout=10, modo="chat")
                         respuesta = resp_fb if (ok_fb and resp_fb) else "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
 
 
@@ -15420,12 +15460,12 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                 
                 mensajes_api = chat_history[-6:]
                 
-                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15)
+                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
                 if ok and respuesta:
                     chat_history.append({"role": "assistant", "content": respuesta})
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
                 else:
-                    respuesta_fallback = generar_respuesta_simulador_fallback(mensajes_api, system_prompt)
+                    respuesta_fallback = generar_respuesta_simulador_fallback(mensajes_api, system_prompt, modo="simulador")
                     chat_history.append({"role": "assistant", "content": respuesta_fallback})
                     agregar_mensaje_chat("Cliente", respuesta_fallback, ft.Icons.SUPPORT_AGENT, "#00FFFF")
 
@@ -15509,7 +15549,7 @@ Tu función es evaluar la conversación de venta utilizando estrictamente los pr
 Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. Tu respuesta DEBE comenzar obligatoriamente con el Score en formato 'SCORE: [Número 0-100]'.
 """
                 
-                ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15)
+                ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15, modo="evaluacion")
                 if ok and eval_text:
                     score_val = 70
                     match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
@@ -15578,7 +15618,7 @@ REGLAS PARA TU MENSAJE INICIAL:
 """
                 messages = [{"role": "user", "content": "Hola, buenas tardes."}]
                 
-                ok, respuesta, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=12)
+                ok, respuesta, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=12, modo="simulador")
                 if ok and respuesta:
                     chat_history.append({"role": "user", "content": "Hola, buenas tardes."})
                     chat_history.append({"role": "assistant", "content": respuesta})
