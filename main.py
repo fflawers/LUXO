@@ -101,6 +101,11 @@ def generar_respuesta_simulador_fallback(messages, system_prompt="", modo="chat"
         elif "hola" in last_msg or "buenas" in last_msg or "qué haces" in last_msg or "quien eres" in last_msg:
             return "¡Hola! 👋 Soy **LUXO**, tu copiloto operativo inteligente de Sunglass Hut. Estoy aquí para apoyarte con cualquier duda de procedimientos en tienda, cortes de caja, políticas de garantía oficiales y consulta de manuales en PDF. ¿En qué te ayudo hoy?"
         else:
+            if "DOCUMENTOS / MANUALES" in system_prompt:
+                partes = system_prompt.split("DOCUMENTOS / MANUALES")[-1]
+                if partes and len(partes.strip()) > 50:
+                    primer_bloque = partes.strip()[:600]
+                    return f"📋 **Información Extraída del Manual:**\n\n{primer_bloque}\n\n💡 *Si requieres profundizar en algún paso de este procedimiento, indícamelo.*"
             return "¡Hola! Con gusto te apoyo. Como tu asistente operativo LUXO, recuerda que puedes consultarme procedimientos de caja, garantías oficiales, atención a siniestros o consulta de manuales para el piso de tienda. ¿En qué tema necesitas orientación?"
 
     # -------------------------------------------------------------
@@ -237,7 +242,7 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
         mensajes_completos.append({"role": "system", "content": system_prompt})
     mensajes_completos.extend(messages)
 
-    fast_timeout = min(timeout, 2.5)
+    fast_timeout = max(timeout, 8.0)
 
     # 1. Intentar con las llaves disponibles (Groq u OpenRouter)
     if keys:
@@ -256,8 +261,8 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
                 if env_model and env_model not in modelos_to_use and "compound" not in env_model:
                     modelos_to_use.insert(0, env_model)
 
-            # Probar el modelo principal de la llave; si la llave falla/429/401, saltar de inmediato a la siguiente llave
-            for mod in modelos_to_use[:1]:
+            # Probar los modelos disponibles de la llave
+            for mod in modelos_to_use:
                 payload = {
                     "model": mod,
                     "messages": mensajes_completos,
