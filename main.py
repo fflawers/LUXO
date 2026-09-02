@@ -7509,49 +7509,23 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         historial_filtrado.append({"role": msg["role"], "content": content_trunc})
                     mensajes_api.extend(historial_filtrado)
 
-                    payload = {
-                        "model": GROQ_MODEL,
-                        "messages": mensajes_api,
-                        "temperature": 0.35
-                    }
-
                     try:
-                        headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
-                        res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                        # Si hay error 429 (cuota agotada), rotar a llave de respaldo y reintentar
-                        if res.status_code == 429 and rotate_groq_key():
-                            headers_groq = {"Authorization": f"Bearer {get_groq_key()}", "Content-Type": "application/json"}
-                            res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                        elif res.status_code in (404, 400, 413):
-                            # Si hay error 413 (payload grande) o modelo no activo, probar con modelos livianos
-                            for fallback_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]:
-                                payload["model"] = fallback_model
-                                res = requests.post(URL_GROQ, headers=headers_groq, json=payload, timeout=15)
-                                if res.status_code == 200:
-                                    break
-                        if res.status_code == 200:
-                            try:
-                                data = res.json()
-                                if "choices" in data and data["choices"]:
-                                    respuesta = data["choices"][0]["message"]["content"]
-                                    if respuesta and "<think>" in respuesta:
-                                        respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
-                                    # Formatear fórmulas de LaTeX a texto plano limpio para visualización perfecta en Flet
-                                    if respuesta:
-                                        respuesta = re.sub(r"\\\[\s*", "", respuesta)
-                                        respuesta = re.sub(r"\s*\\\]", "", respuesta)
-                                        respuesta = re.sub(r"\\text\{([^}]+)\}", r"\1", respuesta)
-                                        respuesta = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"\1 / \2", respuesta)
-                                else:
-                                    respuesta = "Ocurrió un error consultando la IA."
-                            except Exception as e:
-                                print("AI PARSE ERROR:", e)
-                                respuesta = "Ocurrió un error consultando la IA."
+                        ok_api, resp_api, status_api = consultar_groq_api(mensajes_api, system_prompt=mensaje_sistema["content"], timeout=15, modo="chat")
+                        if ok_api and resp_api:
+                            respuesta = resp_api
+                            if "<think>" in respuesta:
+                                respuesta = re.sub(r"<think>.*?</think>", "", respuesta, flags=re.DOTALL).strip()
+                            if respuesta:
+                                respuesta = re.sub(r"\\\[\s*", "", respuesta)
+                                respuesta = re.sub(r"\s*\\\]", "", respuesta)
+                                respuesta = re.sub(r"\\text\{([^}]+)\}", r"\1", respuesta)
+                                respuesta = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"\1 / \2", respuesta)
                         else:
-                            print("AI CONNECTION ERROR:", res.status_code, res.text)
-                            # Si las llamadas de red fallan o dan 413, usar el motor de IA inteligente de respaldo
-                            ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt=mensaje_sistema["content"], timeout=10, modo="chat")
-                            respuesta = resp_fb if (ok_fb and resp_fb) else "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
+                            respuesta = "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
+                    except Exception as re_err:
+                        print("API REQUEST EXCEPTION:", re_err)
+                        ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt="Eres LUXO, asistente operativo Sunglass Hut.", timeout=10, modo="chat")
+                        respuesta = resp_fb if (ok_fb and resp_fb) else "¡Hola! Como tu asistente operativo LUXO, con gusto te apoyo. ¿En qué tema operativo o procedimiento necesitas orientación hoy?"
                     except Exception as re_err:
                         print("API REQUEST EXCEPTION:", re_err)
                         ok_fb, resp_fb, _ = consultar_groq_api([{"role": "user", "content": user_text_expandido}], system_prompt="Eres LUXO, asistente operativo Sunglass Hut.", timeout=10, modo="chat")
