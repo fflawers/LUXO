@@ -105,7 +105,11 @@ def generar_respuesta_simulador_fallback(messages, system_prompt="", modo="chat"
                 partes = system_prompt.split("DOCUMENTOS / MANUALES")[-1]
                 if partes and len(partes.strip()) > 50:
                     primer_bloque = partes.strip()[:600]
-                    return f"📋 **Información Extraída del Manual:**\n\n{primer_bloque}\n\n💡 *Si requieres profundizar en algún paso de este procedimiento, indícamelo.*"
+                    for kw in ["# DOCUMENTO / TITULO:", "DOCUMENTO:", "CONTENIDO DE REFERENCIA:", "PROPORCIONADOS:"]:
+                        primer_bloque = primer_bloque.replace(kw, "")
+                    lines_clean = [l.strip() for l in primer_bloque.splitlines() if l.strip()]
+                    texto_limpio = "\n".join(lines_clean[:10])
+                    return f"📋 **Información del Manual:**\n\n{texto_limpio}\n\n💡 *Si requieres profundizar en este procedimiento, indícamelo.*"
             return "¡Hola! Con gusto te apoyo. Como tu asistente operativo LUXO, recuerda que puedes consultarme procedimientos de caja, garantías oficiales, atención a siniestros o consulta de manuales para el piso de tienda. ¿En qué tema necesitas orientación?"
 
     # -------------------------------------------------------------
@@ -256,7 +260,7 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
                 modelos_to_use = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct"]
             else:
                 target_url = URL_GROQ
-                modelos_to_use = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+                modelos_to_use = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
                 env_model = os.getenv("GROQ_MODEL", "").strip() or globals().get("GROQ_MODEL", "").strip()
                 if env_model and env_model not in modelos_to_use and "compound" not in env_model:
                     modelos_to_use.insert(0, env_model)
@@ -7427,8 +7431,10 @@ INSTRUCCIÓN CLAVE DE CONTEXTO DE USUARIO:
 3. Está terminantemente PROHIBIDO redactar respuestas con tono de servicio de atención al cliente final o promesas de experiencia de compra (ej. "estamos aquí para que tengas una experiencia inolvidable", "te ayudamos con tu compra").
 4. Debes dirigirte al usuario como empleado/gerente y proveer únicamente las instrucciones y protocolos técnicos y operativos detallados en los manuales para el personal.
 
-INSTRUCCIÓN DE CONCISIÓN:
-Debes responder de manera directa, concisa y profesional. Queda strictly prohibido formular preguntas de aclaración o de sondeo si cuentas con la información en la sección de manuales proporcionada. Ve al grano inmediatamente.
+INSTRUCCIÓN DE FORMATO DIRECTO EN LA PRIMERA LÍNEA (MANDATORIO):
+1. La PRIMERA LÍNEA de tu respuesta debe ser la RESPUESTA O DEFINICIÓN DIRECTA EN NEGRITA (Resumen Ejecutivo) respondiendo la duda del usuario al instante sin dar rodeos.
+2. NUNCA incluyas la frase "DOCUMENTO:", "CONTENIDO DE REFERENCIA:", ni etiquetas técnicas de los manuales en tu respuesta al usuario.
+3. Desglosa los detalles o pasos a seguir en puntos enumerados limpios con tamaño de texto normal.
 
 ══════════════════════════════════════════════════════════
 MOTOR DE RAZONAMIENTO LÓGICO UNIVERSAL Y DEDUCCIÓN POR ESCENARIOS
