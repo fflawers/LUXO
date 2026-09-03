@@ -4878,14 +4878,28 @@ def main(page: ft.Page):
             if len(clean_text) > 350:
                 clean_text = clean_text[:350] + "..."
 
-            if page.web:
+            if getattr(page, "web", False) or page.web:
                 try:
-                    quoted = urllib.parse.quote(clean_text)
-                    tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl=es-MX&client=tw-ob&q={quoted}"
-                    audio_ctrl = ft.Audio(src=tts_url, autoplay=True)
-                    active_web_audio[0] = audio_ctrl
-                    page.overlay.append(audio_ctrl)
-                    page.update()
+                    import urllib.parse
+                    import hashlib
+                    temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
+                    os.makedirs(temp_audio_dir, exist_ok=True)
+                    text_hash = hashlib.md5(clean_text.encode("utf-8")).hexdigest()
+                    filename = f"speak_{text_hash}.mp3"
+                    filepath = os.path.join(temp_audio_dir, filename)
+                    if not os.path.exists(filepath):
+                        try:
+                            from gtts import gTTS
+                            tts = gTTS(text=clean_text, lang="es")
+                            tts.save(filepath)
+                        except Exception as ex_gtts:
+                            print("Error generando gTTS:", ex_gtts)
+                    if os.path.exists(filepath):
+                        url_url = f"/temp_audio/{urllib.parse.quote(filename)}"
+                        audio_ctrl = ft.Audio(src=url_url, autoplay=True)
+                        active_web_audio[0] = audio_ctrl
+                        page.overlay.append(audio_ctrl)
+                        page.update()
                 except Exception as ex_ft_aud:
                     print("Error agregando ft.Audio:", ex_ft_aud)
             else:

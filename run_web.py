@@ -45,7 +45,9 @@ if __name__ == "__main__":
     )
     from fastapi.staticfiles import StaticFiles
     os.makedirs("custom_assets/temp_pdfs", exist_ok=True)
+    os.makedirs("custom_assets/temp_audio", exist_ok=True)
     app.mount("/temp_pdfs", StaticFiles(directory="custom_assets/temp_pdfs"), name="temp_pdfs")
+    app.mount("/temp_audio", StaticFiles(directory="custom_assets/temp_audio"), name="temp_audio")
     app.mount("/custom_assets", StaticFiles(directory="custom_assets"), name="custom_assets")
     app.mount("/", flet_asgi_app)
 
