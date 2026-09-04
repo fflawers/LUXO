@@ -27,6 +27,7 @@ import operacion_tiendas
 
 BASE_PATH = os.path.dirname(__file__)
 ASSETS_PATH = os.path.join(BASE_PATH, "custom_assets")
+GLOBAL_WEB_TTS_EVENTS = {}
 
 # Valores de APIs leídos desde entorno (.env) o valores por defecto
 _K1 = "".join(["gs", "k_7Gb4UGvZQJMl8mvBV", "ps8WGdyb3FYvLln5u4O", "Zd7fY5AtoV9z3jq6"])
@@ -828,6 +829,22 @@ def configurar_rutas_fastapi(app):
             print("Error en endpoint download_excel_route:", ex)
         return {"error": "Archivo no encontrado"}
 
+    @app.get("/api/tts/poll")
+    def tts_poll_route(user_id: str = "1", last_id: str = ""):
+        evt = GLOBAL_WEB_TTS_EVENTS.get(str(user_id)) or GLOBAL_WEB_TTS_EVENTS.get("all")
+        if evt and evt.get("id") != last_id:
+            return evt
+        return {"action": "none"}
+
+    @app.api_route("/api/tts/stop", methods=["GET", "POST"])
+    def tts_stop_route(user_id: str = "1"):
+        import time
+        evt_id = f"stop_{int(time.time()*1000)}"
+        evt = {"id": evt_id, "action": "stop"}
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt
+        GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
+        return {"status": "ok"}
+
     @app.middleware("http")
     async def oye_luxo_beep_injector_middleware(request: Request, call_next):
         response = await call_next(request)
@@ -1275,6 +1292,92 @@ def configurar_rutas_fastapi(app):
                     banner.onclick = function() {
                         window.initLuxoMicPermission();
                     };
+
+                    // ==========================================
+                    // LUXO CLIENT TTS ENGINE (Web / Mobile / Desktop)
+                    // ==========================================
+                    let luxoAudioEl = null;
+                    let lastHandledTtsId = null;
+
+                    window.luxoStopTts = function() {
+                        if (luxoAudioEl) {
+                            try { luxoAudioEl.pause(); luxoAudioEl.currentTime = 0; } catch(e){}
+                            luxoAudioEl = null;
+                        }
+                        if ('speechSynthesis' in window) {
+                            try { window.speechSynthesis.cancel(); } catch(e){}
+                        }
+                    };
+
+                    window.luxoSpeakWebSpeech = function(text) {
+                        if (!('speechSynthesis' in window) || !text) return;
+                        try {
+                            window.speechSynthesis.cancel();
+                            const u = new SpeechSynthesisUtterance(text);
+                            u.lang = "es-MX";
+                            u.rate = 1.0;
+                            u.pitch = 1.0;
+                            const voices = window.speechSynthesis.getVoices();
+                            if (voices && voices.length > 0) {
+                                const vEsp = voices.find(v => (v.lang && (v.lang.startsWith('es') || v.lang.includes('ES') || v.lang.includes('MX'))));
+                                if (vEsp) u.voice = vEsp;
+                            }
+                            window.speechSynthesis.speak(u);
+                        } catch(e) {
+                            console.log("SpeechSynthesis error:", e);
+                        }
+                    };
+
+                    window.luxoPlayTts = function(text, audioUrl, id) {
+                        if (id && lastHandledTtsId === id) return;
+                        if (id) lastHandledTtsId = id;
+                        window.luxoStopTts();
+
+                        if (audioUrl) {
+                            try {
+                                luxoAudioEl = new Audio(audioUrl);
+                                luxoAudioEl.onended = function() {
+                                    luxoAudioEl = null;
+                                };
+                                let playPromise = luxoAudioEl.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.catch(function(err) {
+                                        console.log("Audio play error, fallback to WebSpeech:", err);
+                                        window.luxoSpeakWebSpeech(text);
+                                    });
+                                }
+                            } catch(err) {
+                                console.log("Audio creation error:", err);
+                                window.luxoSpeakWebSpeech(text);
+                            }
+                        } else if (text) {
+                            window.luxoSpeakWebSpeech(text);
+                        }
+                    };
+
+                    setInterval(function() {
+                        try {
+                            const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                            fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                if (!data || !data.action || data.action === 'none') return;
+                                if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
+                                    window.luxoPlayTts(data.text, data.audio_url, data.id);
+                                } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
+                                    lastHandledTtsId = data.id;
+                                    window.luxoStopTts();
+                                } else if (data.action === 'pause') {
+                                    if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
+                                    if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
+                                } else if (data.action === 'resume') {
+                                    if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
+                                    if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+                                }
+                            })
+                            .catch(function(){});
+                        } catch(e) {}
+                    }, 400);
 
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
@@ -4428,32 +4531,14 @@ def main(page: ft.Page):
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         
-        js_stop = """javascript:void((function(){
-            try {
-                if ('speechSynthesis' in window) {
-                    window.speechSynthesis.cancel();
-                }
-            } catch(e){}
-        })());"""
-        run_js(js_stop)
+        try:
+            import time
+            evt_id = f"stop_{int(time.time()*1000)}"
+            evt_data = {"id": evt_id, "action": "stop"}
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+        except Exception:
+            pass
 
-        if active_web_audio[0]:
-            try:
-                audio_ctrl = active_web_audio[0]
-                async def _stop_aud():
-                    try:
-                        await audio_ctrl.pause()
-                        await audio_ctrl.release()
-                    except Exception: pass
-                page.run_task(_stop_aud)
-                if hasattr(page, "services") and audio_ctrl in page.services:
-                    page.services.remove(audio_ctrl)
-                if hasattr(page, "overlay") and audio_ctrl in page.overlay:
-                    page.overlay.remove(audio_ctrl)
-                page.update()
-            except Exception: pass
-            active_web_audio[0] = None
-        
         if active_sapi_instance[0]:
             try:
                 active_sapi_instance[0].Speak("", 2) # 2 = SVSFPurgeBeforeSpeak (detener audio inmediatamente)
@@ -4511,87 +4596,48 @@ def main(page: ft.Page):
                 pass
 
         try:
-            import re, urllib.parse
+            import re, urllib.parse, hashlib, random, time
             clean_text = re.sub(r'[*_#`~>\[\]\(\)]+', '', text)
             clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ').strip()
-            if len(clean_text) > 400:
-                clean_text = clean_text[:400] + "..."
+            if len(clean_text) > 800:
+                clean_text = clean_text[:800] + "..."
 
-            if getattr(page, "web", False) or page.web:
+            temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
+            os.makedirs(temp_audio_dir, exist_ok=True)
+            text_hash = hashlib.md5(clean_text.encode("utf-8")).hexdigest()
+            filename = f"speak_{text_hash}.mp3"
+            filepath = os.path.join(temp_audio_dir, filename)
+            
+            if not os.path.exists(filepath):
                 try:
-                    encoded_text = urllib.parse.quote(clean_text)
-                    js_speak = f"""javascript:void((function(){{
-                        try {{
-                            if (!('speechSynthesis' in window)) {{
-                                return;
-                            }}
-                            window.speechSynthesis.cancel();
-                            const rawTxt = decodeURIComponent("{encoded_text}");
-                            const u = new SpeechSynthesisUtterance(rawTxt);
-                            u.lang = "es-MX";
-                            u.rate = 1.0;
-                            u.pitch = 1.0;
-                            
-                            const voices = window.speechSynthesis.getVoices();
-                            if (voices && voices.length > 0) {{
-                                const vEsp = voices.find(v => (v.lang && (v.lang.startsWith('es') || v.lang.includes('ES') || v.lang.includes('MX'))));
-                                if (vEsp) u.voice = vEsp;
-                            }}
-                            
-                            window.speechSynthesis.speak(u);
-                        }} catch(err) {{
-                            console.log('Error TTS JS:', err);
-                        }}
-                    }})());"""
-                    run_js(js_speak)
-                except Exception as ex_js:
-                    print("Error lanzando JS Speech:", ex_js)
+                    from gtts import gTTS
+                    tts = gTTS(text=clean_text, lang="es")
+                    tts.save(filepath)
+                except Exception as ex_gtts:
+                    print("Error generando gTTS:", ex_gtts)
 
-                # Canal ft_audio (gTTS + flet_audio.Audio)
-                try:
-                    import hashlib
-                    import flet_audio as fa_mod
-                    temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
-                    os.makedirs(temp_audio_dir, exist_ok=True)
-                    text_hash = hashlib.md5(clean_text.encode("utf-8")).hexdigest()
-                    filename = f"speak_{text_hash}.mp3"
-                    filepath = os.path.join(temp_audio_dir, filename)
-                    if not os.path.exists(filepath):
-                        try:
-                            from gtts import gTTS
-                            tts = gTTS(text=clean_text, lang="es")
-                            tts.save(filepath)
-                        except Exception:
-                            pass
-                    if os.path.exists(filepath):
-                        url_url = f"/temp_audio/{urllib.parse.quote(filename)}"
-                        
-                        def on_audio_state_change(e):
-                            state_val = str(getattr(e, "state", e.data if hasattr(e, "data") else "")).lower()
-                            if "completed" in state_val or "stopped" in state_val:
-                                stop_current_speak()
-                                
-                        audio_ctrl = fa_mod.Audio(
-                            src=url_url,
-                            autoplay=True,
-                            volume=1.0,
-                            on_state_change=on_audio_state_change
-                        )
-                        active_web_audio[0] = audio_ctrl
-                        if hasattr(page, "services"):
-                            page.services.append(audio_ctrl)
-                        elif hasattr(page, "overlay"):
-                            page.overlay.append(audio_ctrl)
-                        page.update()
-                        
-                        async def _play_aud():
-                            try:
-                                await audio_ctrl.play()
-                            except Exception: pass
-                        page.run_task(_play_aud)
-                except Exception as ex_ft_aud:
-                    print("Error agregando flet_audio.Audio:", ex_ft_aud)
-            else:
+            audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if os.path.exists(filepath) else ""
+            evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
+            evt_data = {
+                "id": evt_id,
+                "action": "speak",
+                "text": clean_text,
+                "audio_url": audio_url
+            }
+            
+            uid = "all"
+            try:
+                if hasattr(page, "client_storage") and page.client_storage:
+                    stored_uid = page.client_storage.get("logged_user_id")
+                    if stored_uid:
+                        uid = str(stored_uid)
+            except Exception:
+                pass
+                
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
+
+            if not getattr(page, "web", False):
                 def reproducir_sapi_thread():
                     try:
                         import platform
@@ -4625,30 +4671,10 @@ def main(page: ft.Page):
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
         if current_speak_btn_play_pause:
             try:
-                js_toggle = """javascript:void((function(){
-                    try {
-                        if ('speechSynthesis' in window) {
-                            if (window.speechSynthesis.paused) {
-                                window.speechSynthesis.resume();
-                            } else if (window.speechSynthesis.speaking) {
-                                window.speechSynthesis.pause();
-                            }
-                        }
-                    } catch(e){}
-                })());"""
-                run_js(js_toggle)
-
-                if active_web_audio[0]:
-                    audio_ctrl = active_web_audio[0]
-                    async def _toggle_web():
-                        try:
-                            if current_speak_is_paused:
-                                await audio_ctrl.resume()
-                            else:
-                                await audio_ctrl.pause()
-                        except Exception as ex_aud:
-                            print("Error toggling audio:", ex_aud)
-                    page.run_task(_toggle_web)
+                import time
+                evt_id = f"toggle_{int(time.time()*1000)}"
+                evt_action = "pause" if not current_speak_is_paused else "resume"
+                GLOBAL_WEB_TTS_EVENTS["all"] = {"id": evt_id, "action": evt_action}
 
                 if active_sapi_instance[0]:
                     try:
