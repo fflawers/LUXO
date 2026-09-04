@@ -19,3 +19,11 @@ config.json
 # Archivos del sistema
 .DS_Store
 Thumbs.db
+
+# Temporales y multimedia
+uploads/
+custom_assets/temp_audio/
+custom_assets/temp_pdfs/
+*.log
+*.exe
+enfoque_diario_state_*.json

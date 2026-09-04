@@ -780,427 +780,53 @@ def configurar_rutas_fastapi(app):
             )
 
     @app.get("/api/download_enfoque_pdf/{day}")
-    async def download_enfoque_pdf_route(day: str):
+    @app.get("/print_enfoque/{day}")
+    def print_enfoque_pdf_route(day: str, user_id: str = "invitado"):
         try:
-            import importlib, enfoque_diario
-            if hasattr(enfoque_diario, "generar_pdf_enfoque_file"):
-                enfoque_diario.generar_pdf_enfoque_file(day)
-
-            filename = f"Enfoque_Diario_{day}_SGH_2026.pdf"
-            file_path = os.path.join(BASE_PATH, "uploads", filename)
-            if not os.path.exists(file_path):
-                home_dir = os.path.expanduser("~")
-                possible = [
-                    os.path.join(home_dir, "Desktop", filename),
-                    os.path.join(home_dir, "OneDrive", "Desktop", filename)
-                ]
-                for p in possible:
-                    if os.path.exists(p):
-                        file_path = p
-                        break
-
-            if os.path.exists(file_path):
+            import urllib.parse
+            import enfoque_diario
+            day = urllib.parse.unquote(day)
+            clean_d_name = enfoque_diario.sanitize_filename(day)
+            pdf_path = enfoque_diario.generar_pdf_enfoque_file(day, user_id)
+            if pdf_path and os.path.exists(pdf_path):
                 from fastapi.responses import FileResponse
+                filename = f"Enfoque_Diario_{clean_d_name}_SGH_2026.pdf"
                 return FileResponse(
-                    path=file_path,
+                    path=pdf_path,
                     filename=filename,
-                    media_type="application/pdf"
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f'inline; filename="{filename}"',
+                        "Cache-Control": "no-cache, no-store, must-revalidate"
+                    }
                 )
         except Exception as ex:
-            print("Error en endpoint download_enfoque_pdf:", ex)
-        return {"error": "Archivo no encontrado"}
+            print("Error en endpoint print_enfoque_pdf_route:", ex)
+        return {"error": "No se pudo generar el archivo PDF oficial"}
 
     @app.get("/api/download_excel/{day}")
-    async def download_excel_route(day: str, user_id: str = "invitado"):
+    def download_excel_route(day: str, user_id: str = "invitado"):
         try:
+            import urllib.parse
             import enfoque_diario
-            enfoque_diario.generar_excel_enfoque(day, user_id)
-            filename = f"Enfoque_Diario_{day}_SGH_2026.xlsx"
-            file_path = os.path.join(BASE_PATH, "uploads", filename)
-            if not os.path.exists(file_path):
-                home_dir = os.path.expanduser("~")
-                possible = [
-                    os.path.join(home_dir, "Desktop", filename),
-                    os.path.join(home_dir, "OneDrive", "Desktop", filename)
-                ]
-                for p in possible:
-                    if os.path.exists(p):
-                        file_path = p
-                        break
-            if os.path.exists(file_path):
+            day = urllib.parse.unquote(day)
+            clean_d_name = enfoque_diario.sanitize_filename(day)
+            excel_path = enfoque_diario.generar_excel_enfoque(day, user_id)
+            if excel_path and os.path.exists(excel_path):
                 from fastapi.responses import FileResponse
+                filename = f"Enfoque_Diario_{clean_d_name}_SGH_2026.xlsx"
                 return FileResponse(
-                    path=file_path,
+                    path=excel_path,
                     filename=filename,
-                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                        "Cache-Control": "no-cache, no-store, must-revalidate"
+                    }
                 )
         except Exception as ex:
             print("Error en endpoint download_excel_route:", ex)
         return {"error": "Archivo no encontrado"}
-
-    @app.get("/print_enfoque/{day}")
-    async def print_enfoque_route(day: str, user_id: str = "invitado"):
-        try:
-            import enfoque_diario
-            s_state = enfoque_diario.user_states.get(user_id, {}).get("store_state", {})
-            meta = enfoque_diario.user_states.get(user_id, {}).get("global_meta", {})
-
-            if day == "SEMANAL":
-                h_state = enfoque_diario.user_states.get(user_id, {}).get("historico_semanal_state", {})
-                tot_meta_sem = sum(s_state[d]["meta_diaria"] for d in enfoque_diario.DIAS if d in s_state)
-                tot_ana_sem = sum(s_state[d]["meta_diaria"] * 0.85 for d in enfoque_diario.DIAS if d in s_state)
-                tot_wea_sem = sum(s_state[d]["meta_diaria"] * 0.15 for d in enfoque_diario.DIAS if d in s_state)
-                tot_horas_sem = sum(enfoque_diario.calcular_dia(d, user_id).get("tot_horas", 0.0) for d in enfoque_diario.DIAS)
-                
-                meta_conversion = float(h_state.get("meta_conversion", 0.16))
-                comply_sem = float(h_state.get("comply_sem", 22519.0))
-                atv_sem = float(h_state.get("atv_sem", 7500.0))
-                aur_sem = float(h_state.get("aur_sem", 4617.0))
-                
-                colabs_list = s_state.get("DOMINGO", {}).get("colaboradores", [])
-                
-                colab_html_rows = ""
-                for c in colabs_list:
-                    c_name = c.get('nombre','').strip()
-                    if not c_name: continue
-                    h_p = h_state.get('horas_colab',{}).get(c_name, 0.0)
-                    m_colab = (tot_meta_sem / (tot_horas_sem or 1)) * h_p
-                    ana_c = max(1, int(((tot_meta_sem / (aur_sem or 4617)) / (tot_horas_sem or 1)) * h_p)) if h_p > 0 else 0
-                    wea_c = h_state.get('wea_colab_manual',{}).get(c_name, 1)
-                    colab_html_rows += f"<tr><td style='text-align:left; font-weight:bold;'>{c_name}</td><td>{h_p:.1f} hrs</td><td>${m_colab:,.2f}</td><td>{ana_c}</td><td>{wea_c}</td><td>1</td><td>1</td></tr>"
-
-                dias_html_rows = ""
-                for d in enfoque_diario.DIAS:
-                    c = enfoque_diario.calcular_dia(d, user_id)
-                    dias_html_rows += f"<tr><td style='font-weight:bold;'>{d}</td><td>${c['meta_diaria']:,.2f}</td><td>${c['analogos']:,.2f}</td><td>${c['wearables']:,.2f}</td><td>{c['tot_horas']:.1f} hrs</td></tr>"
-
-                html = f"""
-                <!DOCTYPE html>
-                <html lang="es">
-                <head>
-                    <meta charset="UTF-8">
-                    <title>2026 SGH ENFOQUE SEMANAL - {meta.get('tienda', '')}</title>
-                    <style>
-                        @page {{ size: landscape; margin: 8mm; }}
-                        body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 10px; color: #000; background: #fff; font-size: 11px; }}
-                        .top-header {{ display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }}
-                        .logo-brand {{ font-size: 16px; font-weight: 900; letter-spacing: -0.5px; }}
-                        .tag-green {{ background: #C6EFCE; color: #006100; font-weight: bold; border: 1px solid #10B981; padding: 4px 10px; border-radius: 4px; font-size: 10px; }}
-                        .title-banner {{ background: #000; color: #fff; font-size: 13px; font-weight: bold; text-align: center; padding: 6px; letter-spacing: 1px; margin-bottom: 10px; text-transform: uppercase; }}
-                        .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }}
-                        .kpi-box {{ border: 1px solid #000; font-size: 10px; }}
-                        .kpi-title {{ background: #000; color: #fff; font-weight: bold; padding: 4px; text-align: center; font-size: 10px; text-transform: uppercase; }}
-                        .kpi-body {{ padding: 6px; background: #fff; }}
-                        .kpi-row {{ display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed #eee; }}
-                        .kpi-row:last-child {{ border-bottom: none; }}
-                        .green-bg {{ background: #C6EFCE !important; color: #006100; font-weight: bold; }}
-                        table {{ width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }}
-                        th {{ background: #000; color: #fff; border: 1px solid #000; padding: 5px; text-align: center; }}
-                        td {{ border: 1px solid #666; padding: 5px; text-align: center; }}
-                        .sec-title {{ font-size: 11px; font-weight: bold; margin-top: 10px; margin-bottom: 4px; text-transform: uppercase; background: #f3f4f6; padding: 4px; border-left: 4px solid #000; }}
-                        .btn-print {{ position: fixed; top: 12px; right: 12px; background: #10B981; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; z-index: 9999; }}
-                        @media print {{ .btn-print {{ display: none; }} body {{ padding: 0; }} }}
-                    </style>
-                </head>
-                <body>
-                    <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-
-                    <div class="top-header">
-                        <div>
-                            <span class="logo-brand">🕶️ sunglass hut</span>
-                            <span style="font-size:14px; font-weight:bold; margin-left:8px;">RESUMEN Y ENFOQUE SEMANAL</span>
-                        </div>
-                        <div style="display:flex; gap:15px; align-items:center;">
-                            <span><b>Semana:</b> {meta.get('semana', '')}</span>
-                            <span><b>Tienda:</b> {meta.get('tienda', '')}</span>
-                            <span class="tag-green">OFICIAL SGH SEMANAL</span>
-                        </div>
-                    </div>
-
-                    <div class="title-banner">RESUMEN GENERAL SEMANAL</div>
-
-                    <div class="kpi-grid">
-                        <div class="kpi-box">
-                            <div class="kpi-title">SEMANAL</div>
-                            <div class="kpi-body">
-                                <div class="kpi-row"><span>META SEMANAL</span><b>${tot_meta_sem:,.2f}</b></div>
-                                <div class="kpi-row green-bg"><span>ANÁLOGOS</span><b>${tot_ana_sem:,.2f}</b></div>
-                                <div class="kpi-row green-bg"><span>WEARABLES</span><b>${tot_wea_sem:,.2f}</b></div>
-                            </div>
-                        </div>
-
-                        <div class="kpi-box">
-                            <div class="kpi-title">CONVERSIÓN SEMANAL</div>
-                            <div class="kpi-body">
-                                <div class="kpi-row"><span>META CONVERSIÓN</span><b>{meta_conversion*100:.1f}%</b></div>
-                                <div class="kpi-row green-bg"><span>META IDEAL 110%</span><b>${tot_meta_sem*1.10:,.2f}</b></div>
-                            </div>
-                        </div>
-
-                        <div class="kpi-box">
-                            <div class="kpi-title">OTROS NO NEGOCIABLES</div>
-                            <div class="kpi-body">
-                                <div class="kpi-row green-bg"><span>WEARABLES</span><b>15%</b></div>
-                                <div class="kpi-row green-bg"><span>KIDS</span><b>5%</b></div>
-                                <div class="kpi-row green-bg"><span>CAREKITS</span><b>30%</b></div>
-                            </div>
-                        </div>
-
-                        <div class="kpi-box">
-                            <div class="kpi-title">COMPLY E INDICADORES</div>
-                            <div class="kpi-body">
-                                <div class="kpi-row green-bg"><span>COMPLY SEMANAL</span><b>${comply_sem:,.2f}</b></div>
-                                <div class="kpi-row"><span>ATV SEMANAL</span><b>${atv_sem:,.2f}</b></div>
-                                <div class="kpi-row"><span>AUR SEMANAL</span><b>${aur_sem:,.2f}</b></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="sec-title">DISTRIBUCIÓN DE METAS POR COLABORADOR</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>COLABORADOR</th>
-                                <th>HORAS PROG.</th>
-                                <th>META VENTA</th>
-                                <th>ANÁLOGOS</th>
-                                <th>WEARABLES</th>
-                                <th>KIDS</th>
-                                <th>CAREKITS</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {colab_html_rows}
-                        </tbody>
-                    </table>
-
-                    <div class="sec-title">CONSOLIDADO POR DÍAS</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>DÍA</th>
-                                <th>META DIARIA</th>
-                                <th>ANÁLOGOS</th>
-                                <th>WEARABLES</th>
-                                <th>HORAS</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {dias_html_rows}
-                            <tr style="font-weight:bold; background:#e5e7eb;">
-                                <td>TOTAL SEMANAL</td>
-                                <td>${tot_meta_sem:,.2f}</td>
-                                <td>${tot_ana_sem:,.2f}</td>
-                                <td>${tot_wea_sem:,.2f}</td>
-                                <td>{tot_horas_sem:.1f} hrs</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </body>
-                </html>
-                """
-                from fastapi.responses import HTMLResponse
-                return HTMLResponse(content=html)
-
-            calc = enfoque_diario.calcular_dia(day, user_id)
-            data = s_state.get(day, {})
-
-            html = f"""
-            <!DOCTYPE html>
-            <html lang="es">
-            <head>
-                <meta charset="UTF-8">
-                <title>2026 SGH ENFOQUE DIARIO - {day} - {meta['tienda']}</title>
-                <style>
-                    @page {{ size: landscape; margin: 8mm; }}
-                    body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 10px; color: #000; background: #fff; font-size: 11px; }}
-                    .top-header {{ display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }}
-                    .logo-brand {{ font-size: 16px; font-weight: 900; letter-spacing: -0.5px; }}
-                    .tag-green {{ background: #C6EFCE; color: #006100; font-weight: bold; border: 1px solid #10B981; padding: 4px 10px; border-radius: 4px; font-size: 10px; }}
-                    .title-banner {{ background: #000; color: #fff; font-size: 13px; font-weight: bold; text-align: center; padding: 6px; letter-spacing: 1px; margin-bottom: 10px; text-transform: uppercase; }}
-                    .kpi-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }}
-                    .kpi-box {{ border: 1px solid #000; font-size: 10px; }}
-                    .kpi-title {{ background: #000; color: #fff; font-weight: bold; padding: 4px; text-align: center; font-size: 10px; text-transform: uppercase; }}
-                    .kpi-body {{ padding: 6px; background: #fff; }}
-                    .kpi-row {{ display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed #e5e7eb; }}
-                    .kpi-row:last-child {{ border-bottom: none; }}
-                    .green-bg {{ background: #C6EFCE !important; color: #006100; font-weight: bold; }}
-                    table {{ width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }}
-                    th {{ background: #000; color: #fff; border: 1px solid #000; padding: 5px; text-align: center; font-size: 10px; font-weight: bold; }}
-                    td {{ border: 1px solid #666; padding: 5px; text-align: center; }}
-                    .sec-title {{ font-size: 11px; font-weight: bold; margin-top: 10px; margin-bottom: 4px; border-left: 4px solid #000; padding-left: 6px; text-transform: uppercase; }}
-                    .btn-print {{ position: fixed; top: 12px; right: 12px; background: #10B981; color: white; border: none; padding: 10px 18px; font-size: 12px; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2); z-index: 9999; }}
-                    @media print {{ .btn-print {{ display: none !important; }} @page {{ margin: 5mm; }} body {{ padding: 0 !important; margin: 0 !important; }} }}
-                </style>
-            </head>
-            <body>
-                <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-
-                <div class="top-header">
-                    <div>
-                        <span class="logo-brand">🕶️ sunglass hut</span>
-                        <span style="font-size:14px; font-weight:bold; margin-left:8px;">ENFOQUE DIARIO! - Nuestra meta y plan de acción</span>
-                    </div>
-                    <div style="display:flex; gap:15px; align-items:center;">
-                        <span><b>Semana:</b> {meta['semana']}</span>
-                        <span><b>Día:</b> {day} ({datetime.now().strftime('%d/%m/%Y')})</span>
-                        <span><b>Tienda:</b> {meta['tienda']}</span>
-                        <span class="tag-green">LAS CELDAS EN COLOR VERDE SE LLENAN AUTOMÁTICAMENTE</span>
-                    </div>
-                </div>
-
-                <div class="title-banner">¿QUÉ ESPERAMOS LOGRAR HOY?</div>
-
-                <div class="kpi-grid">
-                    <div class="kpi-box">
-                        <div class="kpi-title">META DEL DÍA</div>
-                        <div class="kpi-body">
-                            <div class="kpi-row"><span>META DIARIA</span><b>${calc['meta_diaria']:,.2f}</b></div>
-                            <div class="kpi-row green-bg"><span>ANÁLOGOS (85%)</span><b>${calc['analogos']:,.2f}</b></div>
-                            <div class="kpi-row green-bg"><span>WEARABLES (15%)</span><b>${calc['wearables']:,.2f}</b></div>
-                            <div class="kpi-row"><span>TOTAL UNIDADES</span><b>{calc['total_unidades']}</b></div>
-                            <div class="kpi-row" style="margin-top:4px;"><span>EVALUACIÓN</span><b>{'⭐' * data.get('estrellas_logro', 5)}</b></div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-box">
-                        <div class="kpi-title">VERSIÓN (NO NEGOCIABLE)</div>
-                        <div class="kpi-body">
-                            <div class="kpi-row"><span>TRÁFICO ESPERADO</span><b>{data['trafico_esperado']}</b></div>
-                            <div class="kpi-row"><span>META CONVERSIÓN</span><b>{int(data['conversion_target']*100)}%</b></div>
-                            <div class="kpi-row green-bg"><span>META TRANSACCIONES</span><b>{calc['transacciones']}</b></div>
-                            <div class="kpi-row green-bg"><span>META IDEAL (110%)</span><b>${calc['meta_ideal']:,.2f}</b></div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-box">
-                        <div class="kpi-title">OTROS NO NEGOCIABLES</div>
-                        <div class="kpi-body">
-                            <div class="kpi-row green-bg"><span>WEARABLES 15%</span><b>{max(math.ceil(calc['wearables']/8100), 1)} min</b></div>
-                            <div class="kpi-row green-bg"><span>KIDS 5%</span><b>1 min</b></div>
-                            <div class="kpi-row green-bg"><span>CAREKITS 30%</span><b>1 min</b></div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-box">
-                        <div class="kpi-title">PRODUCTIVIDAD & COMP LY</div>
-                        <div class="kpi-body">
-                            <div class="kpi-row green-bg"><span>VENTA NETA/PROD</span><b>${calc['vta_neta_prod']:,.2f}</b></div>
-                            <div class="kpi-row green-bg"><span>UNIDADES PROD</span><b>{calc['u_prod']}</b></div>
-                            <div class="kpi-row green-bg"><span>VENTA NETA LY</span><b>${calc['vta_ly']:,.2f}</b></div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-box">
-                        <div class="kpi-title">MÉTRICAS DÍA / MTD</div>
-                        <div class="kpi-body">
-                            <div class="kpi-row"><span>ATV DÍA COMP</span><b>$7,500</b></div>
-                            <div class="kpi-row"><span>AUR DÍA COMP</span><b>$4,617</b></div>
-                            <div class="kpi-row"><span>ATV MTD</span><b>$6,578</b></div>
-                            <div class="kpi-row"><span>AUR MTD</span><b>$4,312</b></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="sec-title">DESGLOSE HORARIO DE VENTA</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width:20%;">BLOQUE / INDICADOR</th>
-                            <th>Apertura-1pm</th>
-                            <th>1pm - 3pm</th>
-                            <th>3pm - 5pm</th>
-                            <th>5pm - 7pm</th>
-                            <th>7pm - Cierre</th>
-                            <th>TOTAL</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><b>TRÁFICO POR HORA (⚪)</b></td>
-                            {"".join(f"<td>{x}</td>" for x in data["trafico_bloques"])}
-                            <td><b>{calc['tot_trafico_b']}</b></td>
-                        </tr>
-                        <tr class="green-bg">
-                            <td><b>PESO DEL TRÁFICO (%) (🟩)</b></td>
-                            {"".join(f"<td>{p*100:.1f}%</td>" for p in calc["b_pesos"])}
-                            <td><b>100%</b></td>
-                        </tr>
-                        <tr class="green-bg">
-                            <td><b>META $ X HORA (🟩)</b></td>
-                            {"".join(f"<td>${m:,.0f}</td>" for m in calc["b_metas"])}
-                            <td><b>${calc['meta_diaria']:,.0f}</b></td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div class="sec-title">ASIGNACIÓN POR COLABORADOR</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>COLABORADOR</th>
-                            <th>HORAS PROGRAMADAS</th>
-                            <th>META DE VENTA</th>
-                            <th>ANÁLOGOS POR VENDER</th>
-                            <th>WEARABLES POR VENDER</th>
-                            <th>KIDS POR VENDER</th>
-                            <th>CAREKITS POR VENDER</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {"".join(f"<tr><td style='text-align:left; font-weight:bold;'>{r['nombre']}</td><td>{r['horas']:.1f} hrs</td><td class='green-bg'>${r['meta_vta']:,.2f}</td><td class='green-bg'>{r['meta_ana']}</td><td class='green-bg'>{r['meta_wea']}</td><td class='green-bg'>{r['meta_kid']}</td><td class='green-bg'>{r['meta_ck']}</td></tr>" for r in calc["colab_rows"] if r["nombre"])}
-                        <tr style="font-weight:bold; background:#e5e7eb;">
-                            <td>TOTAL TIENDA</td>
-                            <td>{calc['tot_horas']:.1f} hrs</td>
-                            <td>${calc['meta_diaria']:,.2f}</td>
-                            <td>{sum(x['meta_ana'] for x in calc['colab_rows'])}</td>
-                            <td>{sum(x['meta_wea'] for x in calc['colab_rows'])}</td>
-                            <td>{sum(x['meta_kid'] for x in calc['colab_rows'])}</td>
-                            <td>{sum(x['meta_ck'] for x in calc['colab_rows'])}</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-top:8px;">
-                    <div style="border:1px solid #000; padding:6px; background:#fafafa;">
-                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:3px; font-size:10px;">✨ LOS 5 SECRETOS Y PLAN DE ACCIÓN ({day})</div>
-                        <div style="font-size:9px; line-height:1.3;">
-                            <b>1. Pulir es poder:</b> Ofrece limpiar sus lentes al iniciar.<br>
-                            <b>2. Póntelos:</b> Invítalo a probar diferentes modelos en la bandeja.<br>
-                            <b>3. Diviértete más:</b> Muestra 3 o 4 opciones adicionales.<br>
-                            <b>4. Cuídalos:</b> Ofrece estuche, solución limpiadora y carekits.<br>
-                            <b>5. Ajuste perfecto:</b> Ajusta los armazones a su medida exacta.
-                        </div>
-                    </div>
-                    <div style="border:1px solid #000; padding:6px; background:#fafafa;">
-                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:3px; font-size:10px;">🎯 TU ENFOQUE PARA HOY</div>
-                        <div style="font-size:9.5px; color:#111827; font-weight:600;">
-                            {data.get('enfoque_hoy') or 'Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.'}
-                        </div>
-                    </div>
-                    <div style="border:1px solid #000; padding:6px; background:#fafafa;">
-                        <div style="font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:3px; font-size:10px; display:flex; justify-content:space-between;">
-                            <span>🏆 LOGROS DE HOY Y OPORTUNIDADES</span>
-                            <span>{'⭐' * data.get('estrellas_logro', 5)}</span>
-                        </div>
-                        <div style="font-size:9.5px; color:#111827; font-weight:600;">
-                            {data.get('logros_hoy') or data.get('oportunidades_manana') or 'Excelente retención de clientes y venta cruzada.'}
-                        </div>
-                    </div>
-                </div>
-
-                <script>
-                    window.onload = function() {{
-                        setTimeout(function() {{ window.print(); }}, 400);
-                    }};
-                </script>
-            </body>
-            </html>
-            """
-            from fastapi.responses import HTMLResponse
-            return HTMLResponse(content=html)
-        except Exception as ex:
-            return f"Error: {ex}"
 
     @app.middleware("http")
     async def oye_luxo_beep_injector_middleware(request: Request, call_next):
@@ -4802,18 +4428,31 @@ def main(page: ft.Page):
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         
+        js_stop = """javascript:void((function(){
+            try {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                }
+            } catch(e){}
+        })());"""
+        run_js(js_stop)
+
         if active_web_audio[0]:
             try:
                 audio_ctrl = active_web_audio[0]
-                audio_ctrl.pause()
-                if audio_ctrl in page.overlay:
+                async def _stop_aud():
+                    try:
+                        await audio_ctrl.pause()
+                        await audio_ctrl.release()
+                    except Exception: pass
+                page.run_task(_stop_aud)
+                if hasattr(page, "services") and audio_ctrl in page.services:
+                    page.services.remove(audio_ctrl)
+                if hasattr(page, "overlay") and audio_ctrl in page.overlay:
                     page.overlay.remove(audio_ctrl)
+                page.update()
             except Exception: pass
             active_web_audio[0] = None
-
-        try:
-            run_js("javascript:if('speechSynthesis' in window){window.speechSynthesis.cancel();} void(0);")
-        except Exception: pass
         
         if active_sapi_instance[0]:
             try:
@@ -4859,7 +4498,7 @@ def main(page: ft.Page):
             btn_speaker.tooltip = "Detener audio"
             try:
                 btn_speaker.update()
-            except:
+            except Exception:
                 pass
             
         if btn_play_pause:
@@ -4868,20 +4507,50 @@ def main(page: ft.Page):
             btn_play_pause.tooltip = "Pausar lectura"
             try:
                 btn_play_pause.update()
-            except:
+            except Exception:
                 pass
 
         try:
             import re, urllib.parse
             clean_text = re.sub(r'[*_#`~>\[\]\(\)]+', '', text)
             clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ').strip()
-            if len(clean_text) > 350:
-                clean_text = clean_text[:350] + "..."
+            if len(clean_text) > 400:
+                clean_text = clean_text[:400] + "..."
 
             if getattr(page, "web", False) or page.web:
                 try:
-                    import urllib.parse
+                    encoded_text = urllib.parse.quote(clean_text)
+                    js_speak = f"""javascript:void((function(){{
+                        try {{
+                            if (!('speechSynthesis' in window)) {{
+                                return;
+                            }}
+                            window.speechSynthesis.cancel();
+                            const rawTxt = decodeURIComponent("{encoded_text}");
+                            const u = new SpeechSynthesisUtterance(rawTxt);
+                            u.lang = "es-MX";
+                            u.rate = 1.0;
+                            u.pitch = 1.0;
+                            
+                            const voices = window.speechSynthesis.getVoices();
+                            if (voices && voices.length > 0) {{
+                                const vEsp = voices.find(v => (v.lang && (v.lang.startsWith('es') || v.lang.includes('ES') || v.lang.includes('MX'))));
+                                if (vEsp) u.voice = vEsp;
+                            }}
+                            
+                            window.speechSynthesis.speak(u);
+                        }} catch(err) {{
+                            console.log('Error TTS JS:', err);
+                        }}
+                    }})());"""
+                    run_js(js_speak)
+                except Exception as ex_js:
+                    print("Error lanzando JS Speech:", ex_js)
+
+                # Canal ft_audio (gTTS + flet_audio.Audio)
+                try:
                     import hashlib
+                    import flet_audio as fa_mod
                     temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
                     os.makedirs(temp_audio_dir, exist_ok=True)
                     text_hash = hashlib.md5(clean_text.encode("utf-8")).hexdigest()
@@ -4892,16 +4561,36 @@ def main(page: ft.Page):
                             from gtts import gTTS
                             tts = gTTS(text=clean_text, lang="es")
                             tts.save(filepath)
-                        except Exception as ex_gtts:
-                            print("Error generando gTTS:", ex_gtts)
+                        except Exception:
+                            pass
                     if os.path.exists(filepath):
                         url_url = f"/temp_audio/{urllib.parse.quote(filename)}"
-                        audio_ctrl = ft.Audio(src=url_url, autoplay=True)
+                        
+                        def on_audio_state_change(e):
+                            state_val = str(getattr(e, "state", e.data if hasattr(e, "data") else "")).lower()
+                            if "completed" in state_val or "stopped" in state_val:
+                                stop_current_speak()
+                                
+                        audio_ctrl = fa_mod.Audio(
+                            src=url_url,
+                            autoplay=True,
+                            volume=1.0,
+                            on_state_change=on_audio_state_change
+                        )
                         active_web_audio[0] = audio_ctrl
-                        page.overlay.append(audio_ctrl)
+                        if hasattr(page, "services"):
+                            page.services.append(audio_ctrl)
+                        elif hasattr(page, "overlay"):
+                            page.overlay.append(audio_ctrl)
                         page.update()
+                        
+                        async def _play_aud():
+                            try:
+                                await audio_ctrl.play()
+                            except Exception: pass
+                        page.run_task(_play_aud)
                 except Exception as ex_ft_aud:
-                    print("Error agregando ft.Audio:", ex_ft_aud)
+                    print("Error agregando flet_audio.Audio:", ex_ft_aud)
             else:
                 def reproducir_sapi_thread():
                     try:
@@ -4912,13 +4601,16 @@ def main(page: ft.Page):
                             pythoncom.CoInitialize()
                             speaker = win32com.client.Dispatch("SAPI.SpVoice")
                             active_sapi_instance[0] = speaker
-                            speaker.Speak(clean_text, 1)
+                            speaker.Speak(clean_text, 0)
                         elif platform.system() == "Darwin":
                             import subprocess
                             proc = subprocess.Popen(["say", clean_text])
                             active_sapi_instance[0] = proc
+                            proc.wait()
                     except Exception as ex_spk:
                         print("Error en reproductor nativo:", ex_spk)
+                    finally:
+                        stop_current_speak()
 
                 try:
                     t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
@@ -4933,7 +4625,31 @@ def main(page: ft.Page):
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
         if current_speak_btn_play_pause:
             try:
-                run_js("javascript:if('speechSynthesis' in window){if(window.speechSynthesis.paused){window.speechSynthesis.resume();}else{window.speechSynthesis.pause();}} void(0);")
+                js_toggle = """javascript:void((function(){
+                    try {
+                        if ('speechSynthesis' in window) {
+                            if (window.speechSynthesis.paused) {
+                                window.speechSynthesis.resume();
+                            } else if (window.speechSynthesis.speaking) {
+                                window.speechSynthesis.pause();
+                            }
+                        }
+                    } catch(e){}
+                })());"""
+                run_js(js_toggle)
+
+                if active_web_audio[0]:
+                    audio_ctrl = active_web_audio[0]
+                    async def _toggle_web():
+                        try:
+                            if current_speak_is_paused:
+                                await audio_ctrl.resume()
+                            else:
+                                await audio_ctrl.pause()
+                        except Exception as ex_aud:
+                            print("Error toggling audio:", ex_aud)
+                    page.run_task(_toggle_web)
+
                 if active_sapi_instance[0]:
                     try:
                         if current_speak_is_paused:
@@ -6021,7 +5737,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                     start_speak(txt_speak, btn_spk_h, btn_p_h)
                                     
                             def pause_click_h(e):
-                                stop_current_speak()
+                                toggle_pause_speak()
 
                             btn_spk_h.on_click = spk_click_h
                             btn_p_h.on_click = pause_click_h
@@ -7938,7 +7654,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             start_speak(txt, bs, bpp)
                             
                     def handle_play_pause_click(e):
-                        stop_current_speak()
+                        toggle_pause_speak()
 
                     btn_speaker.on_click = handle_speaker_click
                     btn_play_pause.on_click = handle_play_pause_click

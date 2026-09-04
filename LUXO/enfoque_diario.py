@@ -31,12 +31,39 @@ import mysql.connector
 from dotenv import load_dotenv
 load_dotenv()
 
+_ENFOQUE_DB_POOL = None
+
+def get_enfoque_db_pool():
+    global _ENFOQUE_DB_POOL
+    if _ENFOQUE_DB_POOL is None:
+        try:
+            import mysql.connector.pooling
+            p_config = {
+                "host": os.getenv("DB_HOST", "localhost"),
+                "user": os.getenv("DB_USER", "root"),
+                "password": os.getenv("DB_PASSWORD", "los4valtierra"),
+                "database": os.getenv("DB_NAME", "sgh_portal"),
+                "port": int(os.getenv("DB_PORT", 3306)),
+                "pool_name": "enfoque_diario_pool",
+                "pool_size": 10
+            }
+            _ENFOQUE_DB_POOL = mysql.connector.pooling.MySQLConnectionPool(**p_config)
+        except Exception:
+            _ENFOQUE_DB_POOL = False
+    return _ENFOQUE_DB_POOL if _ENFOQUE_DB_POOL else None
+
 def conectar_db():
+    pool = get_enfoque_db_pool()
+    if pool:
+        try:
+            return pool.get_connection()
+        except Exception:
+            pass
     try:
         return mysql.connector.connect(
             host=os.getenv('DB_HOST', 'localhost'),
             user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', ''),
+            password=os.getenv('DB_PASSWORD', 'los4valtierra'),
             database=os.getenv('DB_NAME', 'sgh_portal'),
             port=int(os.getenv('DB_PORT', 3306))
         )
@@ -355,6 +382,11 @@ def default_store_state():
             "onesight_dia": "",
             "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
             "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "ritmo_venta_hoy": "",
+            "checks_estandares": {"limpieza": False, "imagen": False, "reunion": False},
+            "checks_no_negociables": {"registro": False, "sin_celular": False, "fuera_caja": False, "seguimiento": False},
+            "checks_secretos": {"pulir": False, "pontelos": False, "diviertete": False, "cuidalos": False, "ajuste": False},
+            "checks_journey": {"relacion": False, "confianza": False, "interactua": False, "descubre": False, "ve_mas_alla": False},
             "plan_accion": [
                 {"colaborador": "", "compromiso": ""} for _ in range(3)
             ]
@@ -446,8 +478,11 @@ def get_current_sgh_week_str():
         return "34"
 
 def cargar_estado_persistente(user_id):
+    user_id = str(user_id)
     loaded = False
     try:
+        if user_id not in user_states:
+            return
         g_meta = user_states[user_id]["global_meta"]
         cur_sem_default = get_current_sgh_week_str()
         sem_str = str(g_meta.get("semana") or cur_sem_default)
@@ -486,8 +521,7 @@ def cargar_estado_persistente(user_id):
                     if "global_meta" in payload:
                         saved_meta = payload["global_meta"]
                         for k, v in saved_meta.items():
-                            if k not in ("semana", "num_tienda", "tienda") or sem_str == "30":
-                                g_meta[k] = v
+                            g_meta[k] = v
                     if "historico_semanal_state" in payload:
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
                     if "active_tab" in payload:
@@ -499,6 +533,34 @@ def cargar_estado_persistente(user_id):
             finally:
                 try: db.close()
                 except: pass
+
+        if not loaded:
+            # Fallback a archivos JSON locales persistidos en disco
+            sf_user = get_state_file(user_id)
+            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{tienda_id}.json") if tienda_id > 0 else None
+            for path_cand in [sf_user, sf_tienda]:
+                if path_cand and os.path.exists(path_cand):
+                    try:
+                        with open(path_cand, "r", encoding="utf-8") as f_json:
+                            payload = json.load(f_json)
+                        if "store_state" in payload:
+                            def_s = default_store_state()
+                            for d in DIAS:
+                                user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
+                                if d in payload["store_state"]:
+                                    user_states[user_id]["store_state"][d].update(payload["store_state"][d])
+                        if "global_meta" in payload:
+                            for k, v in payload["global_meta"].items():
+                                g_meta[k] = v
+                        if "historico_semanal_state" in payload:
+                            user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+                        if "active_tab" in payload:
+                            user_states[user_id]["active_tab"] = payload["active_tab"]
+                        loaded = True
+                        print(f"✅ Estado de Enfoque Diario cargado desde JSON local: {path_cand}")
+                        break
+                    except Exception as ex_local:
+                        print("Error cargando JSON local de enfoque diario:", ex_local)
 
         if not loaded:
             def_s = default_store_state()
@@ -782,348 +844,273 @@ def calcular_dia(d_name, user_id):
         "carekits_pct": cv_carekits_pct
     }
 
-# --- GENERADOR DE EXCEL OFICIAL SGH (.xlsx) ---
-def generar_excel_enfoque(d_name, user_id, page=None):
-    try:
-        d_real = "DOMINGO" if d_name == "SEMANAL" else d_name
-        calc = calcular_dia(d_real, user_id)
-        g_meta = user_states[user_id]["global_meta"]
-        s_state = user_states[user_id]["store_state"]
+DAY_TO_PLAN_SHEET = {
+    "DOMINGO": "PLAN.ACCIÓN_D",
+    "LUNES": "PLAN.ACCIÓN_L",
+    "MARTES": "PLAN.ACCIÓN_MA",
+    "MIÉRCOLES": "PLAN.ACCIÓN_MI",
+    "JUEVES": "PLAN.ACCIÓN_J",
+    "VIERNES": "PLAN.ACCIÓN_V",
+    "SÁBADO": "PLAN.ACCIÓN_S"
+}
 
-        template_path = os.path.abspath(os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx"))
-        if not os.path.exists(template_path):
-            template_path = os.path.abspath(os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx"))
+def map_to_excel_sheet(tab_name):
+    t = str(tab_name).strip().upper()
+    if t == "SEMANAL":
+        return "SEMANAL"
+    if t in ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "MIERCOLES", "JUEVES", "VIERNES", "SÁBADO", "SABADO"]:
+        if t == "MIERCOLES": return "MIÉRCOLES"
+        if t == "SABADO": return "SÁBADO"
+        return t
+    
+    plan_map = {
+        "PLAN DOMINGO": "PLAN.ACCIÓN_D",
+        "PLAN_DOMINGO": "PLAN.ACCIÓN_D",
+        "PLAN.ACCIÓN_D": "PLAN.ACCIÓN_D",
+        "PLAN_D": "PLAN.ACCIÓN_D",
+        "PLAN LUNES": "PLAN.ACCIÓN_L",
+        "PLAN_LUNES": "PLAN.ACCIÓN_L",
+        "PLAN.ACCIÓN_L": "PLAN.ACCIÓN_L",
+        "PLAN_L": "PLAN.ACCIÓN_L",
+        "PLAN MARTES": "PLAN.ACCIÓN_MA",
+        "PLAN_MARTES": "PLAN.ACCIÓN_MA",
+        "PLAN.ACCIÓN_MA": "PLAN.ACCIÓN_MA",
+        "PLAN_MA": "PLAN.ACCIÓN_MA",
+        "PLAN MIÉRCOLES": "PLAN.ACCIÓN_MI",
+        "PLAN MIERCOLES": "PLAN.ACCIÓN_MI",
+        "PLAN_MIÉRCOLES": "PLAN.ACCIÓN_MI",
+        "PLAN_MIERCOLES": "PLAN.ACCIÓN_MI",
+        "PLAN.ACCIÓN_MI": "PLAN.ACCIÓN_MI",
+        "PLAN_MI": "PLAN.ACCIÓN_MI",
+        "PLAN JUEVES": "PLAN.ACCIÓN_J",
+        "PLAN_JUEVES": "PLAN.ACCIÓN_J",
+        "PLAN.ACCIÓN_J": "PLAN.ACCIÓN_J",
+        "PLAN_J": "PLAN.ACCIÓN_J",
+        "PLAN VIERNES": "PLAN.ACCIÓN_V",
+        "PLAN_VIERNES": "PLAN.ACCIÓN_V",
+        "PLAN.ACCIÓN_V": "PLAN.ACCIÓN_V",
+        "PLAN_V": "PLAN.ACCIÓN_V",
+        "PLAN SÁBADO": "PLAN.ACCIÓN_S",
+        "PLAN SABADO": "PLAN.ACCIÓN_S",
+        "PLAN_SÁBADO": "PLAN.ACCIÓN_S",
+        "PLAN_SABADO": "PLAN.ACCIÓN_S",
+        "PLAN.ACCIÓN_S": "PLAN.ACCIÓN_S",
+        "PLAN_S": "PLAN.ACCIÓN_S",
+    }
+    return plan_map.get(t, t if t in ["SEMANAL", "DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "PLAN.ACCIÓN_D", "PLAN.ACCIÓN_L", "PLAN.ACCIÓN_MA", "PLAN.ACCIÓN_MI", "PLAN.ACCIÓN_J", "PLAN.ACCIÓN_V", "PLAN.ACCIÓN_S"] else "DOMINGO")
 
-        excel_filename = f"Enfoque_Diario_{d_name}_SGH_2026.xlsx"
-        uploads_dir = os.path.abspath(os.path.join(BASE_PATH, "uploads"))
-        os.makedirs(uploads_dir, exist_ok=True)
-        web_excel_path = os.path.abspath(os.path.join(uploads_dir, excel_filename))
+import unicodedata
 
-        if os.path.exists(template_path):
+def sanitize_filename(name):
+    n = unicodedata.normalize('NFKD', str(name)).encode('ASCII', 'ignore').decode('ASCII')
+    n = n.replace(" ", "_").replace(".", "_")
+    return n
+
+# --- GENERADOR DE EXCEL Y PDF OFICIAL SGH (.xlsx y .pdf 100% IDÉNTICOS) ---
+_EXCEL_COM_LOCK = threading.Lock()
+
+def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
+    with _EXCEL_COM_LOCK:
+        try:
+            user_id = str(user_id)
+            if user_id not in user_states:
+                init_user_state(user_id)
+                cargar_estado_persistente(user_id)
+
+            g_meta = user_states[user_id]["global_meta"]
+            s_state = user_states[user_id]["store_state"]
+
+            template_path = os.path.abspath(os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx"))
+            if not os.path.exists(template_path):
+                template_path = os.path.abspath(os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx"))
+
+            target_sheet = map_to_excel_sheet(d_name)
+            clean_sheet_name = sanitize_filename(target_sheet)
+            excel_filename = f"Enfoque_Diario_{clean_sheet_name}_SGH_2026.xlsx"
+            pdf_filename = f"Enfoque_Diario_{clean_sheet_name}_SGH_2026.pdf"
+            uploads_dir = os.path.abspath(os.path.join(BASE_PATH, "uploads"))
+            os.makedirs(uploads_dir, exist_ok=True)
+            web_excel_path = os.path.abspath(os.path.join(uploads_dir, excel_filename))
+            web_pdf_path = os.path.abspath(os.path.join(uploads_dir, pdf_filename))
+
+            if not os.path.exists(template_path):
+                print(f"Error: Plantilla base Excel no encontrada en {template_path}")
+                return None
+
             import shutil
-            shutil.copy(template_path, web_excel_path)
+            import uuid
+            import time
+            temp_excel_path = os.path.abspath(os.path.join(uploads_dir, f"_tmp_{uuid.uuid4().hex}.xlsx"))
+            shutil.copy(template_path, temp_excel_path)
 
+            excel = None
+            wb = None
             try:
+                import pythoncom
                 import win32com.client
+                pythoncom.CoInitialize()
                 excel = win32com.client.Dispatch("Excel.Application")
                 excel.Visible = False
                 excel.DisplayAlerts = False
                 excel.ScreenUpdating = False
 
-                wb = excel.Workbooks.Open(web_excel_path)
+                wb = excel.Workbooks.Open(temp_excel_path)
                 ws_names = [ws.Name for ws in wb.Worksheets]
 
+                fechas_map_ex = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
+
+                # 1. Llenar los 7 días completos para que todas las fórmulas y cálculos del libro sean perfectos
                 for d in DIAS:
-                    if d in ws_names:
+                    if d in ws_names and d in s_state:
                         ws = wb.Worksheets(d)
                         d_data = s_state[d]
 
-                        fechas_map_ex = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
-                        ws.Range('I1').Value = int(g_meta['semana']) if str(g_meta['semana']).isdigit() else g_meta['semana']
-                        ws.Range('M1').Value = g_meta['tienda']
+                        ws.Range('I1').Value = int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30')
+                        ws.Range('M1').Value = g_meta.get('tienda', 'SGH')
                         if d in fechas_map_ex:
                             try: ws.Range('E1').Value = fechas_map_ex[d]['str_header']
                             except Exception: pass
 
-                        ws.Range('C5').Value = d_data['meta_diaria']
-                        ws.Range('F5').Value = d_data['trafico_esperado']
-                        ws.Range('F6').Value = d_data['conversion_target']
-                        ws.Range('E9').Value = d_data['vta_ly']
-                        ws.Range('I5').Value = d_data['wearables_pct']
-                        ws.Range('I6').Value = d_data['kids_pct']
-                        ws.Range('I7').Value = d_data['carekits_pct']
+                        ws.Range('C5').Value = d_data.get('meta_diaria', 0.0)
+                        ws.Range('F5').Value = d_data.get('trafico_esperado', 0)
+                        ws.Range('F6').Value = d_data.get('conversion_target', 0.0)
+                        ws.Range('E9').Value = d_data.get('vta_ly', 0.0)
+                        ws.Range('I5').Value = d_data.get('wearables_pct', 0.0)
+                        ws.Range('I6').Value = d_data.get('kids_pct', 0.0)
+                        ws.Range('I7').Value = d_data.get('carekits_pct', 0.0)
 
-                        for i, val in enumerate(d_data['trafico_bloques']):
-                            col_letter = ['C', 'D', 'E', 'F', 'G'][i]
-                            ws.Range(f'{col_letter}12').Value = val
+                        if 'trafico_bloques' in d_data:
+                            ws.Range('C12:G12').Value = [d_data['trafico_bloques']]
 
                         ws.Range('P7').Value = d_data.get('atv_dia', 7500.0)
                         ws.Range('P9').Value = d_data.get('aur_dia', 4617.0)
                         ws.Range('P13').Value = d_data.get('atv_mtd', 6578.0)
                         ws.Range('P15').Value = d_data.get('aur_mtd', 4312.0)
 
-                        for i, c in enumerate(d_data['colaboradores']):
+                        for i, c in enumerate(d_data.get('colaboradores', [])[:8]):
                             r_idx = 17 + i
-                            if r_idx <= 24:
-                                ws.Range(f'B{r_idx}').Value = c['nombre']
-                                ws.Range(f'D{r_idx}').Value = c['horas']
-                                if c.get("meta_ana", "") != "": ws.Range(f'F{r_idx}').Value = int(c["meta_ana"])
-                                if c.get("meta_wea", "") != "": ws.Range(f'G{r_idx}').Value = int(c["meta_wea"])
-                                if c.get("meta_kid", "") != "": ws.Range(f'H{r_idx}').Value = int(c["meta_kid"])
-                                if c.get("meta_ck", "") != "": ws.Range(f'I{r_idx}').Value = int(c["meta_ck"])
+                            ws.Range(f'B{r_idx}').Value = c.get('nombre', '')
+                            ws.Range(f'D{r_idx}').Value = c.get('horas', 0.0)
+                            if c.get("meta_ana", "") != "": ws.Range(f'F{r_idx}').Value = int(c["meta_ana"])
+                            if c.get("meta_wea", "") != "": ws.Range(f'G{r_idx}').Value = int(c["meta_wea"])
+                            if c.get("meta_kid", "") != "": ws.Range(f'H{r_idx}').Value = int(c["meta_kid"])
+                            if c.get("meta_ck", "") != "": ws.Range(f'I{r_idx}').Value = int(c["meta_ck"])
                                 
                             r_cv_idx = 33 + i
-                            if r_cv_idx <= 40:
-                                ws.Range(f'E{r_cv_idx}').Value = c.get('interacciones', 0)
-                                ws.Range(f'G{r_cv_idx}').Value = c.get('convertidos', 0)
-                                ws.Range(f'J{r_cv_idx}').Value = c.get('vta_cierre', 0.0)
-                                ws.Range(f'K{r_cv_idx}').Value = c.get('ana_cierre', 0)
-                                ws.Range(f'L{r_cv_idx}').Value = c.get('wea_demos', 0)
-                                ws.Range(f'M{r_cv_idx}').Value = c.get('wea_cierre', 0)
-                                ws.Range(f'O{r_cv_idx}').Value = c.get('kid_cierre', 0)
-                                ws.Range(f'P{r_cv_idx}').Value = c.get('ck_cierre', 0)
+                            ws.Range(f'E{r_cv_idx}').Value = c.get('interacciones', 0)
+                            ws.Range(f'G{r_cv_idx}').Value = c.get('convertidos', 0)
+                            ws.Range(f'J{r_cv_idx}').Value = c.get('vta_cierre', 0.0)
+                            ws.Range(f'K{r_cv_idx}').Value = c.get('ana_cierre', 0)
+                            ws.Range(f'L{r_cv_idx}').Value = c.get('wea_demos', 0)
+                            ws.Range(f'M{r_cv_idx}').Value = c.get('wea_cierre', 0)
+                            ws.Range(f'O{r_cv_idx}').Value = c.get('kid_cierre', 0)
+                            ws.Range(f'P{r_cv_idx}').Value = c.get('ck_cierre', 0)
 
                         ws.Range('E30').Value = d_data.get('venta_neta_dia', 0.0)
                         ws.Range('G30').Value = d_data.get('venta_unidades_dia', 0)
 
-                wb.Save()
+                # 2. Llenar las 7 hojas de Plan de Acción si están en la plantilla
+                for d, plan_sheet_name in DAY_TO_PLAN_SHEET.items():
+                    if plan_sheet_name in ws_names and d in s_state:
+                        ws_p = wb.Worksheets(plan_sheet_name)
+                        d_data = s_state[d]
+                        ws_p.Range('I1').Value = int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30')
+                        
+                        r_txt = str(d_data.get('ritmo_venta_hoy', '') or '').strip()
+                        if r_txt:
+                            ws_p.Range('I4').Value = f"¿Cuál debe ser nuestro ritmo de venta hoy?\n{r_txt}"
+                        else:
+                            ws_p.Range('I4').Value = "¿Cuál debe ser nuestro ritmo de venta hoy?"
+                            
+                        ws_p.Range('A27').Value = str(d_data.get('enfoque_hoy', '') or '')
+                        ws_p.Range('A30').Value = str(d_data.get('logros_hoy', '') or '')
+                        
+                        # Checkmarks Estándares
+                        chk_e = d_data.get('checks_estandares', {})
+                        if chk_e.get('limpieza'): ws_p.Range('A9').Value = "✓"
+                        if chk_e.get('imagen'): ws_p.Range('A10').Value = "✓"
+                        if chk_e.get('reunion'): ws_p.Range('A11').Value = "✓"
+
+                        # Checkmarks No Negociables
+                        chk_nn = d_data.get('checks_no_negociables', {})
+                        if chk_nn.get('registro'): ws_p.Range('H9').Value = "✓"
+                        if chk_nn.get('sin_celular'): ws_p.Range('H10').Value = "✓"
+                        if chk_nn.get('fuera_caja'): ws_p.Range('H11').Value = "✓"
+                        if chk_nn.get('seguimiento'): ws_p.Range('H12').Value = "✓"
+
+                        # Checkmarks Secretos
+                        chk_s = d_data.get('checks_secretos', {})
+                        if chk_s.get('pulir'): ws_p.Range('A16').Value = "✓"
+                        if chk_s.get('pontelos'): ws_p.Range('A17').Value = "✓"
+                        if chk_s.get('diviertete'): ws_p.Range('A18').Value = "✓"
+                        if chk_s.get('cuidalos'): ws_p.Range('A19').Value = "✓"
+                        if chk_s.get('ajuste'): ws_p.Range('A20').Value = "✓"
+
+                        # Checkmarks Journey
+                        chk_j = d_data.get('checks_journey', {})
+                        if chk_j.get('relacion'): ws_p.Range('H18').Value = "✓"
+                        if chk_j.get('confianza'): ws_p.Range('K18').Value = "✓"
+                        if chk_j.get('ve_mas_alla'): ws_p.Range('N18').Value = "✓"
+
+                if export_pdf:
+                    sheet_name = target_sheet if target_sheet in ws_names else "DOMINGO"
+                    ws_export = wb.Worksheets(sheet_name)
+                    try:
+                        ws_export.PageSetup.Zoom = False
+                        ws_export.PageSetup.FitToPagesWide = 1
+                        ws_export.PageSetup.FitToPagesTall = 1
+                    except Exception:
+                        pass
+                    ws_export.ExportAsFixedFormat(0, web_pdf_path)
+                    print(f"✅ PDF exportado exitosamente vía win32com ({sheet_name}): {web_pdf_path}")
+
+                wb.SaveCopyAs(web_excel_path)
                 wb.Close(False)
-                excel.Quit()
-                print(f"✅ Excel generado exitosamente vía win32com ({os.path.getsize(web_excel_path)/(1024*1024):.2f} MB)")
+                wb = None
+                
+                if excel:
+                    try: excel.Quit()
+                    except: pass
+                    excel = None
+
+                try:
+                    if os.path.exists(temp_excel_path):
+                        os.remove(temp_excel_path)
+                except Exception:
+                    pass
+
+                if export_pdf:
+                    return web_pdf_path if os.path.exists(web_pdf_path) else None
                 return web_excel_path
+
             except Exception as ex_com:
-                print("Notice win32com excel save fallback:", ex_com)
-                import openpyxl
-                wb = openpyxl.load_workbook(template_path)
-                ws = wb[d_real if d_real in wb.sheetnames else "DOMINGO"]
-                ws['C5'] = s_state.get(d_real, {}).get('meta_diaria', 0.0)
-                wb.save(web_excel_path)
-                wb.close()
-                return web_excel_path
-        return web_excel_path
-    except Exception as ex:
-        print("Error en generar_excel_enfoque:", ex)
-        return None
-
-        home_dir = os.path.expanduser("~")
-        possible_desktops = [
-            os.path.join(home_dir, "Desktop"),
-            os.path.join(home_dir, "OneDrive", "Desktop")
-        ]
-        primary_desk = None
-        for d_path in possible_desktops:
-            if os.path.exists(d_path):
-                target_file = os.path.join(d_path, excel_filename)
+                print("Notice win32com export error:", ex_com)
+                if excel:
+                    try: excel.Quit()
+                    except: pass
+                    excel = None
                 try:
-                    import shutil
-                    shutil.copy2(web_excel_path, target_file)
-                    if not primary_desk:
-                        primary_desk = target_file
+                    if os.path.exists(temp_excel_path):
+                        os.remove(temp_excel_path)
                 except Exception:
                     pass
+                return web_pdf_path if (export_pdf and os.path.exists(web_pdf_path)) else web_excel_path
+            finally:
+                if excel:
+                    try: excel.Quit()
+                    except: pass
+                try: pythoncom.CoUninitialize()
+                except: pass
 
-        if primary_desk and os.path.exists(primary_desk):
-            try:
-                os.startfile(primary_desk)
-            except Exception:
-                pass
+        except Exception as ex:
+            print("Error en generar_excel_y_pdf_enfoque:", ex)
+            return None
 
-        if page:
-            snack = ft.SnackBar(ft.Text(f"📊 Excel oficial generado y guardado en tu Escritorio: {excel_filename}", color="white"), bgcolor="#10B981")
-            page.overlay.append(snack)
-            snack.open = True
-            page.update()
+def generar_excel_enfoque(d_name, user_id, page=None):
+    return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False)
 
-        return web_excel_path
-
-    except Exception as ex_excel:
-        print("Error generando Excel Enfoque Diario:", ex_excel)
-        if page:
-            snack = ft.SnackBar(ft.Text(f"❌ Error generando Excel: {ex_excel}", color="white"), bgcolor="red")
-            page.overlay.append(snack)
-            snack.open = True
-            page.update()
-        return None
-
-# --- GENERADOR DE REPORTES EN PDF ---
 def generar_pdf_enfoque_file(d_name, user_id):
-    try:
-        d_real = "DOMINGO" if d_name == "SEMANAL" else d_name
-        excel_path = generar_excel_enfoque(d_real, user_id)
-
-        pdf_filename = f"Enfoque_Diario_{d_name}_SGH_2026.pdf"
-        uploads_dir = os.path.join(BASE_PATH, "uploads")
-        os.makedirs(uploads_dir, exist_ok=True)
-        web_pdf_path = os.path.join(uploads_dir, pdf_filename)
-
-        abs_excel = os.path.abspath(excel_path)
-        abs_pdf = os.path.abspath(web_pdf_path)
-
-        # Conversión directa del Excel Oficial a PDF via Windows Excel COM
-        try:
-            import win32com.client
-            excel = win32com.client.Dispatch("Excel.Application")
-            excel.Visible = False
-            excel.DisplayAlerts = False
-            wb = excel.Workbooks.Open(abs_excel)
-            sheet_name = d_real if d_real in [ws.Name for ws in wb.Worksheets] else "DOMINGO"
-            ws = wb.Worksheets(sheet_name)
-            ws.ExportAsFixedFormat(0, abs_pdf)
-            wb.Close(False)
-            excel.Quit()
-            if os.path.exists(abs_pdf):
-                print(f"✅ PDF convertido idéntico desde Excel oficial a través de win32com: {abs_pdf}")
-                return abs_pdf
-        except Exception as ex_com:
-            print("Notice win32com PDF conversion:", ex_com)
-
-        return web_pdf_path if os.path.exists(web_pdf_path) else None
-    except Exception as ex_gen:
-        print("Error en generar_pdf_enfoque_file:", ex_gen)
-        return None
-
-        story = []
-        story.append(Paragraph(f"<b>SUNGLASS HUT (SGH) - ENFOQUE DIARIO 2026</b>", title_style))
-        story.append(Paragraph(f"<b>DÍA:</b> {d_name} | <b>SEMANA:</b> {g_meta['semana']} | <b>TIENDA:</b> {g_meta['tienda']} | <b>FECHA EMISIÓN:</b> {datetime.date.today().strftime('%d/%m/%Y')}", sub_title_style))
-        story.append(Spacer(1, 6))
-
-        story.append(Paragraph("<b>1. META DEL DÍA Y NO NEGOCIABLES (RESUMEN OPERATIVO)</b>", h2_style))
-        meta_data_table = [
-            [
-                Paragraph("<b>META DEL DÍA</b>", black_hdr_style),
-                Paragraph("<b>CONVERSIÓN</b>", black_hdr_style),
-                Paragraph("<b>NO NEGOCIABLES</b>", black_hdr_style),
-                Paragraph("<b>PRODUCTIVIDAD</b>", black_hdr_style)
-            ],
-            [
-                f"Meta Diaria: ${calc['meta_diaria']:,.2f}\nAnálogos (85%): ${calc['analogos']:,.2f}\nWearables (15%): ${calc['wearables']:,.2f}\nTotal Unidades: {calc['total_unidades']}\nEvaluación: {'⭐' * data['estrellas_logro']}",
-                f"Tráfico Esperado: {data['trafico_esperado']}\nConversión LY+1: {int(data['conversion_target']*100)}%\nTransacciones Target: {calc['transacciones']}\nMeta Ideal (110%): ${calc['meta_ideal']:,.2f}",
-                f"Wearables: 15% (Min 1)\nKids: 5% (Min 1)\nCarekits: 30% (Min 1)",
-                f"Vta Neta: ${calc['vta_neta_prod']:,.2f}\nU.Prod: {calc['u_prod']}\nVta LY: ${calc['vta_ly']:,.2f}"
-            ]
-        ]
-        t_meta = Table(meta_data_table, colWidths=[135, 135, 135, 135])
-        t_meta.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#000000')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
-            ('BACKGROUND', (0,1), (-1,1), colors.HexColor('#F3F4F6')),
-            ('PADDING', (0,0), (-1,-1), 6),
-            ('VALIGN', (0,0), (-1,-1), 'TOP')
-        ]))
-        story.append(t_meta)
-        story.append(Spacer(1, 8))
-
-        story.append(Paragraph("<b>2. DESGLOSE HORARIO DE VENTA</b>", h2_style))
-        bloques_names = ["Apertura-1pm", "1pm - 3pm", "3pm - 5pm", "5pm - 7pm", "7pm - Cierre", "TOTAL"]
-        hdr_b = [Paragraph(f"<b>{b}</b>", black_hdr_style) for b in bloques_names]
-        hdr_b.insert(0, Paragraph("<b>BLOQUE / INDICADOR</b>", black_hdr_style))
-
-        row_trafico = ["Tráfico (⚪)"] + [str(b) for b in data["trafico_bloques"]] + [str(calc["tot_trafico_b"])]
-        row_peso = ["Peso % (🟩)"] + [f"{p*100:.1f}%" for p in calc["b_pesos"]] + ["100%"]
-        row_meta = ["Meta $ (🟩)"] + [f"${m:,.0f}" for m in calc["b_metas"]] + [f"${calc['meta_diaria']:,.0f}"]
-
-        t_bloques = Table([hdr_b, row_trafico, row_peso, row_meta], colWidths=[115, 70, 70, 70, 70, 75, 70])
-        t_bloques.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#000000')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
-            ('BACKGROUND', (1,2), (-1,3), colors.HexColor('#E6F4EA')),
-            ('PADDING', (0,0), (-1,-1), 5)
-        ]))
-        story.append(t_bloques)
-        story.append(Spacer(1, 8))
-
-        story.append(Paragraph("<b>3. ASIGNACIÓN POR COLABORADOR</b>", h2_style))
-        colab_hdr = [Paragraph(h, black_hdr_style) for h in ["COLABORADOR", "HORAS", "META VENTA", "ANÁLOGOS", "WEARABLES", "KIDS", "CAREKITS"]]
-        colab_table_data = [colab_hdr]
-
-        for r in calc["colab_rows"]:
-            if r["nombre"]:
-                colab_table_data.append([
-                    r["nombre"], f"{r['horas']:.1f}", f"${r['meta_vta']:,.2f}",
-                    str(r["meta_ana"]), str(r["meta_wea"]), str(r["meta_kid"]), str(r["meta_ck"])
-                ])
-
-        colab_table_data.append([
-            "TOTAL TIENDA", f"{calc['tot_horas']:.1f}", f"${calc['meta_diaria']:,.2f}",
-            str(sum(r["meta_ana"] for r in calc["colab_rows"])),
-            str(sum(r["meta_wea"] for r in calc["colab_rows"])),
-            str(sum(r["meta_kid"] for r in calc["colab_rows"])),
-            str(sum(r["meta_ck"] for r in calc["colab_rows"]))
-        ])
-
-        t_colab = Table(colab_table_data, colWidths=[120, 55, 95, 65, 70, 65, 70])
-        t_colab.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#000000')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
-            ('BACKGROUND', (2,1), (-1,-2), colors.HexColor('#E6F4EA')),
-            ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#D1D5DB')),
-            ('TEXTCOLOR', (0,-1), (-1,-1), colors.black),
-            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-            ('PADDING', (0,0), (-1,-1), 5)
-        ]))
-        story.append(t_colab)
-        story.append(Spacer(1, 8))
-
-        story.append(Paragraph("<b>4. ¿CÓMO VAMOS? (RESULTADOS AL CIERRE)</b>", h2_style))
-        
-        cv_hdr1 = [Paragraph(h, black_hdr_style) for h in ["META", "VTA NETA", "META UNID", "VTA UNID", "CONVERSIÓN", "CRECIM.", "WEARABLES %", "KIDS %", "CAREKITS %"]]
-        cv_row1 = [
-            f"${calc['meta_diaria']:,.2f}", f"${calc['venta_neta_dia']:,.2f}", str(calc['total_unidades']),
-            str(calc['venta_unidades_dia']), f"{calc['conversion_dia']*100:.1f}%", f"{calc['crecimiento_conversion']*100:.1f}%",
-            f"{calc['wearables_pct']*100:.1f}%", f"{calc['kids_pct']*100:.1f}%", f"{calc['carekits_pct']*100:.1f}%"
-        ]
-        t_cv1 = Table([cv_hdr1, cv_row1], colWidths=[60, 60, 60, 60, 60, 50, 70, 50, 70])
-        t_cv1.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F59E0B')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
-            ('BACKGROUND', (0,1), (-1,1), colors.HexColor('#FEF3C7')),
-            ('PADDING', (0,0), (-1,-1), 5),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER')
-        ]))
-        story.append(t_cv1)
-        story.append(Spacer(1, 6))
-
-        cv_colab_hdr = [Paragraph(h, black_hdr_style) for h in ["COLABORADOR", "INT.", "CONV.", "CONV.%", "VTA CIERRE", "WEA.C.", "KIDS C.", "CK C."]]
-        cv_colab_data = [cv_colab_hdr]
-        for r in calc["colab_rows"]:
-            if r["nombre"]:
-                cv_colab_data.append([
-                    r["nombre"], str(r["interacciones"]), str(r["convertidos"]), f"{r['conversion_cierre']*100:.1f}%",
-                    f"${r['vta_cierre']:,.2f}", str(r["wea_cierre"]), str(r["kid_cierre"]), str(r["ck_cierre"])
-                ])
-        cv_colab_data.append([
-            "TOTAL TIENDA", str(calc["tot_interacciones"]), str(calc["tot_convertidos"]), "",
-            f"${calc['tot_vta_cierre']:,.2f}", str(calc["tot_wea_cierre"]), str(calc["tot_kid_cierre"]), str(calc["tot_ck_cierre"])
-        ])
-        t_cv_colab = Table(cv_colab_data, colWidths=[100, 40, 40, 50, 70, 50, 50, 50])
-        t_cv_colab.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F59E0B')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
-            ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#D1D5DB')),
-            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-            ('PADDING', (0,0), (-1,-1), 5),
-            ('ALIGN', (1,0), (-1,-1), 'CENTER')
-        ]))
-        story.append(t_cv_colab)
-        story.append(Spacer(1, 8))
-
-        story.append(Paragraph("<b>5. PLAN DE ACCIÓN, LOS 5 SECRETOS Y CUSTOMER JOURNEY</b>", h2_style))
-        story.append(Paragraph(f"<b>Los 5 Secretos:</b> 1. Pulir es poder | 2. Póntelos | 3. Diviértete más | 4. Cuídalos | 5. Ajuste perfecto", normal_style))
-        story.append(Paragraph(f"<b>Customer Journey:</b> 1. Empieza una relación | 2. Gánate su confianza | 3. Interactúa y relaciona | 4. Descubre y aprende | 5. Ve más allá", normal_style))
-        story.append(Spacer(1, 4))
-        story.append(Paragraph(f"<b>Tu Enfoque Para Hoy:</b> {data['enfoque_hoy'] or 'Seguimiento continuo al 100% de la Meta Diaria.'}", normal_style))
-        story.append(Spacer(1, 4))
-        story.append(Paragraph(f"<b>Logros y Oportunidades:</b> {data['logros_hoy'] or 'Mantener la disciplina en el Customer Journey y Los 5 Secretos.'}", normal_style))
-
-        doc = SimpleDocTemplate(
-            web_pdf_path, pagesize=letter,
-            rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
-        )
-        doc.build(story)
-
-        home_dir = os.path.expanduser("~")
-        possible_desktops = [
-            os.path.join(home_dir, "Desktop"),
-            os.path.join(home_dir, "OneDrive", "Desktop")
-        ]
-        for d_path in possible_desktops:
-            if os.path.exists(d_path):
-                try:
-                    import shutil
-                    shutil.copy2(web_pdf_path, os.path.join(d_path, pdf_filename))
-                except Exception:
-                    pass
-
-        return web_pdf_path
-    except Exception as ex_gen:
-        print("Error en generar_pdf_enfoque_file:", ex_gen)
-        return None
-
+    return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=True)
 
 def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     """
@@ -1164,17 +1151,13 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             return
 
         try:
-            if target_day:
-                d_name = target_day
-            else:
-                curr_tab = user_states[user_id]['active_tab'][0]
-                d_name = curr_tab.replace("PLAN.ACCIÓN_", "")
-                code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
-                d_name = code_map.get(d_name, d_name if d_name in DIAS else "DOMINGO")
+            target_raw = target_day if target_day else user_states[user_id]['active_tab'][0]
+            sheet_target_name = map_to_excel_sheet(target_raw)
 
-            pdf_path = generar_pdf_enfoque_file(d_name, user_id)
-            pdf_filename = f"Enfoque_Diario_{d_name}_SGH_2026.pdf"
-            pdf_url = f"/uploads/{pdf_filename}"
+            pdf_path = generar_pdf_enfoque_file(sheet_target_name, user_id)
+            clean_name = sanitize_filename(sheet_target_name)
+            pdf_filename = f"Enfoque_Diario_{clean_name}_SGH_2026.pdf"
+            pdf_url = f"/print_enfoque/{sheet_target_name}?user_id={user_id}"
 
             def cerrar_dialogo(e):
                 dlg.open = False
@@ -1183,10 +1166,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             dlg = ft.AlertDialog(
                 title=ft.Row([
                     ft.Icon(ft.Icons.PICTURE_AS_PDF_ROUNDED, color="#10B981", size=24),
-                    ft.Text(f"Reporte PDF ({d_name}) Listo 📄", color="white", weight="bold", size=16)
+                    ft.Text(f"Reporte PDF ({sheet_target_name}) Listo 📄", color="white", weight="bold", size=16)
                 ], spacing=8),
                 content=ft.Column([
-                    ft.Text("Tu reporte ha sido generado y guardado en tu Escritorio de Windows:", color="#CCCCCC", size=12),
+                    ft.Text("Tu reporte ha sido generado y guardado en tu sistema:", color="#CCCCCC", size=12),
                     ft.Container(
                         content=ft.Row([
                             ft.Icon(ft.Icons.FOLDER_ROUNDED, color="#FFD700", size=18),
@@ -1237,23 +1220,23 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
             d_real = code_map.get(d_code, "DOMINGO")
             view_ui = build_plan_accion_ui(d_real)
+        elif curr_tab.startswith("PLAN "):
+            d_real = curr_tab.replace("PLAN ", "").strip()
+            view_ui = build_plan_accion_ui(d_real)
+        elif curr_tab.startswith("PLAN_"):
+            d_real = curr_tab.replace("PLAN_", "").strip()
+            view_ui = build_plan_accion_ui(d_real)
         else:
             view_ui = build_sheet_ui(curr_tab)
 
         tab_content_container.content = view_ui
             
         try:
-            if curr_tab == "SEMANAL":
-                btn_download_excel.url = f"/api/download_excel/SEMANAL?user_id={user_id}"
-                btn_download_pdf.url = f"/print_enfoque/SEMANAL?user_id={user_id}"
-            else:
-                d_name = curr_tab
-                if d_name.startswith("PLAN.ACCIÓN_"):
-                    d_code = d_name.replace("PLAN.ACCIÓN_", "")
-                    code_map = {"D": "DOMINGO", "L": "LUNES", "MA": "MARTES", "MI": "MIÉRCOLES", "J": "JUEVES", "V": "VIERNES", "S": "SÁBADO"}
-                    d_name = code_map.get(d_code, "DOMINGO")
-                btn_download_excel.url = f"/api/download_excel/{d_name}?user_id={user_id}"
-                btn_download_pdf.url = f"/print_enfoque/{d_name}?user_id={user_id}"
+            sheet_target = map_to_excel_sheet(curr_tab)
+            btn_download_excel.url = f"/api/download_excel/{sheet_target}?user_id={user_id}"
+            btn_download_pdf.url = f"/print_enfoque/{sheet_target}?user_id={user_id}"
+            btn_download_excel.content = ft.Text(f"📊 Exportar Excel ({sheet_target})", color="white", weight="bold", size=11)
+            btn_download_pdf.content = ft.Text(f"🖨️ PDF ({sheet_target})", color="white", weight="bold", size=11)
 
             btn_download_excel.update()
             btn_download_pdf.update()
@@ -1275,18 +1258,24 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         calc = calcular_dia(d_name, user_id)
         data = s_state[d_name]
         green_txts = {}
+        is_mobile = (page.width < 800) if (page and getattr(page, "width", None)) else False
+        cell_font_size = 10 if is_mobile else 11
+        cell_height = 28 if is_mobile else 32
+        cell_padding = ft.Padding(3, 1, 3, 1) if is_mobile else ft.Padding(4, 2, 4, 2)
 
-        def make_green_calc(key, val_str, width=120):
-            t_obj = ft.Text(val_str, size=12, weight="bold", color="#00FF88")
+        def make_green_calc(key, val_str, width=None, expand=None):
+            t_obj = ft.Text(val_str, size=cell_font_size, weight="bold", color="#00FF88", no_wrap=True)
             green_txts[key] = t_obj
             return ft.Container(
                 content=t_obj,
                 bgcolor="#052C1E",
                 border=ft.Border.all(1, "#10B981"),
                 border_radius=6,
-                padding=8,
+                padding=cell_padding,
                 alignment=ft.alignment.Alignment(0, 0),
-                width=width
+                width=width,
+                expand=expand,
+                height=cell_height
             )
 
         def sync_green_cells():
@@ -1447,7 +1436,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             except Exception: pass
 
         # Componente Celda Blanca (Entrada editable ⚪)
-        def make_white_input(val, data_id, width=110, suffix=""):
+        def make_white_input(val, data_id, width=None, suffix="", expand=None):
             val_formatted = str(val)
             try:
                 if isinstance(val, (int, float)) and val != 0:
@@ -1477,15 +1466,18 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     data=data_id,
                     on_change=on_white_cell_change,
                     on_blur=on_blur_format_commas,
-                    text_size=12,
+                    text_size=cell_font_size,
                     text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
                     bgcolor="#1F2937",
                     border_color="#374151",
                     focused_border_color="#00FFFF",
-                    content_padding=8,
-                    suffix=ft.Text(suffix, color="#AAAAAA", size=11) if suffix else None
+                    content_padding=cell_padding,
+                    suffix=ft.Text(suffix, color="#AAAAAA", size=9 if is_mobile else 10) if suffix else None,
+                    dense=True
                 ),
-                width=width
+                width=width,
+                expand=expand,
+                height=cell_height
             )
 
         # Render Estrellas ⭐
@@ -1507,185 +1499,230 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         fecha_full_txt = fechas_map_u.get(d_name, {}).get("str_full", "")
         lbl_meta_dia = f"META DEL DÍA ({d_name} - {fecha_full_txt}) Y NO NEGOCIABLES" if fecha_full_txt else f"META DEL DÍA ({d_name}) Y NO NEGOCIABLES"
 
-        # 1. TARJETA CABECERA DE METAS GENERATION (OFICIAL SGH)
+        # 1. TARJETA CABECERA DE METAS GENERATION (OFICIAL SGH - FORMATO ULTRA COMPACTO)
         card_metas = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.FLAG_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text(lbl_meta_dia, color="white", weight="bold", size=13),
+                    ft.Icon(ft.Icons.FACT_CHECK_ROUNDED, color="#00FFFF", size=16),
+                    ft.Text(lbl_meta_dia, color="white", weight="bold", size=12),
                     ft.Container(expand=True),
-                    ft.Text("Evaluación:", color="#AAAAAA", size=11),
+                    ft.Text("Evaluación:", color="#AAAAAA", size=10),
                     star_row
-                ], spacing=6, vertical_alignment="center"),
-                ft.Divider(height=8, color="#374151"),
+                ], spacing=4, vertical_alignment="center"),
+                ft.Divider(height=6, color="#374151"),
                 ft.Row([
                     # Columna 1: Meta del Día (Negro / Cian)
                     ft.Container(
                         content=ft.Column([
                             ft.Text("META DEL DÍA (NEGRO)", color="#00FFFF", weight="bold", size=11),
-                            ft.Text("Meta Diaria (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(data["meta_diaria"], "meta_diaria", width=130, suffix="$"),
-                            ft.Text("Análogos 85% (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("analogos", f"${calc['analogos']:,.2f}", width=130),
-                            ft.Text("Wearables 15% (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("wearables", f"${calc['wearables']:,.2f}", width=130),
-                            ft.Text("Total Unidades (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("total_unidades", f"{calc['total_unidades']} Pza", width=130),
-                        ], spacing=4),
-                        bgcolor="#111827", padding=10, border_radius=8, border=ft.Border.all(1, "#374151"), width=220
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("Meta Diaria (Manual)", color="#AAAAAA", size=9),
+                                    make_white_input(data["meta_diaria"], "meta_diaria", suffix="$", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("Total U. (Auto)", color="#AAAAAA", size=9),
+                                    make_green_calc("total_unidades", f"{calc['total_unidades']} Pza", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("Análogos 85% (Auto)", color="#AAAAAA", size=9),
+                                    make_green_calc("analogos", f"${calc['analogos']:,.2f}", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("Wearables 15% (Auto)", color="#AAAAAA", size=9),
+                                    make_green_calc("wearables", f"${calc['wearables']:,.2f}", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                        ], spacing=3),
+                        bgcolor="#111827", padding=8, border_radius=8, border=ft.Border.all(1, "#374151"), width=290
                     ),
                     # Columna 2: Conversión (No Negociable)
                     ft.Container(
                         content=ft.Column([
                             ft.Text("CONVERSIÓN (NO NEGOCIABLE)", color="#F59E0B", weight="bold", size=11),
-                            ft.Text("Tráfico Esperado (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(data["trafico_esperado"], "trafico_esperado", width=130),
-                            ft.Text("Conversión LY+1 (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(int(data["conversion_target"]*100), "conversion_target", width=130, suffix="%"),
-                            ft.Text("Transacciones (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("transacciones", f"{calc['transacciones']} Transac.", width=130),
-                            ft.Text("Meta Ideal 110% (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("meta_ideal", f"${calc['meta_ideal']:,.2f}", width=130),
-                        ], spacing=4),
-                        bgcolor="#111827", padding=10, border_radius=8, border=ft.Border.all(1, "#374151"), width=220
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("Tráfico Esp. (Manual)", color="#AAAAAA", size=9),
+                                    make_white_input(data["trafico_esperado"], "trafico_esperado", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("Conv. LY+1 (Manual)", color="#AAAAAA", size=9),
+                                    make_white_input(int(data["conversion_target"]*100), "conversion_target", suffix="%", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("Transacciones (Auto)", color="#AAAAAA", size=9),
+                                    make_green_calc("transacciones", f"{calc['transacciones']} Transac.", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("Meta Ideal 110% (Auto)", color="#AAAAAA", size=9),
+                                    make_green_calc("meta_ideal", f"${calc['meta_ideal']:,.2f}", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                        ], spacing=3),
+                        bgcolor="#111827", padding=8, border_radius=8, border=ft.Border.all(1, "#374151"), width=290
                     ),
                     # Columna 3: Otros No Negociables
                     ft.Container(
                         content=ft.Column([
                             ft.Text("OTROS NO NEGOCIABLES", color="#E040FB", weight="bold", size=11),
-                            ft.Text("Wearables: 15% (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("fix_wea", f"15% (Min 1)", width=130),
-                            ft.Text("Kids: 5% (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("fix_kid", f"5% (Min 1)", width=130),
-                            ft.Text("Carekits: 30% (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("fix_ck", f"30% (Min 1)", width=130),
-                        ], spacing=4),
-                        bgcolor="#111827", padding=10, border_radius=8, border=ft.Border.all(1, "#374151"), width=220
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("Wearables 15%", color="#AAAAAA", size=9),
+                                    make_green_calc("fix_wea", "15% (Min 1)", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("Kids 5%", color="#AAAAAA", size=9),
+                                    make_green_calc("fix_kid", "5% (Min 1)", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("Carekits 30%", color="#AAAAAA", size=9),
+                                    make_green_calc("fix_ck", "30% (Min 1)", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                        ], spacing=3),
+                        bgcolor="#111827", padding=8, border_radius=8, border=ft.Border.all(1, "#374151"), width=290
                     ),
                     # Columna 4: Productividad & COMP LY
                     ft.Container(
                         content=ft.Column([
                             ft.Text("PRODUCTIVIDAD & COMP LY", color="#10B981", weight="bold", size=11),
-                            ft.Text("Vta Neta / Prod (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("vta_neta_prod", f"${calc['vta_neta_prod']:,.2f}", width=130),
-                            ft.Text("U.Prod (U/Hr) (Auto)", color="#AAAAAA", size=10),
-                            make_green_calc("u_prod", f"{calc['u_prod']}", width=130),
-                            ft.Text("COMP LY - Vta LY (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(data["vta_ly"], "vta_ly", width=130, suffix="$"),
-                        ], spacing=4),
-                        bgcolor="#111827", padding=10, border_radius=8, border=ft.Border.all(1, "#374151"), width=220
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("Vta Neta / Prod", color="#AAAAAA", size=9),
+                                    make_green_calc("vta_neta_prod", f"${calc['vta_neta_prod']:,.2f}", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("U.Prod (U/Hr)", color="#AAAAAA", size=9),
+                                    make_green_calc("u_prod", f"{calc['u_prod']}", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("COMP LY - Vta LY (Manual)", color="#AAAAAA", size=9),
+                                    make_white_input(data["vta_ly"], "vta_ly", suffix="$", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                        ], spacing=3),
+                        bgcolor="#111827", padding=8, border_radius=8, border=ft.Border.all(1, "#374151"), width=290
                     ),
                     # Columna 5: CAPTURA DÍA COMP & MTD (ATV / AUR)
                     ft.Container(
                         content=ft.Column([
                             ft.Text("VALORES DÍA COMP & MTD", color="#FFD700", weight="bold", size=11),
-                            ft.Text("ATV Día Comp (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(data.get("atv_dia", 3620.0), "atv_dia", width=130, suffix="$"),
-                            ft.Text("AUR Día Comp (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(data.get("aur_dia", 3620.0), "aur_dia", width=130, suffix="$"),
-                            ft.Text("ATV MTD (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(data.get("atv_mtd", 7597.0), "atv_mtd", width=130, suffix="$"),
-                            ft.Text("AUR MTD (Manual)", color="#AAAAAA", size=10),
-                            make_white_input(data.get("aur_mtd", 3362.0), "aur_mtd", width=130, suffix="$"),
-                        ], spacing=4),
-                        bgcolor="#111827", padding=10, border_radius=8, border=ft.Border.all(1, "#374151"), width=220
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("ATV Día Comp", color="#AAAAAA", size=9),
+                                    make_white_input(data.get("atv_dia", 3620.0), "atv_dia", suffix="$", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("AUR Día Comp", color="#AAAAAA", size=9),
+                                    make_white_input(data.get("aur_dia", 3620.0), "aur_dia", suffix="$", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                            ft.Row([
+                                ft.Column([
+                                    ft.Text("ATV MTD", color="#AAAAAA", size=9),
+                                    make_white_input(data.get("atv_mtd", 7597.0), "atv_mtd", suffix="$", expand=True),
+                                ], spacing=1, expand=1),
+                                ft.Column([
+                                    ft.Text("AUR MTD", color="#AAAAAA", size=9),
+                                    make_white_input(data.get("aur_mtd", 3362.0), "aur_mtd", suffix="$", expand=True),
+                                ], spacing=1, expand=1),
+                            ], spacing=4),
+                        ], spacing=3),
+                        bgcolor="#111827", padding=8, border_radius=8, border=ft.Border.all(1, "#374151"), width=290
                     ),
-                ], spacing=10, wrap=True)
+                ], spacing=8, wrap=True)
             ]),
             bgcolor="#0B0E17",
-            padding=14,
-            border_radius=12,
+            padding=10,
+            border_radius=10,
             border=ft.Border.all(1.5, "#00FFFF"),
             shadow=[ft.BoxShadow(color="#2000FFFF", blur_radius=10, spread_radius=1)]
         )
 
         # 2. TARJETA DESGLOSE HORARIO POR BLOQUE
-        is_mobile_w = (page.width < 800) if (page and page.width) else False
-        w_lbl = 90 if is_mobile_w else 120
-        w_cell = 75 if is_mobile_w else 95
+        w_lbl = 58 if is_mobile else 120
+        w_cell = 52 if is_mobile else 95
+        lbl_size = 9 if is_mobile else 11
+        hdr_size = 9 if is_mobile else 11
+        horarios_sp = 3 if is_mobile else 6
 
-        b_names = ["Apertura-1pm", "1pm - 3pm", "3pm - 5pm", "5pm - 7pm", "7pm - Cierre"]
-        row_b_headers = [ft.Container(ft.Text("INDICADOR", weight="bold", color="#00FFFF", size=11), width=w_lbl)]
+        b_names = ["Ap-1pm", "1-3pm", "3-5pm", "5-7pm", "7-Cie"] if is_mobile else ["Apertura-1pm", "1pm - 3pm", "3pm - 5pm", "5pm - 7pm", "7pm - Cierre"]
+        row_b_headers = [ft.Container(ft.Text("INDICADOR", weight="bold", color="#00FFFF", size=hdr_size), width=w_lbl)]
         for bn in b_names:
-            row_b_headers.append(ft.Container(ft.Text(bn, weight="bold", color="white", size=11), width=w_cell, alignment=ft.alignment.Alignment(0, 0)))
-        row_b_headers.append(ft.Container(ft.Text("TOTAL", weight="bold", color="#00FF88", size=11), width=w_cell, alignment=ft.alignment.Alignment(0, 0)))
+            row_b_headers.append(ft.Container(ft.Text(bn, weight="bold", color="white", size=hdr_size), width=w_cell, alignment=ft.alignment.Alignment(0, 0)))
+        row_b_headers.append(ft.Container(ft.Text("TOTAL", weight="bold", color="#00FF88", size=hdr_size), width=w_cell, alignment=ft.alignment.Alignment(0, 0)))
 
-        # Fila Tráfico (⚪)
-        row_b_trafico = [ft.Container(ft.Text("Tráfico (⚪)", color="#AAAAAA", size=11), width=w_lbl)]
+        # Fila Tráfico (Sin paréntesis en móvil)
+        lbl_trafico = "Tráfico" if is_mobile else "Tráfico (⚪)"
+        row_b_trafico = [ft.Container(ft.Text(lbl_trafico, color="#AAAAAA", size=lbl_size, weight="w600" if is_mobile else None), width=w_lbl)]
         for idx, tv in enumerate(data["trafico_bloques"]):
             row_b_trafico.append(make_white_input(tv, f"trafico_b_{idx}", width=w_cell))
         row_b_trafico.append(make_green_calc("tot_trafico_b", str(calc["tot_trafico_b"]), width=w_cell))
 
-        # Fila Peso % (🟩)
-        row_b_peso = [ft.Container(ft.Text("Peso % (🟩)", color="#AAAAAA", size=11), width=w_lbl)]
+        # Fila Peso % (Sin paréntesis en móvil)
+        lbl_peso = "Peso %" if is_mobile else "Peso % (🟩)"
+        row_b_peso = [ft.Container(ft.Text(lbl_peso, color="#AAAAAA", size=lbl_size, weight="w600" if is_mobile else None), width=w_lbl)]
         for idx, p in enumerate(calc["b_pesos"]):
             row_b_peso.append(make_green_calc(f"b_peso_{idx}", f"{p*100:.1f}%", width=w_cell))
         row_b_peso.append(make_green_calc("b_peso_tot", "100%", width=w_cell))
 
-        # Fila Meta $ (🟩)
-        row_b_meta = [ft.Container(ft.Text("Meta $ (🟩)", color="#AAAAAA", size=11), width=w_lbl)]
+        # Fila Meta $ (Sin paréntesis en móvil)
+        lbl_meta = "Meta $" if is_mobile else "Meta $ (🟩)"
+        row_b_meta = [ft.Container(ft.Text(lbl_meta, color="#AAAAAA", size=lbl_size, weight="w600" if is_mobile else None), width=w_lbl)]
         for idx, m in enumerate(calc["b_metas"]):
             row_b_meta.append(make_green_calc(f"b_meta_{idx}", f"${m:,.0f}", width=w_cell))
         row_b_meta.append(make_green_calc("b_meta_tot", f"${calc['meta_diaria']:,.0f}", width=w_cell))
 
         scrollable_horarios_table = ft.Row([
             ft.Column([
-                ft.Row(row_b_headers, spacing=6),
-                ft.Row(row_b_trafico, spacing=6),
-                ft.Row(row_b_peso, spacing=6),
-                ft.Row(row_b_meta, spacing=6)
-            ], spacing=6)
-        ], scroll=ft.ScrollMode.AUTO)
+                ft.Row(row_b_headers, spacing=horarios_sp),
+                ft.Row(row_b_trafico, spacing=horarios_sp),
+                ft.Row(row_b_peso, spacing=horarios_sp),
+                ft.Row(row_b_meta, spacing=horarios_sp)
+            ], spacing=horarios_sp)
+        ], scroll=ft.ScrollMode.ADAPTIVE)
 
         card_horarios = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.ACCESS_TIME_ROUNDED, color="#E040FB", size=18),
-                    ft.Text("DESGLOSE HORARIO DE VENTA DE TIENDA", color="white", weight="bold", size=13)
-                ], spacing=6),
-                ft.Divider(height=8, color="#374151"),
+                    ft.Icon(ft.Icons.ACCESS_TIME_ROUNDED, color="#E040FB", size=16),
+                    ft.Text("DESGLOSE HORARIO DE VENTA DE TIENDA", color="white", weight="bold", size=12 if is_mobile else 13)
+                ], spacing=4 if is_mobile else 6),
+                ft.Divider(height=6, color="#374151"),
                 scrollable_horarios_table
             ]),
             bgcolor="#0B0E17",
-            padding=14,
-            border_radius=12,
+            padding=10 if is_mobile else 14,
+            border_radius=10 if is_mobile else 12,
             border=ft.Border.all(1.5, "#E040FB"),
             shadow=[ft.BoxShadow(color="#20E040FB", blur_radius=10, spread_radius=1)]
         )
 
-        # Componente Celda Bloqueada / Solo Lectura (🔒)
-        def make_readonly_input(val, width=140):
-            return ft.Container(
-                content=ft.TextField(
-                    value=str(val),
-                    read_only=True,
-                    text_size=12,
-                    text_style=ft.TextStyle(weight="bold", color="#00FFFF"),
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    content_padding=8
-                ),
-                width=width
-            )
-
         # 3. TABLA ASIGNACIÓN POR COLABORADOR
-        w_colab_name = 100 if is_mobile_w else 140
-        w_colab_hrs = 65 if is_mobile_w else 80
-        w_colab_vta = 90 if is_mobile_w else 110
-        w_colab_ana = 75 if is_mobile_w else 90
-        w_colab_wea = 75 if is_mobile_w else 90
-        w_colab_kid = 65 if is_mobile_w else 80
-        w_colab_ck = 65 if is_mobile_w else 80
+        w_colab_name = 75 if is_mobile else 140
+        w_colab_hrs = 34 if is_mobile else 70
+        w_colab_vta = 58 if is_mobile else 110
+        w_colab_ana = 36 if is_mobile else 75
+        w_colab_wea = 36 if is_mobile else 75
+        w_colab_kid = 34 if is_mobile else 75
+        w_colab_ck = 34 if is_mobile else 75
+        colab_sp = 3 if is_mobile else 6
 
         colab_hdr_ui = ft.Row([
-            ft.Container(ft.Text("COLABORADOR (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_name),
-            ft.Container(ft.Text("HORAS (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_hrs),
-            ft.Container(ft.Text("META VTA (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_vta),
-            ft.Container(ft.Text("ANÁLOGOS (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_ana),
-            ft.Container(ft.Text("WEARABLES (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_wea),
-            ft.Container(ft.Text("KIDS (⚪)", weight="bold", color="#00FFFF", size=11), width=w_colab_kid),
-            ft.Container(ft.Text("CAREKITS (🟩)", weight="bold", color="#00FF88", size=11), width=w_colab_ck),
-        ], spacing=6)
+            ft.Container(ft.Text("COLAB." if is_mobile else "COLAB. (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_colab_name),
+            ft.Container(ft.Text("HRS" if is_mobile else "HRS (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_colab_hrs),
+            ft.Container(ft.Text("META" if is_mobile else "META (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_colab_vta),
+            ft.Container(ft.Text("ANÁL" if is_mobile else "ANÁL (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_colab_ana),
+            ft.Container(ft.Text("WEA" if is_mobile else "WEA (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_colab_wea),
+            ft.Container(ft.Text("KIDS" if is_mobile else "KIDS (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_colab_kid),
+            ft.Container(ft.Text("CK" if is_mobile else "CK (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_colab_ck),
+        ], spacing=colab_sp)
 
         colab_rows_ui = [colab_hdr_ui]
         for idx, c in enumerate(data["colaboradores"]):
@@ -1694,144 +1731,167 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 ft.Row([
                     make_white_input(c["nombre"], f"colab_nom_{idx}", width=w_colab_name),
                     make_white_input(c["horas"], f"colab_hrs_{idx}", width=w_colab_hrs),
-                    make_green_calc(f"colab_vta_{idx}", f"${r_calc['meta_vta']:,.2f}", width=w_colab_vta),
+                    make_green_calc(f"colab_vta_{idx}", f"${r_calc['meta_vta']:,.0f}", width=w_colab_vta),
                     make_green_calc(f"colab_ana_{idx}", str(r_calc['meta_ana']), width=w_colab_ana),
                     make_white_input(c.get("meta_wea", r_calc['meta_wea']), f"colab_wea_{idx}", width=w_colab_wea),
                     make_white_input(c.get("meta_kid", r_calc['meta_kid']), f"colab_kid_{idx}", width=w_colab_kid),
                     make_green_calc(f"colab_ck_{idx}", str(r_calc['meta_ck']), width=w_colab_ck),
-                ], spacing=6)
+                ], spacing=colab_sp)
             )
 
         # Fila Totales Colaboradores
         colab_rows_ui.append(
             ft.Row([
-                ft.Container(ft.Text("TOTALES TIENDA", weight="bold", color="white", size=11), width=w_colab_name),
-                make_green_calc("tot_colab_hrs", f"{calc['tot_horas']:.1f} hrs", width=w_colab_hrs),
-                make_green_calc("tot_colab_vta", f"${calc['meta_diaria']:,.2f}", width=w_colab_vta),
+                ft.Container(ft.Text("TOTALES", weight="bold", color="white", size=9 if is_mobile else 11), width=w_colab_name),
+                make_green_calc("tot_colab_hrs", f"{calc['tot_horas']:.1f}", width=w_colab_hrs),
+                make_green_calc("tot_colab_vta", f"${calc['meta_diaria']:,.0f}", width=w_colab_vta),
                 make_green_calc("tot_colab_ana", str(sum(r["meta_ana"] for r in calc["colab_rows"])), width=w_colab_ana),
                 make_green_calc("tot_colab_wea", str(sum(r["meta_wea"] for r in calc["colab_rows"])), width=w_colab_wea),
                 make_green_calc("tot_colab_kid", str(sum(r["meta_kid"] for r in calc["colab_rows"])), width=w_colab_kid),
                 make_green_calc("tot_colab_ck", str(sum(r["meta_ck"] for r in calc["colab_rows"])), width=w_colab_ck),
-            ], spacing=6)
+            ], spacing=colab_sp)
         )
 
         scrollable_colabs_table = ft.Row([
-            ft.Column(colab_rows_ui, spacing=5)
-        ], scroll=ft.ScrollMode.AUTO)
+            ft.Column(colab_rows_ui, spacing=colab_sp)
+        ], scroll=ft.ScrollMode.ADAPTIVE)
 
         card_colabs = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.PEOPLE_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text("ASIGNACIÓN Y DISTRIBUCIÓN POR PERSONAL", color="white", weight="bold", size=13)
-                ], spacing=6),
-                ft.Text("💡 Celdas blancas (⚪) son editables. Las celdas verdes (🟩) calculan metas en tiempo real.", color="#AAAAAA", size=10),
-                ft.Divider(height=8, color="#374151"),
+                    ft.Icon(ft.Icons.PEOPLE_ROUNDED, color="#00FFFF", size=16),
+                    ft.Text("ASIGNACIÓN Y DISTRIBUCIÓN POR PERSONAL", color="white", weight="bold", size=12)
+                ], spacing=4),
+                ft.Text("💡 Celdas editables (Blancas). Celdas automáticas (Verdes).", color="#AAAAAA", size=9),
+                ft.Divider(height=6, color="#374151"),
                 scrollable_colabs_table
             ]),
             bgcolor="#0B0E17",
-            padding=14,
-            border_radius=12,
+            padding=10,
+            border_radius=10,
             border=ft.Border.all(1.5, "#00FFFF"),
             shadow=[ft.BoxShadow(color="#2000FFFF", blur_radius=10, spread_radius=1)]
         )
 
         # 4. TABLA CÓMO VAMOS (TOTAL DEL DÍA)
+        w_cv_m = 54 if is_mobile else 80
+        w_cv_v = 56 if is_mobile else 90
+        w_cv_mu = 38 if is_mobile else 65
+        w_cv_vu = 38 if is_mobile else 65
+        w_cv_cnv = 40 if is_mobile else 65
+        w_cv_crc = 40 if is_mobile else 65
+        w_cv_wea = 40 if is_mobile else 65
+        w_cv_kid = 38 if is_mobile else 65
+        w_cv_ck = 40 if is_mobile else 65
+        cv_sp = 3 if is_mobile else 6
+
         cv_hdr_ui = ft.Row([
-            ft.Container(ft.Text("META", weight="bold", color="#00FFFF", size=11), width=80),
-            ft.Container(ft.Text("VENTA NETA (⚪)", weight="bold", color="#00FFFF", size=11), width=100),
-            ft.Container(ft.Text("META UNID.", weight="bold", color="#00FFFF", size=11), width=80),
-            ft.Container(ft.Text("VENTA UNID. (⚪)", weight="bold", color="#00FFFF", size=11), width=110),
-            ft.Container(ft.Text("CONVERSIÓN (🟩)", weight="bold", color="#00FF88", size=11), width=110),
-            ft.Container(ft.Text("CRECIMIENTO (🟩)", weight="bold", color="#00FF88", size=11), width=110),
-            ft.Container(ft.Text("WEARABLES % (⚪)", weight="bold", color="#00FFFF", size=11), width=110),
-            ft.Container(ft.Text("KIDS % (⚪)", weight="bold", color="#00FFFF", size=11), width=90),
-            ft.Container(ft.Text("CAREKITS % (🟩)", weight="bold", color="#00FF88", size=11), width=110),
-        ], spacing=6)
+            ft.Container(ft.Text("META", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_m),
+            ft.Container(ft.Text("VTA NETA" if is_mobile else "VTA NETA (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_v),
+            ft.Container(ft.Text("M.UNID", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_mu),
+            ft.Container(ft.Text("V.UNID" if is_mobile else "V.UNID (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_vu),
+            ft.Container(ft.Text("CONV" if is_mobile else "CONV (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_cnv),
+            ft.Container(ft.Text("CREC" if is_mobile else "CREC (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_crc),
+            ft.Container(ft.Text("WEA %" if is_mobile else "WEA% (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_wea),
+            ft.Container(ft.Text("KIDS %" if is_mobile else "KIDS% (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_kid),
+            ft.Container(ft.Text("CK %" if is_mobile else "CK% (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_ck),
+        ], spacing=cv_sp)
         
         cv_row_ui = ft.Row([
-            make_green_calc("tot_cv_meta", f"${calc['meta_diaria']:,.2f}", width=80),
-            make_white_input(data.get("venta_neta_dia", 0.0), "venta_neta_dia", width=100),
-            make_green_calc("tot_cv_meta_unidades", str(calc["total_unidades"]), width=80),
-            make_white_input(data.get("venta_unidades_dia", 0), "venta_unidades_dia", width=110),
-            make_green_calc("tot_cv_conversion", f"{calc['conversion_dia']*100:.1f}%", width=110),
-            make_green_calc("tot_cv_crecimiento", f"{calc['crecimiento_conversion']*100:.1f}%", width=110),
-            make_white_input(f"{calc['wearables_pct']*100:.1f}%", "cv_wearables_pct", width=110),
-            make_white_input(f"{calc['kids_pct']*100:.1f}%", "cv_kids_pct", width=90),
-            make_green_calc("tot_cv_carekits_pct", f"{calc['carekits_pct']*100:.1f}%", width=110),
-        ], spacing=6)
+            make_green_calc("tot_cv_meta", f"${calc['meta_diaria']:,.0f}", width=w_cv_m),
+            make_white_input(data.get("venta_neta_dia", 0.0), "venta_neta_dia", width=w_cv_v),
+            make_green_calc("tot_cv_meta_unidades", str(calc["total_unidades"]), width=w_cv_mu),
+            make_white_input(data.get("venta_unidades_dia", 0), "venta_unidades_dia", width=w_cv_vu),
+            make_green_calc("tot_cv_conversion", f"{calc['conversion_dia']*100:.1f}%", width=w_cv_cnv),
+            make_green_calc("tot_cv_crecimiento", f"{calc['crecimiento_conversion']*100:.1f}%", width=w_cv_crc),
+            make_white_input(f"{calc['wearables_pct']*100:.1f}%", "cv_wearables_pct", width=w_cv_wea),
+            make_white_input(f"{calc['kids_pct']*100:.1f}%", "cv_kids_pct", width=w_cv_kid),
+            make_green_calc("tot_cv_carekits_pct", f"{calc['carekits_pct']*100:.1f}%", width=w_cv_ck),
+        ], spacing=cv_sp)
 
         # 5. TABLA CÓMO VAMOS (POR COLABORADOR AL CIERRE)
+        w_c_nom = 70 if is_mobile else 130
+        w_c_hrs = 30 if is_mobile else 50
+        w_c_int = 36 if is_mobile else 60
+        w_c_cnv = 36 if is_mobile else 60
+        w_c_cpct = 38 if is_mobile else 60
+        w_c_vcie = 56 if is_mobile else 85
+        w_c_ana = 34 if is_mobile else 50
+        w_c_dem = 36 if is_mobile else 60
+        w_c_uwea = 34 if is_mobile else 50
+        w_c_cwea = 36 if is_mobile else 60
+        w_c_kid = 34 if is_mobile else 50
+        w_c_ck = 34 if is_mobile else 50
+
         cv_colab_hdr = ft.Row([
-            ft.Container(ft.Text("COLABORADOR", weight="bold", color="#00FFFF", size=10), width=90),
-            ft.Container(ft.Text("HORAS", weight="bold", color="#00FFFF", size=10), width=50),
-            ft.Container(ft.Text("INTERACC. (⚪)", weight="bold", color="#00FFFF", size=10), width=90),
-            ft.Container(ft.Text("CONVERTIDOS (⚪)", weight="bold", color="#00FFFF", size=10), width=110),
-            ft.Container(ft.Text("CONVERSIÓN (🟩)", weight="bold", color="#00FF88", size=10), width=100),
-            ft.Container(ft.Text("VTA CIERRE (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
-            ft.Container(ft.Text("ANÁLOGAS (⚪)", weight="bold", color="#00FFFF", size=10), width=90),
-            ft.Container(ft.Text("DEMOS WEA. (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
-            ft.Container(ft.Text("UNID. WEA. (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
-            ft.Container(ft.Text("CONV. WEA (🟩)", weight="bold", color="#00FF88", size=10), width=90),
-            ft.Container(ft.Text("KIDS CIERRE (⚪)", weight="bold", color="#00FFFF", size=10), width=90),
-            ft.Container(ft.Text("CK CIERRE (⚪)", weight="bold", color="#00FFFF", size=10), width=100),
-        ], spacing=6)
+            ft.Container(ft.Text("COLAB.", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_nom),
+            ft.Container(ft.Text("HRS", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_hrs),
+            ft.Container(ft.Text("INT." if is_mobile else "INT.(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_int),
+            ft.Container(ft.Text("CONV" if is_mobile else "CONV(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_cnv),
+            ft.Container(ft.Text("CNV %" if is_mobile else "CNV%(🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 10), width=w_c_cpct),
+            ft.Container(ft.Text("V.CIE" if is_mobile else "V.CIE(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_vcie),
+            ft.Container(ft.Text("ANÁL" if is_mobile else "ANÁL(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_ana),
+            ft.Container(ft.Text("DEMO" if is_mobile else "DEMO(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_dem),
+            ft.Container(ft.Text("U.WEA" if is_mobile else "U.WEA(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_uwea),
+            ft.Container(ft.Text("C.WEA" if is_mobile else "C.WEA(🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 10), width=w_c_cwea),
+            ft.Container(ft.Text("KID" if is_mobile else "KID(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_kid),
+            ft.Container(ft.Text("CK" if is_mobile else "CK(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_ck),
+        ], spacing=cv_sp)
 
         cv_colab_rows = [cv_colab_hdr]
         for idx, c in enumerate(data["colaboradores"]):
             r_calc = calc["colab_rows"][idx]
             cv_colab_rows.append(
                 ft.Row([
-                    make_white_input(c["nombre"], f"colab_nom_{idx}", width=90),
-                    make_green_calc(f"colab_cv_hrs_{idx}", f"{r_calc['horas']:.1f}", width=50),
-                    make_white_input(c.get("interacciones", 0), f"colab_int_{idx}", width=90),
-                    make_white_input(c.get("convertidos", 0), f"colab_conv_{idx}", width=110),
-                    make_green_calc(f"colab_conv_cierre_{idx}", f"{r_calc['conversion_cierre']*100:.1f}%", width=100),
-                    make_white_input(c.get("vta_cierre", 0.0), f"colab_vtac_{idx}", width=100),
-                    make_white_input(c.get("ana_cierre", 0), f"colab_anac_{idx}", width=90),
-                    make_white_input(c.get("wea_demos", 0), f"colab_wead_{idx}", width=100),
-                    make_white_input(c.get("wea_cierre", 0), f"colab_weac_{idx}", width=100),
-                    make_green_calc(f"colab_conv_wea_{idx}", f"{r_calc['conversion_wea']*100:.1f}%", width=90),
-                    make_white_input(c.get("kid_cierre", 0), f"colab_kidc_{idx}", width=90),
-                    make_white_input(c.get("ck_cierre", 0), f"colab_ckc_{idx}", width=100),
-                ], spacing=6)
+                    make_white_input(c["nombre"], f"colab_nom_{idx}", width=w_c_nom),
+                    make_green_calc(f"colab_cv_hrs_{idx}", f"{r_calc['horas']:.1f}", width=w_c_hrs),
+                    make_white_input(c.get("interacciones", 0), f"colab_int_{idx}", width=w_c_int),
+                    make_white_input(c.get("convertidos", 0), f"colab_conv_{idx}", width=w_c_cnv),
+                    make_green_calc(f"colab_conv_cierre_{idx}", f"{r_calc['conversion_cierre']*100:.0f}%", width=w_c_cpct),
+                    make_white_input(c.get("vta_cierre", 0.0), f"colab_vtac_{idx}", width=w_c_vcie),
+                    make_white_input(c.get("ana_cierre", 0), f"colab_anac_{idx}", width=w_c_ana),
+                    make_white_input(c.get("wea_demos", 0), f"colab_wead_{idx}", width=w_c_dem),
+                    make_white_input(c.get("wea_cierre", 0), f"colab_weac_{idx}", width=w_c_uwea),
+                    make_green_calc(f"colab_conv_wea_{idx}", f"{r_calc['conversion_wea']*100:.0f}%", width=w_c_cwea),
+                    make_white_input(c.get("kid_cierre", 0), f"colab_kidc_{idx}", width=w_c_kid),
+                    make_white_input(c.get("ck_cierre", 0), f"colab_ckc_{idx}", width=w_c_ck),
+                ], spacing=cv_sp)
             )
 
         cv_colab_rows.append(
             ft.Row([
-                ft.Container(ft.Text("TOTALES TIENDA", weight="bold", color="white", size=11), width=90),
-                make_green_calc("sum_cv_horas", f"{calc['tot_horas']:.1f}", width=50),
-                make_green_calc("sum_cv_interacciones", str(calc["tot_interacciones"]), width=90),
-                make_green_calc("sum_cv_convertidos", str(calc["tot_convertidos"]), width=110),
-                ft.Container(width=100), # Espacio para conversion global
-                make_green_calc("sum_cv_vta_cierre", f"${calc['tot_vta_cierre']:,.2f}", width=100),
-                make_green_calc("sum_cv_ana_cierre", str(calc["tot_ana_cierre"]), width=90),
-                make_green_calc("sum_cv_wea_demos", str(calc["tot_wea_demos"]), width=100),
-                make_green_calc("sum_cv_wea_cierre", str(calc["tot_wea_cierre"]), width=100),
-                ft.Container(width=90), # Espacio conv wea global
-                make_green_calc("sum_cv_kid_cierre", str(calc["tot_kid_cierre"]), width=90),
-                make_green_calc("sum_cv_ck_cierre", str(calc["tot_ck_cierre"]), width=100),
-            ], spacing=6)
+                ft.Container(ft.Text("TOTALES", weight="bold", color="white", size=9 if is_mobile else 10), width=w_c_nom),
+                make_green_calc("sum_cv_horas", f"{calc['tot_horas']:.1f}", width=w_c_hrs),
+                make_green_calc("sum_cv_interacciones", str(calc["tot_interacciones"]), width=w_c_int),
+                make_green_calc("sum_cv_convertidos", str(calc["tot_convertidos"]), width=w_c_cnv),
+                ft.Container(width=w_c_cpct), # Espacio para conversion global
+                make_green_calc("sum_cv_vta_cierre", f"${calc['tot_vta_cierre']:,.0f}", width=w_c_vcie),
+                make_green_calc("sum_cv_ana_cierre", str(calc["tot_ana_cierre"]), width=w_c_ana),
+                make_green_calc("sum_cv_wea_demos", str(calc["tot_wea_demos"]), width=w_c_dem),
+                make_green_calc("sum_cv_wea_cierre", str(calc["tot_wea_cierre"]), width=w_c_uwea),
+                ft.Container(width=w_c_cwea), # Espacio conv wea global
+                make_green_calc("sum_cv_kid_cierre", str(calc["tot_kid_cierre"]), width=w_c_kid),
+                make_green_calc("sum_cv_ck_cierre", str(calc["tot_ck_cierre"]), width=w_c_ck),
+            ], spacing=cv_sp)
         )
 
         card_como_vamos = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#F59E0B", size=18),
-                    ft.Text("¿CÓMO VAMOS? (RESULTADOS DE CIERRE)", color="white", weight="bold", size=13)
-                ], spacing=6),
-                ft.Divider(height=8, color="#374151"),
-                ft.Text("TOTAL DEL DÍA", weight="bold", color="#F59E0B", size=11),
-                ft.Row([ft.Column([cv_hdr_ui, cv_row_ui], spacing=5)], scroll=ft.ScrollMode.AUTO),
-                ft.Divider(height=8, color="#374151"),
-                ft.Text("RESULTADOS POR COLABORADOR AL CIERRE", weight="bold", color="#F59E0B", size=11),
-                ft.Row([ft.Column(cv_colab_rows, spacing=5)], scroll=ft.ScrollMode.AUTO),
+                    ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#F59E0B", size=16),
+                    ft.Text("¿CÓMO VAMOS? (RESULTADOS DE CIERRE)", color="white", weight="bold", size=12)
+                ], spacing=4),
+                ft.Divider(height=6, color="#374151"),
+                ft.Text("TOTAL DEL DÍA", weight="bold", color="#F59E0B", size=10),
+                ft.Row([ft.Column([cv_hdr_ui, cv_row_ui], spacing=cv_sp)], scroll=ft.ScrollMode.ADAPTIVE),
+                ft.Divider(height=6, color="#374151"),
+                ft.Text("RESULTADOS POR COLABORADOR AL CIERRE", weight="bold", color="#F59E0B", size=10),
+                ft.Row([ft.Column(cv_colab_rows, spacing=cv_sp)], scroll=ft.ScrollMode.ADAPTIVE),
             ]),
             bgcolor="#0B0E17",
-            padding=14,
-            border_radius=12,
+            padding=10,
+            border_radius=10,
             border=ft.Border.all(1.5, "#F59E0B"),
-            shadow=[ft.BoxShadow(color="#20F59E0B", blur_radius=10, spread_radius=1)]
         )
 
         return ft.Column([
@@ -1847,6 +1907,17 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # --- INTERFAZ PLAN DE ACCIÓN ---
     def build_plan_accion_ui(d_name):
         data = s_state[d_name]
+        is_mobile_w = (page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False
+
+        data.setdefault("ritmo_venta_hoy", "")
+        data.setdefault("checks_estandares", {"limpieza": False, "imagen": False, "reunion": False})
+        data.setdefault("checks_no_negociables", {"registro": False, "sin_celular": False, "fuera_caja": False, "seguimiento": False})
+        data.setdefault("checks_secretos", {"pulir": False, "pontelos": False, "diviertete": False, "cuidalos": False, "ajuste": False})
+        data.setdefault("checks_journey", {"relacion": False, "confianza": False, "interactua": False, "descubre": False, "ve_mas_alla": False})
+
+        def on_ritmo_change(e):
+            data["ritmo_venta_hoy"] = e.control.value
+            guardar_estado_persistente(user_id)
 
         def on_enfoque_change(e):
             data["enfoque_hoy"] = e.control.value
@@ -1856,76 +1927,287 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             data["logros_hoy"] = e.control.value
             guardar_estado_persistente(user_id)
 
-        # Tarjetas de Los 5 Secretos (Brandies SGH)
-        card_secretos = ft.Container(
+        def on_check_change(section, key, val):
+            if section in data and isinstance(data[section], dict):
+                data[section][key] = val
+                guardar_estado_persistente(user_id)
+
+        # Cálculo de métricas del día para el encabezado del plan
+        horas_prog = sum(float(c.get("horas", 0.0) or 0.0) for c in data.get("colaboradores", []))
+        meta_ns = float(data.get("meta_diaria", 4758.0) or 0.0)
+        atv_val = float(data.get("atv_dia", 3620.0) or 3620.0)
+        meta_pzs = (meta_ns / atv_val) if atv_val > 0 else 0.0
+        meta_prod_ns = (meta_ns / horas_prog) if horas_prog > 0 else 0.0
+        meta_prod_pzs = (meta_pzs / horas_prog) if horas_prog > 0 else 0.0
+
+        def make_mini_metric(lbl, val_str, color_txt="#00FFFF"):
+            return ft.Container(
+                content=ft.Column([
+                    ft.Text(lbl, size=9 if is_mobile_w else 10, color="#9CA3AF", weight="bold"),
+                    ft.Text(val_str, size=12 if is_mobile_w else 13, color=color_txt, weight="bold")
+                ], spacing=1, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor="#111827",
+                padding=ft.Padding(8, 6, 8, 6),
+                border_radius=6,
+                border=ft.Border.all(1, "#1F2937")
+            )
+
+        # Tarjeta 1: Encabezado con Métricas Oficiales y Pregunta de Ritmo de Venta
+        metrics_chips = ft.Row([
+            make_mini_metric("HORAS PROG.", f"{horas_prog:.1f} hrs", "#3B82F6"),
+            make_mini_metric("META (NS)", f"${meta_ns:,.0f}", "#10B981"),
+            make_mini_metric("META PIEZAS", f"{meta_pzs:.1f}", "#FFD700"),
+            make_mini_metric("PROD. ($/H)", f"${meta_prod_ns:,.0f}", "#E040FB"),
+            make_mini_metric("PROD. (PZS/H)", f"{meta_prod_pzs:.2f}", "#00FFFF"),
+        ], wrap=True, spacing=6)
+
+        question_box = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, color="#FFD700", size=18),
-                    ft.Text(f"LOS 5 SECRETOS Y PLAN DE ACCIÓN ({d_name}) - OFICIAL SGH", color="white", weight="bold", size=13),
-                    ft.Container(expand=True),
-                    ft.ElevatedButton(
-                        content=ft.Row([
-                            ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="white", size=15),
-                            ft.Text(f"📊 Exportar Excel Plan ({d_name})", color="white", weight="bold", size=11)
-                        ], spacing=4),
-                        style=ft.ButtonStyle(bgcolor="#059669", shape=ft.RoundedRectangleBorder(radius=6)),
-                        url=f"/api/download_excel/{d_name}?user_id={user_id}"
-                    ),
-                    ft.Container(width=6),
-                    ft.ElevatedButton(
-                        content=ft.Row([
-                            ft.Icon(ft.Icons.PRINT_ROUNDED, color="white", size=15),
-                            ft.Text(f"📄 Descargar PDF Plan ({d_name})", color="white", weight="bold", size=11)
-                        ], spacing=4),
-                        style=ft.ButtonStyle(bgcolor="#10B981", shape=ft.RoundedRectangleBorder(radius=6)),
-                        on_click=lambda e, day=d_name: generar_pdf_enfoque(day)
-                    )
-                ], spacing=6, vertical_alignment="center"),
-                ft.Divider(height=8, color="#374151"),
-                ft.Row([
-                    ft.Container(ft.Column([ft.Text("✨ 1. PULIR ES PODER", weight="bold", color="#00FFFF", size=11), ft.Text("Ofrece limpiar sus lentes al iniciar la conversación.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("🕶️ 2. PÓNTELOS", weight="bold", color="#E040FB", size=11), ft.Text("Invítalo a probar diferentes modelos en la bandeja.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("🎉 3. DIVIÉRTETE MÁS", weight="bold", color="#FFD700", size=11), ft.Text("Muestra 3 o 4 opciones adicionales para venta múltiple.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("🧼 4. CUÍDALOS", weight="bold", color="#10B981", size=11), ft.Text("Ofrece estuche, solución limpiadora y carekits.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("📐 5. AJUSTE PERFECTO", weight="bold", color="#3B82F6", size=11), ft.Text("Ajusta los armazones a la medida exacta del cliente.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                ], wrap=True, spacing=8)
-            ]),
+                    ft.Icon(ft.Icons.HELP_OUTLINE_ROUNDED, color="#FFD700", size=16),
+                    ft.Text("¿Cuál debe ser nuestro ritmo de venta hoy?", color="#FFD700", weight="bold", size=11 if is_mobile_w else 12)
+                ], spacing=4),
+                ft.TextField(
+                    value=data.get("ritmo_venta_hoy", ""),
+                    on_change=on_ritmo_change,
+                    hint_text="Escribe aquí el ritmo de venta proyectado o estrategia horaria...",
+                    bgcolor="#111827",
+                    border_color="#374151",
+                    color="white",
+                    text_size=11 if is_mobile_w else 12,
+                    dense=True
+                )
+            ], spacing=4),
             bgcolor="#0B0E17",
-            padding=14,
+            padding=8,
+            border_radius=8,
+            border=ft.Border.all(1, "#374151")
+        )
+
+        plan_sheet_code = DAY_TO_PLAN_SHEET.get(d_name, "PLAN.ACCIÓN_D")
+        top_header_title_row = ft.Row([
+            ft.Row([
+                ft.Icon(ft.Icons.ASSIGNMENT_TURNED_IN_ROUNDED, color="#FFD700", size=18),
+                ft.Text(f"PLAN DE ACCIÓN Y SEGUIMIENTO ({d_name}) - OFICIAL SGH", color="white", weight="bold", size=12 if is_mobile_w else 13),
+            ], spacing=6),
+            ft.Row([
+                ft.ElevatedButton(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="white", size=14),
+                        ft.Text(f"📊 Excel ({d_name})", color="white", weight="bold", size=10 if is_mobile_w else 11)
+                    ], spacing=4),
+                    style=ft.ButtonStyle(bgcolor="#059669", shape=ft.RoundedRectangleBorder(radius=6)),
+                    url=f"/api/download_excel/{plan_sheet_code}?user_id={user_id}"
+                ),
+                ft.Container(width=4),
+                ft.ElevatedButton(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.PRINT_ROUNDED, color="white", size=14),
+                        ft.Text(f"📄 PDF ({d_name})", color="white", weight="bold", size=10 if is_mobile_w else 11)
+                    ], spacing=4),
+                    style=ft.ButtonStyle(bgcolor="#10B981", shape=ft.RoundedRectangleBorder(radius=6)),
+                    on_click=lambda e, code=plan_sheet_code: generar_pdf_enfoque(code)
+                )
+            ], spacing=4)
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        top_header_content = ft.Column([
+            top_header_title_row,
+            ft.Divider(height=6, color="#374151"),
+            ft.Column([
+                metrics_chips,
+                question_box
+            ], spacing=8) if is_mobile_w else ft.Row([
+                ft.Container(metrics_chips, expand=3),
+                ft.Container(width=8),
+                ft.Container(question_box, expand=4)
+            ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        ], spacing=6)
+
+        card_top_header = ft.Container(
+            content=top_header_content,
+            bgcolor="#0B0E17",
+            padding=12 if is_mobile_w else 14,
             border_radius=12,
             border=ft.Border.all(1.5, "#FFD700")
         )
 
-        # Tarjetas del Customer Journey
+        # Helper para Items de Checklist
+        def make_check_item(section, key, title, desc, icon_str, color_str, is_checked):
+            def _toggle_chk(e):
+                on_check_change(section, key, e.control.value)
+            chk = ft.Checkbox(
+                value=is_checked,
+                fill_color={ft.ControlState.SELECTED: "#10B981", ft.ControlState.DEFAULT: "#374151"},
+                check_color="black",
+                scale=1.05 if is_mobile_w else 1.15,
+                on_change=_toggle_chk,
+            )
+            return ft.Container(
+                content=ft.Row([
+                    ft.Icon(icon_str, color=color_str, size=16),
+                    ft.Column([
+                        ft.Text(title, weight="bold", color=color_str, size=10.5 if is_mobile_w else 11.5),
+                        ft.Text(desc, color="#D1D5DB", size=9 if is_mobile_w else 10),
+                    ], expand=True, spacing=1),
+                    chk
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
+                bgcolor="#111827",
+                padding=ft.Padding(8, 6, 8, 6),
+                border_radius=8,
+                border=ft.Border.all(1, "#1F2937")
+            )
+
+        # Tarjeta 2: NUESTROS ESTÁNDARES
+        chk_est = data.get("checks_estandares", {})
+        items_estandares = [
+            ("limpieza", "🧹 LIMPIEZA DE LA TIENDA", "Barre, limpia y desinfecta. Asegúrate de que la tienda luzca impecable. Pon especial atención al piso de ventas, aparadores, espejos, mobiliario, baño y almacén.", ft.Icons.CLEANING_SERVICES_ROUNDED, "#00FFFF", chk_est.get("limpieza", False)),
+            ("imagen", "👔 IMAGEN PERSONAL", "Somos embajadores de la marca, por lo que nuestra imagen debe reflejar los valores de Sunglass Hut.", ft.Icons.CHECKROOM_ROUNDED, "#3B82F6", chk_est.get("imagen", False)),
+            ("reunion", "👥 REÚNETE CON EL EQUIPO", "La junta matutina es clave para tener un gran día. Comunica cómo vamos en la semana/mes, la meta del día y acciones clave para alcanzarla.", ft.Icons.GROUPS_ROUNDED, "#10B981", chk_est.get("reunion", False)),
+        ]
+        col_estandares = ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.RULE_ROUNDED, color="#3B82F6", size=18),
+                ft.Text("NUESTROS ESTÁNDARES", color="white", weight="bold", size=12 if is_mobile_w else 13)
+            ], spacing=6),
+            ft.Divider(height=6, color="#374151"),
+            *[make_check_item("checks_estandares", k, tit, dsc, ico, col, val) for k, tit, dsc, ico, col, val in items_estandares]
+        ], spacing=6)
+
+        # Tarjeta 3: NUESTROS NO NEGOCIABLES
+        chk_no_neg = data.get("checks_no_negociables", {})
+        items_no_neg = [
+            ("registro", "⏰ RECORDATORIO DE ENTRADA Y SALIDA", "Al iniciar el día, registrar entrada y al finalizar, salida. La precisión impacta directamente en los indicadores de productividad.", ft.Icons.TIMER_ROUNDED, "#FFB703", chk_no_neg.get("registro", False)),
+            ("sin_celular", "📵 SIN USO DE TELÉFONOS CELULARES", "Evita el uso del teléfono personal durante la jornada laboral. Navegación y mensajes deben realizarse fuera del horario de trabajo.", ft.Icons.PHONELINK_ERASE_ROUNDED, "#EF4444", chk_no_neg.get("sin_celular", False)),
+            ("fuera_caja", "📍 FUERA DE LA CAJA Y RESPETA TU ZONA", "A menos que cobres en caja, evita estar tras el mostrador. Respeta tu zona asignada y utiliza tu energía para atraer clientes.", ft.Icons.PERSON_PIN_CIRCLE_ROUNDED, "#F59E0B", chk_no_neg.get("fuera_caja", False)),
+            ("seguimiento", "📈 EL SEGUIMIENTO ES FUNDAMENTAL", "Monitorea resultados durante todo el día en el Store Dashboard para impulsar el desempeño y reaccionar oportunamente.", ft.Icons.INSIGHTS_ROUNDED, "#EC4899", chk_no_neg.get("seguimiento", False)),
+        ]
+        col_no_neg = ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.BLOCK_ROUNDED, color="#EF4444", size=18),
+                ft.Text("NUESTROS NO NEGOCIABLES", color="white", weight="bold", size=12 if is_mobile_w else 13)
+            ], spacing=6),
+            ft.Divider(height=6, color="#374151"),
+            *[make_check_item("checks_no_negociables", k, tit, dsc, ico, col, val) for k, tit, dsc, ico, col, val in items_no_neg]
+        ], spacing=6)
+
+        card_estandares_container = ft.Container(
+            content=col_estandares,
+            bgcolor="#0B0E17",
+            padding=12 if is_mobile_w else 14,
+            border_radius=12,
+            border=ft.Border.all(1.5, "#3B82F6")
+        )
+
+        card_no_neg_container = ft.Container(
+            content=col_no_neg,
+            bgcolor="#0B0E17",
+            padding=12 if is_mobile_w else 14,
+            border_radius=12,
+            border=ft.Border.all(1.5, "#EF4444")
+        )
+
+        row_estandares_no_neg = ft.Column([
+            card_estandares_container,
+            ft.Container(height=4),
+            card_no_neg_container
+        ]) if is_mobile_w else ft.Row([
+            ft.Container(card_estandares_container, expand=1),
+            ft.Container(card_no_neg_container, expand=1)
+        ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)
+
+        # Helper para tarjetas de Secretos y Journey
+        card_w = 340 if is_mobile_w else 190
+        def make_interactive_card(section, key, title, desc, icon_str, color_str, is_checked, width_val=card_w):
+            def _toggle_chk(e):
+                on_check_change(section, key, e.control.value)
+            chk = ft.Checkbox(
+                value=is_checked,
+                fill_color={ft.ControlState.SELECTED: "#10B981", ft.ControlState.DEFAULT: "#374151"},
+                check_color="black",
+                scale=0.95,
+                on_change=_toggle_chk,
+            )
+            return ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(icon_str, color=color_str, size=15),
+                        ft.Text(title, weight="bold", color=color_str, size=10.5),
+                        chk
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Text(desc, color="#D1D5DB", size=9.5)
+                ], spacing=3),
+                bgcolor="#111827",
+                padding=8,
+                border_radius=8,
+                width=width_val
+            )
+
+        # Tarjeta 4: Los 5 Secretos / Brandies SGH
+        chk_sec = data.get("checks_secretos", {})
+        secretos_items = [
+            ("pulir", "✨ 1. PULIR ES PODER", "Ofrece limpiar sus lentes al iniciar la conversación para crear conexión y experiencia positiva.", ft.Icons.AUTO_AWESOME_ROUNDED, "#00FFFF", chk_sec.get("pulir", False)),
+            ("pontelos", "🕶️ 2. PÓNTELOS", "Invítalo a probar diferentes modelos en la bandeja de exhibición hasta encontrar el ideal.", ft.Icons.VISIBILITY_ROUNDED, "#E040FB", chk_sec.get("pontelos", False)),
+            ("diviertete", "🎉 3. DIVIÉRTETE MÁS", "Muestra 3 o 4 opciones adicionales para aumentar posibilidades de venta múltiple.", ft.Icons.CELEBRATION_ROUNDED, "#FFD700", chk_sec.get("diviertete", False)),
+            ("cuidalos", "🧼 4. CUÍDALOS", "Enseña al cliente cómo cuidar sus lentes. Ofrece estuche, solución limpiadora y carekits.", ft.Icons.SHIELD_ROUNDED, "#10B981", chk_sec.get("cuidalos", False)),
+            ("ajuste", "📐 5. AJUSTE PERFECTO", "Ajusta los armazones a la medida exacta del cliente para máxima comodidad y satisfacción.", ft.Icons.SQUARE_FOOT_ROUNDED, "#3B82F6", chk_sec.get("ajuste", False)),
+        ]
+
+        card_secretos = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, color="#FFD700", size=18),
+                    ft.Text(f"LOS 5 SECRETOS / BRANDIES ({d_name}) - OFICIAL SGH", color="white", weight="bold", size=12 if is_mobile_w else 13),
+                ], spacing=6),
+                ft.Divider(height=6, color="#374151"),
+                ft.Row([
+                    make_interactive_card("checks_secretos", k, tit, dsc, ico, col, val, width_val=card_w)
+                    for k, tit, dsc, ico, col, val in secretos_items
+                ], wrap=True, spacing=6)
+            ]),
+            bgcolor="#0B0E17",
+            padding=12 if is_mobile_w else 14,
+            border_radius=12,
+            border=ft.Border.all(1.5, "#FFD700")
+        )
+
+        # Tarjeta 5: Customer Journey
+        chk_jrn = data.get("checks_journey", {})
+        journey_items = [
+            ("relacion", "🤝 1. Empieza una relación", "Bienvenida cálida, observa, adapta el acercamiento y presenta novedades.", ft.Icons.HANDSHAKE_ROUNDED, "#00FFFF", chk_jrn.get("relacion", False)),
+            ("confianza", "🛡️ 2. Gánate su confianza", "Escucha activa, preguntas abiertas sobre estilo de vida y conocimiento de producto.", ft.Icons.VERIFIED_USER_ROUNDED, "#E040FB", chk_jrn.get("confianza", False)),
+            ("interactua", "💬 3. Interactúa y relaciona", "Conecta necesidades con beneficios clave y soluciones tangibles.", ft.Icons.CHAT_BUBBLE_ROUNDED, "#FFD700", chk_jrn.get("interactua", False)),
+            ("descubre", "🔍 4. Descubre y aprende", "Muestra opciones, realiza venta adicional (Cross Selling) y ofrece Care Kits.", ft.Icons.TRAVEL_EXPLORE_ROUNDED, "#10B981", chk_jrn.get("descubre", False)),
+            ("ve_mas_alla", "🚀 5. Ve más allá", "Cierre perfecto, garantía, registro de lealtad y despedida memorable.", ft.Icons.ROCKET_LAUNCH_ROUNDED, "#3B82F6", chk_jrn.get("ve_mas_alla", False)),
+        ]
+
         card_journey = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.MAP_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text("CUSTOMER JOURNEY (EXPERIENCIA DEL CLIENTE)", color="white", weight="bold", size=13)
+                    ft.Text("CUSTOMER JOURNEY (EXPERIENCIA DEL CLIENTE)", color="white", weight="bold", size=12 if is_mobile_w else 13)
                 ], spacing=6),
-                ft.Divider(height=8, color="#374151"),
+                ft.Divider(height=6, color="#374151"),
                 ft.Row([
-                    ft.Container(ft.Column([ft.Text("🤝 1. Empieza una relación", weight="bold", color="#00FFFF", size=11), ft.Text("Bienvenida cálida e idéntica a los estándares SGH.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("🛡️ 2. Gánate su confianza", weight="bold", color="#E040FB", size=11), ft.Text("Escucha activa y conocimiento de producto.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("💬 3. Interactúa y relaciona", weight="bold", color="#FFD700", size=11), ft.Text("Conecta necesidades con beneficios clave.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("🔍 4. Descubre y aprende", weight="bold", color="#10B981", size=11), ft.Text("Preguntas abiertas sobre estilo de vida.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                    ft.Container(ft.Column([ft.Text("🚀 5. Ve más allá", weight="bold", color="#3B82F6", size=11), ft.Text("Cierre perfecto, garantía y despedida memorable.", color="#CCCCCC", size=10)]), bgcolor="#111827", padding=8, border_radius=8, width=190),
-                ], wrap=True, spacing=8)
+                    make_interactive_card("checks_journey", k, tit, dsc, ico, col, val, width_val=card_w)
+                    for k, tit, dsc, ico, col, val in journey_items
+                ], wrap=True, spacing=6)
             ]),
             bgcolor="#0B0E17",
-            padding=14,
+            padding=12 if is_mobile_w else 14,
             border_radius=12,
             border=ft.Border.all(1.5, "#00FFFF")
         )
 
+        # Tarjeta 6: Tu Enfoque Para Hoy
         card_enfoque_texto = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text("📝 TU ENFOQUE PARA HOY", color="#00FFFF", weight="bold", size=13)
+                    ft.Text("📝 TU ENFOQUE PARA HOY", color="#00FFFF", weight="bold", size=12 if is_mobile_w else 13)
                 ], spacing=6),
                 ft.TextField(
-                    value=data["enfoque_hoy"],
+                    value=data.get("enfoque_hoy", ""),
                     on_change=on_enfoque_change,
                     hint_text="Escribe aquí las acciones clave y estrategia del día...",
                     multiline=True,
@@ -1934,11 +2216,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     bgcolor="#111827",
                     border_color="#374151",
                     color="white",
-                    text_size=12
+                    text_size=11 if is_mobile_w else 12
                 )
             ]),
             bgcolor="#0B0E17",
-            padding=14,
+            padding=12 if is_mobile_w else 14,
             border_radius=12,
             border=ft.Border.all(1.5, "#00FFFF")
         )
@@ -1949,28 +2231,41 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             update_active_view()
 
         star_row_logros = ft.Row([
-            ft.Text("Calificación del día: ", color="white", weight="bold", size=12),
+            ft.Text("Calificación del día: ", color="white", weight="bold", size=11 if is_mobile_w else 12),
             *[
                 ft.IconButton(
-                    icon=ft.Icons.STAR_ROUNDED if i <= data["estrellas_logro"] else ft.Icons.STAR_OUTLINE_ROUNDED,
-                    icon_color="#FFD700" if i <= data["estrellas_logro"] else "#555555",
-                    icon_size=24,
+                    icon=ft.Icons.STAR_ROUNDED if i <= data.get("estrellas_logro", 5) else ft.Icons.STAR_OUTLINE_ROUNDED,
+                    icon_color="#FFD700" if i <= data.get("estrellas_logro", 5) else "#555555",
+                    icon_size=20 if is_mobile_w else 24,
                     on_click=lambda e, idx=i: set_stars(idx),
                     padding=0
                 ) for i in range(1, 6)
             ]
-        ], spacing=4, vertical_alignment="center")
+        ], spacing=2, vertical_alignment="center")
 
-        card_logros_texto = ft.Container(
-            content=ft.Column([
+        # Tarjeta 7: Logros de Hoy
+        if is_mobile_w:
+            header_logros_content = ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.EMOJI_EVENTS_ROUNDED, color="#E040FB", size=18),
+                    ft.Text("🏆 LOGROS DE HOY Y OPORTUNIDADES PARA MAÑANA", color="#E040FB", weight="bold", size=11),
+                ], spacing=6),
+                star_row_logros
+            ], spacing=4)
+        else:
+            header_logros_content = ft.Row([
                 ft.Row([
                     ft.Icon(ft.Icons.EMOJI_EVENTS_ROUNDED, color="#E040FB", size=18),
                     ft.Text("🏆 LOGROS DE HOY Y OPORTUNIDADES PARA MAÑANA", color="#E040FB", weight="bold", size=13),
-                    ft.Container(expand=True),
-                    star_row_logros
                 ], spacing=6),
+                star_row_logros
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        card_logros_texto = ft.Container(
+            content=ft.Column([
+                header_logros_content,
                 ft.TextField(
-                    value=data["logros_hoy"],
+                    value=data.get("logros_hoy", ""),
                     on_change=on_logros_change,
                     hint_text="Resumen del cierre del día, compromisos y áreas de oportunidad...",
                     multiline=True,
@@ -1979,22 +2274,26 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     bgcolor="#111827",
                     border_color="#374151",
                     color="white",
-                    text_size=12
+                    text_size=11 if is_mobile_w else 12
                 )
             ]),
             bgcolor="#0B0E17",
-            padding=14,
+            padding=12 if is_mobile_w else 14,
             border_radius=12,
             border=ft.Border.all(1.5, "#E040FB")
         )
 
         return ft.Column([
+            card_top_header,
+            ft.Container(height=6),
+            row_estandares_no_neg,
+            ft.Container(height=6),
             card_secretos,
-            ft.Container(height=8),
+            ft.Container(height=6),
             card_journey,
-            ft.Container(height=8),
+            ft.Container(height=6),
             card_enfoque_texto,
-            ft.Container(height=8),
+            ft.Container(height=6),
             card_logros_texto
         ], scroll=ft.ScrollMode.AUTO, expand=True)
 
@@ -2561,6 +2860,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             if t_id in d_short and hasattr(btn.content, "value"):
                 btn.content.value = d_short[t_id]
 
+    is_mob_view = (page.width < 800) if (page and getattr(page, "width", None)) else False
+
     def on_anio_change(e):
         g_meta["anio"] = e.control.value
         tab_view_cache.clear()
@@ -2571,13 +2872,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     dd_anio = ft.Dropdown(
         value=str(g_meta["anio"]),
         options=[ft.dropdown.Option(str(y)) for y in [2026, 2025, 2027, 2028]],
-        width=80,
-        content_padding=6,
+        width=95,
+        content_padding=ft.Padding(6, 2, 2, 2),
         text_size=11,
         text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
         bgcolor="#1F2937",
         border_color="#374151",
-        border_radius=6
+        border_radius=6,
+        dense=True
     )
     dd_anio.on_change = on_anio_change
 
@@ -2673,10 +2975,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         content=ft.Row([
             ft.Text("📅", size=12),
             btn_calendar_txt
-        ], spacing=4),
+        ], spacing=4, tight=True),
         border=ft.Border.all(1.5, "#00FFFF"),
         border_radius=6,
-        padding=ft.Padding(8, 5, 8, 5),
+        padding=ft.Padding(6, 4, 6, 4),
         bgcolor="#1E1E2E",
         ink=True,
         on_click=abrir_calendario,
@@ -2699,12 +3001,13 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     txt_num_tienda = ft.TextField(
         value=g_meta["num_tienda"],
         read_only=not es_admin,
-        width=85,
+        width=65 if is_mob_view else 85,
         text_size=11,
         text_style=ft.TextStyle(weight="bold", color="#00FFFF" if es_admin else "#00FF88"),
         bgcolor="#111827" if es_admin else "#1F2937",
         border_color="#00FFFF" if es_admin else "#374151",
-        content_padding=6,
+        content_padding=ft.Padding(6, 2, 6, 2),
+        dense=True,
         on_change=on_num_tienda_change if es_admin else None,
         tooltip="Número de Tienda SGH (🔒 Fijo para Gerentes)" if not es_admin else "Ingrese número de tienda"
     )
@@ -2734,13 +3037,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         value=g_meta["tienda"],
         options=options_tiendas,
         disabled=not es_admin,
-        width=150,
-        content_padding=6,
+        width=135 if is_mob_view else 150,
+        content_padding=ft.Padding(6, 2, 2, 2),
         text_size=11,
         text_style=ft.TextStyle(weight="bold", color="#00FFFF" if es_admin else "#00FF88"),
         bgcolor="#111827" if es_admin else "#1F2937",
         border_color="#00FFFF" if es_admin else "#374151",
-        border_radius=6
+        border_radius=6,
+        dense=True
     )
     if es_admin:
         dd_tienda.on_change = on_store_select_change
@@ -2794,38 +3098,64 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         tooltip="Sincronizar y recalcular todas las celdas y fórmulas"
     )
 
+    filtros_header_ui = ft.Column([
+        ft.Row([
+            ft.Row([
+                ft.Text("AÑO:", color="white", weight="bold", size=10),
+                dd_anio
+            ], spacing=4, vertical_alignment="center"),
+            ft.Row([
+                ft.Text("FECHA / SEM:", color="white", weight="bold", size=10),
+                btn_calendar
+            ], spacing=4, vertical_alignment="center"),
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        ft.Row([
+            ft.Row([
+                ft.Text("# TIENDA:", color="white", weight="bold", size=10),
+                txt_num_tienda
+            ], spacing=4, vertical_alignment="center"),
+            ft.Row([
+                ft.Text("TIENDA:", color="white", weight="bold", size=10),
+                dd_tienda
+            ], spacing=4, vertical_alignment="center"),
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+    ], spacing=6) if is_mob_view else ft.Row([
+        ft.Text("AÑO:", color="white", weight="bold", size=11),
+        dd_anio,
+        ft.Container(width=2),
+        ft.Text("FECHA / SEMANA:", color="white", weight="bold", size=11),
+        btn_calendar,
+        ft.Container(width=2),
+        ft.Text("# TIENDA:", color="white", weight="bold", size=11),
+        txt_num_tienda,
+        ft.Container(width=2),
+        ft.Text("TIENDA:", color="white", weight="bold", size=11),
+        dd_tienda
+    ], vertical_alignment="center", spacing=4, wrap=True)
+
     header_module = ft.Container(
         content=ft.Column([
             # Fila 1: Título Principal + Botones de Acción de Exportación y Recálculo
             ft.Row([
-                ft.Text("🎯 ENFOQUE DIARIO - SUNGLASS HUT", size=14, weight="bold", color="#00FFFF"),
+                ft.Text("🎯 ENFOQUE DIARIO - SUNGLASS HUT", size=13 if is_mob_view else 14, weight="bold", color="#00FFFF"),
                 ft.Row([
                     btn_refresh_master,
                     btn_download_excel,
                     btn_download_pdf
-                ], vertical_alignment="center", spacing=6, wrap=True)
+                ], vertical_alignment="center", spacing=4 if is_mob_view else 6, wrap=True)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER, wrap=True),
             ft.Divider(height=4, color="#1F2937"),
             # Fila 2: Subtítulo + Filtros de Año, Semana, # Tienda y Nombre Tienda
-            ft.Row([
+            ft.Column([
+                ft.Text("Replicación fiel del Excel Oficial SGH (Blancas = Entrada | Verdes = Cálculo).", size=9 if is_mob_view else 10, color="#AAAAAA"),
+                filtros_header_ui
+            ], spacing=6) if is_mob_view else ft.Row([
                 ft.Text("Replicación fiel del Excel Oficial SGH (Celdas blancas ⚪ = Entrada | Celdas verdes 🟩 = Cálculo automático).", size=10, color="#AAAAAA"),
-                ft.Row([
-                    ft.Text("AÑO:", color="white", weight="bold", size=11),
-                    dd_anio,
-                    ft.Container(width=2),
-                    ft.Text("FECHA / SEMANA:", color="white", weight="bold", size=11),
-                    btn_calendar,
-                    ft.Container(width=2),
-                    ft.Text("# TIENDA:", color="white", weight="bold", size=11),
-                    txt_num_tienda,
-                    ft.Container(width=2),
-                    ft.Text("TIENDA:", color="white", weight="bold", size=11),
-                    dd_tienda
-                ], vertical_alignment="center", spacing=4, wrap=True)
+                filtros_header_ui
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER, wrap=True)
         ], spacing=6),
         bgcolor="#0B0E17",
-        padding=10,
+        padding=8 if is_mob_view else 10,
         border_radius=10,
         border=ft.Border.all(1.5, "#1F2937")
     )
