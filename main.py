@@ -6071,8 +6071,18 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
                     # Vendedores / Configuración Tienda / Metas Mensuales
                     "configuracion tienda": "vendedores",
+                    "configuracion de tienda": "vendedores",
+                    "configuración tienda": "vendedores",
+                    "configuración de tienda": "vendedores",
+                    "abrir configuracion tienda": "vendedores",
+                    "abre configuracion tienda": "vendedores",
+                    "abrir configuracion de tienda": "vendedores",
+                    "abre configuracion de tienda": "vendedores",
+                    "ajustes de tienda": "vendedores",
                     "metas mensuales": "vendedores",
                     "meta mensual": "vendedores",
+                    "colaboradores": "vendedores",
+                    "colaborador": "vendedores",
                     "vendedor": "vendedores",
                     "vendedores": "vendedores",
 
@@ -6117,10 +6127,33 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "budget": "presupuesto",
 
                     # Enfoque Diario 2026
+                    "abrir enfoque diario": "enfoque_diario",
+                    "abre enfoque diario": "enfoque_diario",
                     "enfoque diario 2026": "enfoque_diario",
                     "enfoque diario": "enfoque_diario",
                     "enfoque 2026": "enfoque_diario",
+                    "enfoque del dia": "enfoque_diario",
                     "enfoque": "enfoque_diario",
+
+                    # Enfoque Semanal SGH (¡ENFOQUÉMONOS!)
+                    "abrir enfoque semanal": "enfoque_semanal",
+                    "abre enfoque semanal": "enfoque_semanal",
+                    "abrir el enfoque semanal": "enfoque_semanal",
+                    "abre el enfoque semanal": "enfoque_semanal",
+                    "ver enfoque semanal": "enfoque_semanal",
+                    "mostrar enfoque semanal": "enfoque_semanal",
+                    "muestra enfoque semanal": "enfoque_semanal",
+                    "ir a enfoque semanal": "enfoque_semanal",
+                    "ve a enfoque semanal": "enfoque_semanal",
+                    "enfoque semanal": "enfoque_semanal",
+                    "enfoque de la semana": "enfoque_semanal",
+                    "bitacora semanal": "enfoque_semanal",
+                    "bitácora semanal": "enfoque_semanal",
+                    "abrir enfoquemonos": "enfoque_semanal",
+                    "abre enfoquemonos": "enfoque_semanal",
+                    "enfoquemonos": "enfoque_semanal",
+                    "enfoquémonos": "enfoque_semanal",
+                    "nuestro enfoque semanal": "enfoque_semanal",
 
                     # Panel de Control
                     "panel de control": "dashboard",
@@ -15195,6 +15228,70 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 btn_agregar
             ], spacing=10, vertical_alignment="center", wrap=True)
 
+            return ft.Container(
+                content=ft.Column([
+                    # Header
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Row([
+                                ft.Text("👥", size=22),
+                                ft.Column([
+                                    ft.Text("CONFIGURACIÓN DE TIENDA Y EQUIPO", size=16, weight="heavy", color="white"),
+                                    ft.Text("Gestión oficial de colaboradores, puestos y altas de personal Sunglass Hut", size=11, color="#8B949E")
+                                ], spacing=2)
+                            ], spacing=10),
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        padding=ft.Padding(16, 12, 16, 12),
+                        bgcolor="#0D1117",
+                        border=ft.Border.all(1, "#30363D"),
+                        border_radius=8
+                    ),
+                    
+                    banner_gerente,
+                    
+                    # Formulario de Registro
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([
+                                ft.Icon(ft.Icons.PERSON_ADD_ROUNDED, color="#00FFFF", size=18),
+                                ft.Text("Registrar Nuevo Colaborador / Puesto", size=13, weight="bold", color="#00FFFF")
+                            ], spacing=6),
+                            form_section
+                        ], spacing=10),
+                        padding=ft.Padding(16, 14, 16, 14),
+                        bgcolor="#161B22",
+                        border=ft.Border.all(1, "#30363D"),
+                        border_radius=8
+                    ),
+                    
+                    # Lista de Colaboradores Actuales
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([
+                                ft.Icon(ft.Icons.BADGE_ROUNDED, color="#7CFC00", size=18),
+                                ft.Text("Equipo de Colaboradores de Tienda", size=13, weight="bold", color="#7CFC00"),
+                                ft.Container(expand=True),
+                                ft.IconButton(
+                                    icon=ft.Icons.REFRESH_ROUNDED,
+                                    tooltip="Actualizar Lista 🔄",
+                                    icon_color="#00FFFF",
+                                    icon_size=18,
+                                    on_click=lambda e: (cargar_vendedores(), page.update() if page else None)
+                                )
+                            ], spacing=6),
+                            vendedores_list
+                        ], spacing=10),
+                        padding=ft.Padding(16, 14, 16, 14),
+                        bgcolor="#161B22",
+                        border=ft.Border.all(1, "#30363D"),
+                        border_radius=8
+                    ),
+                    ft.Container(height=30)
+                ], spacing=14, scroll=ft.ScrollMode.AUTO),
+                padding=ft.Padding(16, 12, 16, 12),
+                expand=True
+            )
+
         MANUAL_NEUROVENTAS_LUXO = """
 === MANUAL DE VENTAS DE ÉLITE Y NEUROVENTAS SUNGLASS HUT (SISTEMA LUXO) ===
 
@@ -20394,6 +20491,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_enfoque_semanal = ft.TextButton(
+            content=ft.Row([ft.Text("📅", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("enfoque_semanal"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_dashboard = None
         if es_admin():
             btn_dashboard = ft.TextButton(
@@ -20435,8 +20538,8 @@ Ejemplo:
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
                 (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_enfoque, "enfoque_diario"),
-                (btn_crm, "crm"), (btn_fedex, "fedex"), (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"),
-                (btn_panamericano, "panamericano")
+                (btn_enfoque_semanal, "enfoque_semanal"), (btn_crm, "crm"), (btn_fedex, "fedex"),
+                (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_panamericano, "panamericano")
             ]
             for btn_tuple in all_btn_tuples:
                 btn = btn_tuple[0]
@@ -20460,7 +20563,7 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
+                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "enfoque_semanal", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
                         elif vista == "panamericano":
@@ -20523,6 +20626,11 @@ Ejemplo:
                         elif vista == "enfoque_diario":
                             import enfoque_diario
                             main_views_cache["enfoque_diario"] = enfoque_diario.build_enfoque_diario_view(page, user_info)
+                        elif vista == "enfoque_semanal":
+                            import importlib
+                            import enfoque_semanal
+                            importlib.reload(enfoque_semanal)
+                            main_views_cache["enfoque_semanal"] = enfoque_semanal.build_enfoque_semanal_view(page, user_info)
                         elif vista == "operacion_diaria":
                             if es_admin():
                                 main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr, get_zona_region_fn=obtener_zona_region_activa)
@@ -20715,6 +20823,7 @@ Ejemplo:
                 btn_weekly.content.controls[1].value = tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️")
                 btn_ciclicos.content.controls[1].value = tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄")
                 btn_enfoque.content.controls[1].value = tr("Enfoque Diario 2026 ☀️", "Daily Focus 2026 ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️")
+                btn_enfoque_semanal.content.controls[1].value = tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅")
                 if 'btn_dashboard' in locals() and btn_dashboard:
                     btn_dashboard.content.controls[1].value = tr("Panel de Control 🎮", "Admin Panel 🎮", "Panneau de Contrôle 🎮", "Pannello di Controllo 🎮", "控制面板 🎮")
                 if 'btn_admin_trivia' in locals() and btn_admin_trivia:
@@ -20769,7 +20878,7 @@ Ejemplo:
         ], alignment="start", vertical_alignment="center", spacing=6)
 
         # --- CATEGORÍAS AGRUPADAS CON ACORDEÓN DESPLEGABLE (ExpansionTile) ---
-        ventas_controls = [btn_presupuesto, btn_meta_semanal, btn_weekly]
+        ventas_controls = [btn_presupuesto, btn_meta_semanal, btn_weekly, btn_enfoque_semanal]
         if btn_dashboard:
             ventas_controls.append(btn_dashboard)
         if btn_bitacora:
