@@ -438,8 +438,9 @@ def verificar_alertas_apertura_incumplida(conectar_db_fn=None):
             db.close()
             return
             
+        fecha_hoy = get_now_mexico_city().strftime("%Y-%m-%d")
         cursor = db.cursor(dictionary=True)
-        cursor.execute("SELECT Numero_Tienda FROM operacion_diaria_tiendas WHERE Fecha = CURRENT_DATE() AND Hora_Apertura IS NOT NULL")
+        cursor.execute("SELECT Numero_Tienda FROM operacion_diaria_tiendas WHERE Fecha = %s AND Hora_Apertura IS NOT NULL", (fecha_hoy,))
         reportadas = [r["Numero_Tienda"] for r in cursor.fetchall()]
         
         faltantes = [t for t in tiendas if t not in reportadas]
@@ -513,10 +514,10 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Apertura, Foto_Apertura, Estado_Apertura)
                 VALUES (%s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
-                    Hora_Apertura = IF(Hora_Apertura IS NULL, %s, Hora_Apertura),
-                    Foto_Apertura = IF(Hora_Apertura IS NULL, %s, Foto_Apertura),
-                    Estado_Apertura = IF(Hora_Apertura IS NULL, %s, Estado_Apertura)
-            """, (tienda_usuario, fecha_str, now_str, foto_rel_path, estado, now_str, foto_rel_path, estado))
+                    Hora_Apertura = IF(Hora_Apertura IS NULL, VALUES(Hora_Apertura), Hora_Apertura),
+                    Foto_Apertura = VALUES(Foto_Apertura),
+                    Estado_Apertura = IF(Estado_Apertura IS NULL, VALUES(Estado_Apertura), Estado_Apertura)
+            """, (tienda_usuario, fecha_str, now_str, foto_rel_path, estado))
             db.commit()
             db.close()
             
@@ -640,8 +641,9 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         reg = None
         if db:
             try:
+                fecha_hoy = get_now_mexico_city().strftime("%Y-%m-%d")
                 cursor = db.cursor(dictionary=True)
-                cursor.execute("SELECT * FROM operacion_diaria_tiendas WHERE TRIM(Numero_Tienda) = TRIM(%s) AND Fecha = CURRENT_DATE()", (tienda_usuario,))
+                cursor.execute("SELECT * FROM operacion_diaria_tiendas WHERE TRIM(Numero_Tienda) = TRIM(%s) AND Fecha = %s", (tienda_usuario, fecha_hoy))
                 reg = cursor.fetchone()
                 db.close()
             except Exception as ex:

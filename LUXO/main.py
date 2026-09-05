@@ -2181,14 +2181,17 @@ def configurar_rutas_fastapi(app):
                             msg.style.color = '#7CFC00';
                             msg.innerText = '✅ ¡Éxito! Archivo cargado correctamente.';
                             setTimeout(() => {{
-                                if (window.parent && window.parent.closeOverlay) {{
+                                if (window.opener && !window.opener.closed) {{
+                                    try {{ window.opener.focus(); }} catch(e){{}}
+                                    window.close();
+                                }} else if (window.parent && window.parent !== window && window.parent.closeOverlay) {{
                                     window.parent.closeOverlay();
                                 }} else if (window.history.length > 1) {{
                                     window.history.back();
                                 }} else {{
-                                    window.close();
+                                    window.location.replace('/#/operacion_diaria');
                                 }}
-                            }}, 600);
+                            }}, 500);
                         }} else {{
                             msg.style.color = '#FF4500';
                             msg.innerText = '❌ Error: ' + (data.message || 'Error al subir');
