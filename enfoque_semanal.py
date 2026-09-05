@@ -408,22 +408,10 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         text_size=13
     )
 
-    # 1. Colaborador 1 (Conducta) - Editable libremente para apoyos o cualquier vendedor
-    tf_colab_fuerte_1 = ft.TextField(
-        value=initial_state.get("colab_fuerte_1", initial_state.get("colab_fuerte", "Romo")),
+    # 1. Colaborador (Conducta / Fortaleza) - Editable libremente
+    tf_colab_fuerte = ft.TextField(
+        value=initial_state.get("colab_fuerte", initial_state.get("colab_fuerte_1", "Romo")),
         hint_text="Ej. Romo / Apoyo",
-        height=36,
-        content_padding=ft.Padding(8, 2, 8, 2),
-        bgcolor="#141424",
-        border_color="#00FFFF",
-        focused_border_color="#00FFFF",
-        text_size=12
-    )
-
-    # 1. Colaborador 2 (Métrica) - Editable libremente
-    tf_colab_fuerte_2 = ft.TextField(
-        value=initial_state.get("colab_fuerte_2", initial_state.get("colab_fuerte", "Romo")),
-        hint_text="Ej. Diego / Apoyo",
         height=36,
         content_padding=ft.Padding(8, 2, 8, 2),
         bgcolor="#141424",
@@ -514,18 +502,15 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
 
     # Izquierda (Fortaleza)
     tf_fuerza_comp = crear_input_celda(initial_state.get("fuerza_comp", "Conecta"), color="#00FFFF", font_size=15)
-    tf_mejor_colab_1 = crear_input_celda(initial_state.get("mejor_colab_1", "Romo"), color="#FFFFFF", font_size=14)
+    tf_mejor_colab = crear_input_celda(initial_state.get("mejor_colab", initial_state.get("mejor_colab_1", "Romo")), color="#FFFFFF", font_size=14)
     tf_indicador_fuerte = crear_input_celda(initial_state.get("indicador_fuerte", "Polarizado"), color="#00FFFF", font_size=14)
-    tf_mejor_colab_2 = crear_input_celda(initial_state.get("mejor_colab_2", "Romo"), color="#FFFFFF", font_size=14)
     tf_accion_mantener = crear_input_celda(initial_state.get("accion_mantener", "Realiza preguntas y escucha.\n💡 Consejo Analítico: Indaga sobre actividades al aire libre antes de sugerir."), color="#E2E8F0", font_size=11.5, bold=False, multiline=True, min_lines=2)
     tf_previstos_fuerte = crear_input_celda(initial_state.get("previstos_fuerte", "Mantener arriba del 45% (Meta SGH)"), color="#7CFC00", font_size=11.5 if is_mobile else 12.5, multiline=True, min_lines=1)
     tf_actuales_fuerte = crear_input_celda(initial_state.get("actuales_fuerte", "50%"), color="#FFFFFF", font_size=12 if is_mobile else 13, bold=True, align=ft.TextAlign.CENTER, dense=True, height=28)
 
     # Derecha (Desarrollo)
     tf_desarrollo_comp = crear_input_celda(initial_state.get("desarrollo_comp", "Conecta"), color="#FF7A33", font_size=15)
-    tf_desarrollo_colab_1 = crear_input_celda(initial_state.get("desarrollo_colab_1", "Equipo Tienda"), color="#FFFFFF", font_size=14)
     tf_indicador_debil = crear_input_celda(initial_state.get("indicador_debil", "PPT"), color="#FF7A33", font_size=14)
-    tf_desarrollo_colab_2 = crear_input_celda(initial_state.get("desarrollo_colab_2", "Meta: 1.45"), color="#FFD700", font_size=13)
     tf_accion_desarrollo = crear_input_celda(initial_state.get("accion_desarrollo", "Repite hasta cerrar la venta.\n💡 Consejo de Desarrollo: Presenta siempre un segundo par complementario en el espejo."), color="#E2E8F0", font_size=11.5, bold=False, multiline=True, min_lines=2)
     tf_previstos_debil = crear_input_celda(initial_state.get("previstos_debil", "Subir a 1.45 (Meta Tienda SGH)"), color="#FFD700", font_size=11.5 if is_mobile else 12.5, multiline=True, min_lines=1)
     tf_actuales_debil = crear_input_celda(initial_state.get("actuales_debil", "14%"), color="#FFFFFF", font_size=12 if is_mobile else 13, bold=True, align=ft.TextAlign.CENTER, dense=True, height=28)
@@ -538,8 +523,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
             rotacion_estado["desarrollo"] += 1
 
         kpi_f = dd_kpi_fuerte.value or "Polarizado (% POL)"
-        colab_f1 = tf_colab_fuerte_1.value.strip() or "Romo"
-        colab_f2 = tf_colab_fuerte_2.value.strip() or colab_f1
+        colab_f = tf_colab_fuerte.value.strip() or "Romo"
         extra_f = tf_extra_fuerte.value.strip()
 
         kpi_d = dd_kpi_debil.value or "PPT (Piezas x Transacción)"
@@ -556,9 +540,8 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         previsto_texto_f = f"Mantener arriba de {val_act_f}" if val_act_f else f"Mantener arriba del {SGH_MINIMUM_TARGETS.get(kpi_f, '45%')}"
 
         tf_fuerza_comp.value = pilar_f.capitalize()
-        tf_mejor_colab_1.value = colab_f1
+        tf_mejor_colab.value = colab_f
         tf_indicador_fuerte.value = clean_kpi_name_f
-        tf_mejor_colab_2.value = colab_f2
         tf_accion_mantener.value = f"{conducta_f}.\n{consejo_f}"
         tf_previstos_fuerte.value = previsto_texto_f
         tf_actuales_fuerte.value = val_act_f
@@ -589,9 +572,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         )
 
         tf_desarrollo_comp.value = pilar_d.capitalize()
-        tf_desarrollo_colab_1.value = "Equipo Tienda"
         tf_indicador_debil.value = clean_kpi_name_d
-        tf_desarrollo_colab_2.value = f"Meta: {meta_min_d}"
         tf_accion_desarrollo.value = f"{conducta_d}.\n{consejo_d_dinamico}"
         tf_previstos_debil.value = previsto_texto_d
         tf_actuales_debil.value = val_act_d
@@ -608,30 +589,25 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     tf_valor_actual_fuerte.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
     tf_valor_actual_debil.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
     tf_extra_fuerte.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
-    tf_colab_fuerte_1.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
-    tf_colab_fuerte_2.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    tf_colab_fuerte.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
     dd_semana.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=True)
 
     def guardar_estado(e=None, mostrar_alerta=True):
         data = {
             "semana": dd_semana.value,
-            "colab_fuerte_1": tf_colab_fuerte_1.value,
-            "colab_fuerte_2": tf_colab_fuerte_2.value,
+            "colab_fuerte": tf_colab_fuerte.value,
             "kpi_fuerte": dd_kpi_fuerte.value,
             "actuales_fuerte": tf_valor_actual_fuerte.value,
             "extra_fuerte": tf_extra_fuerte.value,
             "kpi_debil": dd_kpi_debil.value,
             "valor_actual_debil": tf_valor_actual_debil.value,
             "fuerza_comp": tf_fuerza_comp.value,
-            "mejor_colab_1": tf_mejor_colab_1.value,
+            "mejor_colab": tf_mejor_colab.value,
             "indicador_fuerte": tf_indicador_fuerte.value,
-            "mejor_colab_2": tf_mejor_colab_2.value,
             "accion_mantener": tf_accion_mantener.value,
             "previstos_fuerte": tf_previstos_fuerte.value,
             "desarrollo_comp": tf_desarrollo_comp.value,
-            "desarrollo_colab_1": tf_desarrollo_colab_1.value,
             "indicador_debil": tf_indicador_debil.value,
-            "desarrollo_colab_2": tf_desarrollo_colab_2.value,
             "accion_desarrollo": tf_accion_desarrollo.value,
             "previstos_debil": tf_previstos_debil.value,
             "actuales_debil": tf_actuales_debil.value,
@@ -685,8 +661,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                             ft.Text("FORTALEZA (MANTENER)", size=11, weight="bold", color="#00FFFF"),
                         ], spacing=4),
                         ft.Row([
-                            ft.Container(content=ft.Column([ft.Text("Colab (Cond):", size=9, color="#CBD5E1"), tf_colab_fuerte_1], spacing=1), expand=1),
-                            ft.Container(content=ft.Column([ft.Text("Colab (Métr):", size=9, color="#CBD5E1"), tf_colab_fuerte_2], spacing=1), expand=1),
+                            ft.Container(content=ft.Column([ft.Text("Mejor Colaborador:", size=9, color="#CBD5E1"), tf_colab_fuerte], spacing=1), expand=1),
                         ], spacing=4),
                         ft.Row([
                             ft.Container(content=ft.Column([ft.Text("KPI Fuerte:", size=9, color="#CBD5E1"), dd_kpi_fuerte], spacing=1), expand=2),
@@ -751,10 +726,8 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                     # Fortaleza
                     ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#00FFFF", size=14),
                     ft.Text("FORTALEZA:", size=11, weight="bold", color="#00FFFF"),
-                    ft.Text("Cond:", size=10, color="#CBD5E1"),
-                    ft.Container(content=tf_colab_fuerte_1, width=105),
-                    ft.Text("Métr:", size=10, color="#CBD5E1"),
-                    ft.Container(content=tf_colab_fuerte_2, width=105),
+                    ft.Text("Colaborador:", size=10, color="#CBD5E1"),
+                    ft.Container(content=tf_colab_fuerte, width=125),
                     ft.Text("KPI Fuerte:", size=10, color="#CBD5E1"),
                     ft.Container(content=dd_kpi_fuerte, width=175),
                     ft.Text("Val:", size=10, color="#00FFFF", weight="bold"),
@@ -859,8 +832,8 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                     ft.Text("ACTUAL:", size=7.5, weight="heavy", color="#CBD5E1"),
                     ft.Container(
                         content=control_actuales,
-                        width=58,
-                        height=26,
+                        width=54,
+                        height=24,
                         bgcolor="#040711",
                         border=ft.Border.all(1.2, border_box_color),
                         border_radius=ft.BorderRadius(3, 3, 3, 3),
@@ -949,7 +922,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         border=ft.Border(bottom=ft.BorderSide(1.5, BORDER_COLOR))
     )
 
-    # 2. Fila 1: Fuerza de Comportamiento / Área de Desarrollo (Simetría de 2 columnas en ambos lados)
+    # 2. Fila 1: Fuerza de Comportamiento / Área de Desarrollo
     r1_controls = []
     if not is_mobile:
         r1_controls.append(
@@ -964,9 +937,8 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         )
     r1_controls.extend([
         celda_grid("FUERZA DE COMPORTAMIENTO", "" if is_mobile else "Identifica tu fortaleza: INVITA, CONECTA, AGRADECE", tf_fuerza_comp, border_right=True, title_color="#00FFFF", expand=6),
-        celda_grid("MEJOR COLAB" if is_mobile else "MEJOR COLABORADOR", "" if is_mobile else "Nombre (Conducta)", tf_mejor_colab_1, border_right=True, title_color="#FFFFFF", expand=4),
-        celda_grid("ÁREA DE DESARROLLO" if is_mobile else "ÁREA DE DESARROLLO DEL COMPORTAMIENTO", "" if is_mobile else "Identifica un área para enfocarte: INVITA, CONECTA, AGRADECE", tf_desarrollo_comp, border_right=True, title_color="#FF7A33", expand=6),
-        celda_grid("ENFOQUE" if is_mobile else "ENFOQUE / EQUIPO", "" if is_mobile else "Equipo o Colaborador", tf_desarrollo_colab_1, border_right=False, title_color="#FFFFFF", expand=4),
+        celda_grid("MEJOR COLAB" if is_mobile else "MEJOR COLABORADOR", "" if is_mobile else "Nombre (Conducta)", tf_mejor_colab, border_right=True, title_color="#FFFFFF", expand=4),
+        celda_grid("ÁREA DE DESARROLLO" if is_mobile else "ÁREA DE DESARROLLO DEL COMPORTAMIENTO", "" if is_mobile else "Identifica un área para enfocarte: INVITA, CONECTA, AGRADECE", tf_desarrollo_comp, border_right=False, title_color="#FF7A33", expand=10),
     ])
     row_1 = ft.Container(
         content=ft.Row(r1_controls, spacing=0),
@@ -974,7 +946,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
-    # 3. Fila 2: Indicador Métrico (Simetría de 2 columnas en ambos lados)
+    # 3. Fila 2: Indicador Métrico (Un solo recuadro continuo de 100% de ancho en cada columna)
     r2_controls = []
     if not is_mobile:
         r2_controls.append(
@@ -988,10 +960,8 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
             )
         )
     r2_controls.extend([
-        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico: POLARIZADO, LUJO, MULT, PPT...", tf_indicador_fuerte, border_right=True, title_color="#00FFFF", expand=6),
-        celda_grid("MEJOR COLAB" if is_mobile else "MEJOR COLABORADOR", "" if is_mobile else "Nombre (Métrica)", tf_mejor_colab_2, border_right=True, title_color="#FFFFFF", expand=4),
-        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico soporte: MULT, PPT, CONV...", tf_indicador_debil, border_right=True, title_color="#FF7A33", expand=6),
-        celda_grid("META SGH" if is_mobile else "OBJETIVO SGH", "" if is_mobile else "Meta Tienda", tf_desarrollo_colab_2, border_right=False, title_color="#FFD700", expand=4),
+        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico: POLARIZADO, LUJO, MULT, PPT...", tf_indicador_fuerte, border_right=True, title_color="#00FFFF", expand=10),
+        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico soporte: MULT, PPT, CONV...", tf_indicador_debil, border_right=False, title_color="#FF7A33", expand=10),
     ])
     row_2 = ft.Container(
         content=ft.Row(r2_controls, spacing=0),

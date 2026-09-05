@@ -5601,7 +5601,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 resultado.append(palabra)
         return "".join(resultado)
 
-    def cargar_chat():
+    def cargar_chat(initial_view=None):
         page.clean()
         page.add(
             ft.Container(
@@ -20538,9 +20538,16 @@ Ejemplo:
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista):
             active_view[0] = vista
+            if hasattr(page, "shared_preferences") and page.shared_preferences:
+                async def _save_v_sp():
+                    try:
+                        await page.shared_preferences.set("last_active_view", str(vista))
+                    except Exception:
+                        pass
+                page.run_task(_save_v_sp)
             if hasattr(page, "client_storage") and page.client_storage:
                 try:
-                    page.client_storage.set("last_active_view", vista)
+                    page.client_storage.set("last_active_view", str(vista))
                 except Exception:
                     pass
             all_btn_tuples = [
@@ -22446,11 +22453,13 @@ Ejemplo:
             import asyncio
             uid_saved = None
             last_act_str = None
+            last_view_saved = None
             
             if hasattr(page, "shared_preferences") and page.shared_preferences:
                 try:
                     uid_saved = await asyncio.wait_for(page.shared_preferences.get("logged_user_id"), timeout=1.5)
                     last_act_str = await asyncio.wait_for(page.shared_preferences.get("last_activity_timestamp"), timeout=1.5)
+                    last_view_saved = await asyncio.wait_for(page.shared_preferences.get("last_active_view"), timeout=1.5)
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
@@ -22506,8 +22515,8 @@ Ejemplo:
                         }
                         active_sessions[sess_token] = sess_dict
                         active_sessions[user_id_key] = sess_dict
-                        print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']}")
-                        cargar_chat()
+                        print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
+                        cargar_chat(initial_view=last_view_saved)
                         return # Termina sin mostrar login
         except Exception as ex_r:
             print("Notice auto-restore session:", ex_r)
