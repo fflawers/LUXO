@@ -97,8 +97,132 @@ SGH_KPI_MAPPING = {
     ]
 }
 
-def resolver_conducta_fuerte(kpi_f, extra_f):
-    """Determina la conducta exacta para la Fortaleza según el KPI y el comentario opcional."""
+def obtener_llaves_activas():
+    keys = []
+    for var in ["GROQ_API_KEY", "GROQ_API_KEY_2", "GROQ_API_KEY_3"]:
+        k = os.getenv(var, "").strip()
+        if k and k not in keys:
+            keys.append(k)
+    cfg_paths = [
+        os.path.join(BASE_DIR, "config.json"),
+        os.path.join(os.path.dirname(BASE_DIR), "config.json")
+    ]
+    for p in cfg_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    if isinstance(cfg, dict):
+                        for m in cfg.get("models", []):
+                            k = m.get("apiKey", "").strip()
+                            if k and k not in keys:
+                                keys.append(k)
+            except Exception:
+                pass
+    return keys
+
+def generar_consejo_desarrollo_ia(kpi_d, conducta_d, val_act_d, meta_d, extra_ctx="", rotacion_index=0):
+    """Genera un consejo de desarrollo libre, analítico y contextualizado con IA para piso de venta."""
+    keys = obtener_llaves_activas()
+    
+    # 1. Intentar consulta libre con IA en vivo (Groq / OpenRouter)
+    if keys:
+        system_prompt = (
+            "Eres LUXO AI, el coach analítico y experto en ventas retail para tiendas Sunglass Hut (SGH). "
+            "Genera un ÚNICO consejo táctico, libre y persuasivo de desarrollo para el equipo en piso de venta frente al cliente. "
+            "Reglas obligatorias: "
+            "1. Redacta de 1 a máximo 2 oraciones muy prácticas, claras y accionables en el piso de venta (en el espejo o probador). "
+            "2. Conecta de forma natural la conducta SGH con el indicador de oportunidad y el contexto de venta. "
+            "3. NO des introducciones, saludos ni explicaciones. Responde ÚNICAMENTE empezando con: "
+            "💡 Consejo de Desarrollo: [tu consejo]"
+        )
+        user_msg = (
+            f"Indicador bajo (Oportunidad): {kpi_d}\n"
+            f"Resultado actual de la tienda: {val_act_d} (Meta SGH esperada: {meta_d})\n"
+            f"Conducta oficial SGH asignada: {conducta_d}\n"
+            f"Contexto o detalle de tienda: {extra_ctx or 'Ninguno'}\n"
+            f"Genera el consejo táctico para cerrar la brecha métrica:"
+        )
+        
+        for key in keys:
+            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+            target_url = "https://openrouter.ai/api/v1/chat/completions" if key.startswith("sk-or-") else "https://api.groq.com/openai/v1/chat/completions"
+            models = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct"] if key.startswith("sk-or-") else ["groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b"]
+            
+            for mod in models:
+                try:
+                    payload = {
+                        "model": mod,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_msg}
+                        ],
+                        "temperature": 0.75
+                    }
+                    res = requests.post(target_url, headers=headers, json=payload, timeout=3.5)
+                    if res.status_code == 200:
+                        data = res.json()
+                        if "choices" in data and data["choices"]:
+                            txt = data["choices"][0]["message"]["content"].strip()
+                            txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.DOTALL).strip()
+                            if not txt.startswith("💡"):
+                                if "Consejo de Desarrollo:" in txt:
+                                    txt = "💡 " + txt[txt.find("Consejo de Desarrollo:"):]
+                                else:
+                                    txt = f"💡 Consejo de Desarrollo: {txt}"
+                            return txt
+                except Exception:
+                    continue
+
+    # 2. Catálogo dinámico y variado de respaldo (Fallback pedagógico SGH por KPI y Conducta)
+    FALLBACKS = {
+        "Polarizado": [
+            "💡 Consejo de Desarrollo: Cuando el cliente tenga las gafas en el rostro, acércate con el probador de polarizado frente al espejo para evidenciar el 100% de eliminación de reflejos.",
+            "💡 Consejo de Desarrollo: Haz la pregunta clave: '¿Manejas de día o realizas actividades al aire libre?' para justificar la tecnología polarizada antes de mencionar el precio.",
+            "💡 Consejo de Desarrollo: Pule las gafas polarizadas frente al cliente y colócalas en sus manos invitándolo a mirar hacia una zona iluminada de la tienda.",
+            "💡 Consejo de Desarrollo: Explica la protección UV400 y cómo la mica polarizada reduce el cansancio visual en un 80% frente a una mica convencional."
+        ],
+        "Conversión": [
+            "💡 Consejo de Desarrollo: Saluda al cliente en los primeros 15 segundos y acompáñalo con 2 preguntas abiertas sobre qué estilo o marca prefiere hoy.",
+            "💡 Consejo de Desarrollo: Presenta 3 modelos diferentes de forma consecutiva para mantener su atención y encontrar rápidamente su estilo ideal.",
+            "💡 Consejo de Desarrollo: Guía al cliente al muro de marcas icónicas y rétalo a probarse un estilo nuevo que eleve su seguridad.",
+            "💡 Consejo de Desarrollo: Si un cliente parece indeciso, acércate con una segunda opción y resalta un beneficio clave para facilitar su decisión de compra."
+        ],
+        "Múltiples": [
+            "💡 Consejo de Desarrollo: Mientras el cliente se prueba su par favorito, acércale un segundo modelo con un uso distinto (deportivo vs casual) antes de ir a caja.",
+            "💡 Consejo de Desarrollo: Ofrece la promoción de segundo par o complementos de limpieza y estuches especiales para asegurar 2 o más piezas por transacción.",
+            "💡 Consejo de Desarrollo: Usa la técnica de 'Uno para ti y uno para regalo' o 'Uno para manejar y otro para el fin de semana' para cerrar pares adicionales."
+        ],
+        "PPT": [
+            "💡 Consejo de Desarrollo: Aplica la regla del kit completo: cada armazón debe presentarse acompañado de microfibra premium, spray limpiador o cordón.",
+            "💡 Consejo de Desarrollo: Invita al cliente a aprovechar el viaje a tienda para llevar una opción de reemplazo o un accesorio de protección con descuento.",
+            "💡 Consejo de Desarrollo: Antes de procesar el pago, muestra físicamente el kit de cuidado y explica la garantía de por vida en ajustes."
+        ],
+        "AUR": [
+            "💡 Consejo de Desarrollo: Utiliza el catálogo SmartShopper en tablet para mostrar ediciones limitadas y modelos premium exclusivos no exhibidos en piso.",
+            "💡 Consejo de Desarrollo: Enfoca la conversación en el valor artesanal, materiales como titanio o acetato pulido a mano y prestigio de marca.",
+            "💡 Consejo de Desarrollo: Realiza un recorrido por las marcas de alta gama de la tienda invitando a probar piezas icónicas de temporada."
+        ],
+        "Lujo": [
+            "💡 Consejo de Desarrollo: Presenta piezas de firmas de lujo sobre paño de exhibición y resalta la exclusividad del diseño y acabados de lujo.",
+            "💡 Consejo de Desarrollo: Aprovecha el SmartShopper para buscar lanzamientos internacionales de marcas de lujo y elevar el ticket promedio.",
+            "💡 Consejo de Desarrollo: Ofrece el ajuste personalizado y entrega el empaque premium con ambas manos para transmitir el valor de lujo."
+        ],
+        "Cumplimiento": [
+            "💡 Consejo de Desarrollo: Asegura que cada cliente reciba la bienvenida cálida y el ajuste perfecto antes de salir de la tienda.",
+            "💡 Consejo de Desarrollo: Explica detalladamente los beneficios postventa y agradece al cliente llamándolo por su nombre al despedirlo."
+        ]
+    }
+    
+    for kpi_key, tips in FALLBACKS.items():
+        if kpi_key.lower() in kpi_d.lower():
+            idx = rotacion_index % len(tips)
+            return tips[idx]
+            
+    return f"💡 Consejo de Desarrollo: Aplica la técnica de {conducta_d} de manera consistente en cada interacción para elevar {kpi_d} hacia {meta_d}."
+
+def resolver_conducta_fuerte(kpi_f, extra_f, rotacion_idx=0):
+    """Determina la conducta exacta para la Fortaleza según el KPI, el comentario opcional y la rotación semanal."""
     extra_lower = (extra_f or "").lower().strip()
     candidatas = SGH_KPI_MAPPING.get(kpi_f, ["Realiza preguntas y escucha"])
     
@@ -111,8 +235,9 @@ def resolver_conducta_fuerte(kpi_f, extra_f):
             return "Muestra la tienda"
         elif any(w in extra_lower for w in ["pregunto", "escucho", "indago", "necesidad"]):
             return "Realiza preguntas y escucha"
-        return "Los clientes son primero"
-        
+        elif extra_lower:
+            return "Los clientes son primero"
+            
     elif "Polarizado" in kpi_f or "POL" in kpi_f:
         if any(w in extra_lower for w in ["sol", "manejo", "conducir", "deporte", "pregunta"]):
             return "Realiza preguntas y escucha"
@@ -120,36 +245,41 @@ def resolver_conducta_fuerte(kpi_f, extra_f):
             return "Personaliza la Experiencia e invita a que se pruebe las gafas, recuerda que pulir es poder"
         elif any(w in extra_lower for w in ["garantia", "proteccion", "uv"]):
             return "Informa y mantente conectado"
-        return "Vuelve a acercarte al cliente y reconecta"
-        
+        elif extra_lower:
+            return "Vuelve a acercarte al cliente y reconecta"
+            
     elif "Múltiples" in kpi_f or "MULT" in kpi_f:
         if any(w in extra_lower for w in ["pulir", "probar", "espejo", "manos"]):
             return "Personaliza la Experiencia e invita a que se pruebe las gafas, recuerda que pulir es poder"
         elif any(w in extra_lower for w in ["pregunta", "estilo", "ocasion"]):
             return "Realiza preguntas y escucha"
-        return "Repite hasta cerrar la venta"
-        
+        elif extra_lower:
+            return "Repite hasta cerrar la venta"
+            
     elif "PPT" in kpi_f:
         if any(w in extra_lower for w in ["cerrar", "2do par", "segundo par", "kit", "cordon", "estuche", "equipo"]):
             return "Repite hasta cerrar la venta"
         elif any(w in extra_lower for w in ["pregunta", "cuidado"]):
             return "Realiza preguntas y escucha"
-        return "Personaliza la Experiencia e invita a que se pruebe las gafas, recuerda que pulir es poder"
-        
+        elif extra_lower:
+            return "Personaliza la Experiencia e invita a que se pruebe las gafas, recuerda que pulir es poder"
+            
     elif "AUR" in kpi_f:
         if any(w in extra_lower for w in ["tienda", "muro", "marcas"]):
             return "Muestra la tienda"
         elif any(w in extra_lower for w in ["pregunta", "valor"]):
             return "Realiza preguntas y escucha"
-        return "Plática significativa y uso del SmartShopper"
-        
+        elif extra_lower:
+            return "Plática significativa y uso del SmartShopper"
+            
     elif "Lujo" in kpi_f or "LUX" in kpi_f:
         if any(w in extra_lower for w in ["smartshopper", "catalogo", "digital"]):
             return "Plática significativa y uso del SmartShopper"
         elif any(w in extra_lower for w in ["ajuste", "estuche", "certificado"]):
             return "Ajuste Perfecto"
-        return "Muestra la tienda"
-        
+        elif extra_lower:
+            return "Muestra la tienda"
+            
     elif "Cumplimiento" in kpi_f or "COMP" in kpi_f:
         if any(w in extra_lower for w in ["garantia", "postventa", "seguimiento"]):
             return "Informa y mantente conectado"
@@ -157,9 +287,11 @@ def resolver_conducta_fuerte(kpi_f, extra_f):
             return "Agradece por su nombre"
         elif any(w in extra_lower for w in ["bienvenida", "energia"]):
             return "Los clientes son primero"
-        return "Ajuste Perfecto"
-        
-    return candidatas[0]
+        elif extra_lower:
+            return "Ajuste Perfecto"
+
+    # Si no hay palabra clave o es rotación general:
+    return candidatas[rotacion_idx % len(candidatas)]
 
 def calcular_meta_incremental(val_actual_str, meta_oficial_str):
     """Calcula una meta semanal realista y progresiva basada en el resultado actual."""
@@ -240,6 +372,8 @@ def save_enfoque_semanal_state(state_data, store_code="general"):
 def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     if user_info is None:
         user_info = {}
+
+    is_mobile = (page.width < 750) if (page and page.width) else False
 
     st_u = str(user_info.get("usuario") or "").strip()
     st_digits = "".join(filter(str.isdigit, st_u))
@@ -384,17 +518,23 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     tf_indicador_fuerte = crear_input_celda(initial_state.get("indicador_fuerte", "Polarizado"), color="#00FFFF", font_size=14)
     tf_mejor_colab_2 = crear_input_celda(initial_state.get("mejor_colab_2", "Romo"), color="#FFFFFF", font_size=14)
     tf_accion_mantener = crear_input_celda(initial_state.get("accion_mantener", "Realiza preguntas y escucha.\n💡 Consejo Analítico: Indaga sobre actividades al aire libre antes de sugerir."), color="#E2E8F0", font_size=11.5, bold=False, multiline=True, min_lines=2)
-    tf_previstos_fuerte = crear_input_celda(initial_state.get("previstos_fuerte", "Mantener arriba del 45% (Meta SGH)"), color="#7CFC00", font_size=12.5)
-    tf_actuales_fuerte = crear_input_celda(initial_state.get("actuales_fuerte", "50%"), color="#FFFFFF", font_size=13, bold=True, align=ft.TextAlign.CENTER, dense=True, height=28)
+    tf_previstos_fuerte = crear_input_celda(initial_state.get("previstos_fuerte", "Mantener arriba del 45% (Meta SGH)"), color="#7CFC00", font_size=11.5 if is_mobile else 12.5, multiline=True, min_lines=1)
+    tf_actuales_fuerte = crear_input_celda(initial_state.get("actuales_fuerte", "50%"), color="#FFFFFF", font_size=12 if is_mobile else 13, bold=True, align=ft.TextAlign.CENTER, dense=True, height=28)
 
     # Derecha (Desarrollo)
     tf_desarrollo_comp = crear_input_celda(initial_state.get("desarrollo_comp", "Conecta"), color="#FF7A33", font_size=15)
     tf_indicador_debil = crear_input_celda(initial_state.get("indicador_debil", "PPT"), color="#FF7A33", font_size=14)
     tf_accion_desarrollo = crear_input_celda(initial_state.get("accion_desarrollo", "Repite hasta cerrar la venta.\n💡 Consejo de Desarrollo: Presenta siempre un segundo par complementario en el espejo."), color="#E2E8F0", font_size=11.5, bold=False, multiline=True, min_lines=2)
-    tf_previstos_debil = crear_input_celda(initial_state.get("previstos_debil", "Subir a 1.45 (Meta Tienda SGH)"), color="#FFD700", font_size=12.5)
-    tf_actuales_debil = crear_input_celda(initial_state.get("actuales_debil", "14%"), color="#FFFFFF", font_size=13, bold=True, align=ft.TextAlign.CENTER, dense=True, height=28)
+    tf_previstos_debil = crear_input_celda(initial_state.get("previstos_debil", "Subir a 1.45 (Meta Tienda SGH)"), color="#FFD700", font_size=11.5 if is_mobile else 12.5, multiline=True, min_lines=1)
+    tf_actuales_debil = crear_input_celda(initial_state.get("actuales_debil", "14%"), color="#FFFFFF", font_size=12 if is_mobile else 13, bold=True, align=ft.TextAlign.CENTER, dense=True, height=28)
 
-    def ejecutar_cruce_inteligente(e=None):
+    rotacion_estado = {"fuerte": 0, "desarrollo": 0}
+
+    def ejecutar_cruce_inteligente(e=None, rotar=False):
+        if rotar:
+            rotacion_estado["fuerte"] += 1
+            rotacion_estado["desarrollo"] += 1
+
         kpi_f = dd_kpi_fuerte.value or "Polarizado (% POL)"
         colab_f1 = tf_colab_fuerte_1.value.strip() or "Romo"
         colab_f2 = tf_colab_fuerte_2.value.strip() or colab_f1
@@ -405,9 +545,9 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         val_act_f = tf_valor_actual_fuerte.value.strip() or "50%"
 
         # ======================================================================
-        # 1. ANÁLISIS DE FORTALEZA SEGÚN MATRIZ OFICIAL SGH (3 PILARES)
+        # 1. ANÁLISIS DE FORTALEZA SEGÚN MATRIZ OFICIAL SGH (ROTACIÓN DE CONDUCTAS)
         # ======================================================================
-        conducta_f = resolver_conducta_fuerte(kpi_f, extra_f)
+        conducta_f = resolver_conducta_fuerte(kpi_f, extra_f, rotacion_estado["fuerte"])
         pilar_f, consejo_f = SGH_BLOQUES.get(conducta_f, ("Invita", "💡 Consejo Analítico: Prioriza al cliente presencial."))
 
         clean_kpi_name_f = kpi_f.split("(")[0].strip()
@@ -422,42 +562,51 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         tf_actuales_fuerte.value = val_act_f
 
         # ======================================================================
-        # 2. ANÁLISIS DE ÁREA DE DESARROLLO (NUNCA DUPLICAR ACCIÓN DE FORTALEZA)
+        # 2. ÁREA DE DESARROLLO (CONSEJO LIBRE Y DINÁMICO GENERADO POR IA)
         # ======================================================================
         candidatas_d = SGH_KPI_MAPPING.get(kpi_d, ["Repite hasta cerrar la venta"])
-        conducta_d = candidatas_d[0]
-        for c in candidatas_d:
-            if c != conducta_f:
-                conducta_d = c
-                break
+        candidatas_d_filtradas = [c for c in candidatas_d if c != conducta_f]
+        if not candidatas_d_filtradas:
+            candidatas_d_filtradas = candidatas_d
 
-        pilar_d, consejo_d = SGH_BLOQUES.get(conducta_d, ("Conecta", "💡 Consejo de Desarrollo: Refuerza la técnica en piso de venta."))
-        consejo_d_fmt = consejo_d.replace("Consejo Analítico:", "Consejo de Desarrollo:")
+        conducta_d = candidatas_d_filtradas[rotacion_estado["desarrollo"] % len(candidatas_d_filtradas)]
+        pilar_d, _ = SGH_BLOQUES.get(conducta_d, ("Conecta", ""))
 
         clean_kpi_name_d = kpi_d.split("(")[0].strip()
         meta_min_d = SGH_MINIMUM_TARGETS.get(kpi_d, "45%")
         previsto_texto_d = calcular_meta_incremental(val_act_d, meta_min_d)
 
+        # Llamada a la IA para generar el consejo de desarrollo libre y táctico para piso de venta
+        consejo_d_dinamico = generar_consejo_desarrollo_ia(
+            kpi_d=clean_kpi_name_d,
+            conducta_d=conducta_d,
+            val_act_d=val_act_d,
+            meta_d=meta_min_d,
+            extra_ctx=extra_f,
+            rotacion_index=rotacion_estado["desarrollo"]
+        )
+
         tf_desarrollo_comp.value = pilar_d.capitalize()
         tf_indicador_debil.value = clean_kpi_name_d
-        tf_accion_desarrollo.value = f"{conducta_d}.\n{consejo_d_fmt}"
+        tf_accion_desarrollo.value = f"{conducta_d}.\n{consejo_d_dinamico}"
         tf_previstos_debil.value = previsto_texto_d
         tf_actuales_debil.value = val_act_d
 
         guardar_estado()
         if page:
-            page.snack_bar = ft.SnackBar(ft.Text("⚡ ¡Enfoque Semanal actualizado con la Matriz SGH!"), bgcolor="#008080")
+            page.snack_bar = ft.SnackBar(ft.Text("⚡ ¡Enfoque Semanal actualizado con Inteligencia Artificial!"), bgcolor="#008080")
             page.snack_bar.open = True
             page.update()
 
-    # Vinculación de eventos on_change para reactividad instantánea al cambiar indicadores
-    dd_kpi_fuerte.on_change = ejecutar_cruce_inteligente
-    dd_kpi_debil.on_change = ejecutar_cruce_inteligente
-    tf_valor_actual_fuerte.on_change = ejecutar_cruce_inteligente
-    tf_valor_actual_debil.on_change = ejecutar_cruce_inteligente
-    tf_extra_fuerte.on_change = ejecutar_cruce_inteligente
-    tf_colab_fuerte_1.on_change = ejecutar_cruce_inteligente
-    tf_colab_fuerte_2.on_change = ejecutar_cruce_inteligente
+    # Vinculación de eventos on_change para reactividad instantánea
+    dd_kpi_fuerte.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    dd_kpi_debil.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    tf_valor_actual_fuerte.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    tf_valor_actual_debil.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    tf_extra_fuerte.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    tf_colab_fuerte_1.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    tf_colab_fuerte_2.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
+    dd_semana.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=True)
 
     def guardar_estado(e=None):
         data = {
@@ -592,7 +741,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                         style=ft.ButtonStyle(bgcolor="#008080", color="white", shape=ft.RoundedRectangleBorder(radius=5), padding=ft.Padding(6, 6, 6, 6)),
                         height=34,
                         expand=True,
-                        on_click=ejecutar_cruce_inteligente
+                        on_click=lambda e: ejecutar_cruce_inteligente(e, rotar=True)
                     ),
                     ft.OutlinedButton(
                         content=ft.Row([ft.Text("💾", size=11), ft.Text("Guardar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
@@ -656,7 +805,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                             padding=ft.Padding(12, 8, 12, 8)
                         ),
                         height=36,
-                        on_click=ejecutar_cruce_inteligente
+                        on_click=lambda e: ejecutar_cruce_inteligente(e, rotar=True)
                     ),
                     ft.OutlinedButton(
                         content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
@@ -729,6 +878,52 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         if border_right:
             borders["right"] = ft.BorderSide(1, BORDER_COLOR)
 
+        if is_mobile:
+            cuerpo = ft.Column([
+                ft.Container(
+                    content=control_previstos,
+                    expand=True,
+                    padding=ft.Padding(2, 2, 2, 0)
+                ),
+                ft.Row([
+                    ft.Text("ACTUAL:", size=7.5, weight="heavy", color="#CBD5E1"),
+                    ft.Container(
+                        content=control_actuales,
+                        width=58,
+                        height=26,
+                        bgcolor="#040711",
+                        border=ft.Border.all(1.2, border_box_color),
+                        border_radius=ft.BorderRadius(3, 3, 3, 3),
+                        alignment=ft.Alignment(0, 0),
+                        padding=ft.Padding(1, 0, 1, 0)
+                    )
+                ], spacing=4, alignment=ft.MainAxisAlignment.END, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ], spacing=2)
+        else:
+            cuerpo = ft.Row([
+                ft.Container(
+                    content=control_previstos,
+                    expand=True,
+                    alignment=ft.Alignment(-1, 0)
+                ),
+                ft.Container(
+                    content=ft.Column([
+                        ft.Text("RESULTADOS ACTUALES:", size=7.5, weight="heavy", color="#CBD5E1"),
+                        ft.Container(
+                            content=control_actuales,
+                            width=78,
+                            height=30,
+                            bgcolor="#040711",
+                            border=ft.Border.all(1.2, border_box_color),
+                            border_radius=ft.BorderRadius(3, 3, 3, 3),
+                            alignment=ft.Alignment(0, 0),
+                            padding=ft.Padding(2, 0, 2, 0)
+                        )
+                    ], spacing=1, horizontal_alignment=ft.CrossAxisAlignment.END, alignment=ft.MainAxisAlignment.CENTER),
+                    padding=ft.Padding(0, 0, 6, 2)
+                )
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
         return ft.Container(
             content=ft.Column([
                 # Header de la celda
@@ -741,32 +936,10 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                     bgcolor="#0F172A",
                     border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
                 ),
-                # Cuerpo: Texto a la izquierda y Cajita RESULTADOS ACTUALES en la esquina derecha (Ajustada para que el número sea 100% visible)
+                # Cuerpo
                 ft.Container(
-                    content=ft.Row([
-                        ft.Container(
-                            content=control_previstos,
-                            expand=True,
-                            alignment=ft.Alignment(-1, 0)
-                        ),
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Text("RESULTADOS ACTUALES:", size=7.5, weight="heavy", color="#CBD5E1"),
-                                ft.Container(
-                                    content=control_actuales,
-                                    width=78,
-                                    height=30,
-                                    bgcolor="#040711",
-                                    border=ft.Border.all(1.2, border_box_color),
-                                    border_radius=ft.BorderRadius(3, 3, 3, 3),
-                                    alignment=ft.Alignment(0, 0),
-                                    padding=ft.Padding(2, 0, 2, 0)
-                                )
-                            ], spacing=1, horizontal_alignment=ft.CrossAxisAlignment.END, alignment=ft.MainAxisAlignment.CENTER),
-                            padding=ft.Padding(0, 0, 6, 2)
-                        )
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    padding=ft.Padding(6, 2, 6, 2),
+                    content=cuerpo,
+                    padding=ft.Padding(4, 2, 4, 2) if is_mobile else ft.Padding(6, 2, 6, 2),
                     expand=True
                 )
             ], spacing=0),
