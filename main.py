@@ -20357,7 +20357,12 @@ Ejemplo:
                 stored_last_view = page.client_storage.get("last_active_view")
             except Exception:
                 pass
-        active_view = [stored_last_view if (stored_last_view and isinstance(stored_last_view, str)) else "chat"]
+        v_cand = initial_view or stored_last_view
+        if not v_cand and hasattr(page, "route") and page.route:
+            clean_r = str(page.route).strip("/# ")
+            if clean_r:
+                v_cand = clean_r
+        active_view = [v_cand if (v_cand and isinstance(v_cand, str)) else "chat"]
         main_views_cache = {}
 
         def tr(es, en, fr=None, it=None, zh=None):
@@ -20538,6 +20543,10 @@ Ejemplo:
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista):
             active_view[0] = vista
+            try:
+                page.route = f"/{vista}"
+            except Exception:
+                pass
             if hasattr(page, "shared_preferences") and page.shared_preferences:
                 async def _save_v_sp():
                     try:
@@ -22457,11 +22466,16 @@ Ejemplo:
             
             if hasattr(page, "shared_preferences") and page.shared_preferences:
                 try:
-                    uid_saved = await asyncio.wait_for(page.shared_preferences.get("logged_user_id"), timeout=1.5)
-                    last_act_str = await asyncio.wait_for(page.shared_preferences.get("last_activity_timestamp"), timeout=1.5)
-                    last_view_saved = await asyncio.wait_for(page.shared_preferences.get("last_active_view"), timeout=1.5)
+                    uid_saved = await asyncio.wait_for(page.shared_preferences.get("logged_user_id"), timeout=2.5)
+                    last_act_str = await asyncio.wait_for(page.shared_preferences.get("last_activity_timestamp"), timeout=2.5)
+                    last_view_saved = await asyncio.wait_for(page.shared_preferences.get("last_active_view"), timeout=2.5)
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
+
+            if not last_view_saved and hasattr(page, "route") and page.route:
+                r_cand = str(page.route).strip("/# ")
+                if r_cand:
+                    last_view_saved = r_cand
 
             # Control de expiración de sesión (30 minutos de inactividad máxima)
             if uid_saved and last_act_str:
