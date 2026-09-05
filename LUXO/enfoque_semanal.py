@@ -515,100 +515,178 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
             page.snack_bar.open = True
             page.update()
 
+    # Detección de dispositivo móvil / pantalla angosta (oculta columna 0 y adapta panel superior para vista óptima)
+    is_mobile = (page.width < 750) if (page and page.width) else False
+
     # --- Header Superior con Semana ---
     header_section = ft.Container(
         content=ft.Row([
             ft.Row([
-                ft.Text("📅", size=18),
-                ft.Text("NUESTRO ENFOQUE SEMANAL", size=15, weight="heavy", color="white"),
-                ft.Text("(Matriz Oficial SGH: INVITA · CONECTA · AGRADECE)", size=11, color="#8B949E", italic=True),
+                ft.Text("📅", size=16 if is_mobile else 18),
+                ft.Text("ENFOQUE SEMANAL" if is_mobile else "NUESTRO ENFOQUE SEMANAL", size=13 if is_mobile else 15, weight="heavy", color="white"),
+                ft.Text("(Matriz Oficial SGH: INVITA · CONECTA · AGRADECE)", size=11, color="#8B949E", italic=True) if not is_mobile else ft.Container(height=0),
             ], spacing=6),
             ft.Container(expand=True),
             ft.Row([
-                ft.Text("SEMANA ACTUAL:", size=11, weight="bold", color="#8B949E"),
+                ft.Text("SEM:" if is_mobile else "SEMANA ACTUAL:", size=10 if is_mobile else 11, weight="bold", color="#8B949E"),
                 dd_semana
             ], spacing=6, alignment=ft.MainAxisAlignment.END)
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.Padding(12, 6, 12, 6),
+        padding=ft.Padding(10, 6, 10, 6) if is_mobile else ft.Padding(12, 6, 12, 6),
         bgcolor="#0C101C",
         border=ft.Border.all(1, "#28324E"),
         border_radius=ft.BorderRadius(6, 6, 6, 6)
     )
 
-    # --- Panel Superior de Captura (Limpio, Sin Encimarse y con Espaciado Cómodo) ---
-    panel_preguntas = ft.Container(
-        content=ft.Column([
-            # Fila 1: Indicadores y Nombres de Colaboradores (Directamente Editables)
-            ft.Row([
-                # Fortaleza
-                ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#00FFFF", size=14),
-                ft.Text("FORTALEZA:", size=11, weight="bold", color="#00FFFF"),
-                ft.Text("Cond:", size=10, color="#CBD5E1"),
-                ft.Container(content=tf_colab_fuerte_1, width=105),
-                ft.Text("Métr:", size=10, color="#CBD5E1"),
-                ft.Container(content=tf_colab_fuerte_2, width=105),
-                ft.Text("KPI Fuerte:", size=10, color="#CBD5E1"),
-                ft.Container(content=dd_kpi_fuerte, width=175),
-                ft.Text("Val:", size=10, color="#00FFFF", weight="bold"),
-                ft.Container(content=tf_valor_actual_fuerte, width=65),
-
-                ft.Container(width=6),
-                ft.Container(width=1, height=28, bgcolor="#334155"),
-                ft.Container(width=6),
-
-                # Desarrollo
-                ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#FF7A33", size=14),
-                ft.Text("DESARROLLO:", size=11, weight="bold", color="#FF7A33"),
-                ft.Text("KPI Oportunidad:", size=10, color="#CBD5E1"),
-                ft.Container(content=dd_kpi_debil, width=180),
-                ft.Text("Val:", size=10, color="#FF7A33", weight="bold"),
-                ft.Container(content=tf_valor_actual_debil, width=65),
-            ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-
-            # Fila 2: ¿Hicieron algo extraordinario? (Con separación para que no se encime)
-            ft.Row([
-                ft.Text("¿Hicieron algo extraordinario? (Opcional):", size=10.5, color="#94A3B8"),
-                ft.Container(content=tf_extra_fuerte, expand=True),
-                ft.ElevatedButton(
-                    content=ft.Row([ft.Text("⚡", size=13), ft.Text("Generar Enfoque", weight="heavy", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
-                    style=ft.ButtonStyle(
-                        bgcolor="#008080",
-                        color="white",
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                        padding=ft.Padding(12, 8, 12, 8)
-                    ),
-                    height=36,
-                    on_click=ejecutar_cruce_inteligente
+    # --- Panel Superior de Captura (Adaptativo: 2 Filas en PC, Tarjetas Organizadas en Celular) ---
+    if is_mobile:
+        panel_preguntas = ft.Container(
+            content=ft.Column([
+                # 1. Tarjeta Fortaleza
+                ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#00FFFF", size=14),
+                            ft.Text("FORTALEZA (MANTENER)", size=11, weight="bold", color="#00FFFF"),
+                        ], spacing=4),
+                        ft.Row([
+                            ft.Container(content=ft.Column([ft.Text("Colab (Cond):", size=9, color="#CBD5E1"), tf_colab_fuerte_1], spacing=1), expand=1),
+                            ft.Container(content=ft.Column([ft.Text("Colab (Métr):", size=9, color="#CBD5E1"), tf_colab_fuerte_2], spacing=1), expand=1),
+                        ], spacing=4),
+                        ft.Row([
+                            ft.Container(content=ft.Column([ft.Text("KPI Fuerte:", size=9, color="#CBD5E1"), dd_kpi_fuerte], spacing=1), expand=2),
+                            ft.Container(content=ft.Column([ft.Text("Valor:", size=9, color="#00FFFF", weight="bold"), tf_valor_actual_fuerte], spacing=1), width=75),
+                        ], spacing=4),
+                    ], spacing=5),
+                    padding=ft.Padding(8, 6, 8, 6),
+                    bgcolor="#0B1528",
+                    border=ft.Border.all(1, "#00FFFF"),
+                    border_radius=ft.BorderRadius(5, 5, 5, 5)
                 ),
-                ft.OutlinedButton(
-                    content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
-                    style=ft.ButtonStyle(
-                        color="#00FFFF",
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                        side=ft.BorderSide(1.2, "#00FFFF"),
-                        padding=ft.Padding(10, 8, 10, 8)
-                    ),
-                    height=36,
-                    on_click=guardar_estado
+                # 2. Tarjeta Desarrollo
+                ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#FF7A33", size=14),
+                            ft.Text("DESARROLLO (OPORTUNIDAD)", size=11, weight="bold", color="#FF7A33"),
+                        ], spacing=4),
+                        ft.Row([
+                            ft.Container(content=ft.Column([ft.Text("KPI Oportunidad:", size=9, color="#CBD5E1"), dd_kpi_debil], spacing=1), expand=2),
+                            ft.Container(content=ft.Column([ft.Text("Valor:", size=9, color="#FF7A33", weight="bold"), tf_valor_actual_debil], spacing=1), width=75),
+                        ], spacing=4),
+                    ], spacing=5),
+                    padding=ft.Padding(8, 6, 8, 6),
+                    bgcolor="#190F16",
+                    border=ft.Border.all(1, "#FF7A33"),
+                    border_radius=ft.BorderRadius(5, 5, 5, 5)
                 ),
-                ft.OutlinedButton(
-                    content=ft.Row([ft.Text("📋", size=12), ft.Text("Copiar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
-                    style=ft.ButtonStyle(
-                        color="#7CFC00",
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                        side=ft.BorderSide(1.2, "#7CFC00"),
-                        padding=ft.Padding(10, 8, 10, 8)
+                # 3. ¿Hicieron algo extraordinario?
+                ft.Column([
+                    ft.Text("¿Hicieron algo extraordinario? (Opcional):", size=9.5, color="#94A3B8"),
+                    tf_extra_fuerte
+                ], spacing=2),
+                # 4. Botones
+                ft.Row([
+                    ft.ElevatedButton(
+                        content=ft.Row([ft.Text("⚡", size=12), ft.Text("Generar", weight="heavy", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                        style=ft.ButtonStyle(bgcolor="#008080", color="white", shape=ft.RoundedRectangleBorder(radius=5), padding=ft.Padding(6, 6, 6, 6)),
+                        height=34,
+                        expand=True,
+                        on_click=ejecutar_cruce_inteligente
                     ),
-                    height=36,
-                    on_click=copiar_al_portapapeles
-                )
-            ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
-        ], spacing=10),
-        padding=ft.Padding(10, 10, 10, 10),
-        bgcolor="#0B0F1C",
-        border=ft.Border.all(1, "#1E2742"),
-        border_radius=ft.BorderRadius(6, 6, 6, 6)
-    )
+                    ft.OutlinedButton(
+                        content=ft.Row([ft.Text("💾", size=11), ft.Text("Guardar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                        style=ft.ButtonStyle(color="#00FFFF", shape=ft.RoundedRectangleBorder(radius=5), side=ft.BorderSide(1.2, "#00FFFF"), padding=ft.Padding(6, 6, 6, 6)),
+                        height=34,
+                        on_click=guardar_estado
+                    ),
+                    ft.OutlinedButton(
+                        content=ft.Row([ft.Text("📋", size=11), ft.Text("Copiar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                        style=ft.ButtonStyle(color="#7CFC00", shape=ft.RoundedRectangleBorder(radius=5), side=ft.BorderSide(1.2, "#7CFC00"), padding=ft.Padding(6, 6, 6, 6)),
+                        height=34,
+                        on_click=copiar_al_portapapeles
+                    )
+                ], spacing=5)
+            ], spacing=6),
+            padding=ft.Padding(8, 8, 8, 8),
+            bgcolor="#0B0F1C",
+            border=ft.Border.all(1, "#1E2742"),
+            border_radius=ft.BorderRadius(6, 6, 6, 6)
+        )
+    else:
+        panel_preguntas = ft.Container(
+            content=ft.Column([
+                # Fila 1: Indicadores y Nombres de Colaboradores (Directamente Editables)
+                ft.Row([
+                    # Fortaleza
+                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#00FFFF", size=14),
+                    ft.Text("FORTALEZA:", size=11, weight="bold", color="#00FFFF"),
+                    ft.Text("Cond:", size=10, color="#CBD5E1"),
+                    ft.Container(content=tf_colab_fuerte_1, width=105),
+                    ft.Text("Métr:", size=10, color="#CBD5E1"),
+                    ft.Container(content=tf_colab_fuerte_2, width=105),
+                    ft.Text("KPI Fuerte:", size=10, color="#CBD5E1"),
+                    ft.Container(content=dd_kpi_fuerte, width=175),
+                    ft.Text("Val:", size=10, color="#00FFFF", weight="bold"),
+                    ft.Container(content=tf_valor_actual_fuerte, width=65),
+
+                    ft.Container(width=6),
+                    ft.Container(width=1, height=28, bgcolor="#334155"),
+                    ft.Container(width=6),
+
+                    # Desarrollo
+                    ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#FF7A33", size=14),
+                    ft.Text("DESARROLLO:", size=11, weight="bold", color="#FF7A33"),
+                    ft.Text("KPI Oportunidad:", size=10, color="#CBD5E1"),
+                    ft.Container(content=dd_kpi_debil, width=180),
+                    ft.Text("Val:", size=10, color="#FF7A33", weight="bold"),
+                    ft.Container(content=tf_valor_actual_debil, width=65),
+                ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+
+                # Fila 2: ¿Hicieron algo extraordinario? (Con separación para que no se encime)
+                ft.Row([
+                    ft.Text("¿Hicieron algo extraordinario? (Opcional):", size=10.5, color="#94A3B8"),
+                    ft.Container(content=tf_extra_fuerte, expand=True),
+                    ft.ElevatedButton(
+                        content=ft.Row([ft.Text("⚡", size=13), ft.Text("Generar Enfoque", weight="heavy", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                        style=ft.ButtonStyle(
+                            bgcolor="#008080",
+                            color="white",
+                            shape=ft.RoundedRectangleBorder(radius=5),
+                            padding=ft.Padding(12, 8, 12, 8)
+                        ),
+                        height=36,
+                        on_click=ejecutar_cruce_inteligente
+                    ),
+                    ft.OutlinedButton(
+                        content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
+                        style=ft.ButtonStyle(
+                            color="#00FFFF",
+                            shape=ft.RoundedRectangleBorder(radius=5),
+                            side=ft.BorderSide(1.2, "#00FFFF"),
+                            padding=ft.Padding(10, 8, 10, 8)
+                        ),
+                        height=36,
+                        on_click=guardar_estado
+                    ),
+                    ft.OutlinedButton(
+                        content=ft.Row([ft.Text("📋", size=12), ft.Text("Copiar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
+                        style=ft.ButtonStyle(
+                            color="#7CFC00",
+                            shape=ft.RoundedRectangleBorder(radius=5),
+                            side=ft.BorderSide(1.2, "#7CFC00"),
+                            padding=ft.Padding(10, 8, 10, 8)
+                        ),
+                        height=36,
+                        on_click=copiar_al_portapapeles
+                    )
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ], spacing=10),
+            padding=ft.Padding(10, 10, 10, 10),
+            bgcolor="#0B0F1C",
+            border=ft.Border.all(1, "#1E2742"),
+            border_radius=ft.BorderRadius(6, 6, 6, 6)
+        )
 
     # ==============================================================================
     # TABLA UNIFICADA IDÉNTICA A LA BITÁCORA FÍSICA (UN SOLO RECTÁNGULO CONTINUO)
@@ -698,34 +776,40 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         )
 
     # 1. Fila Encabezado Superior (Banner)
-    row_banner = ft.Container(
-        content=ft.Row([
+    banner_controls = []
+    if not is_mobile:
+        banner_controls.append(
             ft.Container(
                 content=ft.Text("¡ENFOQUÉMONOS!", size=13, weight="heavy", color="white", text_align=ft.TextAlign.CENTER),
                 width=COL0_WIDTH,
                 alignment=ft.Alignment(0, 0),
                 border=ft.Border(right=ft.BorderSide(1.5, BORDER_COLOR))
-            ),
-            ft.Container(
-                content=ft.Text("Completa esta columna primero ➔", size=10.5, color="#00FFFF", italic=True, weight="bold", text_align=ft.TextAlign.CENTER),
-                expand=1,
-                alignment=ft.Alignment(0, 0),
-                border=ft.Border(right=ft.BorderSide(1.5, BORDER_COLOR))
-            ),
-            ft.Container(
-                content=ft.Text("Completa esta columna después ➔", size=10.5, color="#FF7A33", italic=True, weight="bold", text_align=ft.TextAlign.CENTER),
-                expand=1,
-                alignment=ft.Alignment(0, 0)
-            ),
-        ], spacing=0),
-        height=34,
+            )
+        )
+    banner_controls.extend([
+        ft.Container(
+            content=ft.Text("Completa esta columna primero ➔", size=9.5 if is_mobile else 10.5, color="#00FFFF", italic=True, weight="bold", text_align=ft.TextAlign.CENTER),
+            expand=1,
+            alignment=ft.Alignment(0, 0),
+            border=ft.Border(right=ft.BorderSide(1.5, BORDER_COLOR))
+        ),
+        ft.Container(
+            content=ft.Text("Completa esta columna después ➔", size=9.5 if is_mobile else 10.5, color="#FF7A33", italic=True, weight="bold", text_align=ft.TextAlign.CENTER),
+            expand=1,
+            alignment=ft.Alignment(0, 0)
+        )
+    ])
+    row_banner = ft.Container(
+        content=ft.Row(banner_controls, spacing=0),
+        height=30 if is_mobile else 34,
         bgcolor="#131B2E",
         border=ft.Border(bottom=ft.BorderSide(1.5, BORDER_COLOR))
     )
 
     # 2. Fila 1: Fuerza de Comportamiento / Área de Desarrollo
-    row_1 = ft.Container(
-        content=ft.Row([
+    r1_controls = []
+    if not is_mobile:
+        r1_controls.append(
             ft.Container(
                 content=ft.Text("RESULTADOS\nSEMANA\nANTERIOR", size=9, weight="heavy", color="#E2E8F0", text_align=ft.TextAlign.CENTER),
                 width=COL0_WIDTH,
@@ -733,20 +817,23 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                 bgcolor="#0B101E",
                 border=ft.Border(right=ft.BorderSide(1.5, BORDER_COLOR)),
                 padding=ft.Padding(4, 4, 4, 4)
-            ),
-            # Fortaleza: Fuerza (6) + Colab 1 (4)
-            celda_grid("FUERZA DE COMPORTAMIENTO", "Identifica tu fortaleza: INVITA, CONECTA, AGRADECE", tf_fuerza_comp, border_right=True, title_color="#00FFFF", expand=6),
-            celda_grid("MEJOR COLABORADOR", "Nombre (Conducta)", tf_mejor_colab_1, border_right=True, title_color="#FFFFFF", expand=4),
-            # Desarrollo (10)
-            celda_grid("ÁREA DE DESARROLLO DEL COMPORTAMIENTO", "Identifica un área para enfocarte: INVITA, CONECTA, AGRADECE", tf_desarrollo_comp, border_right=False, title_color="#FF7A33", expand=10),
-        ], spacing=0),
-        height=78,
+            )
+        )
+    r1_controls.extend([
+        celda_grid("FUERZA DE COMPORTAMIENTO", "" if is_mobile else "Identifica tu fortaleza: INVITA, CONECTA, AGRADECE", tf_fuerza_comp, border_right=True, title_color="#00FFFF", expand=6),
+        celda_grid("MEJOR COLAB" if is_mobile else "MEJOR COLABORADOR", "" if is_mobile else "Nombre (Conducta)", tf_mejor_colab_1, border_right=True, title_color="#FFFFFF", expand=4),
+        celda_grid("ÁREA DE DESARROLLO" if is_mobile else "ÁREA DE DESARROLLO DEL COMPORTAMIENTO", "" if is_mobile else "Identifica un área para enfocarte: INVITA, CONECTA, AGRADECE", tf_desarrollo_comp, border_right=False, title_color="#FF7A33", expand=10),
+    ])
+    row_1 = ft.Container(
+        content=ft.Row(r1_controls, spacing=0),
+        height=68 if is_mobile else 78,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
     # 3. Fila 2: Indicador Métrico
-    row_2 = ft.Container(
-        content=ft.Row([
+    r2_controls = []
+    if not is_mobile:
+        r2_controls.append(
             ft.Container(
                 content=ft.Text("Considera los componentes de las ECUACIONES DE VENTA y observaciones SGH.", size=7, color="#64748B", italic=True, text_align=ft.TextAlign.CENTER),
                 width=COL0_WIDTH,
@@ -754,58 +841,70 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                 bgcolor="#0B101E",
                 border=ft.Border(right=ft.BorderSide(1.5, BORDER_COLOR)),
                 padding=ft.Padding(4, 2, 4, 2)
-            ),
-            # Fortaleza: Indicador (6) + Colab 2 (4)
-            celda_grid("INDICADOR MÉTRICO", "Indicador métrico: POLARIZADO, LUJO, MULT, PPT...", tf_indicador_fuerte, border_right=True, title_color="#00FFFF", expand=6),
-            celda_grid("MEJOR COLABORADOR", "Nombre (Métrica)", tf_mejor_colab_2, border_right=True, title_color="#FFFFFF", expand=4),
-            # Desarrollo (10)
-            celda_grid("INDICADOR MÉTRICO", "Indicador métrico soporte: MULT, PPT, CONV...", tf_indicador_debil, border_right=False, title_color="#FF7A33", expand=10),
-        ], spacing=0),
-        height=78,
+            )
+        )
+    r2_controls.extend([
+        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico: POLARIZADO, LUJO, MULT, PPT...", tf_indicador_fuerte, border_right=True, title_color="#00FFFF", expand=6),
+        celda_grid("MEJOR COLAB" if is_mobile else "MEJOR COLABORADOR", "" if is_mobile else "Nombre (Métrica)", tf_mejor_colab_2, border_right=True, title_color="#FFFFFF", expand=4),
+        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico soporte: MULT, PPT, CONV...", tf_indicador_debil, border_right=False, title_color="#FF7A33", expand=10),
+    ])
+    row_2 = ft.Container(
+        content=ft.Row(r2_controls, spacing=0),
+        height=68 if is_mobile else 78,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
-    # 4. Fila 3: Acción Clave
-    row_3 = ft.Container(
-        content=ft.Row([
+    # 4. Fila 3: Acción Clave (Espaciosa para móvil)
+    r3_controls = []
+    if not is_mobile:
+        r3_controls.append(
             ft.Container(
                 content=ft.Container(),
                 width=COL0_WIDTH,
                 bgcolor="#0B101E",
                 border=ft.Border(right=ft.BorderSide(1.5, BORDER_COLOR))
-            ),
-            celda_grid("ACCIÓN CLAVE PARA MANTENER (CONDUCTA O SECRETO DE LA EXPERIENCIA)", "Acción para mantener la fortaleza + Consejo táctico analítico", tf_accion_mantener, border_right=True, title_color="#00FFFF", expand=10),
-            celda_grid("ACCIÓN CLAVE EL DESARROLLO (CONDUCTA O SECRETO DE LA EXPERIENCIA)", "Acción clave para desarrollar la conducta + Consejo táctico analítico", tf_accion_desarrollo, border_right=False, title_color="#FF7A33", expand=10),
-        ], spacing=0),
-        height=100,
+            )
+        )
+    r3_controls.extend([
+        celda_grid("ACCIÓN PARA MANTENER" if is_mobile else "ACCIÓN CLAVE PARA MANTENER (CONDUCTA O SECRETO DE LA EXPERIENCIA)", "" if is_mobile else "Acción para mantener la fortaleza + Consejo táctico analítico", tf_accion_mantener, border_right=True, title_color="#00FFFF", expand=10),
+        celda_grid("ACCIÓN EL DESARROLLO" if is_mobile else "ACCIÓN CLAVE EL DESARROLLO (CONDUCTA O SECRETO DE LA EXPERIENCIA)", "" if is_mobile else "Acción clave para desarrollar la conducta + Consejo táctico analítico", tf_accion_desarrollo, border_right=False, title_color="#FF7A33", expand=10),
+    ])
+    row_3 = ft.Container(
+        content=ft.Row(r3_controls, spacing=0),
+        height=130 if is_mobile else 100,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
-    # 5. Fila 4: Resultados Previstos con Cajita Anidada (Sin frase en Col 0 a petición del usuario)
-    row_4 = ft.Container(
-        content=ft.Row([
+    # 5. Fila 4: Resultados Previstos con Cajita Anidada
+    r4_controls = []
+    if not is_mobile:
+        r4_controls.append(
             ft.Container(
                 content=ft.Container(),
                 width=COL0_WIDTH,
                 bgcolor="#0B101E",
                 border=ft.Border(right=ft.BorderSide(1.5, BORDER_COLOR)),
                 padding=ft.Padding(4, 2, 4, 2)
-            ),
-            celda_previstos_grid("RESULTADOS PREVISTOS", "Resultados específicos que esperas alcanzar con base en la fortaleza", tf_previstos_fuerte, tf_actuales_fuerte, border_right=True, title_color="#7CFC00", border_box_color="#00FFFF", expand=10),
-            celda_previstos_grid("RESULTADOS PREVISTOS", "Establece resultados específicos que esperas alcanzar esta semana", tf_previstos_debil, tf_actuales_debil, border_right=False, title_color="#FFD700", border_box_color="#FF7A33", expand=10),
-        ], spacing=0),
-        height=85,
+            )
+        )
+    r4_controls.extend([
+        celda_previstos_grid("RESULTADOS PREVISTOS", "" if is_mobile else "Resultados específicos que esperas alcanzar con base en la fortaleza", tf_previstos_fuerte, tf_actuales_fuerte, border_right=True, title_color="#7CFC00", border_box_color="#00FFFF", expand=10),
+        celda_previstos_grid("RESULTADOS PREVISTOS", "" if is_mobile else "Establece resultados específicos que esperas alcanzar esta semana", tf_previstos_debil, tf_actuales_debil, border_right=False, title_color="#FFD700", border_box_color="#FF7A33", expand=10),
+    ])
+    row_4 = ft.Container(
+        content=ft.Row(r4_controls, spacing=0),
+        height=90 if is_mobile else 85,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
     # 6. Fila Pie de Página
     row_footer = ft.Container(
         content=ft.Row([
-            ft.Text("ℹ️ Para el correcto llenado, deberás consultar KPI CONEXIÓN (Matriz Oficial Sunglass Hut Experience)", size=9, color="#94A3B8", italic=True)
+            ft.Text("ℹ️ Matriz Oficial Sunglass Hut Experience: INVITA · CONECTA · AGRADECE" if is_mobile else "ℹ️ Para el correcto llenado, deberás consultar KPI CONEXIÓN (Matriz Oficial Sunglass Hut Experience)", size=8.5 if is_mobile else 9, color="#94A3B8", italic=True)
         ], alignment=ft.MainAxisAlignment.START),
-        padding=ft.Padding(12, 4, 12, 4),
+        padding=ft.Padding(8, 4, 8, 4) if is_mobile else ft.Padding(12, 4, 12, 4),
         bgcolor="#0C101C",
-        height=28
+        height=26 if is_mobile else 28
     )
 
     # Cuadrícula Rectangular Completa (Un Solo Bloque Sólido de Filas)
