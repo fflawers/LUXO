@@ -523,7 +523,9 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
 
     # Derecha (Desarrollo)
     tf_desarrollo_comp = crear_input_celda(initial_state.get("desarrollo_comp", "Conecta"), color="#FF7A33", font_size=15)
+    tf_desarrollo_colab_1 = crear_input_celda(initial_state.get("desarrollo_colab_1", "Equipo Tienda"), color="#FFFFFF", font_size=14)
     tf_indicador_debil = crear_input_celda(initial_state.get("indicador_debil", "PPT"), color="#FF7A33", font_size=14)
+    tf_desarrollo_colab_2 = crear_input_celda(initial_state.get("desarrollo_colab_2", "Meta: 1.45"), color="#FFD700", font_size=13)
     tf_accion_desarrollo = crear_input_celda(initial_state.get("accion_desarrollo", "Repite hasta cerrar la venta.\n💡 Consejo de Desarrollo: Presenta siempre un segundo par complementario en el espejo."), color="#E2E8F0", font_size=11.5, bold=False, multiline=True, min_lines=2)
     tf_previstos_debil = crear_input_celda(initial_state.get("previstos_debil", "Subir a 1.45 (Meta Tienda SGH)"), color="#FFD700", font_size=11.5 if is_mobile else 12.5, multiline=True, min_lines=1)
     tf_actuales_debil = crear_input_celda(initial_state.get("actuales_debil", "14%"), color="#FFFFFF", font_size=12 if is_mobile else 13, bold=True, align=ft.TextAlign.CENTER, dense=True, height=28)
@@ -587,12 +589,14 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         )
 
         tf_desarrollo_comp.value = pilar_d.capitalize()
+        tf_desarrollo_colab_1.value = "Equipo Tienda"
         tf_indicador_debil.value = clean_kpi_name_d
+        tf_desarrollo_colab_2.value = f"Meta: {meta_min_d}"
         tf_accion_desarrollo.value = f"{conducta_d}.\n{consejo_d_dinamico}"
         tf_previstos_debil.value = previsto_texto_d
         tf_actuales_debil.value = val_act_d
 
-        guardar_estado()
+        guardar_estado(mostrar_alerta=False)
         if page:
             page.snack_bar = ft.SnackBar(ft.Text("⚡ ¡Enfoque Semanal actualizado con Inteligencia Artificial!"), bgcolor="#008080")
             page.snack_bar.open = True
@@ -608,7 +612,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     tf_colab_fuerte_2.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=False)
     dd_semana.on_change = lambda e: ejecutar_cruce_inteligente(e, rotar=True)
 
-    def guardar_estado(e=None):
+    def guardar_estado(e=None, mostrar_alerta=True):
         data = {
             "semana": dd_semana.value,
             "colab_fuerte_1": tf_colab_fuerte_1.value,
@@ -625,42 +629,24 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
             "accion_mantener": tf_accion_mantener.value,
             "previstos_fuerte": tf_previstos_fuerte.value,
             "desarrollo_comp": tf_desarrollo_comp.value,
+            "desarrollo_colab_1": tf_desarrollo_colab_1.value,
             "indicador_debil": tf_indicador_debil.value,
+            "desarrollo_colab_2": tf_desarrollo_colab_2.value,
             "accion_desarrollo": tf_accion_desarrollo.value,
             "previstos_debil": tf_previstos_debil.value,
             "actuales_debil": tf_actuales_debil.value,
             "timestamp": datetime.datetime.now().isoformat()
         }
         save_enfoque_semanal_state(data, store_code)
-        if e and page:
-            page.snack_bar = ft.SnackBar(ft.Text("💾 Enfoque Semanal guardado localmente con éxito."), bgcolor="#2E8B57")
-            page.snack_bar.open = True
-            page.update()
-
-    def copiar_al_portapapeles(e):
-        txt_resumen = f"""NUESTRO ENFOQUE SEMANAL - SEMANA {dd_semana.value}
-==================================================
-¡ENFOQUÉMONOS!
-
-[FORTALEZA / MANTENER]
-• Fuerza de Comportamiento: {tf_fuerza_comp.value}
-• Mejor Colaborador (Conducta): {tf_mejor_colab_1.value}
-• Indicador Métrico: {tf_indicador_fuerte.value}
-• Mejor Colaborador (Métrico): {tf_mejor_colab_2.value}
-• Acción Clave para Mantener: {tf_accion_mantener.value}
-• Resultados Previstos: {tf_previstos_fuerte.value}
-• Resultados Actuales: {tf_actuales_fuerte.value}
-
-[ÁREA DE DESARROLLO]
-• Área de Desarrollo: {tf_desarrollo_comp.value}
-• Indicador Métrico: {tf_indicador_debil.value}
-• Acción Clave el Desarrollo: {tf_accion_desarrollo.value}
-• Resultados Previstos: {tf_previstos_debil.value}
-• Resultados Actuales: {tf_actuales_debil.value}
-"""
-        if page:
-            page.set_clipboard(txt_resumen)
-            page.snack_bar = ft.SnackBar(ft.Text("📋 ¡Texto copiado al portapapeles listo para transcribir!"), bgcolor="#1F4E78")
+        if mostrar_alerta and page:
+            page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, color="#7CFC00", size=18),
+                    ft.Text("✅ ¡Enfoque Semanal guardado exitosamente!", color="white", weight="bold", size=13)
+                ], spacing=8),
+                bgcolor="#1B4332",
+                duration=3500
+            )
             page.snack_bar.open = True
             page.update()
 
@@ -737,25 +723,20 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                 # 4. Botones
                 ft.Row([
                     ft.ElevatedButton(
-                        content=ft.Row([ft.Text("⚡", size=12), ft.Text("Generar", weight="heavy", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
+                        content=ft.Row([ft.Text("⚡", size=12), ft.Text("Generar Enfoque", weight="heavy", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
                         style=ft.ButtonStyle(bgcolor="#008080", color="white", shape=ft.RoundedRectangleBorder(radius=5), padding=ft.Padding(6, 6, 6, 6)),
-                        height=34,
-                        expand=True,
+                        height=36,
+                        expand=2,
                         on_click=lambda e: ejecutar_cruce_inteligente(e, rotar=True)
                     ),
-                    ft.OutlinedButton(
-                        content=ft.Row([ft.Text("💾", size=11), ft.Text("Guardar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
-                        style=ft.ButtonStyle(color="#00FFFF", shape=ft.RoundedRectangleBorder(radius=5), side=ft.BorderSide(1.2, "#00FFFF"), padding=ft.Padding(6, 6, 6, 6)),
-                        height=34,
+                    ft.ElevatedButton(
+                        content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
+                        style=ft.ButtonStyle(bgcolor="#1B4332", color="white", shape=ft.RoundedRectangleBorder(radius=5), padding=ft.Padding(6, 6, 6, 6)),
+                        height=36,
+                        expand=1,
                         on_click=guardar_estado
-                    ),
-                    ft.OutlinedButton(
-                        content=ft.Row([ft.Text("📋", size=11), ft.Text("Copiar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
-                        style=ft.ButtonStyle(color="#7CFC00", shape=ft.RoundedRectangleBorder(radius=5), side=ft.BorderSide(1.2, "#7CFC00"), padding=ft.Padding(6, 6, 6, 6)),
-                        height=34,
-                        on_click=copiar_al_portapapeles
                     )
-                ], spacing=5)
+                ], spacing=6)
             ], spacing=6),
             padding=ft.Padding(8, 8, 8, 8),
             bgcolor="#0B0F1C",
@@ -807,29 +788,18 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                         height=36,
                         on_click=lambda e: ejecutar_cruce_inteligente(e, rotar=True)
                     ),
-                    ft.OutlinedButton(
+                    ft.ElevatedButton(
                         content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
                         style=ft.ButtonStyle(
-                            color="#00FFFF",
+                            bgcolor="#1B4332",
+                            color="white",
                             shape=ft.RoundedRectangleBorder(radius=5),
-                            side=ft.BorderSide(1.2, "#00FFFF"),
-                            padding=ft.Padding(10, 8, 10, 8)
+                            padding=ft.Padding(12, 8, 12, 8)
                         ),
                         height=36,
                         on_click=guardar_estado
-                    ),
-                    ft.OutlinedButton(
-                        content=ft.Row([ft.Text("📋", size=12), ft.Text("Copiar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
-                        style=ft.ButtonStyle(
-                            color="#7CFC00",
-                            shape=ft.RoundedRectangleBorder(radius=5),
-                            side=ft.BorderSide(1.2, "#7CFC00"),
-                            padding=ft.Padding(10, 8, 10, 8)
-                        ),
-                        height=36,
-                        on_click=copiar_al_portapapeles
                     )
-                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+                ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
             ], spacing=10),
             padding=ft.Padding(10, 10, 10, 10),
             bgcolor="#0B0F1C",
@@ -979,7 +949,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         border=ft.Border(bottom=ft.BorderSide(1.5, BORDER_COLOR))
     )
 
-    # 2. Fila 1: Fuerza de Comportamiento / Área de Desarrollo
+    # 2. Fila 1: Fuerza de Comportamiento / Área de Desarrollo (Simetría de 2 columnas en ambos lados)
     r1_controls = []
     if not is_mobile:
         r1_controls.append(
@@ -995,7 +965,8 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     r1_controls.extend([
         celda_grid("FUERZA DE COMPORTAMIENTO", "" if is_mobile else "Identifica tu fortaleza: INVITA, CONECTA, AGRADECE", tf_fuerza_comp, border_right=True, title_color="#00FFFF", expand=6),
         celda_grid("MEJOR COLAB" if is_mobile else "MEJOR COLABORADOR", "" if is_mobile else "Nombre (Conducta)", tf_mejor_colab_1, border_right=True, title_color="#FFFFFF", expand=4),
-        celda_grid("ÁREA DE DESARROLLO" if is_mobile else "ÁREA DE DESARROLLO DEL COMPORTAMIENTO", "" if is_mobile else "Identifica un área para enfocarte: INVITA, CONECTA, AGRADECE", tf_desarrollo_comp, border_right=False, title_color="#FF7A33", expand=10),
+        celda_grid("ÁREA DE DESARROLLO" if is_mobile else "ÁREA DE DESARROLLO DEL COMPORTAMIENTO", "" if is_mobile else "Identifica un área para enfocarte: INVITA, CONECTA, AGRADECE", tf_desarrollo_comp, border_right=True, title_color="#FF7A33", expand=6),
+        celda_grid("ENFOQUE" if is_mobile else "ENFOQUE / EQUIPO", "" if is_mobile else "Equipo o Colaborador", tf_desarrollo_colab_1, border_right=False, title_color="#FFFFFF", expand=4),
     ])
     row_1 = ft.Container(
         content=ft.Row(r1_controls, spacing=0),
@@ -1003,7 +974,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
-    # 3. Fila 2: Indicador Métrico
+    # 3. Fila 2: Indicador Métrico (Simetría de 2 columnas en ambos lados)
     r2_controls = []
     if not is_mobile:
         r2_controls.append(
@@ -1019,7 +990,8 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     r2_controls.extend([
         celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico: POLARIZADO, LUJO, MULT, PPT...", tf_indicador_fuerte, border_right=True, title_color="#00FFFF", expand=6),
         celda_grid("MEJOR COLAB" if is_mobile else "MEJOR COLABORADOR", "" if is_mobile else "Nombre (Métrica)", tf_mejor_colab_2, border_right=True, title_color="#FFFFFF", expand=4),
-        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico soporte: MULT, PPT, CONV...", tf_indicador_debil, border_right=False, title_color="#FF7A33", expand=10),
+        celda_grid("INDICADOR MÉTRICO", "" if is_mobile else "Indicador métrico soporte: MULT, PPT, CONV...", tf_indicador_debil, border_right=True, title_color="#FF7A33", expand=6),
+        celda_grid("META SGH" if is_mobile else "OBJETIVO SGH", "" if is_mobile else "Meta Tienda", tf_desarrollo_colab_2, border_right=False, title_color="#FFD700", expand=4),
     ])
     row_2 = ft.Container(
         content=ft.Row(r2_controls, spacing=0),
@@ -1066,7 +1038,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     ])
     row_4 = ft.Container(
         content=ft.Row(r4_controls, spacing=0),
-        height=90 if is_mobile else 85,
+        height=96 if is_mobile else 85,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 

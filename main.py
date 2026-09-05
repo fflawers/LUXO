@@ -20351,7 +20351,13 @@ Ejemplo:
             ], expand=True)
 
         actualizar_campana_badge()
-        active_view = ["chat"]
+        stored_last_view = None
+        if hasattr(page, "client_storage") and page.client_storage:
+            try:
+                stored_last_view = page.client_storage.get("last_active_view")
+            except Exception:
+                pass
+        active_view = [stored_last_view if (stored_last_view and isinstance(stored_last_view, str)) else "chat"]
         main_views_cache = {}
 
         def tr(es, en, fr=None, it=None, zh=None):
@@ -20532,6 +20538,11 @@ Ejemplo:
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista):
             active_view[0] = vista
+            if hasattr(page, "client_storage") and page.client_storage:
+                try:
+                    page.client_storage.set("last_active_view", vista)
+                except Exception:
+                    pass
             all_btn_tuples = [
                 (btn_chat, "chat"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
                 (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_garantias, "garantias"), 
@@ -21595,7 +21606,8 @@ Ejemplo:
                 )
             )
 
-        cambiar_vista("chat")
+        initial_view_to_load = active_view[0] if (active_view and active_view[0]) else "chat"
+        cambiar_vista(initial_view_to_load)
         page.update()
 
     def obtener_avatar_usuario(id_usuario):
