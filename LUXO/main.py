@@ -6124,6 +6124,53 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "tareas": "tareas",
                     "tarea": "tareas",
 
+                    # Parroquiales y Minutas Zonales
+                    "parroquiales y minutas": "parroquiales_minutas",
+                    "parroquiales & minutas": "parroquiales_minutas",
+                    "parroquiales": "parroquiales_minutas",
+                    "parroquial": "parroquiales_minutas",
+                    "avisos parroquiales": "parroquiales_minutas",
+                    "aviso parroquial": "parroquiales_minutas",
+                    "minutas de junta": "parroquiales_minutas",
+                    "minutas zonales": "parroquiales_minutas",
+                    "minutas": "parroquiales_minutas",
+                    "minuta": "parroquiales_minutas",
+                    "junta zonal": "parroquiales_minutas",
+                    "juntas zonales": "parroquiales_minutas",
+
+                    # Polar RB y OO (Solo comandos de navegación explícitos para no interferir con dudas sobre polarizados)
+                    "abrir polar": "polar",
+                    "abre polar": "polar",
+                    "ve a polar": "polar",
+                    "ir a polar": "polar",
+                    "llevame a polar": "polar",
+                    "llévame a polar": "polar",
+                    "mostrar polar": "polar",
+                    "muestra polar": "polar",
+                    "ver polar": "polar",
+                    "abrir polarizados": "polar",
+                    "abre polarizados": "polar",
+                    "ve a polarizados": "polar",
+                    "ir a polarizados": "polar",
+                    "abrir polarizado": "polar",
+                    "abre polarizado": "polar",
+                    "ve a polarizado": "polar",
+                    "abrir polar rb": "polar",
+                    "abre polar rb": "polar",
+                    "ve a polar rb": "polar",
+                    "abrir polar oo": "polar",
+                    "abre polar oo": "polar",
+                    "ve a polar oo": "polar",
+                    "abrir polar rb y oo": "polar",
+                    "abre polar rb y oo": "polar",
+                    "ve a polar rb y oo": "polar",
+                    "modulo polar": "polar",
+                    "módulo polar": "polar",
+                    "reporte polar": "polar",
+                    "pantalla polar": "polar",
+                    "seccion polar": "polar",
+                    "sección polar": "polar",
+
                     # Presupuesto
                     "presupuesto": "presupuesto",
                     "bouget": "presupuesto",
@@ -13643,12 +13690,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         "tarea": ft.Icons.ASSIGNMENT_ROUNDED,
                         "manual": ft.Icons.BOOK_ROUNDED,
                         "campana": ft.Icons.PHOTO_CAMERA,
+                        "parroquial": ft.Icons.CAMPAIGN_ROUNDED,
+                        "minuta": ft.Icons.NOTE_ALT_ROUNDED,
                         "sistema": ft.Icons.INFO_ROUNDED
                     }
                     icon_color_map = {
                         "tarea": "#00FFFF",
                         "manual": "#D8B4FE",
                         "campana": "#7CFC00",
+                        "parroquial": "#00FFFF",
+                        "minuta": "#D8B4FE",
                         "sistema": "#FFD700"
                     }
                     tipo = n.get("Tipo") or "sistema"
@@ -20481,6 +20532,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_polar = ft.TextButton(
+            content=ft.Row([ft.Text("🕶️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Polar RB y OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "偏光 RB & OO 🕶️"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("polar"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_ciclicos = ft.TextButton(
             content=ft.Row([ft.Text("🔄", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("ciclicos"),
@@ -20508,6 +20565,12 @@ Ejemplo:
         btn_enfoque_semanal = ft.TextButton(
             content=ft.Row([ft.Text("📅", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_semanal"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
+        btn_parroquiales_minutas = ft.TextButton(
+            content=ft.Row([ft.Text("📢", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Parroquiales y Minutas 📝", "Announcements & Minutes 📝", "Paroissiales & Procès-verbaux 📝", "Avvisi & Verbali 📝", "通告与会议纪要 📝"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("parroquiales_minutas"),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
@@ -20567,8 +20630,9 @@ Ejemplo:
                 (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_garantias, "garantias"), 
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
-                (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_enfoque, "enfoque_diario"),
-                (btn_enfoque_semanal, "enfoque_semanal"), (btn_crm, "crm"), (btn_fedex, "fedex"),
+                (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_polar, "polar"), (btn_enfoque, "enfoque_diario"),
+                (btn_enfoque_semanal, "enfoque_semanal"), (btn_parroquiales_minutas, "parroquiales_minutas"),
+                (btn_crm, "crm"), (btn_fedex, "fedex"),
                 (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_panamericano, "panamericano")
             ]
             for btn_tuple in all_btn_tuples:
@@ -20593,7 +20657,7 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "enfoque_semanal", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
+                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
                         elif vista == "panamericano":
@@ -20661,6 +20725,33 @@ Ejemplo:
                             import enfoque_semanal
                             importlib.reload(enfoque_semanal)
                             main_views_cache["enfoque_semanal"] = enfoque_semanal.build_enfoque_semanal_view(page, user_info)
+                        elif vista == "parroquiales_minutas":
+                            import importlib
+                            import parroquiales_minutas_view
+                            importlib.reload(parroquiales_minutas_view)
+                            main_views_cache["parroquiales_minutas"] = parroquiales_minutas_view.build_parroquiales_minutas_view(
+                                page,
+                                user_info=user_info,
+                                conectar_db_fn=conectar_db,
+                                mostrar_snack_fn=mostrar_snack,
+                                tr_fn=tr,
+                                get_zona_region_fn=obtener_zona_region_activa,
+                                seleccionar_archivo_async=seleccionar_archivo_async,
+                                actualizar_campana_fn=actualizar_campana_badge
+                            )
+                        elif vista == "polar":
+                            import importlib
+                            import polar_view
+                            importlib.reload(polar_view)
+                            main_views_cache["polar"] = polar_view.build_polar_view(
+                                page,
+                                user_info=user_info,
+                                conectar_db_fn=conectar_db,
+                                mostrar_snack_fn=mostrar_snack,
+                                tr_fn=tr,
+                                get_zona_region_fn=obtener_zona_region_activa,
+                                seleccionar_archivo_async=seleccionar_archivo_async
+                            )
                         elif vista == "operacion_diaria":
                             if es_admin():
                                 main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr, get_zona_region_fn=obtener_zona_region_activa)
@@ -20851,9 +20942,11 @@ Ejemplo:
                 btn_facturacion.content.controls[1].value = tr("Facturación CFDI 🧾", "CFDI Invoicing 🧾", "Facturation CFDI 🧾", "Fatturazione CFDI 🧾", "CFDI 发票 🧾")
                 btn_meta_semanal.content.controls[1].value = tr("Metas y Métricas 🎯", "Goals & Metrics 🎯", "Objectifs & Métriques 🎯", "Obiettivi & Metriche 🎯", "目标与指标 🎯")
                 btn_weekly.content.controls[1].value = tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️")
+                btn_polar.content.controls[1].value = tr("Polar RB y OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "偏光 RB & OO 🕶️")
                 btn_ciclicos.content.controls[1].value = tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄")
                 btn_enfoque.content.controls[1].value = tr("Enfoque Diario 2026 ☀️", "Daily Focus 2026 ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️")
                 btn_enfoque_semanal.content.controls[1].value = tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅")
+                btn_parroquiales_minutas.content.controls[1].value = tr("Parroquiales y Minutas 📝", "Announcements & Minutes 📝", "Paroissiales & Procès-verbaux 📝", "Avvisi & Verbali 📝", "通告与会议纪要 📝")
                 if 'btn_dashboard' in locals() and btn_dashboard:
                     btn_dashboard.content.controls[1].value = tr("Panel de Control 🎮", "Admin Panel 🎮", "Panneau de Contrôle 🎮", "Pannello di Controllo 🎮", "控制面板 🎮")
                 if 'btn_admin_trivia' in locals() and btn_admin_trivia:
@@ -20908,7 +21001,7 @@ Ejemplo:
         ], alignment="start", vertical_alignment="center", spacing=6)
 
         # --- CATEGORÍAS AGRUPADAS CON ACORDEÓN DESPLEGABLE (ExpansionTile) ---
-        ventas_controls = [btn_presupuesto, btn_meta_semanal, btn_weekly, btn_enfoque_semanal]
+        ventas_controls = [btn_presupuesto, btn_meta_semanal, btn_weekly, btn_polar, btn_enfoque_semanal]
         if btn_dashboard:
             ventas_controls.append(btn_dashboard)
         if btn_bitacora:
@@ -21027,6 +21120,8 @@ Ejemplo:
             btn_operacion_diaria,
             btn_chat,
             btn_enfoque,
+            btn_enfoque_semanal,
+            btn_parroquiales_minutas,
             ft.Divider(height=10, color="#333333"),
             tile_ventas,
             tile_clientes,

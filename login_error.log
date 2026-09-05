@@ -1,9 +1,7 @@
 Traceback (most recent call last):
-  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 19649, in procesar_login
+  File "C:\Users\MOISES\Desktop\luxo7.7\main.py", line 22077, in procesar_login
     cargar_chat()
-  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 19166, in cargar_chat
-    cambiar_vista("chat")
-  File "C:\Users\MOISES\Desktop\luxo7.7\LUXO\main.py", line 18428, in cambiar_vista
-    active_view[0] = vista
-    ^^^^^^^^^^^
-NameError: name 'active_view' is not defined
+  File "C:\Users\MOISES\Desktop\luxo7.7\main.py", line 8083, in cargar_chat
+    "is_mobile": is_mobile_w
+                 ^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'is_mobile_w' where it is not associated with a value
