@@ -15554,9 +15554,61 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
 
             eval_detail_card = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
 
+            def formatear_feedback_responsivo(texto):
+                if not texto:
+                    return "No hay contenido de evaluación disponible."
+                
+                # Si contiene tablas Markdown (| col | col |), convertirlas a formato de tarjetas/viñetas amigables con celulares
+                if "|" in texto and ("---" in texto or "Puntos" in texto or "Criterio" in texto or "Score" in texto):
+                    lineas = texto.split("\n")
+                    nuevas_lineas = []
+                    
+                    for l in lineas:
+                        l_str = l.strip()
+                        if l_str.startswith("|") and l_str.endswith("|"):
+                            partes = [p.strip() for p in l_str.split("|")[1:-1]]
+                            # Saltar separadores tipo |---|---|
+                            if all(all(c in "- :" for c in p) for p in partes if p):
+                                continue
+                            # Saltar cabecera
+                            if any(h in l_str.lower() for h in ["criterio", "ítem", "puntos", "observaciones", "comentario"]):
+                                continue
+                            
+                            if len(partes) >= 3:
+                                num = partes[0] if partes[0].isdigit() else ""
+                                crit = partes[1] if len(partes) > 1 else ""
+                                pts_pos = partes[2] if len(partes) > 2 else ""
+                                pts_obt = partes[3] if len(partes) > 3 else ""
+                                com = partes[4] if len(partes) > 4 else (partes[2] if len(partes) == 3 else "")
+                                
+                                titulo = f"**{num}. {crit}**" if num else f"**{crit}**"
+                                pts_str = f" `[{pts_obt} / {pts_pos} pts]`" if pts_pos and pts_obt else ""
+                                icon = "✅" if (pts_obt and pts_pos and pts_obt == pts_pos and pts_obt != "0") else ("❌" if pts_obt == "0" else "🔹")
+                                
+                                nuevas_lineas.append(f"\n{icon} {titulo}{pts_str}")
+                                if com:
+                                    nuevas_lineas.append(f"> {com}")
+                            else:
+                                nuevas_lineas.append(f"- {' | '.join(partes)}")
+                        else:
+                            nuevas_lineas.append(l)
+                    
+                    return "\n".join(nuevas_lineas)
+                
+                return texto
+
             def volver_al_simulador(e=None):
                 eval_detail_wrapper.visible = False
                 sim_main_wrapper.visible = True
+                config_area.visible = True
+                chat_area.visible = False
+                chat_history.clear()
+                sim_chat_column.controls.clear()
+                user_input.value = ""
+                user_input.disabled = True
+                btn_enviar.disabled = True
+                btn_finalizar.disabled = True
+                btn_iniciar.disabled = False
                 cargar_historial_evaluaciones()
                 page.update()
 
@@ -15567,8 +15619,9 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                 badge_color = "#7CFC00" if score_num >= 80 else ("#FFD700" if score_num >= 60 else "#FF4500")
                 badge_bg = "#1f6f43" if score_num >= 80 else ("#665200" if score_num >= 60 else "#5c1d1d")
                 
+                texto_limpio = formatear_feedback_responsivo(feedback)
                 md_content = ft.Markdown(
-                    feedback,
+                    texto_limpio,
                     selectable=True,
                     extension_set=ft.MarkdownExtensionSet.GITHUB_WEB
                 )
@@ -15795,6 +15848,18 @@ REGLAS PARA TU MENSAJE INICIAL:
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
+            def cancelar_simulacion_click(e):
+                config_area.visible = True
+                chat_area.visible = False
+                chat_history.clear()
+                sim_chat_column.controls.clear()
+                user_input.value = ""
+                user_input.disabled = True
+                btn_enviar.disabled = True
+                btn_finalizar.disabled = True
+                btn_iniciar.disabled = False
+                page.update()
+
             btn_iniciar = ft.ElevatedButton(
                 "Iniciar Roleplay ➕",
                 on_click=iniciar_simulacion_click,
@@ -15810,6 +15875,13 @@ REGLAS PARA TU MENSAJE INICIAL:
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                 disabled=True
             )
+            btn_cancelar = ft.ElevatedButton(
+                "Cancelar / Salir ✖️",
+                on_click=cancelar_simulacion_click,
+                bgcolor="#333333",
+                color="white",
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+            )
 
             config_area = ft.Column([
                 ft.Row([vendedor_dropdown, cliente_dropdown], spacing=10, wrap=True),
@@ -15821,7 +15893,7 @@ REGLAS PARA TU MENSAJE INICIAL:
                 sim_chat_column,
                 ft.Row([user_input, btn_enviar], spacing=5),
                 ft.Container(height=10),
-                btn_finalizar
+                ft.Row([btn_finalizar, btn_cancelar], spacing=10, wrap=True)
             ], visible=False, expand=True)
 
             eval_history_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
