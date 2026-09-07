@@ -15454,7 +15454,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 color="white",
                 expand=True,
                 disabled=True,
-                shift_enter=False
+                multiline=True,
+                min_lines=1,
+                max_lines=4,
+                shift_enter=True
             )
             btn_enviar = ft.IconButton(
                 icon=ft.Icons.SEND,
@@ -15549,6 +15552,79 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
             user_input.on_submit = enviar_mensaje_simulacion
             btn_enviar.on_click = enviar_mensaje_simulacion
 
+            eval_detail_card = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
+
+            def volver_al_simulador(e=None):
+                eval_detail_wrapper.visible = False
+                sim_main_wrapper.visible = True
+                cargar_historial_evaluaciones()
+                page.update()
+
+            def mostrar_evaluacion_detalle(score, feedback, nombre_vendedor="Asesor de Ventas", perfil="", fecha=""):
+                eval_detail_card.controls.clear()
+                
+                score_num = int(score) if str(score).isdigit() else 70
+                badge_color = "#7CFC00" if score_num >= 80 else ("#FFD700" if score_num >= 60 else "#FF4500")
+                badge_bg = "#1f6f43" if score_num >= 80 else ("#665200" if score_num >= 60 else "#5c1d1d")
+                
+                md_content = ft.Markdown(
+                    feedback,
+                    selectable=True,
+                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB
+                )
+
+                eval_detail_card.controls.extend([
+                    ft.Row([
+                        ft.ElevatedButton(
+                            "← Volver al Simulador",
+                            icon=ft.Icons.ARROW_BACK,
+                            on_click=volver_al_simulador,
+                            bgcolor="#2A1B4E",
+                            color="white",
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+                        ),
+                        ft.Container(
+                            content=ft.Text(f"SCORE: {score_num}/100 📊", color="white", weight="bold", size=15),
+                            bgcolor=badge_bg,
+                            border=ft.Border.all(1.5, badge_color),
+                            padding=ft.Padding(left=12, top=6, right=12, bottom=6),
+                            border_radius=8
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text(f"👤 Vendedor: {nombre_vendedor}", color="#00FFFF", weight="bold", size=15),
+                            ft.Text(f"🎭 Perfil: {perfil}" if perfil else "🎭 Simulación de Ventas", color="white", size=13),
+                            ft.Text(f"📅 Fecha: {fecha}", color="#aaaaaa", size=11) if fecha else ft.Container()
+                        ], spacing=3),
+                        bgcolor="#1E1E2E",
+                        padding=12,
+                        border_radius=8,
+                        border=ft.Border.all(1, "#333344")
+                    ),
+                    ft.Divider(height=10, color="#444466"),
+                    ft.Container(
+                        content=md_content,
+                        bgcolor="#141424",
+                        padding=14,
+                        border_radius=10,
+                        border=ft.Border.all(1, "#2A1B4E")
+                    ),
+                    ft.Container(height=10),
+                    ft.ElevatedButton(
+                        "← Regresar a la lista / Iniciar nuevo roleplay",
+                        icon=ft.Icons.CHECK_CIRCLE,
+                        on_click=volver_al_simulador,
+                        bgcolor="#6E48AA",
+                        color="white",
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+                    )
+                ])
+
+                sim_main_wrapper.visible = False
+                eval_detail_wrapper.visible = True
+                page.update()
+
             def finalizar_simulacion_click(e):
                 user_input.disabled = True
                 btn_enviar.disabled = True
@@ -15563,33 +15639,47 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                 
                 if es_caso_servicio:
                     eval_prompt = """Analiza la siguiente conversación de roleplay de servicio al cliente en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente que viene a realizar un CAMBIO de producto sin ticket de compra o presenta una queja.
-                    Evalúa el desempeño del vendedor en base a estos puntos específicos de servicio al cliente:
-                    1. Trato al cliente (Amabilidad, escucha activa, templanza y empatía ante la molestia del cliente).
-                    2. Manejo de objeciones y políticas (¿Explicó claramente las políticas de devolución/cambios sin ticket y dio alternativas viables?).
-                    3. Búsqueda de soluciones y CRM (¿Ofreció buscar en el sistema de ventas con los datos del cliente, correo electrónico o ID de transacción?).
-                    4. Protocolo de atención ante conflictos (¿Evitó discutir y mantuvo una postura profesional y resolutiva?).
-                    5. Cierre formal del caso (¿Dejó claros los pasos a seguir o canalizó formalmente el caso a soporte/gerencia de forma educada?).
+                    Evalúa el desempeño del vendedor en base a estos puntos específicos de servicio al cliente (100 Puntos Máx):
+                    1. Trato al cliente (Amabilidad, escucha activa, templanza y empatía ante la molestia del cliente) (20 pts).
+                    2. Manejo de objeciones y políticas (¿Explicó claramente las políticas de devolución/cambios sin ticket y dio alternativas viables?) (20 pts).
+                    3. Búsqueda de soluciones y CRM (¿Ofreció buscar en el sistema de ventas con los datos del cliente, correo electrónico o ID de transacción?) (20 pts).
+                    4. Protocolo de atención ante conflictos (¿Evitó discutir y mantuvo una postura profesional y resolutiva?) (20 pts).
+                    5. Cierre formal del caso (¿Dejó claros los pasos a seguir o canalizó formalmente el caso a soporte/gerencia de forma educada?) (20 pts).
                     
                     NOTA IMPORTANTE: Al ser un caso de reclamación/servicio, NO penalices ni exijas venta cruzada (UPT) o el cierre de una venta comercial.
                     
                     Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
                     SCORE: [Número]
                     [Salto de línea]
-                    Comentarios detallados de la evaluación en Markdown...
+                    
+                    FORMATO OBLIGATORIO (Usa títulos y viñetas claras con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
+                    Para cada punto indica:
+                    - ✅ o ❌ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Comentario explicativo y qué debió hacer/decir si faltó algo.
+                    
+                    Al final incluye:
+                    ### 🏆 Fortalezas Detectadas
+                    ### 🎯 Consejos Clave para el Próximo Servicio
                     """
                 elif es_caso_seguridad:
                     eval_prompt = """Analiza la siguiente conversación de roleplay de Prevención de Robo y Seguridad Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente sospechoso o grupo distractor.
-                    Evalúa el desempeño del vendedor según los Protocolos de Seguridad Sunglass Hut:
-                    1. Control de Huecos y Bandeja (¿Mantuvo el límite de máximo 3 armazones en bandeja a la vez?).
-                    2. Control Visual y Presencia (¿Mantuvo el control visual de la tienda y la entrada sin dar la espalda al cliente ni al exhibidor?).
-                    3. Desplazamiento Acompañado ('Jalar al cliente') (¿Acompañó al cliente al mueble correspondiente sin dejarlo caminar solo?).
-                    4. Manejo de Distracciones y Saludo desde Caja (¿Saludó de inmediato a nuevos visitantes y evitó ser sacado de su zona de control?).
-                    5. Profesionalismo y Templanza (¿Mantuvo una postura atenta, amable y preventiva sin caer en confrontación ni acusaciones directas agresivas?).
+                    Evalúa el desempeño del vendedor según los Protocolos de Seguridad Sunglass Hut (100 Puntos Máx):
+                    1. Control de Huecos y Bandeja (¿Mantuvo el límite de máximo 3 armazones en bandeja a la vez?) (20 pts).
+                    2. Control Visual y Presencia (¿Mantuvo el control visual de la tienda y la entrada sin dar la espalda al cliente ni al exhibidor?) (20 pts).
+                    3. Desplazamiento Acompañado ('Jalar al cliente') (¿Acompañó al cliente al mueble correspondiente sin dejarlo caminar solo?) (20 pts).
+                    4. Manejo de Distracciones y Saludo desde Caja (¿Saludó de inmediato a nuevos visitantes y evitó ser sacado de su zona de control?) (20 pts).
+                    5. Profesionalismo y Templanza (¿Mantuvo una postura atenta, amable y preventiva sin caer en confrontación ni acusaciones directas agresivas?) (20 pts).
                     
                     Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
                     SCORE: [Número]
                     [Salto de línea]
-                    Comentarios detallados de la evaluación en Markdown...
+                    
+                    FORMATO OBLIGATORIO (Usa títulos y viñetas claras con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
+                    Para cada punto indica:
+                    - ✅ o ❌ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Comentario explicativo y qué debió hacer/decir si faltó algo.
+                    
+                    Al final incluye:
+                    ### 🏆 Fortalezas de Seguridad
+                    ### 🎯 Consejos Clave de Prevención
                     """
                 else:
                     eval_prompt = """Analiza la siguiente conversación de roleplay de venta en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente.
@@ -15610,7 +15700,15 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                     Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
                     SCORE: [Número]
                     [Salto de línea]
-                    Desglose detallado de los 12 criterios con viñetas en formato Markdown...
+                    
+                    FORMATO OBLIGATORIO (Usa viñetas y títulos claros con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
+                    Desglosa los 12 criterios uno por uno:
+                    - Si se cumplió: ✅ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Breve comentario positivo.
+                    - Si se omitió o falló: ❌ [0 / Puntos Posibles] Nombre del Criterio: Explica claramente qué faltó y da un consejo práctico específico de qué debió decir o hacer el vendedor.
+
+                    Al final incluye:
+                    ### 🏆 Fortalezas Detectadas
+                    ### 🎯 Plan de Acción y Consejos Clave para la Próxima Simulación
                     """
                 
                 for msg in chat_history:
@@ -15623,7 +15721,7 @@ Tu función es evaluar la conversación de venta utilizando estrictamente los pr
 
 {MANUAL_NEUROVENTAS_LUXO}
 
-Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. Tu respuesta DEBE comenzar obligatoriamente con el Score en formato 'SCORE: [Número 0-100]'.
+Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. Usa viñetas con ✅ y ❌ para cada criterio (NUNCA generes tablas anchas que se rompan en celular). Tu respuesta DEBE comenzar obligatoriamente con el Score en formato 'SCORE: [Número 0-100]'.
 """
                 
                 ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15, modo="evaluacion")
@@ -15633,6 +15731,14 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                     if match_score:
                         score_val = int(match_score.group(1))
                     
+                    nom_vend_txt = "Asesor de Ventas"
+                    try:
+                        for op in vendedor_dropdown.options:
+                            if op.key == vendedor_dropdown.value:
+                                nom_vend_txt = op.text
+                                break
+                    except Exception: pass
+
                     try:
                         v_id_val = int(vendedor_dropdown.value) if vendedor_dropdown.value and str(vendedor_dropdown.value).isdigit() else 1
                         db = conectar_db()
@@ -15647,30 +15753,11 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                     except Exception as ex_db_eval:
                         print("Error guardando eval en DB:", ex_db_eval)
                     
-                    mostrar_evaluacion_dialog(score_val, eval_text)
+                    from datetime import datetime
+                    fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, cliente_dropdown.value, fecha_ahora)
                 else:
                     mostrar_snack(f"Error de conexión al evaluar ({status})", "red")
-
-            def mostrar_evaluacion_dialog(score, feedback):
-                md_content = ft.Markdown(
-                    feedback,
-                    selectable=True,
-                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB
-                )
-                dlg = ft.AlertDialog(
-                    title=ft.Text(f"Evaluación del Simulador: Score {score}/100 📊", color="#00FFFF", weight="bold", size=18),
-                    content=ft.Container(
-                        content=ft.Column([md_content], scroll=ft.ScrollMode.AUTO),
-                        width=550,
-                        height=420
-                    ),
-                    actions=[
-                        ft.TextButton("Entendido", on_click=lambda e: (page.pop_dialog(), cambiar_vista("simulador")))
-                    ],
-                    bgcolor="#0F0F1A"
-                )
-                page.show_dialog(dlg)
-                page.update()
 
             def iniciar_simulacion_click(e):
                 if not vendedor_dropdown.value:
@@ -15746,7 +15833,7 @@ REGLAS PARA TU MENSAJE INICIAL:
                     if db:
                         cursor = db.cursor(dictionary=True)
                         cursor.execute("""
-                            SELECT e.Score_Evaluacion, e.Cliente_Simulado, DATE_FORMAT(e.Fecha_Hora, '%d/%m/%Y %H:%i') as fecha_f, v.Nombre_Completo 
+                            SELECT e.Score_Evaluacion, e.Cliente_Simulado, DATE_FORMAT(e.Fecha_Hora, '%d/%m/%Y %H:%i') as fecha_f, v.Nombre_Completo, e.Feedback_Detallado 
                             FROM evaluaciones_simulador e 
                             JOIN vendedores v ON e.ID_Vendedor = v.ID_Vendedor 
                             WHERE v.ID_Usuario_Tienda = %s 
@@ -15759,19 +15846,42 @@ REGLAS PARA TU MENSAJE INICIAL:
                             eval_history_column.controls.append(ft.Text("No hay evaluaciones guardadas.", color="#888888", italic=True))
                         else:
                             for r in rows:
+                                def make_click_hist(r_data=r):
+                                    return lambda e: mostrar_evaluacion_detalle(
+                                        score=r_data["Score_Evaluacion"],
+                                        feedback=r_data.get("Feedback_Detallado") or "No hay detalle guardado para esta evaluación.",
+                                        nombre_vendedor=r_data["Nombre_Completo"],
+                                        perfil=r_data["Cliente_Simulado"],
+                                        fecha=r_data["fecha_f"]
+                                    )
+
                                 eval_history_column.controls.append(
                                     ft.Container(
                                         content=ft.Row([
-                                            ft.Icon(ft.Icons.ASSESSMENT, color="#7CFC00" if r["Score_Evaluacion"] >= 80 else "#FF8C00"),
+                                            ft.Icon(ft.Icons.ASSESSMENT, color="#7CFC00" if r["Score_Evaluacion"] >= 80 else "#FF8C00", size=24),
                                             ft.Column([
-                                                ft.Text(f"Vendedor: {r['Nombre_Completo']} | Score: {r['Score_Evaluacion']}/100", color="white", weight="bold"),
-                                                ft.Text(f"Perfil: {r['Cliente_Simulado']} | {r['fecha_f']}", color="#aaaaaa", size=11)
+                                                ft.Row([
+                                                    ft.Text(f"Vendedor: {r['Nombre_Completo']}", color="white", weight="bold", size=13),
+                                                    ft.Container(
+                                                        content=ft.Text(f"{r['Score_Evaluacion']}/100", color="white", weight="bold", size=11),
+                                                        bgcolor="#1f6f43" if r["Score_Evaluacion"] >= 80 else ("#665200" if r["Score_Evaluacion"] >= 60 else "#5c1d1d"),
+                                                        padding=ft.Padding(left=6, top=2, right=6, bottom=2),
+                                                        border_radius=5
+                                                    )
+                                                ], spacing=8, alignment="spaceBetween"),
+                                                ft.Text(f"Perfil: {r['Cliente_Simulado']}", color="#cccccc", size=11, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                                ft.Row([
+                                                    ft.Text(f"📅 {r['fecha_f']}", color="#888888", size=10),
+                                                    ft.Text("• Toca para ver evaluación completa 🔍", color="#00FFFF", size=10)
+                                                ], spacing=5)
                                             ], spacing=3, expand=True)
-                                        ], vertical_alignment="center"),
+                                        ], vertical_alignment="center", spacing=10),
                                         bgcolor="#1a1a1a",
-                                        padding=10,
+                                        padding=12,
                                         border_radius=8,
-                                        border=ft.Border.all(1, "#333333")
+                                        border=ft.Border.all(1, "#333333"),
+                                        on_click=make_click_hist(r),
+                                        ink=True
                                     )
                                 )
                 except Exception as ex:
@@ -16065,13 +16175,22 @@ Ejemplo:
             cargar_historial_evaluaciones()
             cargar_perfiles_simulador()
 
-            return ft.Column([
+            sim_main_wrapper = ft.Column([
                 ft.Row([
                     ft.Text("Simulador de Ventas con IA 🎭", size=24, color="#D8B4FE", weight="bold")
                 ]),
                 ft.Text("Realiza roleplay interactivo de ventas por vendedor. La IA auditará el cumplimiento de las metas de UPT, captura de datos y cierre.", color="#aaaaaa", size=13),
                 ft.Divider(height=15, color="#333333"),
                 tabs
+            ], expand=True, visible=True)
+
+            eval_detail_wrapper = ft.Column([
+                eval_detail_card
+            ], expand=True, visible=False)
+
+            return ft.Column([
+                sim_main_wrapper,
+                eval_detail_wrapper
             ], expand=True)
 
         def build_crm_view():
@@ -21120,7 +21239,6 @@ Ejemplo:
             btn_operacion_diaria,
             btn_chat,
             btn_enfoque,
-            btn_enfoque_semanal,
             btn_parroquiales_minutas,
             ft.Divider(height=10, color="#333333"),
             tile_ventas,
