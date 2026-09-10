@@ -20,6 +20,8 @@ import difflib
 # Cargar variables de entorno desde .env
 load_dotenv()
 import operacion_tiendas
+import catalogo_upc_view
+from optics_engine import analizar_tecnologia_optica, generar_resumen_voz
 
 # =========================================
 # CONFIGURACION
@@ -1001,6 +1003,119 @@ def configurar_rutas_fastapi(app):
                         
                         document.body.appendChild(mobileMicBtn);
                     }
+
+                    // --- RECONOCIMIENTO DE VOZ DEDICADO PARA SIMULADOR DE VENTAS IA ---
+                    window.iniciarDictadoSimulador = function(modo) {
+                        try {
+                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+                            if (!SR) { 
+                                alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome o Microsoft Edge.'); 
+                                return; 
+                            }
+                            if (window._simRecognitionActive) {
+                                try { window._simRecognitionActive.abort(); } catch(e){}
+                            }
+                            const rSim = new SR();
+                            rSim.lang = 'es-MX';
+                            rSim.interimResults = false;
+                            rSim.continuous = false;
+                            rSim.maxAlternatives = 1;
+                            window._simRecognitionActive = rSim;
+
+                            function playToneSim(count) {
+                                try {
+                                    const cnt = count || 1;
+                                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                    function emit(freq, duration, delay) {
+                                        setTimeout(function() {
+                                            try {
+                                                const osc = ctx.createOscillator();
+                                                const gain = ctx.createGain();
+                                                osc.type = 'sine';
+                                                osc.frequency.value = freq;
+                                                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                                                osc.connect(gain);
+                                                gain.connect(ctx.destination);
+                                                osc.start();
+                                                osc.stop(ctx.currentTime + duration);
+                                            } catch(err){}
+                                        }, delay);
+                                    }
+                                    if (cnt === 1) { emit(880, 0.12, 0); } 
+                                    else { emit(1046, 0.1, 0); emit(1318, 0.15, 100); }
+                                } catch(err) {}
+                            }
+
+                            rSim.onstart = function() {
+                                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: modo, timestamp: Date.now() });
+                                playToneSim(1);
+                            };
+                            rSim.onresult = function(ev) {
+                                const txt = ev.results[0][0].transcript;
+                                if (txt) {
+                                    playToneSim(2);
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                }
+                            };
+                            rSim.onerror = function(ev) { 
+                                console.log("[SIMULADOR MIC] Error:", ev.error);
+                                window._simRecognitionActive = null;
+                                if (ev.error === 'not-allowed') {
+                                    alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
+                                }
+                            };
+                            rSim.onend = function() { 
+                                console.log("[SIMULADOR MIC] DETENIENDO MICROFONO", { timestamp: Date.now() });
+                                window._simRecognitionActive = null;
+                            };
+                            
+                            rSim.start();
+                        } catch(e) {
+                            console.log("Error iniciando micrófono del simulador:", e);
+                        }
+                    };
+
+                    // Interceptor de clics físicos directos para el micrófono del simulador
+                    let lastSimClickTime = 0;
+                    function handleSimDirectClick(e) {
+                        try {
+                            const now = Date.now();
+                            if (now - lastSimClickTime < 700) return;
+
+                            let target = e.target;
+                            let isSimMic = false;
+                            let isSimVoz = false;
+                            for (let i = 0; i < 8 && target && target !== document.body; i++) {
+                                const title = (target.getAttribute && (target.getAttribute('title') || target.getAttribute('aria-label') || '')) || '';
+                                const txt = target.innerText || target.textContent || '';
+                                if (title.includes('Hablar por Micrófono') || title.includes('sim-mic') || (target.id && target.id.includes('sim-mic'))) {
+                                    isSimMic = true;
+                                    break;
+                                }
+                                if (txt.includes('Hablar Ahora') || title.includes('Hablar Ahora')) {
+                                    isSimVoz = true;
+                                    break;
+                                }
+                                target = target.parentElement;
+                            }
+                            if (isSimMic) {
+                                lastSimClickTime = now;
+                                console.log('[SIMULADOR MIC] Clic físico interceptado en botón micrófono');
+                                window.iniciarDictadoSimulador('chat');
+                            } else if (isSimVoz) {
+                                lastSimClickTime = now;
+                                console.log('[SIMULADOR MIC] Clic físico interceptado en botón hablar voz');
+                                window.iniciarDictadoSimulador('voz');
+                            }
+                        } catch(err) {
+                            console.log('Error en interceptor clic simulador:', err);
+                        }
+                    }
+
+                    document.addEventListener('click', handleSimDirectClick, true);
+                    document.addEventListener('pointerdown', handleSimDirectClick, true);
                 });
                 </script>
                 """
@@ -1377,7 +1492,7 @@ def configurar_rutas_fastapi(app):
                             })
                             .catch(function(){});
                         } catch(e) {}
-                    }, 400);
+                    }, 1500);
 
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
@@ -1950,6 +2065,68 @@ def configurar_rutas_fastapi(app):
             return {"status": "session_not_found"}
         except Exception as e:
             print(f"ERROR CRÍTICO en /text_input: {traceback.format_exc()}")
+            return {"status": "error", "detail": str(e)}
+
+    @app.api_route("/simulador_text_input", methods=["GET", "POST"])
+    async def post_simulador_text_input(user_id: str = "1", text: str = ""):
+        import traceback
+        try:
+            print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido con user_id={user_id}, text='{text}'")
+            user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
+            session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
+            if not session and active_sessions:
+                session = list(active_sessions.values())[-1]
+
+            if session and text:
+                modo_activo = session.get("sim_modo_activo", "chat")
+                page = session.get("page")
+                btn_mic_sim = session.get("btn_mic_simulador_container")
+
+                if btn_mic_sim:
+                    try:
+                        btn_mic_sim.bgcolor = "#9D50BB"
+                        btn_mic_sim.border = ft.Border.all(2, "#00FFFF")
+                        btn_mic_sim.update()
+                        def revert_sim_mic(b):
+                            import time
+                            time.sleep(1.5)
+                            b.bgcolor = "#1E1E2E"
+                            b.border = ft.Border.all(1.5, "#9D50BB")
+                            try: b.update()
+                            except: pass
+                        threading.Thread(target=revert_sim_mic, args=(btn_mic_sim,), daemon=True).start()
+                    except: pass
+
+                if modo_activo == "voz" and session.get("sim_voz_enviar_fn"):
+                    sim_voz_fn = session.get("sim_voz_enviar_fn")
+                    try:
+                        if hasattr(page, "run_thread"):
+                            page.run_thread(sim_voz_fn, text)
+                        else:
+                            sim_voz_fn(text)
+                    except Exception as ex_v:
+                        print(f"ERROR en sim_voz_enviar_fn: {ex_v}")
+                    return {"status": "success", "mode": "voz"}
+                else:
+                    sim_input = session.get("sim_user_input")
+                    sim_enviar = session.get("sim_enviar_fn")
+                    if sim_input and sim_enviar and page:
+                        sim_input.value = text
+                        try: sim_input.update()
+                        except Exception: pass
+                        try: page.update()
+                        except Exception: pass
+                        try:
+                            if hasattr(page, "run_thread"):
+                                page.run_thread(sim_enviar, None)
+                            else:
+                                sim_enviar(None)
+                        except Exception as ex:
+                            print(f"ERROR en sim_enviar: {ex}")
+                        return {"status": "success", "mode": "chat"}
+            return {"status": "session_or_input_not_found"}
+        except Exception as e:
+            print(f"ERROR en /simulador_text_input: {traceback.format_exc()}")
             return {"status": "error", "detail": str(e)}
 
     @app.post("/upload")
@@ -4630,7 +4807,9 @@ def main(page: ft.Page):
             
             uid = "all"
             try:
-                if hasattr(page, "client_storage") and page.client_storage:
+                if user_info and user_info.get("id"):
+                    uid = str(user_info["id"])
+                elif hasattr(page, "client_storage") and page.client_storage:
                     stored_uid = page.client_storage.get("logged_user_id")
                     if stored_uid:
                         uid = str(stored_uid)
@@ -4639,6 +4818,8 @@ def main(page: ft.Page):
                 
             GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
             GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
+            if user_info and user_info.get("id"):
+                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
             if not getattr(page, "web", False):
                 def reproducir_sapi_thread():
@@ -5737,6 +5918,53 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                 border=ft.Border.all(1, "#D8B4FE33"),
                             )
                         )
+                    elif "FICHA TÉCNICA LUXOTTICA" in resp_ia_text or "Ficha Técnica Luxottica" in resp_ia_text:
+                        partes_upc = resp_ia_text.split("\n")
+                        google_link = None
+                        campos_upc_hist = []
+                        for line_u in partes_upc:
+                            if "Google URL:" in line_u:
+                                google_link = line_u.replace("Google URL:", "").strip()
+                            elif ":" in line_u:
+                                k_u, v_u = line_u.split(":", 1)
+                                campos_upc_hist.append(
+                                    ft.Row([
+                                        ft.Text(f"🔹 {k_u.strip()}:", color="#00FFFF", weight="bold", size=13),
+                                        ft.Text(v_u.strip(), color="white", size=13, selectable=True, expand=True),
+                                    ], spacing=5, vertical_alignment="start")
+                                )
+                            elif line_u.strip():
+                                campos_upc_hist.append(ft.Text(line_u.strip(), color="white", size=13))
+
+                        acciones_hist_upc = []
+                        if google_link:
+                            acciones_hist_upc.append(
+                                ft.ElevatedButton(
+                                    "🌐 Ver Fotos en Google",
+                                    icon=ft.Icons.TRAVEL_EXPLORE,
+                                    url=google_link,
+                                    bgcolor="#0A3C60",
+                                    color="#00FFFF"
+                                )
+                            )
+
+                        chat_display.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Icon(ft.Icons.QR_CODE_2, color="#00FFFF", size=20),
+                                        ft.Text("Ficha Técnica de Producto Luxottica", color="#00FFFF", weight="bold", size=14),
+                                    ], spacing=8),
+                                    ft.Divider(height=1, color="#333355"),
+                                    *campos_upc_hist,
+                                    ft.Row(acciones_hist_upc) if acciones_hist_upc else ft.Container()
+                                ], spacing=6),
+                                bgcolor="#18182A",
+                                padding=12,
+                                border_radius=10,
+                                border=ft.Border.all(1, "#00FFFF"),
+                            )
+                        )
                     else:
                         conv_id_hist = row.get("ID_Conversacion") or row.get("id_conversacion") or row.get("ID_CONVERSACION") or row.get("id")
                         fb_container_hist = ft.Container(alignment=ft.alignment.Alignment(-1, 0), expand=True)
@@ -6265,6 +6493,17 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "abrir ofertas": "descuentos",
                     "abre ofertas": "descuentos",
 
+                    # Catálogo de UPCs
+                    "catalogo upc": "catalogo_upc",
+                    "catalogo upcs": "catalogo_upc",
+                    "catalogo de upc": "catalogo_upc",
+                    "catalogo de upcs": "catalogo_upc",
+                    "abrir catalogo upc": "catalogo_upc",
+                    "abre catalogo upc": "catalogo_upc",
+                    "ver catalogo upc": "catalogo_upc",
+                    "ir a catalogo upc": "catalogo_upc",
+                    "ve a catalogo upc": "catalogo_upc",
+
                     # Facturación CFDI v4.0 (Requiere acción explícita: abrir, abre, ve a, dirígete a, etc.)
                     "dirigete a facturacion": "facturacion",
                     "dirígete a facturacion": "facturacion",
@@ -6366,6 +6605,263 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                         border_radius=10
                     )
                 )
+                page.update()
+                return
+
+            # --- 1.5. BUSCADOR INSTANTÁNEO DE UPCS, MICAS Y TECNOLOGÍAS ÓPTICAS LUXOTTICA (<5ms) ---
+            raw_digits = "".join(re.findall(r'\d+', user_text))
+            upc_candidate = None
+            if len(raw_digits) >= 11 and len(raw_digits) <= 14:
+                upc_candidate = raw_digits
+            elif any(w in user_text_norm for w in ["upc", "lente", "gafa", "modelo", "armazon", "codigo", "mica", "polar"]):
+                m_dig = re.search(r'\b\d{8,14}\b', user_text)
+                if m_dig:
+                    upc_candidate = m_dig.group(0)
+
+            upc_encontrado_row = None
+            keywords_modelos = ["upc", "rw40", "rw70", "rb3025", "rb2140", "rb3016", "oo9406", "oo9208", "oo9463", "oo9465", "ve4361", "pr17ws", "po0649", "po0714", "580g", "580p"]
+            if upc_candidate or any(k in user_text_norm for k in keywords_modelos):
+                try:
+                    db_u = conectar_db()
+                    if db_u:
+                        c_u = db_u.cursor(dictionary=True)
+                        if upc_candidate:
+                            c_u.execute("SELECT * FROM catalogo_upcs WHERE upc = %s OR upc LIKE %s LIMIT 1", (upc_candidate, f"{upc_candidate}%"))
+                            upc_encontrado_row = c_u.fetchone()
+                        
+                        if not upc_encontrado_row:
+                            toks = [t.strip().upper() for t in re.split(r'[\s,]+', user_text) if len(t.strip()) >= 4]
+                            for t_mod in toks:
+                                if t_mod.startswith(("RB", "OO", "OX", "RW", "VE", "PR", "PO", "0RB", "0OO", "0PR", "0VE", "0PO", "6S", "EA", "AX", "MK", "DG")):
+                                    c_u.execute("SELECT * FROM catalogo_upcs WHERE modelo = %s OR modelo LIKE %s LIMIT 1", (t_mod, f"{t_mod}%"))
+                                    upc_encontrado_row = c_u.fetchone()
+                                    if upc_encontrado_row:
+                                        break
+                        db_u.close()
+                except Exception as ex_u:
+                    print("Error buscando en catalogo_upcs:", ex_u)
+
+            if upc_encontrado_row:
+                row_u = upc_encontrado_row
+                upc_val = str(row_u.get("upc") or "").strip()
+                marca_val = str(row_u.get("marca") or "").strip().title()
+                modelo_val = str(row_u.get("modelo") or "").strip()
+                color_val = str(row_u.get("color") or row_u.get("color_codigo") or "").strip()
+                desc_art = str(row_u.get("descripcion_articulo") or row_u.get("desc_articulo") or "").strip()
+                desc_col = str(row_u.get("desc_color") or "").strip()
+                polar_val = str(row_u.get("polarizado") or "").strip()
+                calibre_val = str(row_u.get("calibre") or "").strip()
+                puente_val = str(row_u.get("puente") or "").strip()
+                varilla_val = str(row_u.get("varilla") or "").strip()
+
+                medidas_str = f"{calibre_val}/{puente_val} - {varilla_val}mm" if (calibre_val and puente_val) else "Estándar"
+
+                opt_info = analizar_tecnologia_optica(marca_val, modelo_val, color_val, f"{desc_art} {desc_col} {polar_val}", upc=upc_val)
+                texto_voz = generar_resumen_voz(opt_info)
+
+                id_conv_upc = None
+                try:
+                    db_h = conectar_db()
+                    if db_h:
+                        cur_h = db_h.cursor()
+                        resp_guardar = f"🔍 FICHA TÉCNICA LUXOTTICA: {marca_val} {modelo_val} {color_val} (UPC: {upc_val})\nColección: {opt_info['coleccion_ano']}\nTecnología: {opt_info['tecnologia_mica']}\nUso: {opt_info['uso_ideal']}\nSpecs: {opt_info['nanometros']} | VLT {opt_info['vlt_porcentaje']}\nStorytelling: {opt_info['storytelling']}\nGoogle URL: {opt_info['google_img_url']}"
+                        cur_h.execute("""
+                            INSERT INTO historial_conversaciones (ID_Usuario, Pregunta_Usuario, Respuesta_IA, Fecha_Hora, Fue_Respondida_Con_Manual)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (user_info["id"], user_text, resp_guardar, datetime.now(), 1))
+                        db_h.commit()
+                        id_conv_upc = cur_h.lastrowid
+                        db_h.close()
+                except Exception as ex_sh:
+                    print("Error guardando historial UPC:", ex_sh)
+
+                btn_speaker_u = ft.IconButton(icon=ft.Icons.VOLUME_UP_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Escuchar ficha técnica")
+                btn_play_pause_u = ft.IconButton(icon=ft.Icons.PAUSE_ROUNDED, icon_size=15, icon_color="#00FFFF", tooltip="Pausar/Reanudar lectura", disabled=True)
+
+                def handle_speaker_upc(ev, txt=texto_voz, bs=btn_speaker_u, bpp=btn_play_pause_u):
+                    nonlocal current_speak_btn_speaker
+                    if current_speak_btn_speaker == bs:
+                        stop_current_speak()
+                    else:
+                        start_speak(txt, bs, bpp)
+
+                def handle_play_pause_upc(ev):
+                    toggle_pause_speak()
+
+                btn_speaker_u.on_click = handle_speaker_upc
+                btn_play_pause_u.on_click = handle_play_pause_upc
+
+                feedback_container_u = ft.Container(alignment=ft.alignment.Alignment(-1, 0), expand=True)
+                def on_thumbs_up_u(ev):
+                    if id_conv_upc:
+                        registrar_feedback(id_conv_upc, True, "", feedback_container_u)
+                    feedback_container_u.content = ft.Text("¡Gracias por calificar la respuesta!", color="#7CFC00", size=11, italic=True)
+                    page.update()
+
+                def on_thumbs_down_u(ev):
+                    if id_conv_upc:
+                        registrar_feedback(id_conv_upc, False, "", feedback_container_u)
+                    feedback_container_u.content = ft.Text("Gracias por tu retroalimentación", color="#FF4500", size=11, italic=True)
+                    page.update()
+
+                feedback_container_u.content = ft.Row([
+                    ft.Text("¿Te sirvió?", color="#aaaaaa", size=10),
+                    ft.IconButton(icon=ft.Icons.THUMB_UP_OUTLINED, icon_size=14, icon_color="#7CFC00", tooltip="Sí, fue útil", on_click=on_thumbs_up_u),
+                    ft.IconButton(icon=ft.Icons.THUMB_DOWN_OUTLINED, icon_size=14, icon_color="#FF4500", tooltip="No fue útil", on_click=on_thumbs_down_u),
+                    ft.Text("|", color="#444466", size=10),
+                    btn_speaker_u,
+                    btn_play_pause_u
+                ], spacing=2, alignment="start", vertical_alignment="center")
+
+                if opt_info.get("es_oftalmico"):
+                    polar_badge_text = "👓 ARMAZÓN OFTÁLMICO (GRADUABLE)"
+                    polar_badge_color = "#38BDF8"
+                elif opt_info.get("es_polarizado") or "POLAR" in polar_val.upper():
+                    polar_badge_text = "✨ POLARIZADO"
+                    polar_badge_color = "#00FFFF"
+                else:
+                    polar_badge_text = "☀️ SOLAR UV400"
+                    polar_badge_color = "#D8B4FE"
+
+                if opt_info.get("es_graduable", True):
+                    grad_badge_text = "👓 GRADUABLE: SÍ"
+                    grad_badge_color = "#10B981"
+                    grad_badge_bg = "#064E3B"
+                else:
+                    grad_badge_text = "🚫 NO GRADUABLE"
+                    grad_badge_color = "#F87171"
+                    grad_badge_bg = "#450A0A"
+
+                card_upc = ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Container(
+                                content=ft.Row([
+                                    ft.Icon(ft.Icons.QR_CODE_2, color="#00FFFF", size=22),
+                                    ft.Text(f"{marca_val.upper()} {modelo_val} {color_val}", color="white", weight="bold", size=16),
+                                ], spacing=6),
+                                expand=True
+                            ),
+                            ft.Container(
+                                content=ft.Text(f"UPC: {upc_val}", color="#00FFFF", size=11, weight="bold"),
+                                bgcolor="#0A2540",
+                                padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                                border_radius=6,
+                                border=ft.Border.all(1, "#00FFFF44")
+                            )
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+
+                        ft.Divider(height=1, color="#333355"),
+
+                        ft.Row([
+                            ft.Container(
+                                content=ft.Row([
+                                    ft.Icon(ft.Icons.STAR_BORDER, color="#FFD700", size=14),
+                                    ft.Text(opt_info["coleccion_ano"], color="#FFD700", size=11, weight="bold"),
+                                ], spacing=4),
+                                bgcolor="#332B00",
+                                padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                                border_radius=6,
+                                border=ft.Border.all(1, "#FFD70044")
+                            ),
+                            ft.Container(
+                                content=ft.Text(polar_badge_text, color=polar_badge_color, size=11, weight="bold"),
+                                bgcolor="#1F1F38",
+                                padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                                border_radius=6,
+                                border=ft.Border.all(1, f"{polar_badge_color}44")
+                            ),
+                            ft.Container(
+                                content=ft.Text(grad_badge_text, color=grad_badge_color, size=11, weight="bold"),
+                                bgcolor=grad_badge_bg,
+                                padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                                border_radius=6,
+                                border=ft.Border.all(1, f"{grad_badge_color}44")
+                            ),
+                            ft.Container(
+                                content=ft.Text(f"Medidas: {medidas_str}", color="#AAAAAA", size=11),
+                                bgcolor="#161622",
+                                padding=ft.Padding(left=8, top=4, right=8, bottom=4),
+                                border_radius=6,
+                            ),
+                        ], wrap=True, spacing=6),
+
+                        ft.Container(height=4),
+
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text("🧬 Tecnología de Mica:", color="#00FFFF", weight="bold", size=13),
+                                    ft.Text(opt_info["tecnologia_mica"], color="white", weight="bold", size=13, expand=True, selectable=True),
+                                ], vertical_alignment="start"),
+                                ft.Row([
+                                    ft.Text("👓 Graduación / RX:", color=grad_badge_color, weight="bold", size=13),
+                                    ft.Text(opt_info.get("graduacion_detalle", "Compatible con graduación"), color="white", size=13, expand=True, selectable=True),
+                                ], vertical_alignment="start"),
+                                ft.Row([
+                                    ft.Text("🎯 Uso Ideal & Entorno:", color="#D8B4FE", weight="bold", size=13),
+                                    ft.Text(opt_info["uso_ideal"], color="#EEEEEE", size=13, expand=True, selectable=True),
+                                ], vertical_alignment="start"),
+                                ft.Row([
+                                    ft.Text("🔬 Especificaciones:", color="#00FFFF", weight="bold", size=13),
+                                    ft.Text(f"{opt_info['nanometros']}  •  VLT: {opt_info['vlt_porcentaje']}", color="#DDDDDD", size=12, expand=True, selectable=True),
+                                ], vertical_alignment="start"),
+                                ft.Row([
+                                    ft.Text("🛡️ Beneficio Óptico:", color="#7CFC00", weight="bold", size=13),
+                                    ft.Text(opt_info["beneficio_tecnico"], color="#DDDDDD", size=12, expand=True, selectable=True),
+                                ], vertical_alignment="start"),
+                            ], spacing=6),
+                            bgcolor="#131322",
+                            padding=10,
+                            border_radius=8,
+                            border=ft.Border.all(1, "#2A2A44")
+                        ),
+
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.RECORD_VOICE_OVER, color="#FF9900", size=16),
+                                    ft.Text("Storytelling de Venta (20 Segundos):", color="#FF9900", weight="bold", size=13),
+                                ], spacing=6),
+                                ft.Text(f'"{opt_info["storytelling"]}"', color="#FFFFFF", italic=True, size=13, selectable=True),
+                            ], spacing=4),
+                            bgcolor="#24180A",
+                            padding=10,
+                            border_radius=8,
+                            border=ft.Border.all(1, "#FF990044")
+                        ),
+
+                        ft.Row([
+                            ft.ElevatedButton(
+                                "🌐 Ver Fotos del Modelo en Google",
+                                icon=ft.Icons.TRAVEL_EXPLORE,
+                                url=opt_info["google_img_url"],
+                                bgcolor="#0A3C60",
+                                color="#00FFFF",
+                                style=ft.ButtonStyle(
+                                    shape=ft.RoundedRectangleBorder(radius=8),
+                                    side=ft.BorderSide(1, "#00FFFF")
+                                )
+                            ),
+                            ft.Container(expand=True),
+                            feedback_container_u
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center")
+
+                    ], spacing=10),
+                    bgcolor="#18182A",
+                    padding=14,
+                    border_radius=12,
+                    border=ft.Border.all(1.5, "#00FFFF"),
+                    shadow=[
+                        ft.BoxShadow(
+                            color="#3300FFFF",
+                            blur_radius=12,
+                            spread_radius=1
+                        )
+                    ]
+                )
+
+                chat_display.controls.append(card_upc)
                 page.update()
                 return
 
@@ -15415,6 +15911,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 width=260,
                 height=45
             )
+            vendedor_voz_dropdown = EmojiDropdown(
+                label="Seleccionar Vendedor",
+                border_color="#00FFFF",
+                width=260,
+                height=45
+            )
             cliente_dropdown = EmojiDropdown(
                 label="Perfil de Cliente",
                 border_color="#9D50BB",
@@ -15443,13 +15945,21 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ft.dropdown.Option("🛡️ Prevención: Llamada de Extorsión y Falso Corporativo", "Falso ejecutivo o supuesto auditor de corporativo llamando por teléfono exigiendo depósitos urgentes o sacar mercancía de la tienda bajo amenaza de clausura")
                 ]
             )
+            cliente_voz_dropdown = EmojiDropdown(
+                label="Perfil de Cliente",
+                border_color="#00FFFF",
+                width=260,
+                height=45,
+                options=cliente_dropdown.options
+            )
             if cliente_dropdown.options_list:
                 cliente_dropdown.value = getattr(cliente_dropdown.options_list[0], "key", None) or getattr(cliente_dropdown.options_list[0], "value", None) or str(cliente_dropdown.options_list[0])
+                cliente_voz_dropdown.value = cliente_dropdown.value
 
             chat_history = []
             sim_chat_column = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
             user_input = ft.TextField(
-                label="Escribe tu respuesta al cliente...",
+                label="Escribe o dicta tu respuesta al cliente...",
                 border_color="#9D50BB",
                 color="white",
                 expand=True,
@@ -15463,6 +15973,243 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 icon=ft.Icons.SEND,
                 icon_color="#00FFFF",
                 disabled=True
+            )
+
+            # Avatar Reactivo del Cliente Simulado
+            avatar_sim_src = "custom_assets/avatar_luxo2.png" if os.path.exists(os.path.join(ASSETS_PATH, "avatar_luxo2.png")) else "/avatar_luxo2.png"
+            avatar_sim_img = ft.Image(
+                src=avatar_sim_src,
+                width=70,
+                height=70,
+                border_radius=35,
+                fit="cover"
+            )
+            avatar_sim_container = ft.Container(
+                content=avatar_sim_img,
+                width=80,
+                height=80,
+                border_radius=40,
+                border=ft.Border.all(2, "#9D50BB"),
+                bgcolor="#141424",
+                alignment=ft.alignment.Alignment(0, 0),
+                animate=300
+            )
+            sim_estado_texto = ft.Text("👂 Esperando inicio del roleplay...", color="#8888AA", size=12, italic=True)
+            sim_cliente_titulo = ft.Text("Cliente Simulado Sunglass Hut", color="#FFD700", weight="bold", size=13)
+            
+            avatar_header_card = ft.Container(
+                content=ft.Row([
+                    avatar_sim_container,
+                    ft.Column([
+                        sim_cliente_titulo,
+                        sim_estado_texto,
+                        ft.Row([
+                            ft.Icon(ft.Icons.RECORD_VOICE_OVER, color="#00FFAA", size=14),
+                            ft.Text("Roleplay de Voz Activo • Habla con naturalidad", color="#00FFAA", size=11, weight="bold")
+                        ], spacing=5)
+                    ], spacing=3, expand=True)
+                ], spacing=12, vertical_alignment="center"),
+                bgcolor="#18182A",
+                padding=10,
+                border_radius=10,
+                border=ft.Border.all(1, "#2A2A44")
+            )
+
+            def reproducir_voz_cliente(texto, on_finish_callback=None):
+                try:
+                    texto_hablado = re.sub(r"\*.*?\*", "", str(texto or "")).strip()
+                    texto_hablado = re.sub(r'["\']', '', texto_hablado).strip()
+                    if texto_hablado:
+                        avatar_sim_container.border = ft.Border.all(3.5, "#00FFFF")
+                        avatar_sim_container.bgcolor = "#9D50BB44"
+                        sim_estado_texto.value = "🗣️ Cliente hablando..."
+                        sim_estado_texto.color = "#FFD700"
+
+                        avatar_voz_container.border = ft.Border.all(3.5, "#FFD700")
+                        avatar_voz_container.bgcolor = "#FFD70022"
+                        sim_voz_estado_texto.value = "🗣️ Cliente hablando por voz..."
+                        sim_voz_estado_texto.color = "#FFD700"
+
+                        try: avatar_sim_container.update()
+                        except: pass
+                        try: sim_estado_texto.update()
+                        except: pass
+                        try: avatar_voz_container.update()
+                        except: pass
+                        try: sim_voz_estado_texto.update()
+                        except: pass
+
+                        def _hablar_cliente_simulado_thread():
+                            try:
+                                import platform
+                                if platform.system() == "Windows":
+                                    import win32com.client
+                                    import pythoncom
+                                    pythoncom.CoInitialize()
+                                    speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                                    speaker.Speak(texto_hablado, 0)
+                                else:
+                                    start_speak(texto_hablado)
+                            except Exception as ex_spk:
+                                print("Error en voz SAPI cliente simulado:", ex_spk)
+                            finally:
+                                avatar_sim_container.border = ft.Border.all(2, "#9D50BB")
+                                avatar_sim_container.bgcolor = "#141424"
+                                sim_estado_texto.value = "👂 Escuchando tu argumento de venta..."
+                                sim_estado_texto.color = "#00FFFF"
+
+                                avatar_voz_container.border = ft.Border.all(3, "#00FFFF")
+                                avatar_voz_container.bgcolor = "#141424"
+                                sim_voz_estado_texto.value = "👂 Escuchando tu argumento por voz..."
+                                sim_voz_estado_texto.color = "#00FFFF"
+
+                                try: avatar_sim_container.update()
+                                except: pass
+                                try: sim_estado_texto.update()
+                                except: pass
+                                try: avatar_voz_container.update()
+                                except: pass
+                                try: sim_voz_estado_texto.update()
+                                except: pass
+                                if on_finish_callback:
+                                    try: on_finish_callback()
+                                    except Exception as ex_cb: print("Error en callback fin audio:", ex_cb)
+
+                        threading.Thread(target=_hablar_cliente_simulado_thread, daemon=True).start()
+                except Exception as ex_v:
+                    print("Error reproduciendo voz cliente simulado:", ex_v)
+
+            # --- MOTOR DE GRABACIÓN Y RECONOCIMIENTO DE VOZ LOCAL DEDICADO PARA SIMULADOR ---
+            sim_dictado_en_progreso = [False]
+            sim_stop_requested = [False]
+
+            def play_sim_beep(tipo="start"):
+                def _beep_worker():
+                    try:
+                        import winsound
+                        if tipo == "start":
+                            winsound.Beep(1200, 75)
+                            winsound.Beep(1600, 110)
+                        elif tipo == "success":
+                            winsound.Beep(1600, 75)
+                            winsound.Beep(2000, 100)
+                        elif tipo == "cancel":
+                            winsound.Beep(700, 120)
+                    except Exception as ex_b:
+                        print("Error play_sim_beep:", ex_b)
+                threading.Thread(target=_beep_worker, daemon=True).start()
+
+            def sim_dictado_local_worker(modo="chat"):
+                if sim_dictado_en_progreso[0]:
+                    return
+                sim_dictado_en_progreso[0] = True
+                sim_stop_requested[0] = False
+
+                play_sim_beep("start")
+
+                try:
+                    if modo == "chat":
+                        btn_mic_sim_container.bgcolor = "#FF0000"
+                        btn_mic_sim_container.border = ft.Border.all(2, "white")
+                        try: btn_mic_sim_container.update()
+                        except: pass
+                    else:
+                        btn_hablar_voz.bgcolor = "#FF0000"
+                        btn_hablar_voz.text = "Escuchando tu voz... 🎙️"
+                        sim_voz_estado_texto.value = "🎙️ Tu turno de hablar... di tu argumento al cliente"
+                        sim_voz_estado_texto.color = "#00FFAA"
+                        avatar_voz_container.border = ft.Border.all(3.5, "#00FFAA")
+                        avatar_voz_container.bgcolor = "#00FFAA22"
+                        try: btn_hablar_voz.update()
+                        except: pass
+                        try: sim_voz_estado_texto.update()
+                        except: pass
+                        try: avatar_voz_container.update()
+                        except: pass
+
+                    r_sim = sr.Recognizer()
+                    r_sim.pause_threshold = 1.8
+                    r_sim.non_speaking_duration = 1.0
+                    r_sim.dynamic_energy_threshold = False
+                    r_sim.energy_threshold = 300
+
+                    with sr.Microphone() as source:
+                        r_sim.adjust_for_ambient_noise(source, duration=0.35)
+                        if r_sim.energy_threshold < 250:
+                            r_sim.energy_threshold = 250
+                        if sim_stop_requested[0]:
+                            raise Exception("Cancelado por usuario")
+                        audio = r_sim.listen(source, timeout=8, phrase_time_limit=45)
+
+                    if sim_stop_requested[0]:
+                        raise Exception("Cancelado por usuario")
+
+                    texto_reconocido = r_sim.recognize_google(audio, language="es-MX").strip()
+                    if texto_reconocido:
+                        play_sim_beep("success")
+                        print(f"🎙️ [SIMULADOR LOCAL MIC] Reconocido ({modo}): '{texto_reconocido}'")
+                        if modo == "chat":
+                            user_input.value = texto_reconocido
+                            try: user_input.update()
+                            except: pass
+                            enviar_mensaje_simulacion(None)
+                        else:
+                            enviar_mensaje_simulacion_voz(texto_reconocido)
+                    else:
+                        play_sim_beep("cancel")
+                except sr.WaitTimeoutError:
+                    print("[SIMULADOR LOCAL MIC] Tiempo de espera agotado sin voz detectada")
+                    play_sim_beep("cancel")
+                except sr.UnknownValueError:
+                    print("[SIMULADOR LOCAL MIC] No se entendió el audio")
+                    play_sim_beep("cancel")
+                    mostrar_snack("No se entendió el audio, intenta de nuevo.", "#FFD700")
+                except Exception as ex_dict:
+                    print("[SIMULADOR LOCAL MIC] Excepción o cancelación:", ex_dict)
+                    play_sim_beep("cancel")
+                finally:
+                    sim_dictado_en_progreso[0] = False
+                    sim_stop_requested[0] = False
+                    if modo == "chat":
+                        btn_mic_sim_container.bgcolor = "#1E1E2E"
+                        btn_mic_sim_container.border = ft.Border.all(1.5, "#9D50BB")
+                        try: btn_mic_sim_container.update()
+                        except: pass
+                    else:
+                        btn_hablar_voz.bgcolor = "#1f6f43"
+                        btn_hablar_voz.text = "Hablar Ahora 🎙️"
+                        try: btn_hablar_voz.update()
+                        except: pass
+
+            # Botón de Micrófono Dedicado Push-to-Talk para el Simulador
+            def on_mic_sim_click(e):
+                if user_input.disabled:
+                    return
+                if sim_dictado_en_progreso[0]:
+                    sim_stop_requested[0] = True
+                    mostrar_snack("⏹️ Grabación detenida", "#FFD700")
+                    return
+                
+                mostrar_snack("🎙️ Escuchando... di tu respuesta al cliente", "#00FFFF")
+                threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
+
+            btn_mic_sim_icon = ft.IconButton(
+                icon=ft.Icons.MIC_ROUNDED,
+                icon_color="#00FFFF",
+                icon_size=20,
+                tooltip="Hablar por Micrófono 🎙️",
+                on_click=on_mic_sim_click,
+                disabled=True
+            )
+            btn_mic_sim_container = ft.Container(
+                content=btn_mic_sim_icon,
+                bgcolor="#1E1E2E",
+                border=ft.Border.all(1.5, "#9D50BB"),
+                border_radius=22,
+                width=44,
+                height=44,
+                alignment=ft.alignment.Alignment(0, 0),
+                tooltip="Hablar por Micrófono 🎙️"
             )
 
             vendedor_seleccionado_id = [None]
@@ -15499,8 +16246,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     ]
 
                 vendedor_dropdown.options = opciones
+                vendedor_voz_dropdown.options = list(opciones)
                 if opciones:
                     vendedor_dropdown.value = getattr(opciones[0], "key", None) or getattr(opciones[0], "value", None) or str(opciones[0])
+                    vendedor_voz_dropdown.value = getattr(opciones[0], "key", None) or getattr(opciones[0], "value", None) or str(opciones[0])
 
             cargar_vendedores_dropdown()
 
@@ -15517,6 +16266,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         border=ft.Border.all(1, "#333333")
                     )
                 )
+                try:
+                    sim_chat_column.scroll_to(offset=-1, duration=300)
+                except Exception: pass
                 page.update()
 
             def enviar_mensaje_simulacion(e):
@@ -15530,12 +16282,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 chat_history.append({"role": "user", "content": msg_txt})
                 agregar_mensaje_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
                 
-                system_prompt = f"""Eres un cliente real de Sunglass Hut en un roleplay de ventas. Tu perfil es: '{perfil_cliente_txt[0]}'.
-REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
-1. REACCIÓN ESTRICTA AL VENDEDOR: Responde ÚNICAMENTE a lo que el vendedor te acaba de decir en su último mensaje. Si el vendedor te ofrece probarte los lentes o ver una imagen polarizada, PRUÉBALOS y reacciona a los colores o el contraste.
-2. CERO REPETICIONES: NUNCA repitas frases o preguntas que ya dijiste en turnos anteriores.
-3. LENGUAJE NO VERBAL COHERENTE: Incluye siempre tus gestos y acciones físicas entre asteriscos (Ejemplo: *(El cliente se prueba las gafas frente al espejo)*).
-4. RESPUESTAS BREVES Y NATURALES: Escribe de 1 a 2 oraciones en español coloquial de tienda.
+                system_prompt = f"""Eres un cliente real en una tienda Sunglass Hut en México en un roleplay de ventas. Tu perfil es: '{perfil_cliente_txt[0]}'.
+REGLAS OBLIGATORIAS:
+1. MONEDA Y PRECIOS: Si mencionas dinero, presupuesto, descuentos o precios, DEBE ser SIEMPRE en Pesos Mexicanos ($ MXN o pesos, por ejemplo: $2,500 MXN, $3,500 a $5,000 pesos). ESTÁ TERMINANTEMENTE PROHIBIDO usar Euros (€) o Dólares ($ USD).
+2. REACCIÓN ESTRICTA AL VENDEDOR: Responde ÚNICAMENTE a lo que el vendedor te acaba de decir en su último mensaje. Si el vendedor te ofrece probarte los lentes o ver una imagen polarizada, PRUÉBALOS y reacciona a los colores o el contraste.
+3. CERO REPETICIONES: NUNCA repitas frases o preguntas que ya dijiste en turnos anteriores.
+4. LENGUAJE NO VERBAL COHERENTE: Incluye siempre tus gestos y acciones físicas entre asteriscos (Ejemplo: *(El cliente se prueba las gafas frente al espejo)*).
+5. RESPUESTAS BREVES Y NATURALES: Escribe de 1 a 2 oraciones en español mexicano natural de tienda.
 """
                 
                 mensajes_api = chat_history[-6:]
@@ -15551,6 +16304,13 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
 
             user_input.on_submit = enviar_mensaje_simulacion
             btn_enviar.on_click = enviar_mensaje_simulacion
+
+            # Registrar en active_sessions para recibir eventos de voz del simulador
+            for uid, sess in list(active_sessions.items()):
+                if sess.get("page") == page:
+                    sess["sim_user_input"] = user_input
+                    sess["sim_enviar_fn"] = enviar_mensaje_simulacion
+                    sess["btn_mic_simulador_container"] = btn_mic_sim_container
 
             eval_detail_card = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
 
@@ -15607,8 +16367,11 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                 user_input.value = ""
                 user_input.disabled = True
                 btn_enviar.disabled = True
+                btn_mic_sim_icon.disabled = True
                 btn_finalizar.disabled = True
                 btn_iniciar.disabled = False
+                sim_estado_texto.value = "👂 Esperando inicio del roleplay..."
+                sim_estado_texto.color = "#8888AA"
                 cargar_historial_evaluaciones()
                 page.update()
 
@@ -15632,45 +16395,41 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                             "← Volver al Simulador",
                             icon=ft.Icons.ARROW_BACK,
                             on_click=volver_al_simulador,
-                            bgcolor="#2A1B4E",
+                            bgcolor="#333333",
                             color="white",
                             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
-                        ),
-                        ft.Container(
-                            content=ft.Text(f"SCORE: {score_num}/100 📊", color="white", weight="bold", size=15),
-                            bgcolor=badge_bg,
-                            border=ft.Border.all(1.5, badge_color),
-                            padding=ft.Padding(left=12, top=6, right=12, bottom=6),
-                            border_radius=8
                         )
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ]),
                     ft.Container(
                         content=ft.Column([
-                            ft.Text(f"👤 Vendedor: {nombre_vendedor}", color="#00FFFF", weight="bold", size=15),
-                            ft.Text(f"🎭 Perfil: {perfil}" if perfil else "🎭 Simulación de Ventas", color="white", size=13),
-                            ft.Text(f"📅 Fecha: {fecha}", color="#aaaaaa", size=11) if fecha else ft.Container()
-                        ], spacing=3),
-                        bgcolor="#1E1E2E",
-                        padding=12,
-                        border_radius=8,
-                        border=ft.Border.all(1, "#333344")
+                            ft.Row([
+                                ft.Text("AUDITORÍA DE VENTA Y NEUROVENTAS", color="#00FFFF", weight="bold", size=16),
+                                ft.Container(
+                                    content=ft.Text(f"SCORE: {score_num}/100", color="white", weight="bold", size=15),
+                                    bgcolor=badge_bg,
+                                    padding=ft.Padding(left=12, top=6, right=12, bottom=6),
+                                    border_radius=8,
+                                    border=ft.Border.all(1.5, badge_color)
+                                )
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center"),
+                            ft.Divider(color="#333333", height=15),
+                            ft.Row([
+                                ft.Text(f"👤 Asesor: {nombre_vendedor}", color="white", weight="bold", size=13),
+                                ft.Text(f"📅 Fecha: {fecha}", color="#888888", size=12),
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            ft.Text(f"🎯 Escenario / Perfil: {perfil}", color="#D8B4FE", size=12, italic=True),
+                        ], spacing=8),
+                        bgcolor="#141424",
+                        padding=15,
+                        border_radius=10,
+                        border=ft.Border.all(1, "#9D50BB")
                     ),
-                    ft.Divider(height=10, color="#444466"),
                     ft.Container(
                         content=md_content,
-                        bgcolor="#141424",
-                        padding=14,
+                        bgcolor="#111111",
+                        padding=15,
                         border_radius=10,
-                        border=ft.Border.all(1, "#2A1B4E")
-                    ),
-                    ft.Container(height=10),
-                    ft.ElevatedButton(
-                        "← Regresar a la lista / Iniciar nuevo roleplay",
-                        icon=ft.Icons.CHECK_CIRCLE,
-                        on_click=volver_al_simulador,
-                        bgcolor="#6E48AA",
-                        color="white",
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+                        border=ft.Border.all(1, "#333333")
                     )
                 ])
 
@@ -15679,41 +16438,21 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                 page.update()
 
             def finalizar_simulacion_click(e):
+                if len(chat_history) < 2:
+                    mostrar_snack("La simulación debe tener al menos una interacción del vendedor.", "red")
+                    return
+                
+                mostrar_snack("Analizando auditoría de neuroventas y protocolo...", "#00FFFF")
                 user_input.disabled = True
                 btn_enviar.disabled = True
+                btn_mic_sim_icon.disabled = True
                 btn_finalizar.disabled = True
                 page.update()
-                
-                agregar_mensaje_chat("Sistema", "Analizando el desempeño de la simulación de venta. Por favor espera...", ft.Icons.INFO, "#00FFFF")
-                
-                perfil_lower = perfil_cliente_txt[0].lower()
-                es_caso_servicio = "cambio" in perfil_lower or "reclamando" in perfil_lower or "ticket" in perfil_lower
-                es_caso_seguridad = "prevención" in perfil_lower or "robo" in perfil_lower or "cambiazo" in perfil_lower or "distracción" in perfil_lower
-                
-                if es_caso_servicio:
-                    eval_prompt = """Analiza la siguiente conversación de roleplay de servicio al cliente en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente que viene a realizar un CAMBIO de producto sin ticket de compra o presenta una queja.
-                    Evalúa el desempeño del vendedor en base a estos puntos específicos de servicio al cliente (100 Puntos Máx):
-                    1. Trato al cliente (Amabilidad, escucha activa, templanza y empatía ante la molestia del cliente) (20 pts).
-                    2. Manejo de objeciones y políticas (¿Explicó claramente las políticas de devolución/cambios sin ticket y dio alternativas viables?) (20 pts).
-                    3. Búsqueda de soluciones y CRM (¿Ofreció buscar en el sistema de ventas con los datos del cliente, correo electrónico o ID de transacción?) (20 pts).
-                    4. Protocolo de atención ante conflictos (¿Evitó discutir y mantuvo una postura profesional y resolutiva?) (20 pts).
-                    5. Cierre formal del caso (¿Dejó claros los pasos a seguir o canalizó formalmente el caso a soporte/gerencia de forma educada?) (20 pts).
-                    
-                    NOTA IMPORTANTE: Al ser un caso de reclamación/servicio, NO penalices ni exijas venta cruzada (UPT) o el cierre de una venta comercial.
-                    
-                    Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
-                    SCORE: [Número]
-                    [Salto de línea]
-                    
-                    FORMATO OBLIGATORIO (Usa títulos y viñetas claras con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
-                    Para cada punto indica:
-                    - ✅ o ❌ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Comentario explicativo y qué debió hacer/decir si faltó algo.
-                    
-                    Al final incluye:
-                    ### 🏆 Fortalezas Detectadas
-                    ### 🎯 Consejos Clave para el Próximo Servicio
-                    """
-                elif es_caso_seguridad:
+
+                perfil_nombre = cliente_dropdown.value or "Cliente General"
+                es_caso_seguridad = "🛡️" in perfil_nombre
+
+                if es_caso_seguridad:
                     eval_prompt = """Analiza la siguiente conversación de roleplay de Prevención de Robo y Seguridad Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente sospechoso o grupo distractor.
                     Evalúa el desempeño del vendedor según los Protocolos de Seguridad Sunglass Hut (100 Puntos Máx):
                     1. Control de Huecos y Bandeja (¿Mantuvo el límite de máximo 3 armazones en bandeja a la vez?) (20 pts).
@@ -15736,18 +16475,25 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                     """
                 else:
                     eval_prompt = """Analiza la siguiente conversación de roleplay de venta en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente.
-                    Evalúa el desempeño del vendedor en base a los 12 Criterios Oficiales de Auditoría de Tienda Sunglass Hut (100 Puntos Máx):
+                    Evalúa el desempeño del vendedor en base a los Criterios Oficiales de Auditoría de Tienda y Neuroventas Sunglass Hut (100 Puntos Máx):
+                    
+                    ⚠️ REGLA DE DETECCIÓN DE FRASES PROHIBIDAS (ANTI-VENTAS):
+                    - Si el vendedor utilizó frases como 'pruébeselo sin compromiso', '¿le puedo ayudar en algo?', 'está caro' o 'es lo más barato':
+                      PENALIZA severamente e incluye una alerta destacada:
+                      '❌ ALERTA DE NEUROVENTAS: Detectada frase prohibida (\"sin compromiso\" / \"ayudar en algo\"). En venta de lujo esto desvaloriza el producto y fomenta no comprar. La frase recomendada de reemplazo es: \"Pruébeselas frente al espejo para que sienta el confort y la ligereza del armazón\".'
+
+                    CRITERIOS DE AUDITORÍA (100 PTS TOTAL):
                     1. Presentación del vendedor por nombre (10 pts)
                     2. Pedir/Indagar el nombre del cliente (10 pts)
                     3. Rompehielos y Apertura (10 pts)
                     4. Preguntas de sondeo abiertas y cerradas (10 pts)
                     5. Invitación a ponerse/probarse las gafas (10 pts)
-                    6. Demostración y explicación del polarizado/Chromance (10 pts)
+                    6. Demostración y explicación del polarizado/Chromance/UV400 (10 pts)
                     7. Ofrecer el Ajuste Perfecto (5 pts)
-                    8. Actitud de servicio y Regla 80/20 (10 pts)
+                    8. Actitud de servicio, cortesía y Regla 80/20 (10 pts)
                     9. Ofrecer Kit de Limpieza y explicar el beneficio técnico (10 pts)
                     10. Venta Cruzada / UPT (tratar de vender 2do par) (10 pts)
-                    11. Despedida por el nombre del cliente (10 pts)
+                    11. Despedida por el nombre del cliente (5 pts)
                     12. Invitar a regresar a la tienda (compre o no) (5 pts)
 
                     Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
@@ -15755,11 +16501,12 @@ REGLAS OBLIGATORIAS Y LÓGICA DE CONVERSACIÓN REALISTA:
                     [Salto de línea]
                     
                     FORMATO OBLIGATORIO (Usa viñetas y títulos claros con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
-                    Desglosa los 12 criterios uno por uno:
+                    Desglosa los criterios uno por uno:
                     - Si se cumplió: ✅ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Breve comentario positivo.
                     - Si se omitió o falló: ❌ [0 / Puntos Posibles] Nombre del Criterio: Explica claramente qué faltó y da un consejo práctico específico de qué debió decir o hacer el vendedor.
 
                     Al final incluye:
+                    ### 🚫 Análisis de Lenguaje y Frases a Evitar
                     ### 🏆 Fortalezas Detectadas
                     ### 🎯 Plan de Acción y Consejos Clave para la Próxima Simulación
                     """
@@ -15823,15 +16570,24 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                 v_val = vendedor_dropdown.value
                 vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
                 perfil_cliente_txt[0] = cliente_dropdown.value
+                sim_cliente_titulo.value = "Cliente en Tienda Sunglass Hut 🕶️"
                 
                 chat_history.clear()
                 sim_chat_column.controls.clear()
+
+                # Vincular referencias en active_sessions
+                for uid, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess["sim_user_input"] = user_input
+                        sess["sim_enviar_fn"] = enviar_mensaje_simulacion
+                        sess["btn_mic_simulador_container"] = btn_mic_sim_container
                 
-                system_prompt = f"""Eres un cliente que entra a la tienda Sunglass Hut. Tu perfil es: '{perfil_cliente_txt[0]}'.
-REGLAS PARA TU MENSAJE INICIAL:
-1. NUNCA digas que sostienes o tienes la gafa en la mano. Lo realista es que entras caminando a la tienda, te acercas a una vitrina o exhibidor y observas un armazón que te llamó la atención.
-2. Incluye siempre tu acción física de entrada entre comillas o asteriscos (Ejemplo: *(El cliente entra a la tienda, camina hacia el exhibidor y observa un armazón en la vitrina)*).
-3. Escribe tu saludo o comentario inicial breve sobre lo que ves (máximo 2 oraciones).
+                system_prompt = f"""Eres un cliente que entra a una tienda Sunglass Hut en México. Tu perfil es: '{perfil_cliente_txt[0]}'.
+REGLAS OBLIGATORIAS:
+1. MONEDA Y PRECIOS: Si mencionas dinero, precios o presupuesto, usa EXCLUSIVAMENTE Pesos Mexicanos ($ MXN o pesos). NUNCA USES EUROS (€) NI DÓLARES. Los presupuestos son realistas para México (ejemplo: $2,000 a $4,500 pesos).
+2. NUNCA digas que sostienes o tienes la gafa en la mano. Lo realista es que entras caminando a la tienda, te acercas a una vitrina o exhibidor y observas un armazón que te llamó la atención.
+3. Incluye siempre tu acción física de entrada entre asteriscos (Ejemplo: *(El cliente entra a la tienda, camina hacia el exhibidor y observa un armazón en la vitrina)*).
+4. Escribe tu saludo o comentario inicial breve sobre lo que ves (máximo 2 oraciones en español mexicano natural).
 """
                 messages = [{"role": "user", "content": "Hola, buenas tardes."}]
                 
@@ -15843,6 +16599,7 @@ REGLAS PARA TU MENSAJE INICIAL:
                     chat_area.visible = True
                     user_input.disabled = False
                     btn_enviar.disabled = False
+                    btn_mic_sim_icon.disabled = False
                     btn_finalizar.disabled = False
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
                 else:
@@ -15856,6 +16613,7 @@ REGLAS PARA TU MENSAJE INICIAL:
                 user_input.value = ""
                 user_input.disabled = True
                 btn_enviar.disabled = True
+                btn_mic_sim_icon.disabled = True
                 btn_finalizar.disabled = True
                 btn_iniciar.disabled = False
                 page.update()
@@ -15891,10 +16649,284 @@ REGLAS PARA TU MENSAJE INICIAL:
 
             chat_area = ft.Column([
                 sim_chat_column,
-                ft.Row([user_input, btn_enviar], spacing=5),
+                ft.Row([user_input, btn_mic_sim_container, btn_enviar], spacing=6, vertical_alignment="center"),
                 ft.Container(height=10),
                 ft.Row([btn_finalizar, btn_cancelar], spacing=10, wrap=True)
             ], visible=False, expand=True)
+
+            # --- MODALIDAD 2: CONVERSACIÓN POR VOZ EN VIVO 🎙️ (ROLEPLAY 100% VOZ) ---
+            voz_chat_history = []
+            sim_voz_chat_column = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
+
+            avatar_voz_img = ft.Image(
+                src=avatar_sim_src,
+                width=85,
+                height=85,
+                border_radius=42,
+                fit="cover"
+            )
+            avatar_voz_container = ft.Container(
+                content=avatar_voz_img,
+                width=96,
+                height=96,
+                border_radius=48,
+                border=ft.Border.all(3, "#00FFFF"),
+                bgcolor="#141424",
+                alignment=ft.alignment.Alignment(0, 0),
+                animate=300
+            )
+            sim_voz_estado_texto = ft.Text("👂 Listo para iniciar la conversación de voz", color="#8888AA", size=13, italic=True)
+            sim_voz_cliente_titulo = ft.Text("Cliente Simulado Sunglass Hut", color="#FFD700", weight="bold", size=14)
+
+            avatar_voz_card = ft.Container(
+                content=ft.Row([
+                    avatar_voz_container,
+                    ft.Column([
+                        sim_voz_cliente_titulo,
+                        sim_voz_estado_texto,
+                        ft.Row([
+                            ft.Icon(ft.Icons.MIC, color="#00FFAA", size=14),
+                            ft.Text("Modo 100% Voz en Vivo • Diálogo Continuo Manos Libres", color="#00FFAA", size=11, weight="bold")
+                        ], spacing=5)
+                    ], spacing=3, expand=True)
+                ], spacing=14, vertical_alignment="center"),
+                bgcolor="#16162C",
+                padding=12,
+                border_radius=10,
+                border=ft.Border.all(1.5, "#00FFFF")
+            )
+
+            def activar_mic_voz_automatico():
+                try:
+                    if not sim_dictado_en_progreso[0]:
+                        threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
+                except Exception as ex_act:
+                    print("Error activar_mic_voz_automatico:", ex_act)
+
+            def hablar_ahora_voz_click(e):
+                if sim_dictado_en_progreso[0]:
+                    sim_stop_requested[0] = True
+                    mostrar_snack("⏹️ Grabación detenida", "#FFD700")
+                    return
+                mostrar_snack("🎙️ Micrófono activado. Di tu respuesta.", "#00FFFF")
+                activar_mic_voz_automatico()
+
+            def agregar_mensaje_voz_chat(autor, texto, avatar_icon, color_borde):
+                sim_voz_chat_column.controls.append(
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Icon(avatar_icon, color=color_borde),
+                            ft.Text(f"{autor}: {texto}", color="white", expand=True, selectable=True)
+                        ], spacing=10, vertical_alignment="start"),
+                        bgcolor="#141424" if autor == "Cliente" else "#111111",
+                        padding=10,
+                        border_radius=8,
+                        border=ft.Border.all(1, "#333333")
+                    )
+                )
+                try:
+                    sim_voz_chat_column.scroll_to(offset=-1, duration=300)
+                except Exception: pass
+                try: page.update()
+                except: pass
+
+            def enviar_mensaje_simulacion_voz(msg_txt):
+                if not msg_txt or not str(msg_txt).strip():
+                    return
+                msg_txt = str(msg_txt).strip()
+                voz_chat_history.append({"role": "user", "content": msg_txt})
+                agregar_mensaje_voz_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
+                
+                sim_voz_estado_texto.value = "🧠 Analizando tu argumento de ventas..."
+                sim_voz_estado_texto.color = "#9D50BB"
+                avatar_voz_container.border = ft.Border.all(3.5, "#9D50BB")
+                avatar_voz_container.bgcolor = "#141424"
+                btn_hablar_voz.bgcolor = "#1f6f43"
+                btn_hablar_voz.text = "Hablar Ahora 🎙️"
+                try: page.update()
+                except: pass
+
+                system_prompt = f"""Eres un cliente real de Sunglass Hut en México en un roleplay de ventas hablado por voz. Tu perfil es: '{perfil_cliente_txt[0]}'.
+REGLAS OBLIGATORIAS:
+1. MONEDA Y PRECIOS: Si mencionas precios o presupuesto, usa EXCLUSIVAMENTE Pesos Mexicanos ($ MXN o pesos). PROHIBIDO usar Euros (€) o Dólares.
+2. Responde de 1 a 2 oraciones breves y naturales en español mexicano para ser escuchadas por voz.
+3. NUNCA repitas objeciones que ya dijiste.
+4. Si el vendedor te ofrece probarte los lentes o te explica las micas, reacciona a lo que te dijo.
+"""
+                mensajes_api = voz_chat_history[-6:]
+                ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
+                if not ok or not respuesta:
+                    respuesta = generar_respuesta_simulador_fallback(mensajes_api, system_prompt, modo="simulador")
+
+                voz_chat_history.append({"role": "assistant", "content": respuesta})
+                agregar_mensaje_voz_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                
+                sim_voz_estado_texto.value = "🗣️ Cliente hablando por voz..."
+                sim_voz_estado_texto.color = "#FFD700"
+                avatar_voz_container.border = ft.Border.all(3.5, "#FFD700")
+                avatar_voz_container.bgcolor = "#FFD70022"
+                try: page.update()
+                except: pass
+
+                reproducir_voz_cliente(respuesta, on_finish_callback=activar_mic_voz_automatico)
+
+            def iniciar_simulacion_voz_click(e):
+                if not vendedor_voz_dropdown.value:
+                    mostrar_snack("Por favor selecciona un vendedor", "red")
+                    return
+                if not cliente_voz_dropdown.value:
+                    mostrar_snack("Por favor selecciona un perfil de cliente", "red")
+                    return
+                
+                v_val = vendedor_voz_dropdown.value
+                vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
+                perfil_cliente_txt[0] = cliente_voz_dropdown.value
+                sim_voz_cliente_titulo.value = "Cliente en Tienda Sunglass Hut 🕶️"
+                
+                voz_chat_history.clear()
+                sim_voz_chat_column.controls.clear()
+
+                sess_uid = user_info.get("id", 1)
+                active_sessions[sess_uid] = active_sessions.get(sess_uid, {})
+                active_sessions[sess_uid]["sim_voz_enviar_fn"] = enviar_mensaje_simulacion_voz
+                active_sessions[sess_uid]["sim_modo_activo"] = "voz"
+                active_sessions[sess_uid]["page"] = page
+                active_sessions[str(sess_uid)] = active_sessions[sess_uid]
+
+                system_prompt = f"""Eres un cliente que entra a una tienda Sunglass Hut en México. Tu perfil es: '{perfil_cliente_txt[0]}'.
+REGLAS OBLIGATORIAS:
+1. MONEDA Y PRECIOS: Usa EXCLUSIVAMENTE Pesos Mexicanos ($ MXN o pesos). PROHIBIDO usar Euros (€) o Dólares.
+2. Di un saludo inicial breve y realista al entrar a la tienda (máximo 2 oraciones en español mexicano).
+3. No menciones que tienes las gafas puestas. Di qué tipo de armazón o vitrina estás viendo.
+"""
+                messages = [{"role": "user", "content": "Hola, buenas tardes."}]
+                ok, respuesta, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=12, modo="simulador")
+                if ok and respuesta:
+                    voz_chat_history.append({"role": "user", "content": "Hola, buenas tardes."})
+                    voz_chat_history.append({"role": "assistant", "content": respuesta})
+                    config_area_voz.visible = False
+                    chat_area_voz.visible = True
+                    btn_hablar_voz.disabled = False
+                    btn_finalizar_voz.disabled = False
+                    agregar_mensaje_voz_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                    reproducir_voz_cliente(respuesta, on_finish_callback=activar_mic_voz_automatico)
+                else:
+                    mostrar_snack(f"Error de conexión con la IA ({status})", "red")
+
+            def cancelar_simulacion_voz_click(e):
+                config_area_voz.visible = True
+                chat_area_voz.visible = False
+                voz_chat_history.clear()
+                sim_voz_chat_column.controls.clear()
+                btn_hablar_voz.disabled = True
+                btn_finalizar_voz.disabled = True
+                sim_voz_estado_texto.value = "👂 Listo para iniciar la conversación de voz"
+                sim_voz_estado_texto.color = "#8888AA"
+                avatar_voz_container.border = ft.Border.all(3, "#00FFFF")
+                avatar_voz_container.bgcolor = "#141424"
+                page.update()
+
+            def finalizar_simulacion_voz_click(e):
+                if len(voz_chat_history) < 2:
+                    mostrar_snack("La conversación debe tener al menos una intervención por voz del vendedor.", "red")
+                    return
+                mostrar_snack("Analizando auditoría de neuroventas y conversación de voz...", "#00FFFF")
+                btn_hablar_voz.disabled = True
+                btn_finalizar_voz.disabled = True
+                page.update()
+
+                perfil_nombre = cliente_voz_dropdown.value or "Cliente General"
+                eval_prompt = f"""Analiza la siguiente conversación de roleplay 100% de voz entre un Asesor de Ventas Sunglass Hut y un Cliente ('{perfil_nombre}').
+Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de frases prohibidas de neuroventas (como 'sin compromiso' o 'ayudar en algo'):
+"""
+                for msg in voz_chat_history:
+                    rol_label = "VENDEDOR" if msg['role'] == 'user' else "CLIENTE"
+                    eval_prompt += f"\n{rol_label}: {msg['content']}"
+
+                messages = [{"role": "user", "content": eval_prompt}]
+                system_prompt = f"""Eres un coach y auditor de ventas de Sunglass Hut. Evalúa rigurosamente en Markdown iniciando con 'SCORE: [Número 0-100]'. Manual de referencia: {MANUAL_NEUROVENTAS_LUXO}"""
+
+                ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15, modo="evaluacion")
+                if ok and eval_text:
+                    score_val = 75
+                    match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
+                    if match_score:
+                        score_val = int(match_score.group(1))
+                    
+                    nom_vend_txt = "Asesor de Ventas"
+                    try:
+                        for op in vendedor_voz_dropdown.options:
+                            if op.key == vendedor_voz_dropdown.value:
+                                nom_vend_txt = op.text
+                                break
+                    except Exception: pass
+
+                    try:
+                        v_id_val = int(vendedor_voz_dropdown.value) if vendedor_voz_dropdown.value and str(vendedor_voz_dropdown.value).isdigit() else 1
+                        db = conectar_db()
+                        if db:
+                            cursor = db.cursor()
+                            cursor.execute("""
+                                INSERT INTO evaluaciones_simulador (ID_Vendedor, Cliente_Simulado, Score_Evaluacion, Feedback_Detallado)
+                                VALUES (%s, %s, %s, %s)
+                            """, (v_id_val, f"🎙️ [Voz] {cliente_voz_dropdown.value}", score_val, eval_text))
+                            db.commit()
+                            db.close()
+                    except Exception as ex_db_eval:
+                        print("Error guardando eval voz en DB:", ex_db_eval)
+
+                    from datetime import datetime
+                    fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, f"🎙️ [Voz en Vivo] {cliente_voz_dropdown.value}", fecha_ahora)
+                else:
+                    mostrar_snack(f"Error de conexión al evaluar voz ({status})", "red")
+
+            btn_iniciar_voz = ft.ElevatedButton(
+                "Iniciar Conversación por Voz 🎙️",
+                on_click=iniciar_simulacion_voz_click,
+                bgcolor="#6E48AA",
+                color="white",
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+            )
+            btn_hablar_voz = ft.ElevatedButton(
+                "Hablar Ahora 🎙️",
+                on_click=hablar_ahora_voz_click,
+                bgcolor="#1f6f43",
+                color="white",
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                disabled=True
+            )
+            btn_finalizar_voz = ft.ElevatedButton(
+                "Finalizar y Evaluar 📊",
+                on_click=finalizar_simulacion_voz_click,
+                bgcolor="#FF4500",
+                color="white",
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+                disabled=True
+            )
+            btn_cancelar_voz = ft.ElevatedButton(
+                "Cancelar / Salir ✖️",
+                on_click=cancelar_simulacion_voz_click,
+                bgcolor="#333333",
+                color="white",
+                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+            )
+
+            config_area_voz = ft.Column([
+                ft.Row([vendedor_voz_dropdown, cliente_voz_dropdown], spacing=10, wrap=True),
+                ft.Container(height=10),
+                btn_iniciar_voz
+            ], visible=True)
+
+            chat_area_voz = ft.Column([
+                avatar_voz_card,
+                ft.Container(height=5),
+                sim_voz_chat_column,
+                ft.Container(height=10),
+                ft.Row([btn_hablar_voz, btn_finalizar_voz, btn_cancelar_voz], spacing=10, wrap=True)
+            ], visible=False, expand=True)
+
+            tab_voz = ft.Column([config_area_voz, chat_area_voz], expand=True)
 
             eval_history_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
             
@@ -16081,6 +17113,7 @@ REGLAS PARA TU MENSAJE INICIAL:
 
                 if dropdown_options:
                     cliente_dropdown.options = dropdown_options
+                    cliente_voz_dropdown.options = list(dropdown_options)
                 page.update()
 
             def abrir_modal_nuevo_perfil(e):
@@ -16220,14 +17253,15 @@ Ejemplo:
             tabs = ft.Tabs(
                 selected_index=0,
                 animation_duration=300,
-                length=3,
+                length=4,
                 expand=True,
                 content=ft.Column(
                     expand=True,
                     controls=[
                         ft.TabBar(
                             tabs=[
-                                ft.Tab(label="Iniciar Simulador"),
+                                ft.Tab(label="Roleplay Chat (Texto / Mic)"),
+                                ft.Tab(label="Conversación por Voz 🎙️"),
                                 ft.Tab(label="Historial de Avance"),
                                 ft.Tab(label="Gestión de Perfiles 👥")
                             ]
@@ -16236,6 +17270,7 @@ Ejemplo:
                             expand=True,
                             controls=[
                                 tab_simulacion,
+                                tab_voz,
                                 tab_historial,
                                 tab_perfiles
                             ]
@@ -16623,7 +17658,7 @@ Ejemplo:
                     if os.path.exists(full_p):
                         ticket_img_widget = ft.Column([
                             ft.Text("🧾 Foto del Ticket Escaneado:", color="#00FFFF", weight="bold", size=12),
-                            ft.Image(src=full_p, width=280, height=350, fit=ft.ImageFit.CONTAIN, border_radius=8)
+                            ft.Image(src=full_p, width=280, height=350, fit="contain", border_radius=8)
                         ], spacing=6)
 
                 dialog = ft.AlertDialog(
@@ -16726,7 +17761,7 @@ Ejemplo:
                     if os.path.exists(full_p):
                         ticket_img_widget = ft.Column([
                             ft.Text("🧾 Foto del Ticket Escaneado:", color="#00FFFF", weight="bold", size=12),
-                            ft.Image(src=full_p, width=280, height=350, fit=ft.ImageFit.CONTAIN, border_radius=8)
+                            ft.Image(src=full_p, width=280, height=350, fit="contain", border_radius=8)
                         ], spacing=6)
 
                 dialog = ft.AlertDialog(
@@ -20651,6 +21686,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_catalogo_upc = ft.TextButton(
+            content=ft.Row([ft.Text("🔍", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Catálogo UPCs 🔍", "UPC Catalog 🔍", "Catalogue UPC 🔍", "Catalogo UPC 🔍", "UPC 目录 🔍"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("catalogo_upc"),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_garantias = ft.TextButton(
             content=ft.Row([ft.Text("👓", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Garantías 👓", "Warranties 👓", "Garanties 👓", "Garanzie 👓", "保修 👓"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("garantias"),
@@ -20818,7 +21859,7 @@ Ejemplo:
                     pass
             all_btn_tuples = [
                 (btn_chat, "chat"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
-                (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_garantias, "garantias"), 
+                (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_catalogo_upc, "catalogo_upc"), (btn_garantias, "garantias"), 
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
                 (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_polar, "polar"), (btn_enfoque, "enfoque_diario"),
@@ -20851,6 +21892,11 @@ Ejemplo:
                     if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
+                        elif vista == "catalogo_upc":
+                            import catalogo_upc_view
+                            main_views_cache["catalogo_upc"] = catalogo_upc_view.build_catalogo_upc_view(
+                                page, user_info=user_info, conectar_db_fn=conectar_db, seleccionar_archivo_async=seleccionar_archivo_async
+                            )
                         elif vista == "panamericano":
                             import panamericano_view
                             main_views_cache["panamericano"] = panamericano_view.build_panamericano_view(
@@ -21121,6 +22167,7 @@ Ejemplo:
                 btn_operacion_diaria.content.controls[1].value = tr("Aperturas y Cierres 🔑", "Openings & Closings 🔑", "Ouvertures & Fermetures 🔑", "Aperture & Chiusure 🔑", "开门与关门 🔑")
                 btn_checklists.content.controls[1].value = tr("Checklists 📋", "Checklists 📋", "Listes 📋", "Liste 📋", "任务清单 📋")
                 btn_manuales.content.controls[1].value = tr("Manuales 📚", "Manuals 📚", "Manuels 📚", "Manuali 📚", "手册 📚")
+                btn_catalogo_upc.content.controls[1].value = tr("Catálogo UPCs 🔍", "UPC Catalog 🔍", "Catalogue UPC 🔍", "Catalogo UPC 🔍", "UPC 目录 🔍")
                 btn_garantias.content.controls[1].value = tr("Garantías 👓", "Warranties 👓", "Garanties 👓", "Garanzie 👓", "保修 👓")
                 btn_tareas.content.controls[1].value = tr("Tareas 📋", "Tasks 📋", "Tâches 📋", "Attività 📋", "任务 📋")
                 btn_campanas.content.controls[1].value = tr("Campañas 📸", "Campaigns 📸", "Campagnes 📸", "Campagne 📸", "活动 📸")
@@ -21226,7 +22273,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
