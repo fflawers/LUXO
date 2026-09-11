@@ -4938,42 +4938,43 @@ def main(page: ft.Page):
             if user_info and user_info.get("id"):
                 GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
-            # Reproducir SAPI nativo en Windows directamente
-            def reproducir_sapi_thread():
-                try:
-                    import platform
-                    if platform.system() == "Windows":
-                        import win32com.client
-                        import pythoncom
-                        pythoncom.CoInitialize()
-                        speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                        active_sapi_instance[0] = speaker
-                        try:
-                            voices = speaker.GetVoices()
-                            for v in voices:
-                                desc = v.GetDescription().lower()
-                                if g_actual == "female" and any(fn in desc for fn in ["sabina", "helena", "zira", "maria", "female"]):
-                                    speaker.Voice = v
-                                    break
-                                elif g_actual == "male" and any(mn in desc for mn in ["raul", "pablo", "jorge", "david", "male"]):
-                                    speaker.Voice = v
-                                    break
-                        except Exception: pass
-                        speaker.Speak(clean_text, 0)
-                    elif platform.system() == "Darwin":
-                        import subprocess
-                        proc = subprocess.Popen(["say", clean_text])
-                        active_sapi_instance[0] = proc
-                        proc.wait()
-                except Exception as ex_spk:
-                    print("Error en reproductor nativo:", ex_spk)
-                finally:
-                    stop_current_speak()
+            # Solo reproducir SAPI nativo en Windows como respaldo si no existe el archivo MP3 neural
+            if not (os.path.exists(filepath) and os.path.getsize(filepath) > 0):
+                def reproducir_sapi_thread():
+                    try:
+                        import platform
+                        if platform.system() == "Windows":
+                            import win32com.client
+                            import pythoncom
+                            pythoncom.CoInitialize()
+                            speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                            active_sapi_instance[0] = speaker
+                            try:
+                                voices = speaker.GetVoices()
+                                for v in voices:
+                                    desc = v.GetDescription().lower()
+                                    if g_actual == "female" and any(fn in desc for fn in ["sabina", "helena", "zira", "maria", "female"]):
+                                        speaker.Voice = v
+                                        break
+                                    elif g_actual == "male" and any(mn in desc for mn in ["raul", "pablo", "jorge", "david", "male"]):
+                                        speaker.Voice = v
+                                        break
+                            except Exception: pass
+                            speaker.Speak(clean_text, 0)
+                        elif platform.system() == "Darwin":
+                            import subprocess
+                            proc = subprocess.Popen(["say", clean_text])
+                            active_sapi_instance[0] = proc
+                            proc.wait()
+                    except Exception as ex_spk:
+                        print("Error en reproductor nativo:", ex_spk)
+                    finally:
+                        stop_current_speak()
 
-            try:
-                t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
-                t_speak.start()
-            except Exception: pass
+                try:
+                    t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
+                    t_speak.start()
+                except Exception: pass
 
         except Exception as e:
             print("ERROR STARTING SPEAK CLIENT:", e)
