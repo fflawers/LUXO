@@ -12,3 +12,4 @@ SpeechRecognition
 pyaudio
 python-multipart
 gTTS
+edge-tts

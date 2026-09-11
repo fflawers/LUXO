@@ -833,8 +833,13 @@ def configurar_rutas_fastapi(app):
 
     @app.get("/api/tts/poll")
     def tts_poll_route(user_id: str = "1", last_id: str = ""):
+        import time
+        now = time.time()
         evt = GLOBAL_WEB_TTS_EVENTS.get(str(user_id)) or GLOBAL_WEB_TTS_EVENTS.get("all")
         if evt and evt.get("id") != last_id:
+            evt_time = evt.get("timestamp", 0)
+            if evt_time and (now - evt_time > 30):
+                return {"action": "none"}
             return evt
         return {"action": "none"}
 
@@ -1056,7 +1061,7 @@ def configurar_rutas_fastapi(app):
                                 if (txt) {
                                     playToneSim(2);
                                     const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), {{ method: 'POST' }});
+                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
                             rSim.onerror = function(ev) { 
@@ -1424,30 +1429,74 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    window.luxoSpeakWebSpeech = function(text) {
-                        if (!('speechSynthesis' in window) || !text) return;
+                    let _luxoCachedVoices = [];
+                    function _refreshLuxoVoices() {
+                        if ('speechSynthesis' in window) {
+                            _luxoCachedVoices = window.speechSynthesis.getVoices() || [];
+                        }
+                    }
+                    _refreshLuxoVoices();
+                    if ('speechSynthesis' in window) {
+                        window.speechSynthesis.onvoiceschanged = _refreshLuxoVoices;
+                    }
+
+                    window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, fallbackUrl) {
+                        if (!('speechSynthesis' in window) || !text) {
+                            if (fallbackUrl) {
+                                luxoAudioEl = new Audio(fallbackUrl);
+                                luxoAudioEl.play().catch(function(){});
+                            }
+                            return;
+                        }
                         try {
                             window.speechSynthesis.cancel();
+                            _refreshLuxoVoices();
                             const u = new SpeechSynthesisUtterance(text);
-                            u.lang = "es-MX";
-                            u.rate = 1.0;
-                            u.pitch = 1.0;
-                            const voices = window.speechSynthesis.getVoices();
-                            if (voices && voices.length > 0) {
-                                const vEsp = voices.find(v => (v.lang && (v.lang.startsWith('es') || v.lang.includes('ES') || v.lang.includes('MX'))));
-                                if (vEsp) u.voice = vEsp;
+                            const vId = (voiceId || '').toLowerCase();
+                            const voices = (_luxoCachedVoices.length > 0) ? _luxoCachedVoices : (window.speechSynthesis.getVoices() || []);
+
+                            if (vId === 'helena') {
+                                u.lang = "es-MX";
+                                u.pitch = 1.35;
+                                u.rate = 1.05;
+                                const vM = voices.find(v => (v.lang && (v.lang === 'es-MX' || v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('paul') || v.name.toLowerCase().includes('zira'))));
+                                if (vM) u.voice = vM;
+                            } else if (vId === 'sabina') {
+                                u.lang = "es-ES";
+                                u.pitch = 1.65;
+                                u.rate = 1.15;
+                                const vS = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('female'))));
+                                if (vS) u.voice = vS;
+                            } else if (vId === 'jorge') {
+                                u.lang = "es-MX";
+                                u.pitch = 0.60;
+                                u.rate = 0.90;
+                                const vJ = voices.find(v => (v.lang && (v.lang === 'es-MX' || v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('male'))));
+                                if (vJ) u.voice = vJ;
+                            } else if (vId === 'alonso') {
+                                u.lang = "es-ES";
+                                u.pitch = 0.40;
+                                u.rate = 0.85;
+                                const vA = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('enrique') || v.name.toLowerCase().includes('male'))));
+                                if (vA) u.voice = vA;
+                            } else {
+                                u.lang = "es-MX";
+                                u.pitch = (voiceGender === 'female') ? 1.30 : ((voiceGender === 'male') ? 0.60 : 1.0);
+                                u.rate = 1.0;
                             }
+
                             window.speechSynthesis.speak(u);
                         } catch(e) {
                             console.log("SpeechSynthesis error:", e);
+                            if (fallbackUrl) {
+                                luxoAudioEl = new Audio(fallbackUrl);
+                                luxoAudioEl.play().catch(function(){});
+                            }
                         }
                     };
 
-                    window.luxoPlayTts = function(text, audioUrl, id) {
+                    window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
                         if (id && lastHandledTtsId === id) return;
-                        if (id) lastHandledTtsId = id;
-                        window.luxoStopTts();
-
                         if (audioUrl) {
                             try {
                                 luxoAudioEl = new Audio(audioUrl);
@@ -1457,42 +1506,44 @@ def configurar_rutas_fastapi(app):
                                 let playPromise = luxoAudioEl.play();
                                 if (playPromise !== undefined) {
                                     playPromise.catch(function(err) {
-                                        console.log("Audio play error, fallback to WebSpeech:", err);
-                                        window.luxoSpeakWebSpeech(text);
+                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                                     });
                                 }
                             } catch(err) {
-                                console.log("Audio creation error:", err);
-                                window.luxoSpeakWebSpeech(text);
+                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                             }
                         } else if (text) {
-                            window.luxoSpeakWebSpeech(text);
+                            window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                         }
                     };
 
-                    setInterval(function() {
-                        try {
-                            const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                            fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
-                            .then(function(r) { return r.json(); })
-                            .then(function(data) {
-                                if (!data || !data.action || data.action === 'none') return;
-                                if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
-                                    window.luxoPlayTts(data.text, data.audio_url, data.id);
-                                } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
-                                    lastHandledTtsId = data.id;
-                                    window.luxoStopTts();
-                                } else if (data.action === 'pause') {
-                                    if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
-                                    if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
-                                } else if (data.action === 'resume') {
-                                    if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
-                                    if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
-                                }
-                            })
-                            .catch(function(){});
-                        } catch(e) {}
-                    }, 1500);
+                    if (!window._luxoTtsIntervalStarted) {
+                        window._luxoTtsIntervalStarted = true;
+                        setInterval(function() {
+                            try {
+                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                .then(function(r) { return r.json(); })
+                                .then(function(data) {
+                                    if (!data || !data.action || data.action === 'none') return;
+                                    if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
+                                        lastHandledTtsId = data.id;
+                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                    } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
+                                        lastHandledTtsId = data.id;
+                                        window.luxoStopTts();
+                                    } else if (data.action === 'pause') {
+                                        if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
+                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
+                                    } else if (data.action === 'resume') {
+                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
+                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+                                    }
+                                })
+                                .catch(function(){});
+                            } catch(e) {}
+                        }, 1500);
+                    }
 
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
@@ -4747,7 +4798,7 @@ def main(page: ft.Page):
             
         current_speak_is_paused = False
 
-    def start_speak(text, btn_speaker=None, btn_play_pause=None):
+    def start_speak(text, btn_speaker=None, btn_play_pause=None, voice_id=None, voice_gender=None):
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         stop_current_speak()
         
@@ -4761,6 +4812,28 @@ def main(page: ft.Page):
         if btn_speaker:
             btn_speaker.icon = ft.Icons.VOLUME_OFF_ROUNDED
             btn_speaker.tooltip = "Detener audio"
+    def reproducir_audio_mp3_local(filepath):
+        try:
+            import platform
+            if platform.system() == "Windows" and os.path.exists(filepath):
+                import ctypes
+                abs_p = os.path.abspath(filepath)
+                mci = ctypes.windll.winmm.mciSendStringW
+                mci("close luxo_mci_audio", None, 0, 0)
+                mci(f'open "{abs_p}" type mpegvideo alias luxo_mci_audio', None, 0, 0)
+                mci("play luxo_mci_audio", None, 0, 0)
+        except Exception as ex_mci:
+            print("Notice reproductor local MCI:", ex_mci)
+
+    def start_speak(text, is_audio_direct=False, voice_id=None, voice_gender=None):
+        if not text:
+            return
+
+        stop_current_speak()
+
+        if btn_speaker:
+            btn_speaker.icon = ft.Icons.VOLUME_UP_ROUNDED
+            btn_speaker.icon_color = "#00FFFF"
             try:
                 btn_speaker.update()
             except Exception:
@@ -4784,25 +4857,61 @@ def main(page: ft.Page):
 
             temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
             os.makedirs(temp_audio_dir, exist_ok=True)
-            text_hash = hashlib.md5(clean_text.encode("utf-8")).hexdigest()
-            filename = f"speak_{text_hash}.mp3"
+            
+            # Determinar género y voz
+            v_actual = voice_id or ("helena" if not 'user_voice_pref' in locals() else user_voice_pref[0])
+            g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
+
+            text_hash = hashlib.md5(f"{clean_text}_{v_actual}".encode("utf-8")).hexdigest()
+            filename = f"speak_{text_hash}_{v_actual}.mp3"
             filepath = os.path.join(temp_audio_dir, filename)
             
             if not os.path.exists(filepath):
                 try:
-                    from gtts import gTTS
-                    tts = gTTS(text=clean_text, lang="es")
-                    tts.save(filepath)
-                except Exception as ex_gtts:
-                    print("Error generando gTTS:", ex_gtts)
+                    import asyncio, edge_tts
+                    VOICE_EDGE_SPECS = {
+                        "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-4%", "pitch": "-12Hz"},
+                        "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-4%", "pitch": "-12Hz"},
+                        "luxo_avatar": {"voice": "es-CO-SalomeNeural", "rate": "+2%", "pitch": "+4Hz"},
+                        "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+6%", "pitch": "+18Hz"},
+                        "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
+                        "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
+                        "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
+                        "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
+                        "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
+                    }
+                    spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
+                    
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
+                    loop.run_until_complete(comm.save(filepath))
+                    loop.close()
+                except Exception as ex_edge:
+                    print("Fallback a gTTS:", ex_edge)
+                    try:
+                        from gtts import gTTS
+                        tts = gTTS(text=clean_text, lang="es", tld="com.mx")
+                        tts.save(filepath)
+                    except Exception as ex_gtts:
+                        print("Error generando gTTS:", ex_gtts)
 
-            audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if os.path.exists(filepath) else ""
+            # Reproducir directamente en bocinas de Windows si existe el archivo
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                reproducir_audio_mp3_local(filepath)
+
+            audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
+
             evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
+
             evt_data = {
                 "id": evt_id,
                 "action": "speak",
                 "text": clean_text,
-                "audio_url": audio_url
+                "audio_url": audio_url,
+                "timestamp": time.time(),
+                "voice_id": v_actual,
+                "voice_gender": g_actual
             }
             
             uid = "all"
@@ -4821,31 +4930,42 @@ def main(page: ft.Page):
             if user_info and user_info.get("id"):
                 GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
-            if not getattr(page, "web", False):
-                def reproducir_sapi_thread():
-                    try:
-                        import platform
-                        if platform.system() == "Windows":
-                            import win32com.client
-                            import pythoncom
-                            pythoncom.CoInitialize()
-                            speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                            active_sapi_instance[0] = speaker
-                            speaker.Speak(clean_text, 0)
-                        elif platform.system() == "Darwin":
-                            import subprocess
-                            proc = subprocess.Popen(["say", clean_text])
-                            active_sapi_instance[0] = proc
-                            proc.wait()
-                    except Exception as ex_spk:
-                        print("Error en reproductor nativo:", ex_spk)
-                    finally:
-                        stop_current_speak()
-
+            # Reproducir SAPI nativo en Windows directamente
+            def reproducir_sapi_thread():
                 try:
-                    t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
-                    t_speak.start()
-                except Exception: pass
+                    import platform
+                    if platform.system() == "Windows":
+                        import win32com.client
+                        import pythoncom
+                        pythoncom.CoInitialize()
+                        speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                        active_sapi_instance[0] = speaker
+                        try:
+                            voices = speaker.GetVoices()
+                            for v in voices:
+                                desc = v.GetDescription().lower()
+                                if g_actual == "female" and any(fn in desc for fn in ["sabina", "helena", "zira", "maria", "female"]):
+                                    speaker.Voice = v
+                                    break
+                                elif g_actual == "male" and any(mn in desc for mn in ["raul", "pablo", "jorge", "david", "male"]):
+                                    speaker.Voice = v
+                                    break
+                        except Exception: pass
+                        speaker.Speak(clean_text, 0)
+                    elif platform.system() == "Darwin":
+                        import subprocess
+                        proc = subprocess.Popen(["say", clean_text])
+                        active_sapi_instance[0] = proc
+                        proc.wait()
+                except Exception as ex_spk:
+                    print("Error en reproductor nativo:", ex_spk)
+                finally:
+                    stop_current_speak()
+
+            try:
+                t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
+                t_speak.start()
+            except Exception: pass
 
         except Exception as e:
             print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5805,6 +5925,50 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         except: pass
         import time
         time.sleep(0.01)
+
+        def _formatear_codigo_parentesis_para_voz(texto):
+            import re
+            def _separar_codigo(match):
+                contenido = match.group(1).strip()
+                bloques = []
+                partes = re.findall(r'[A-Za-z]+|\d+', contenido)
+                for parte in partes:
+                    if parte.isalpha():
+                        bloques.append(" ".join(list(parte.upper())))
+                    else:
+                        nums = [parte[i:i+2] for i in range(0, len(parte), 2)]
+                        bloques.append(" ".join(nums))
+                return " ".join(bloques)
+            return re.sub(r'\((.*?)\)', _separar_codigo, texto)
+
+        def emitir_saludo_bienvenida_thread():
+            try:
+                time.sleep(1.2)
+                nombre_u = (user_info.get("nombre") or "").strip()
+                usuario_u = (user_info.get("usuario") or "").strip()
+                tienda_u = (user_info.get("tienda") or "").strip()
+
+                is_store = False
+                if usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda "):
+                    is_store = True
+
+                if is_store:
+                    nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
+                    if not nombre_tienda and tienda_u:
+                        nombre_tienda = tienda_u
+                    saludo_raw = f"¡Hola Tienda {nombre_tienda}, bienvenido a LUXO!"
+                elif nombre_u:
+                    primer_nombre = nombre_u.split()[0].title()
+                    saludo_raw = f"¡Hola {primer_nombre}, bienvenido a LUXO!"
+                else:
+                    saludo_raw = "¡Bienvenido a LUXO System!"
+                
+                saludo_txt = _formatear_codigo_parentesis_para_voz(saludo_raw)
+                start_speak(saludo_txt)
+            except Exception as ex_w:
+                print("Notice saludo bienvenida:", ex_w)
+
+        threading.Thread(target=emitir_saludo_bienvenida_thread, daemon=True).start()
         
         page.clean()
 
@@ -16039,6 +16203,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         try: sim_voz_estado_texto.update()
                         except: pass
 
+                        # Detectar si el perfil del cliente simulado es femenino o masculino
+                        perfil_str = str(perfil_cliente_txt[0] or "").lower()
+                        es_femenino = any(k in perfil_str for k in [
+                            "madre", "mujer", "chica", "compradora", "mariana", "elena", "sofia", "pareja", "edición prada", "regalo para su pareja", "familia numerosa"
+                        ])
+                        genero_cliente = "female" if es_femenino else "male"
+                        voz_id_cliente = "sabina" if es_femenino else "jorge"
+
                         def _hablar_cliente_simulado_thread():
                             try:
                                 import platform
@@ -16047,9 +16219,20 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                     import pythoncom
                                     pythoncom.CoInitialize()
                                     speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                                    try:
+                                        voices = speaker.GetVoices()
+                                        for v in voices:
+                                            desc = v.GetDescription().lower()
+                                            if es_femenino and any(fn in desc for fn in ["sabina", "helena", "zira", "maria", "female"]):
+                                                speaker.Voice = v
+                                                break
+                                            elif not es_femenino and any(mn in desc for mn in ["raul", "pablo", "jorge", "david", "male"]):
+                                                speaker.Voice = v
+                                                break
+                                    except Exception: pass
                                     speaker.Speak(texto_hablado, 0)
                                 else:
-                                    start_speak(texto_hablado)
+                                    start_speak(texto_hablado, voice_id=voz_id_cliente, voice_gender=genero_cliente)
                             except Exception as ex_spk:
                                 print("Error en voz SAPI cliente simulado:", ex_spk)
                             finally:
@@ -16698,12 +16881,21 @@ REGLAS OBLIGATORIAS:
 
             def activar_mic_voz_automatico():
                 try:
+                    # En celulares y navegador web, disparar Web Speech API del cliente
+                    try:
+                        page.launch_url("javascript:window.iniciarDictadoSimulador('voz');")
+                    except Exception: pass
+
+                    # En Windows de escritorio local, ejecutar también el worker de PyAudio si no está activo
                     if not sim_dictado_en_progreso[0]:
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                 except Exception as ex_act:
                     print("Error activar_mic_voz_automatico:", ex_act)
 
             def hablar_ahora_voz_click(e):
+                try:
+                    page.launch_url("javascript:window.iniciarDictadoSimulador('voz');")
+                except Exception: pass
                 if sim_dictado_en_progreso[0]:
                     sim_stop_requested[0] = True
                     mostrar_snack("⏹️ Grabación detenida", "#FFD700")
@@ -22238,6 +22430,82 @@ Ejemplo:
             btn_refresh_lang
         ], alignment="start", vertical_alignment="center", spacing=6)
 
+        # --- SELECTOR DE VOZ DE LUXO (DEBAJO DE IDIOMA) ---
+        user_voice_pref = ["jarvis"]
+
+        def reproducir_muestra_voz(voice_id):
+            v_id = voice_id or "jarvis"
+            sample_file = f"sample_{v_id}.mp3"
+            sample_path = os.path.join(ASSETS_PATH, "temp_audio", sample_file)
+            
+            # 1. Reproducir inmediatamente en las bocinas de la PC con Windows MCI
+            if os.path.exists(sample_path) and os.path.getsize(sample_path) > 0:
+                reproducir_audio_mp3_local(sample_path)
+            else:
+                start_speak("¡Hola! Soy LUXO.", voice_id=v_id)
+
+            # 2. Despachar también el evento web para móviles/navegadores
+            sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
+            evt_id = f"sample_{int(time.time()*1000)}"
+            evt_data = {
+                "id": evt_id,
+                "action": "speak",
+                "text": "Muestra de voz",
+                "audio_url": sample_url,
+                "timestamp": time.time(),
+                "voice_id": v_id,
+                "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
+            }
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            if user_info and user_info.get("id"):
+                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
+
+        def on_voice_changed(e):
+            v_val = e.control.value if (e and hasattr(e, "control") and e.control and e.control.value) else (voice_dropdown.value or "jarvis")
+            user_voice_pref[0] = v_val
+            try:
+                if hasattr(page, "shared_preferences") and page.shared_preferences:
+                    page.run_task(page.shared_preferences.set, "user_voice_preference", v_val)
+            except Exception: pass
+            reproducir_muestra_voz(v_val)
+
+        voice_dropdown = EmojiDropdown(
+            label="Voz de LUXO 🎙️",
+            value=user_voice_pref[0],
+            border_color="#00FFFF",
+            options=[
+                ft.dropdown.Option("jarvis", "🤖 Yarvis"),
+                ft.dropdown.Option("luxo_avatar", "💎 LUXO Avatar"),
+                ft.dropdown.Option("barbara", "🌸 Bárbara"),
+                ft.dropdown.Option("helena", "🇲🇽 Helena (Mexicana)"),
+                ft.dropdown.Option("jorge", "👔 Jorge (Ejecutivo)"),
+                ft.dropdown.Option("sabina", "⚡ Sabina (Asistente)"),
+                ft.dropdown.Option("alonso", "🎙️ Alonso (Locutor)"),
+                ft.dropdown.Option("estandar", "📻 Voz Estándar")
+            ],
+            width=140,
+            height=45,
+            on_change=on_voice_changed
+        )
+
+        btn_refresh_voice = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.VOLUME_UP_ROUNDED, color="#00FF88", size=20)
+            ], alignment="center"),
+            border=ft.Border.all(1.5, "#00FF88"),
+            border_radius=8,
+            padding=10,
+            bgcolor="#1E1E2E",
+            ink=True,
+            on_click=lambda e: reproducir_muestra_voz(voice_dropdown.value or user_voice_pref[0]),
+            tooltip="Escuchar muestra: '¡Hola! Soy LUXO.' ▶️"
+        )
+
+        voice_row = ft.Row([
+            voice_dropdown,
+            btn_refresh_voice
+        ], alignment="start", vertical_alignment="center", spacing=6)
+
         # --- CATEGORÍAS AGRUPADAS CON ACORDEÓN DESPLEGABLE (ExpansionTile) ---
         ventas_controls = [btn_presupuesto, btn_meta_semanal, btn_weekly, btn_polar, btn_enfoque_semanal]
         if btn_dashboard:
@@ -22368,6 +22636,7 @@ Ejemplo:
             suggestion_box,
             ft.Container(expand=True),
             lang_row,
+            voice_row,
             btn_logout
         ]
 
