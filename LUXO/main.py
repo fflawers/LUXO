@@ -1496,7 +1496,7 @@ def configurar_rutas_fastapi(app):
                     };
 
                     window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
-                        if (id && lastHandledTtsId === id) return;
+                        window.luxoStopTts();
                         if (audioUrl) {
                             try {
                                 luxoAudioEl = new Audio(audioUrl);
@@ -1506,6 +1506,7 @@ def configurar_rutas_fastapi(app):
                                 let playPromise = luxoAudioEl.play();
                                 if (playPromise !== undefined) {
                                     playPromise.catch(function(err) {
+                                        console.log("Audio play error, falling back to WebSpeech:", err);
                                         window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                                     });
                                 }
