@@ -1455,33 +1455,51 @@ def configurar_rutas_fastapi(app):
                             const vId = (voiceId || '').toLowerCase();
                             const voices = (_luxoCachedVoices.length > 0) ? _luxoCachedVoices : (window.speechSynthesis.getVoices() || []);
 
-                            if (vId === 'helena') {
-                                u.lang = "es-MX";
-                                u.pitch = 1.35;
+                            if (vId === 'jarvis' || vId === 'yarvis') {
+                                u.lang = "es-ES";
+                                u.pitch = 0.60;
+                                u.rate = 0.95;
+                                const vY = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('alvaro') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('enrique') || v.name.toLowerCase().includes('male'))));
+                                if (vY) u.voice = vY;
+                            } else if (vId === 'luxo_avatar') {
+                                u.lang = "es-CO";
+                                u.pitch = 1.20;
                                 u.rate = 1.05;
+                                const vLA = voices.find(v => (v.lang && (v.lang.includes('CO') || v.lang.includes('MX') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('salome') || v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('female'))));
+                                if (vLA) u.voice = vLA;
+                            } else if (vId === 'barbara') {
+                                u.lang = "es-MX";
+                                u.pitch = 1.45;
+                                u.rate = 1.10;
+                                const vB = voices.find(v => (v.lang && (v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('female'))));
+                                if (vB) u.voice = vB;
+                            } else if (vId === 'helena') {
+                                u.lang = "es-MX";
+                                u.pitch = 1.15;
+                                u.rate = 1.00;
                                 const vM = voices.find(v => (v.lang && (v.lang === 'es-MX' || v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('paul') || v.name.toLowerCase().includes('zira'))));
                                 if (vM) u.voice = vM;
                             } else if (vId === 'sabina') {
                                 u.lang = "es-ES";
-                                u.pitch = 1.65;
-                                u.rate = 1.15;
+                                u.pitch = 1.30;
+                                u.rate = 1.05;
                                 const vS = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('female'))));
                                 if (vS) u.voice = vS;
                             } else if (vId === 'jorge') {
                                 u.lang = "es-MX";
-                                u.pitch = 0.60;
-                                u.rate = 0.90;
+                                u.pitch = 0.70;
+                                u.rate = 0.95;
                                 const vJ = voices.find(v => (v.lang && (v.lang === 'es-MX' || v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('male'))));
                                 if (vJ) u.voice = vJ;
                             } else if (vId === 'alonso') {
                                 u.lang = "es-ES";
-                                u.pitch = 0.40;
+                                u.pitch = 0.45;
                                 u.rate = 0.85;
                                 const vA = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('enrique') || v.name.toLowerCase().includes('male'))));
                                 if (vA) u.voice = vA;
                             } else {
                                 u.lang = "es-MX";
-                                u.pitch = (voiceGender === 'female') ? 1.30 : ((voiceGender === 'male') ? 0.60 : 1.0);
+                                u.pitch = (voiceGender === 'female') ? 1.20 : ((voiceGender === 'male') ? 0.65 : 1.0);
                                 u.rate = 1.0;
                             }
 
@@ -4778,6 +4796,15 @@ def main(page: ft.Page):
         except Exception:
             pass
 
+        try:
+            import platform, ctypes
+            if platform.system() == "Windows":
+                mci = ctypes.windll.winmm.mciSendStringW
+                mci("stop luxo_mci_audio", None, 0, 0)
+                mci("close luxo_mci_audio", None, 0, 0)
+        except Exception:
+            pass
+
         if active_sapi_instance[0]:
             try:
                 active_sapi_instance[0].Speak("", 2) # 2 = SVSFPurgeBeforeSpeak (detener audio inmediatamente)
@@ -4997,6 +5024,17 @@ def main(page: ft.Page):
                             active_sapi_instance[0].Pause()
                     except Exception:
                         pass
+
+                try:
+                    import platform, ctypes
+                    if platform.system() == "Windows":
+                        mci = ctypes.windll.winmm.mciSendStringW
+                        if current_speak_is_paused:
+                            mci("resume luxo_mci_audio", None, 0, 0)
+                        else:
+                            mci("pause luxo_mci_audio", None, 0, 0)
+                except Exception:
+                    pass
 
                 if current_speak_is_paused:
                     current_speak_btn_play_pause.icon = ft.Icons.PAUSE_ROUNDED
