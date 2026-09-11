@@ -5914,7 +5914,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 resultado.append(palabra)
         return "".join(resultado)
 
-    def cargar_chat(initial_view=None):
+    def cargar_chat(initial_view=None, desde_login=False):
         page.clean()
         page.add(
             ft.Container(
@@ -5977,7 +5977,9 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             except Exception as ex_w:
                 print("Notice saludo bienvenida:", ex_w)
 
-        threading.Thread(target=emitir_saludo_bienvenida_thread, daemon=True).start()
+        if desde_login and not getattr(page, "_saludo_ya_emitido", False):
+            page._saludo_ya_emitido = True
+            threading.Thread(target=emitir_saludo_bienvenida_thread, daemon=True).start()
         
         page.clean()
 
@@ -23729,7 +23731,7 @@ Ejemplo:
                     except Exception as ex_bit_pw:
                         print("Error preparando bitácora contraseña:", ex_bit_pw)
 
-                    cargar_chat()
+                    cargar_chat(desde_login=True)
 
 
                 else:
