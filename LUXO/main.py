@@ -1455,52 +1455,41 @@ def configurar_rutas_fastapi(app):
                             const vId = (voiceId || '').toLowerCase();
                             const voices = (_luxoCachedVoices.length > 0) ? _luxoCachedVoices : (window.speechSynthesis.getVoices() || []);
 
+                            const esVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
+                            const maleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('alvaro') || v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('enrique')));
+                            const femaleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('laura')));
+
                             if (vId === 'jarvis' || vId === 'yarvis') {
                                 u.lang = "es-ES";
-                                u.pitch = 0.60;
-                                u.rate = 0.95;
-                                const vY = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('alvaro') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('enrique') || v.name.toLowerCase().includes('male'))));
-                                if (vY) u.voice = vY;
-                            } else if (vId === 'luxo_avatar') {
-                                u.lang = "es-CO";
-                                u.pitch = 1.20;
-                                u.rate = 1.05;
-                                const vLA = voices.find(v => (v.lang && (v.lang.includes('CO') || v.lang.includes('MX') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('salome') || v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('female'))));
-                                if (vLA) u.voice = vLA;
-                            } else if (vId === 'barbara') {
+                                u.pitch = 0.55;
+                                u.rate = 0.90;
+                                if (maleVoices.length > 0) u.voice = maleVoices[0];
+                                else if (esVoices.length > 0) u.voice = esVoices[0];
+                            } else if (vId === 'jorge' || vId === 'alonso') {
                                 u.lang = "es-MX";
-                                u.pitch = 1.45;
+                                u.pitch = 0.65;
+                                u.rate = 0.92;
+                                if (maleVoices.length > 0) u.voice = maleVoices[0];
+                                else if (esVoices.length > 0) u.voice = esVoices[0];
+                            } else if (vId === 'luxo_avatar' || vId === 'barbara') {
+                                u.lang = "es-MX";
+                                u.pitch = 1.35;
                                 u.rate = 1.10;
-                                const vB = voices.find(v => (v.lang && (v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('female'))));
-                                if (vB) u.voice = vB;
-                            } else if (vId === 'helena') {
+                                if (femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                else if (esVoices.length > 0) u.voice = esVoices[0];
+                            } else if (vId === 'helena' || vId === 'sabina') {
                                 u.lang = "es-MX";
                                 u.pitch = 1.15;
-                                u.rate = 1.00;
-                                const vM = voices.find(v => (v.lang && (v.lang === 'es-MX' || v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('paul') || v.name.toLowerCase().includes('zira'))));
-                                if (vM) u.voice = vM;
-                            } else if (vId === 'sabina') {
-                                u.lang = "es-ES";
-                                u.pitch = 1.30;
-                                u.rate = 1.05;
-                                const vS = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('female'))));
-                                if (vS) u.voice = vS;
-                            } else if (vId === 'jorge') {
-                                u.lang = "es-MX";
-                                u.pitch = 0.70;
-                                u.rate = 0.95;
-                                const vJ = voices.find(v => (v.lang && (v.lang === 'es-MX' || v.lang.includes('MX') || v.lang.includes('US')) && (v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('male'))));
-                                if (vJ) u.voice = vJ;
-                            } else if (vId === 'alonso') {
-                                u.lang = "es-ES";
-                                u.pitch = 0.45;
-                                u.rate = 0.85;
-                                const vA = voices.find(v => (v.lang && (v.lang.startsWith('es-ES') || v.lang.includes('ES')) && (v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('enrique') || v.name.toLowerCase().includes('male'))));
-                                if (vA) u.voice = vA;
+                                u.rate = 1.02;
+                                if (femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                else if (esVoices.length > 0) u.voice = esVoices[0];
                             } else {
                                 u.lang = "es-MX";
                                 u.pitch = (voiceGender === 'female') ? 1.20 : ((voiceGender === 'male') ? 0.65 : 1.0);
                                 u.rate = 1.0;
+                                if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
+                                else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                else if (esVoices.length > 0) u.voice = esVoices[0];
                             }
 
                             window.speechSynthesis.speak(u);
@@ -1516,21 +1505,32 @@ def configurar_rutas_fastapi(app):
                     window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
                         window.luxoStopTts();
                         if (audioUrl) {
-                            try {
-                                luxoAudioEl = new Audio(audioUrl);
-                                luxoAudioEl.onended = function() {
-                                    luxoAudioEl = null;
-                                };
-                                let playPromise = luxoAudioEl.play();
-                                if (playPromise !== undefined) {
-                                    playPromise.catch(function(err) {
-                                        console.log("Audio play error, falling back to WebSpeech:", err);
+                            function tryPlayAudio(retriesLeft) {
+                                try {
+                                    luxoAudioEl = new Audio(audioUrl);
+                                    luxoAudioEl.onended = function() {
+                                        luxoAudioEl = null;
+                                    };
+                                    let playPromise = luxoAudioEl.play();
+                                    if (playPromise !== undefined) {
+                                        playPromise.catch(function(err) {
+                                            console.log("Audio play error, retries:", retriesLeft, err);
+                                            if (retriesLeft > 0) {
+                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                            } else {
+                                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
+                                            }
+                                        });
+                                    }
+                                } catch(err) {
+                                    if (retriesLeft > 0) {
+                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                    } else {
                                         window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
-                                    });
+                                    }
                                 }
-                            } catch(err) {
-                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                             }
+                            tryPlayAudio(2);
                         } else if (text) {
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                         }
@@ -6204,7 +6204,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                                 if current_speak_btn_speaker == btn_spk_h:
                                     stop_current_speak()
                                 else:
-                                    start_speak(txt_speak, btn_spk_h, btn_p_h)
+                                    v_sel = user_voice_pref[0] if user_voice_pref else "jarvis"
+                                    start_speak(txt_speak, btn_spk_h, btn_p_h, voice_id=v_sel)
                                     
                             def pause_click_h(e):
                                 toggle_pause_speak()
@@ -6896,7 +6897,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     if current_speak_btn_speaker == bs:
                         stop_current_speak()
                     else:
-                        start_speak(txt, bs, bpp)
+                        v_sel = user_voice_pref[0] if user_voice_pref else "jarvis"
+                        start_speak(txt, bs, bpp, voice_id=v_sel)
 
                 def handle_play_pause_upc(ev):
                     toggle_pause_speak()
@@ -8469,7 +8471,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         if current_speak_btn_speaker == bs:
                             stop_current_speak()
                         else:
-                            start_speak(txt, bs, bpp)
+                            v_sel = user_voice_pref[0] if user_voice_pref else "jarvis"
+                            start_speak(txt, bs, bpp, voice_id=v_sel)
                             
                     def handle_play_pause_click(e):
                         toggle_pause_speak()
