@@ -4893,6 +4893,15 @@ def main(page: ft.Page):
 
             audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
 
+            # Reproducir nativamente en Flet Web / Móviles (Render)
+            if audio_url:
+                try:
+                    page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
+                    audio_ctrl = ft.Audio(src=audio_url, autoplay=True)
+                    page.overlay.append(audio_ctrl)
+                    page.update()
+                except Exception: pass
+
             evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
 
             evt_data = {
@@ -22435,8 +22444,17 @@ Ejemplo:
             else:
                 start_speak("¡Hola! Soy LUXO.", voice_id=v_id)
 
-            # 2. Despachar también el evento web para móviles/navegadores
+            # 2. Reproducir nativamente en Flet Web / Móviles (Render)
             sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
+            if sample_url:
+                try:
+                    page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
+                    audio_ctrl = ft.Audio(src=sample_url, autoplay=True)
+                    page.overlay.append(audio_ctrl)
+                    page.update()
+                except Exception: pass
+
+            # 3. Despachar también el evento web para móviles/navegadores
             evt_id = f"sample_{int(time.time()*1000)}"
             evt_data = {
                 "id": evt_id,
