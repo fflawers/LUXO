@@ -4876,8 +4876,11 @@ def main(page: ft.Page):
 
         try:
             import re, urllib.parse, hashlib, random, time
-            clean_text = re.sub(r'[*_#`~>\[\]\(\)]+', '', text)
-            clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ').strip()
+            clean_text = re.sub(r'https?://\S+', '', text)
+            clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
+            clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
+            clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
+            clean_text = re.sub(r'\s+', ' ', clean_text).strip()
             if len(clean_text) > 800:
                 clean_text = clean_text[:800] + "..."
 
