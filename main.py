@@ -4798,6 +4798,19 @@ def main(page: ft.Page):
             
         current_speak_is_paused = False
 
+    def reproducir_audio_mp3_local(filepath):
+        try:
+            import platform
+            if platform.system() == "Windows" and os.path.exists(filepath):
+                import ctypes
+                abs_p = os.path.abspath(filepath)
+                mci = ctypes.windll.winmm.mciSendStringW
+                mci("close luxo_mci_audio", None, 0, 0)
+                mci(f'open "{abs_p}" type mpegvideo alias luxo_mci_audio', None, 0, 0)
+                mci("play luxo_mci_audio", None, 0, 0)
+        except Exception as ex_mci:
+            print("Notice reproductor local MCI:", ex_mci)
+
     def start_speak(text, btn_speaker=None, btn_play_pause=None, voice_id=None, voice_gender=None):
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         stop_current_speak()
@@ -4812,28 +4825,6 @@ def main(page: ft.Page):
         if btn_speaker:
             btn_speaker.icon = ft.Icons.VOLUME_OFF_ROUNDED
             btn_speaker.tooltip = "Detener audio"
-    def reproducir_audio_mp3_local(filepath):
-        try:
-            import platform
-            if platform.system() == "Windows" and os.path.exists(filepath):
-                import ctypes
-                abs_p = os.path.abspath(filepath)
-                mci = ctypes.windll.winmm.mciSendStringW
-                mci("close luxo_mci_audio", None, 0, 0)
-                mci(f'open "{abs_p}" type mpegvideo alias luxo_mci_audio', None, 0, 0)
-                mci("play luxo_mci_audio", None, 0, 0)
-        except Exception as ex_mci:
-            print("Notice reproductor local MCI:", ex_mci)
-
-    def start_speak(text, is_audio_direct=False, voice_id=None, voice_gender=None):
-        if not text:
-            return
-
-        stop_current_speak()
-
-        if btn_speaker:
-            btn_speaker.icon = ft.Icons.VOLUME_UP_ROUNDED
-            btn_speaker.icon_color = "#00FFFF"
             try:
                 btn_speaker.update()
             except Exception:
