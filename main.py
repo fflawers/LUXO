@@ -4749,6 +4749,13 @@ def main(page: ft.Page):
     current_speak_btn_play_pause = None
     current_speak_is_paused = False
     active_sapi_instance = [None]
+    user_voice_pref = ["jarvis"]
+    try:
+        if page.client_storage and page.client_storage.contains_key("user_voice_preference"):
+            saved_pref = page.client_storage.get("user_voice_preference")
+            if saved_pref:
+                user_voice_pref[0] = saved_pref
+    except Exception: pass
 
     def run_js(js_code):
         async def _exec_js():
@@ -4851,7 +4858,7 @@ def main(page: ft.Page):
             os.makedirs(temp_audio_dir, exist_ok=True)
             
             # Determinar género y voz
-            v_actual = voice_id or ("helena" if not 'user_voice_pref' in locals() else user_voice_pref[0])
+            v_actual = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
             g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
 
             text_hash = hashlib.md5(f"{clean_text}_{v_actual}".encode("utf-8")).hexdigest()
@@ -22432,8 +22439,6 @@ Ejemplo:
         ], alignment="start", vertical_alignment="center", spacing=6)
 
         # --- SELECTOR DE VOZ DE LUXO (DEBAJO DE IDIOMA) ---
-        user_voice_pref = ["jarvis"]
-
         def reproducir_muestra_voz(voice_id):
             v_id = voice_id or "jarvis"
             sample_file = f"sample_{v_id}.mp3"
@@ -22473,6 +22478,10 @@ Ejemplo:
         def on_voice_changed(e):
             v_val = e.control.value if (e and hasattr(e, "control") and e.control and e.control.value) else (voice_dropdown.value or "jarvis")
             user_voice_pref[0] = v_val
+            try:
+                if page.client_storage:
+                    page.client_storage.set("user_voice_preference", v_val)
+            except Exception: pass
             try:
                 if hasattr(page, "shared_preferences") and page.shared_preferences:
                     page.run_task(page.shared_preferences.set, "user_voice_preference", v_val)
