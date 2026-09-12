@@ -1541,25 +1541,19 @@ def configurar_rutas_fastapi(app):
                                     let playPromise = luxoAudioEl.play();
                                     if (playPromise !== undefined) {
                                         playPromise.catch(function(err) {
-                                            console.log("Audio play error, retries:", retriesLeft, err);
+                                            console.log("Audio play attempt failed, retries left:", retriesLeft, err);
                                             if (retriesLeft > 0) {
                                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
-                                            } else {
-                                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                                             }
                                         });
                                     }
                                 } catch(err) {
                                     if (retriesLeft > 0) {
                                         setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
-                                    } else {
-                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                                     }
                                 }
                             }
-                            tryPlayAudio(3);
-                        } else if (text) {
-                            window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
+                            tryPlayAudio(5);
                         }
                     };
 
@@ -4885,8 +4879,8 @@ def main(page: ft.Page):
         current_speak_is_paused = False
         
         if btn_speaker:
-            btn_speaker.icon = ft.Icons.VOLUME_OFF_ROUNDED
-            btn_speaker.tooltip = "Detener audio"
+            btn_speaker.icon = ft.Icons.HOURGLASS_TOP_ROUNDED
+            btn_speaker.tooltip = "Generando audio..."
             try:
                 btn_speaker.update()
             except Exception:
@@ -4901,30 +4895,28 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-        try:
-            import re, urllib.parse, hashlib, random, time
-            clean_text = re.sub(r'https?://\S+', '', text)
-            clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
-            clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
-            clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
-            clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-            if len(clean_text) > 800:
-                clean_text = clean_text[:800] + "..."
+        def _speak_worker():
+            try:
+                import re, urllib.parse, hashlib, random, time, asyncio, edge_tts
+                clean_text = re.sub(r'https?://\S+', '', text)
+                clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
+                clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
+                clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
+                clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+                if len(clean_text) > 500:
+                    clean_text = clean_text[:500] + "..."
 
-            temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
-            os.makedirs(temp_audio_dir, exist_ok=True)
-            
-            # Determinar género y voz
-            v_actual = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
-            g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
+                temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
+                os.makedirs(temp_audio_dir, exist_ok=True)
+                
+                v_actual = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
+                g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
 
-            text_hash = hashlib.md5(f"{clean_text}_{v_actual}".encode("utf-8")).hexdigest()
-            filename = f"speak_{text_hash}_{v_actual}.mp3"
-            filepath = os.path.join(temp_audio_dir, filename)
-            
-            if not os.path.exists(filepath):
-                try:
-                    import asyncio, edge_tts
+                text_hash = hashlib.md5(f"{clean_text}_{v_actual}".encode("utf-8")).hexdigest()
+                filename = f"speak_{text_hash}_{v_actual}.mp3"
+                filepath = os.path.join(temp_audio_dir, filename)
+                
+                if not os.path.exists(filepath):
                     VOICE_EDGE_SPECS = {
                         "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-4%", "pitch": "-12Hz"},
                         "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-4%", "pitch": "-12Hz"},
@@ -4938,104 +4930,68 @@ def main(page: ft.Page):
                     }
                     spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
                     
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
-                    loop.run_until_complete(comm.save(filepath))
-                    loop.close()
-                except Exception as ex_edge:
-                    print("Fallback a gTTS:", ex_edge)
                     try:
-                        from gtts import gTTS
-                        tts = gTTS(text=clean_text, lang="es", tld="com.mx")
-                        tts.save(filepath)
-                    except Exception as ex_gtts:
-                        print("Error generando gTTS:", ex_gtts)
+                        async def _synthesize():
+                            comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
+                            await comm.save(filepath)
+                        asyncio.run(_synthesize())
+                    except Exception as ex_edge:
+                        print("Error en edge_tts, reintentando:", ex_edge)
+                        try:
+                            async def _retry_synthesize():
+                                comm = edge_tts.Communicate(clean_text, spec.get("voice", "es-ES-AlvaroNeural"))
+                                await comm.save(filepath)
+                            asyncio.run(_retry_synthesize())
+                        except Exception as ex_retry:
+                            print("Error reintento edge_tts:", ex_retry)
 
-            # Reproducir directamente en bocinas de Windows si existe el archivo
-            if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-                reproducir_audio_mp3_local(filepath)
+                # Actualizar icono a reproduciendo
+                if btn_speaker and current_speak_btn_speaker == btn_speaker:
+                    btn_speaker.icon = ft.Icons.VOLUME_OFF_ROUNDED
+                    btn_speaker.tooltip = "Detener audio"
+                    try:
+                        btn_speaker.update()
+                    except Exception:
+                        pass
 
-            audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
+                # Reproducir directamente en bocinas de Windows si existe el archivo
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                    reproducir_audio_mp3_local(filepath)
 
-            # Reproducir nativamente en Flet Web / Móviles (Render)
-            if audio_url:
-                try:
-                    page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
-                    audio_ctrl = ft.Audio(src=audio_url, autoplay=True)
-                    page.overlay.append(audio_ctrl)
-                    page.update()
-                except Exception: pass
+                audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
 
-            evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
-
-            evt_data = {
-                "id": evt_id,
-                "action": "speak",
-                "text": clean_text,
-                "audio_url": audio_url,
-                "timestamp": time.time(),
-                "voice_id": v_actual,
-                "voice_gender": g_actual
-            }
-            
-            uid = "all"
-            try:
-                if user_info and user_info.get("id"):
-                    uid = str(user_info["id"])
-                elif hasattr(page, "client_storage") and page.client_storage:
-                    stored_uid = page.client_storage.get("logged_user_id")
-                    if stored_uid:
-                        uid = str(stored_uid)
-            except Exception:
-                pass
+                evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
+                evt_data = {
+                    "id": evt_id,
+                    "action": "speak",
+                    "text": clean_text,
+                    "audio_url": audio_url,
+                    "timestamp": time.time(),
+                    "voice_id": v_actual,
+                    "voice_gender": g_actual
+                }
                 
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-            GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
-            if user_info and user_info.get("id"):
-                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-
-            # Solo reproducir SAPI nativo en Windows como respaldo si no existe el archivo MP3 neural
-            if not (os.path.exists(filepath) and os.path.getsize(filepath) > 0):
-                def reproducir_sapi_thread():
-                    try:
-                        import platform
-                        if platform.system() == "Windows":
-                            import win32com.client
-                            import pythoncom
-                            pythoncom.CoInitialize()
-                            speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                            active_sapi_instance[0] = speaker
-                            try:
-                                voices = speaker.GetVoices()
-                                for v in voices:
-                                    desc = v.GetDescription().lower()
-                                    if g_actual == "female" and any(fn in desc for fn in ["sabina", "helena", "zira", "maria", "female"]):
-                                        speaker.Voice = v
-                                        break
-                                    elif g_actual == "male" and any(mn in desc for mn in ["raul", "pablo", "jorge", "david", "male"]):
-                                        speaker.Voice = v
-                                        break
-                            except Exception: pass
-                            speaker.Speak(clean_text, 0)
-                        elif platform.system() == "Darwin":
-                            import subprocess
-                            proc = subprocess.Popen(["say", clean_text])
-                            active_sapi_instance[0] = proc
-                            proc.wait()
-                    except Exception as ex_spk:
-                        print("Error en reproductor nativo:", ex_spk)
-                    finally:
-                        stop_current_speak()
-
+                uid = "all"
                 try:
-                    t_speak = threading.Thread(target=reproducir_sapi_thread, daemon=True)
-                    t_speak.start()
-                except Exception: pass
+                    if user_info and user_info.get("id"):
+                        uid = str(user_info["id"])
+                    elif hasattr(page, "client_storage") and page.client_storage:
+                        stored_uid = page.client_storage.get("logged_user_id")
+                        if stored_uid:
+                            uid = str(stored_uid)
+                except Exception:
+                    pass
+                    
+                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+                GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
+                if user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
-        except Exception as e:
-            print("ERROR STARTING SPEAK CLIENT:", e)
-            stop_current_speak()
+            except Exception as e:
+                print("ERROR STARTING SPEAK CLIENT:", e)
+                stop_current_speak()
+
+        threading.Thread(target=_speak_worker, daemon=True).start()
 
     def toggle_pause_speak():
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
