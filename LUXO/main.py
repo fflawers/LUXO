@@ -23962,7 +23962,7 @@ Ejemplo:
                 playlist_mode=fv.PlaylistMode.LOOP,
                 autoplay=True,
                 volume=100.0,
-                muted=True,
+                muted=False,
                 show_controls=False,
                 expand=True,
                 fit=ft.BoxFit.COVER,
@@ -23972,36 +23972,41 @@ Ejemplo:
                 toggle_audio(e)
 
             btn_audio = ft.Container(
-                content=ft.Text("🔇", size=11, color="#00FFFF", text_align="center"),
-                bgcolor="#111111",
-                width=28,
-                height=28,
-                border_radius=14,
+                content=ft.Text("🔊", size=13, color="#00FFFF", text_align="center"),
+                bgcolor="#111122",
+                border=ft.Border.all(1.5, "#00FFFF"),
+                width=32,
+                height=32,
+                border_radius=16,
                 alignment=ft.alignment.Alignment(0, 0),
-                tooltip="Activar Audio",
-                data=False,
+                tooltip="Silenciar / Activar Audio",
+                shadow=[ft.BoxShadow(color="#4000FFFF", blur_radius=10, spread_radius=1)],
+                data=True,
                 on_click=toggle_audio
             )
-            video_avatar = ft.Stack([
-                ft.Container(
-                    content=login_video_player,
-                    width=108,
-                    height=108,
-                    border_radius=54,
-                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                    border=ft.Border.all(2, "#00F0FF"),
-                    shadow=[ft.BoxShadow(color="#4000FFFF", blur_radius=20, spread_radius=1)],
-                    on_click=on_avatar_tap
-                ),
-                ft.Container(
-                    content=btn_audio,
-                    right=0,
-                    bottom=0,
-                    width=28,
-                    height=28,
-                    border_radius=14,
-                )
-            ], width=108, height=108)
+            video_avatar = ft.Column([
+                ft.Stack([
+                    ft.Container(
+                        content=login_video_player,
+                        width=112,
+                        height=112,
+                        border_radius=56,
+                        clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                        border=ft.Border.all(2.5, "#00F0FF"),
+                        shadow=[ft.BoxShadow(color="#6000FFFF", blur_radius=25, spread_radius=2)],
+                        on_click=on_avatar_tap
+                    ),
+                    ft.Container(
+                        content=btn_audio,
+                        right=0,
+                        bottom=0,
+                        width=32,
+                        height=32,
+                        border_radius=16,
+                    )
+                ], width=112, height=112),
+                ft.Text("🔊 Toca para escuchar al Avatar", size=10, color="#80E5FF", weight="w500")
+            ], horizontal_alignment="center", spacing=6)
         except Exception as ex_v:
             print("Notice video login load:", ex_v)
             video_avatar = None
