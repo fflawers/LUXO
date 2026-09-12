@@ -3129,22 +3129,33 @@ def obtener_64(nombre):
 # MÓDULO DE AUTENTICACIÓN BIOMÉTRICA Y BITÁCORA DE AUDITORÍA (LUXO)
 # ==============================================================================
 
-def reproducir_saludo_login(nombre_usuario):
+def reproducir_saludo_login(nombre_usuario, voice_id="jarvis"):
     """Reproduce el saludo por voz personalizado al iniciar sesión biométrica en segundo plano."""
-    saludo_text = f"Hola, {nombre_usuario}. Sesión iniciada."
+    saludo_text = f"Bienvenido, {nombre_usuario}. Sistemas de LUXO en línea."
     
     def _speak_thread():
         try:
-            import platform
-            if platform.system() == "Windows":
-                import win32com.client
-                import pythoncom
-                pythoncom.CoInitialize()
-                speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                speaker.Speak(saludo_text, 1)  # 1 = SVSFlagsAsync
-            elif platform.system() == "Darwin":
-                import subprocess
-                subprocess.Popen(["say", saludo_text])
+            temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
+            os.makedirs(temp_audio_dir, exist_ok=True)
+            v_spec = {
+                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+            }.get(voice_id, {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"})
+            
+            import hashlib, asyncio, edge_tts
+            h = hashlib.md5(f"{saludo_text}_{voice_id}".encode("utf-8")).hexdigest()
+            fp = os.path.join(temp_audio_dir, f"saludo_{h}.mp3")
+            if not os.path.exists(fp):
+                async def _gen():
+                    comm = edge_tts.Communicate(saludo_text, v_spec["voice"], rate=v_spec.get("rate", "+0%"), pitch=v_spec.get("pitch", "+0Hz"))
+                    await comm.save(fp)
+                asyncio.run(_gen())
+            if os.path.exists(fp) and os.path.getsize(fp) > 0:
+                import ctypes
+                mci = ctypes.windll.winmm.mciSendStringW
+                mci("close luxo_saludo_login", None, 0, 0)
+                mci(f'open "{os.path.abspath(fp)}" type mpegvideo alias luxo_saludo_login', None, 0, 0)
+                mci("play luxo_saludo_login", None, 0, 0)
         except Exception as e:
             print("Error en reproducir_saludo_login:", e)
             
@@ -4918,10 +4929,10 @@ def main(page: ft.Page):
                 
                 if not os.path.exists(filepath):
                     VOICE_EDGE_SPECS = {
-                        "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-4%", "pitch": "-12Hz"},
-                        "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-4%", "pitch": "-12Hz"},
-                        "luxo_avatar": {"voice": "es-CO-SalomeNeural", "rate": "+2%", "pitch": "+4Hz"},
-                        "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+6%", "pitch": "+18Hz"},
+                        "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                        "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                        "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+2%", "pitch": "+35Hz"},
+                        "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
                         "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
                         "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
                         "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
@@ -8246,12 +8257,20 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     nombre_pdf = nombre_pdf_rag
                     es_pdf_abierto = es_pdf_abierto_rag
                 elif respuesta:
-                    respuesta_lower = respuesta.lower()
+                    import unicodedata
+                    def _norm_txt(s):
+                        if not s: return ""
+                        s_norm = ''.join(c for c in unicodedata.normalize('NFD', str(s)) if unicodedata.category(c) != 'Mn')
+                        return s_norm.lower().replace('"', '').replace("'", "")
+
+                    norm_resp = _norm_txt(respuesta)
                     encontrado = False
                     for m in manuales:
                         m_nombre = m.get("Nombre_Archivo") or ""
                         nombre_sin_ext = m_nombre.rsplit(".", 1)[0] if "." in m_nombre else m_nombre
-                        if m_nombre.lower() in respuesta_lower or (len(nombre_sin_ext) > 3 and nombre_sin_ext.lower() in respuesta_lower):
+                        norm_m = _norm_txt(m_nombre)
+                        norm_sin_ext = _norm_txt(nombre_sin_ext)
+                        if (norm_m and norm_m in norm_resp) or (len(norm_sin_ext) > 3 and norm_sin_ext in norm_resp):
                             id_manual = m["ID_Manual"]
                             nombre_pdf = m_nombre
                             es_pdf_abierto = m.get("Abierto", 1) == 1
@@ -8259,10 +8278,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             break
                     
                     # Si la IA citó el manual en la respuesta se adjunta.
-                    # Si no lo citó explícitamente, pero es una consulta operativa extensa con alto score RAG (>=100) y NO es respuesta negativa/sondeo, adjuntar el documento RAG
+                    # Si no lo citó explícitamente, pero es una consulta técnica con score RAG (>=80) y NO es saludo/negativa/sondeo, adjuntar el documento RAG
                     palabras_usuario = user_text.lower().split()
                     es_saludo_conversacion = any(w in ["hi", "hello", "hola", "hey", "buenos", "dias", "tardes", "noches", "saludos", "quien", "eres", "nombre", "name"] for w in palabras_usuario)
-                    if not encontrado and not es_saludo_conversacion and len(palabras_usuario) >= 4 and manuales_con_score and manuales_con_score[0][0] >= 100:
+                    if not encontrado and not es_saludo_conversacion and len(palabras_usuario) >= 2 and manuales_con_score and manuales_con_score[0][0] >= 80:
                         id_manual = id_manual_rag
                         nombre_pdf = nombre_pdf_rag
                         es_pdf_abierto = es_pdf_abierto_rag
@@ -22474,15 +22493,13 @@ Ejemplo:
             sample_file = f"sample_{v_id}.mp3"
             sample_path = os.path.join(ASSETS_PATH, "temp_audio", sample_file)
             
-            # 1. Reproducir inmediatamente en las bocinas de la PC con Windows MCI
-            if os.path.exists(sample_path) and os.path.getsize(sample_path) > 0:
+            # 1. Reproducir inmediatamente en las bocinas de la PC con Windows MCI solo si no es web
+            if not getattr(page, "web", False) and os.path.exists(sample_path) and os.path.getsize(sample_path) > 0:
                 reproducir_audio_mp3_local(sample_path)
-            else:
-                start_speak("¡Hola! Soy LUXO.", voice_id=v_id)
 
             # 2. Reproducir nativamente en Flet Web / Móviles (Render)
             sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
-            if sample_url:
+            if sample_url and getattr(page, "web", False):
                 try:
                     page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
                     audio_ctrl = ft.Audio(src=sample_url, autoplay=True)
@@ -23568,6 +23585,8 @@ Ejemplo:
         try:
             first_n = nombre_completo.strip().split(" ")[0] if nombre_completo else "Usuario"
             mostrar_snack(f"✨ ¡Bienvenid@, {first_n}!", color="#00FFFF")
+            v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
+            start_speak(f"Bienvenido, {first_n}. Sistemas de LUXO en línea y a su servicio.", voice_id=v_pref)
         except Exception: pass
 
     # =====================================
