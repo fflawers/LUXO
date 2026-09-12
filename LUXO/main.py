@@ -1416,13 +1416,40 @@ def configurar_rutas_fastapi(app):
                     // ==========================================
                     // LUXO CLIENT TTS ENGINE (Web / Mobile / Desktop)
                     // ==========================================
-                    let luxoAudioEl = null;
                     let lastHandledTtsId = null;
+
+                    // --- REPRODUCTOR DE AUDIO GLOBAL Y DESBLOQUEO DE AUTOPLAY ---
+                    let luxoAudioEl = document.getElementById("luxo_global_tts_player");
+                    if (!luxoAudioEl) {
+                        luxoAudioEl = document.createElement("audio");
+                        luxoAudioEl.id = "luxo_global_tts_player";
+                        luxoAudioEl.preload = "auto";
+                        luxoAudioEl.style.display = "none";
+                        document.body.appendChild(luxoAudioEl);
+                    }
+
+                    window._luxoAudioUnlocked = false;
+                    window.luxoUnlockAudio = function() {
+                        if (window._luxoAudioUnlocked) return;
+                        try {
+                            if (luxoAudioEl) {
+                                luxoAudioEl.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+                                luxoAudioEl.play().then(function() {
+                                    window._luxoAudioUnlocked = true;
+                                }).catch(function(){});
+                            }
+                        } catch(e){}
+                    };
+
+                    document.addEventListener("click", window.luxoUnlockAudio, { passive: true });
+                    document.addEventListener("touchstart", window.luxoUnlockAudio, { passive: true });
 
                     window.luxoStopTts = function() {
                         if (luxoAudioEl) {
-                            try { luxoAudioEl.pause(); luxoAudioEl.currentTime = 0; } catch(e){}
-                            luxoAudioEl = null;
+                            try {
+                                luxoAudioEl.pause();
+                                luxoAudioEl.currentTime = 0;
+                            } catch(e){}
                         }
                         if ('speechSynthesis' in window) {
                             try { window.speechSynthesis.cancel(); } catch(e){}
@@ -1442,8 +1469,8 @@ def configurar_rutas_fastapi(app):
 
                     window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, fallbackUrl) {
                         if (!('speechSynthesis' in window) || !text) {
-                            if (fallbackUrl) {
-                                luxoAudioEl = new Audio(fallbackUrl);
+                            if (fallbackUrl && luxoAudioEl) {
+                                luxoAudioEl.src = fallbackUrl;
                                 luxoAudioEl.play().catch(function(){});
                             }
                             return;
@@ -1495,8 +1522,8 @@ def configurar_rutas_fastapi(app):
                             window.speechSynthesis.speak(u);
                         } catch(e) {
                             console.log("SpeechSynthesis error:", e);
-                            if (fallbackUrl) {
-                                luxoAudioEl = new Audio(fallbackUrl);
+                            if (fallbackUrl && luxoAudioEl) {
+                                luxoAudioEl.src = fallbackUrl;
                                 luxoAudioEl.play().catch(function(){});
                             }
                         }
@@ -1507,10 +1534,10 @@ def configurar_rutas_fastapi(app):
                         if (audioUrl) {
                             function tryPlayAudio(retriesLeft) {
                                 try {
-                                    luxoAudioEl = new Audio(audioUrl);
-                                    luxoAudioEl.onended = function() {
-                                        luxoAudioEl = null;
-                                    };
+                                    if (!luxoAudioEl) {
+                                        luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
+                                    }
+                                    luxoAudioEl.src = audioUrl;
                                     let playPromise = luxoAudioEl.play();
                                     if (playPromise !== undefined) {
                                         playPromise.catch(function(err) {
@@ -1530,7 +1557,7 @@ def configurar_rutas_fastapi(app):
                                     }
                                 }
                             }
-                            tryPlayAudio(2);
+                            tryPlayAudio(3);
                         } else if (text) {
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                         }
