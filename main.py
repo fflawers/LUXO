@@ -833,36 +833,20 @@ def configurar_rutas_fastapi(app):
 
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
-        import time
-        now = time.time()
-        evt = None
-        
-        token = device_id or session_id
-        if token and token in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[token]
-        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS["all"]
-
-        if evt and evt.get("id") != last_id:
-            evt_time = evt.get("timestamp", 0)
-            if evt_time and (now - evt_time > 30):
-                return {"action": "none"}
-            return evt
-        return {"action": "none"}
+        req_session = session_id or device_id
+        data = None
+        if req_session and str(req_session) in GLOBAL_WEB_TTS_EVENTS:
+            data = GLOBAL_WEB_TTS_EVENTS.pop(str(req_session), None)
+        return data or {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
         import time
+        req_session = session_id or device_id
         evt_id = f"stop_{int(time.time()*1000)}"
-        evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-        GLOBAL_WEB_TTS_EVENTS["all"] = evt
-        if user_id:
-            GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
-        token = device_id or session_id
-        if token:
-            GLOBAL_WEB_TTS_EVENTS[token] = evt
+        evt = {"id": evt_id, "action": "stop", "timestamp": time.time(), "session_id": str(req_session) if req_session else ""}
+        if req_session:
+            GLOBAL_WEB_TTS_EVENTS[str(req_session)] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -1601,10 +1585,10 @@ def configurar_rutas_fastapi(app):
                     };
 
                     window.getLuxoLocalSessionId = function() {
-                        let sid = window._luxoClientSessionId;
+                        let sid = window._luxoLocalSessionId || window._luxoClientSessionId;
                         if (!sid) {
                             try {
-                                sid = sessionStorage.getItem('luxo_client_session_id') || localStorage.getItem('luxo_device_token');
+                                sid = sessionStorage.getItem('luxo_local_session_id') || sessionStorage.getItem('luxo_client_session_id') || localStorage.getItem('luxo_device_token');
                             } catch(e) {}
                         }
                         return sid || '';
@@ -4188,18 +4172,17 @@ def main(page: ft.Page):
                 page.client_storage.set("luxo_device_token", dev_token)
     except Exception:
         pass
-    if not dev_token:
-        dev_token = f"dev_{uuid.uuid4().hex[:12]}"
-    page.device_id = dev_token
-    page.client_session_id = dev_token
     import uuid
-    sess_id = f"sess_{uuid.uuid4().hex[:12]}"
-    page.client_session_id = sess_id
-    page.device_id = sess_id
+    if not getattr(page, "_luxo_unique_session_id", None):
+        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+    page_sess_id = page._luxo_unique_session_id
+    page.client_session_id = page_sess_id
+    page.device_id = page_sess_id
+    page.session_id = page_sess_id
 
     # Sincronizar session_id inmediatamente con el cliente web
     try:
-        page.launch_url(f"javascript:void((function(){{try{{window._luxoClientSessionId='{sess_id}';sessionStorage.setItem('luxo_client_session_id','{sess_id}');}}catch(e){{}}}})());")
+        page.launch_url(f"javascript:void((function(){{try{{window._luxoLocalSessionId='{page_sess_id}';window._luxoClientSessionId='{page_sess_id}';sessionStorage.setItem('luxo_local_session_id','{page_sess_id}');sessionStorage.setItem('luxo_client_session_id','{page_sess_id}');}}catch(e){{}}}})());")
     except Exception:
         pass
 
@@ -4903,13 +4886,14 @@ def main(page: ft.Page):
         
         try:
             import time
+            if not getattr(page, "_luxo_unique_session_id", None):
+                import uuid
+                page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+            page_sess_id = page._luxo_unique_session_id
             evt_id = f"stop_{int(time.time()*1000)}"
-            evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-            page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None)
+            evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time(), "session_id": str(page_sess_id)}
             if page_sess_id:
-                GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
-            elif user_info and user_info.get("id"):
-                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
+                GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_data
         except Exception:
             pass
 
@@ -5058,7 +5042,11 @@ def main(page: ft.Page):
 
                 audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
 
-                page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None) or getattr(page, "session_id", None)
+                if not getattr(page, "_luxo_unique_session_id", None):
+                    import uuid
+                    page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+                page_sess_id = page._luxo_unique_session_id
+
                 evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
                 evt_data = {
                     "id": evt_id,
@@ -5068,14 +5056,11 @@ def main(page: ft.Page):
                     "timestamp": time.time(),
                     "voice_id": v_actual,
                     "voice_gender": g_actual,
-                    "session_id": page_sess_id
+                    "session_id": str(page_sess_id)
                 }
                 
-                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-                if user_info and user_info.get("id"):
-                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
                 if page_sess_id:
-                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
+                    GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5088,14 +5073,15 @@ def main(page: ft.Page):
         if current_speak_btn_play_pause:
             try:
                 import time
+                if not getattr(page, "_luxo_unique_session_id", None):
+                    import uuid
+                    page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+                page_sess_id = page._luxo_unique_session_id
                 evt_id = f"toggle_{int(time.time()*1000)}"
                 evt_action = "pause" if not current_speak_is_paused else "resume"
-                evt = {"id": evt_id, "action": evt_action, "timestamp": time.time()}
-                page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None)
+                evt = {"id": evt_id, "action": evt_action, "timestamp": time.time(), "session_id": str(page_sess_id)}
                 if page_sess_id:
-                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt
-                elif user_info and user_info.get("id"):
-                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt
+                    GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt
 
                 if current_speak_is_paused:
                     run_js("javascript:if(window.luxoResumeTts){window.luxoResumeTts();}")
@@ -16941,13 +16927,12 @@ REGLAS OBLIGATORIAS:
 
             def cancelar_simulacion_click(e):
                 try:
-                    page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
-                    import time
-                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
-                    if user_info and user_info.get("id"):
-                        GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_stop
-                    if page_dev_id:
-                        GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
+                    if not getattr(page, "_luxo_unique_session_id", None):
+                        import uuid
+                        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+                    page_sess_id = page._luxo_unique_session_id
+                    if page_sess_id:
+                        GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_stop
                 except Exception: pass
                 config_area.visible = True
                 chat_area.visible = False
@@ -17171,13 +17156,12 @@ REGLAS OBLIGATORIAS:
 
             def cancelar_simulacion_voz_click(e):
                 try:
-                    page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
-                    import time
-                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
-                    if user_info and user_info.get("id"):
-                        GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_stop
-                    if page_dev_id:
-                        GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
+                    if not getattr(page, "_luxo_unique_session_id", None):
+                        import uuid
+                        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+                    page_sess_id = page._luxo_unique_session_id
+                    if page_sess_id:
+                        GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_stop
                 except Exception: pass
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
@@ -22213,16 +22197,12 @@ Ejemplo:
                     except: pass
                 # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu
                 if desde_menu_manual:
-                    if page:
-                        try: page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
-                        except: pass
-                    import time
-                    page_dev_id = getattr(page, "device_id", None)
-                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
-                    if user_info and user_info.get("id"):
-                        GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_stop
-                    if page_dev_id:
-                        GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
+                    if not getattr(page, "_luxo_unique_session_id", None):
+                        import uuid
+                        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+                    page_sess_id = page._luxo_unique_session_id
+                    if page_sess_id:
+                        GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_stop
             except Exception:
                 pass
             try:
@@ -22651,14 +22631,15 @@ Ejemplo:
                 "audio_url": sample_url,
                 "timestamp": time.time(),
                 "voice_id": v_id,
-                "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
+                "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male",
+                "session_id": str(getattr(page, "_luxo_unique_session_id", None) or "")
             }
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-            if user_info and user_info.get("id"):
-                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-            page_dev_id = getattr(page, "device_id", None)
-            if page_dev_id:
-                GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
+            if not getattr(page, "_luxo_unique_session_id", None):
+                import uuid
+                page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+            page_sess_id = page._luxo_unique_session_id
+            if page_sess_id:
+                GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_data
 
         def on_voice_changed(e):
             v_val = e.control.value if (e and hasattr(e, "control") and e.control and e.control.value) else (voice_dropdown.value or "jarvis")
