@@ -1,6 +1,5 @@
 flet
 flet-video
-flet-audio
 mysql-connector-python
 PyMuPDF
 openpyxl

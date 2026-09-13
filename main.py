@@ -1,9 +1,4 @@
 import flet as ft
-try:
-    import flet_audio as fta
-    ft.Audio = fta.Audio
-except Exception:
-    pass
 from datetime import datetime, timedelta
 import mysql.connector
 import requests
@@ -1537,9 +1532,42 @@ def configurar_rutas_fastapi(app):
                         window.initLuxoMicPermission();
                     };
 
+                    window._currentLuxoAudio = null;
+                    window.luxoPlayAudio = function(url) {
+                        try {
+                            if (!url) return;
+                            if (window._currentLuxoAudio) {
+                                try {
+                                    window._currentLuxoAudio.pause();
+                                    window._currentLuxoAudio.currentTime = 0;
+                                } catch(e) {}
+                            }
+                            let audio = new Audio(url);
+                            window._currentLuxoAudio = audio;
+                            audio.volume = 1.0;
+                            audio.play().catch(function(err) {
+                                console.log("Audio play error:", err);
+                            });
+                        } catch(ex) {
+                            console.error("luxoPlayAudio error:", ex);
+                        }
+                    };
 
+                    window.luxoPauseAudio = function() {
+                        try {
+                            if (window._currentLuxoAudio) {
+                                window._currentLuxoAudio.pause();
+                            }
+                        } catch(e) {}
+                    };
 
-                    window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
+                    window.luxoResumeAudio = function() {
+                        try {
+                            if (window._currentLuxoAudio) {
+                                window._currentLuxoAudio.play().catch(function(){});
+                            }
+                        } catch(e) {}
+                    };
                         let input = document.getElementById("luxo_global_file_input");
                         if (!input) {
                             input = document.createElement("input");
@@ -4072,23 +4100,23 @@ def descargar_pdf_archivo(id_manual, page=None):
 # =========================================
 
 def main(page: ft.Page):
-    local_audio = None
-    try:
-        import flet_audio as fta
-        local_audio = fta.Audio(autoplay=False)
-        page.overlay.append(local_audio)
-        page.update()
-    except Exception as ex_aud:
-        print("Error montando local_audio:", ex_aud)
+    def run_js(js_code):
+        clean_code = (js_code or "").strip()
+        if not clean_code.startswith("javascript:"):
+            clean_code = f"javascript:void((function(){{try{{{clean_code}}}catch(e){{}}}})());"
+        async def _exec_js():
+            try:
+                await page.launch_url(clean_code, web_popup_window_name="_self")
+            except Exception:
+                pass
+        page.run_task(_exec_js)
 
     def reproducir_audio_local(url):
         if not url:
             return
         try:
-            if local_audio:
-                local_audio.src = url
-                local_audio.update()
-                local_audio.play()
+            import json
+            run_js(f"window.luxoPlayAudio({json.dumps(url)});")
         except Exception as ex:
             print("Error en reproducir_audio_local:", ex)
 
@@ -4810,8 +4838,7 @@ def main(page: ft.Page):
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         try:
-            if local_audio:
-                local_audio.pause()
+            run_js("window.luxoPauseAudio();")
         except Exception:
             pass
 
@@ -4935,7 +4962,7 @@ def main(page: ft.Page):
                 try: current_speak_btn_play_pause.update()
                 except Exception: pass
             try:
-                if local_audio: local_audio.pause()
+                run_js("window.luxoPauseAudio();")
             except Exception: pass
         else:
             current_speak_is_paused = False
@@ -4945,7 +4972,7 @@ def main(page: ft.Page):
                 try: current_speak_btn_play_pause.update()
                 except Exception: pass
             try:
-                if local_audio: local_audio.resume()
+                run_js("window.luxoResumeAudio();")
             except Exception: pass
 
 
