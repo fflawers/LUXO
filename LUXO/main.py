@@ -832,15 +832,18 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(session_id: str = "", user_id: str = "1", last_id: str = ""):
+    def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
         import time
         now = time.time()
         evt = None
         
-        if session_id and session_id in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[session_id]
-        elif not session_id and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+        token = device_id or session_id
+        if token and token in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[token]
+        elif not token and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+        elif not token and "all" in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
@@ -850,12 +853,13 @@ def configurar_rutas_fastapi(app):
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
-    def tts_stop_route(session_id: str = "", user_id: str = "1"):
+    def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
         evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-        if session_id:
-            GLOBAL_WEB_TTS_EVENTS[session_id] = evt
+        token = device_id or session_id
+        if token:
+            GLOBAL_WEB_TTS_EVENTS[token] = evt
         elif user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         return {"status": "ok"}
@@ -1595,18 +1599,12 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    window.getLuxoSessionId = function() {
-                        if (window._luxoClientSessionId && window._luxoClientSessionId.length > 3) {
-                            return window._luxoClientSessionId;
-                        }
-                        let stored = null;
-                        try { stored = sessionStorage.getItem('luxo_client_session_id'); } catch(e){}
-                        if (!stored) {
-                            stored = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-                            try { sessionStorage.setItem('luxo_client_session_id', stored); } catch(e){}
-                        }
-                        window._luxoClientSessionId = stored;
-                        return window._luxoClientSessionId;
+                    window.getLuxoDeviceId = function() {
+                        let did = null;
+                        try {
+                            did = localStorage.getItem('luxo_device_token') || sessionStorage.getItem('luxo_device_token') || sessionStorage.getItem('luxo_client_session_id');
+                        } catch(e) {}
+                        return did || '';
                     };
 
                     if (!window._luxoTtsIntervalStarted) {
@@ -1614,8 +1612,8 @@ def configurar_rutas_fastapi(app):
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
-                                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
