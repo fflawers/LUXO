@@ -838,12 +838,14 @@ def configurar_rutas_fastapi(app):
         evt = None
         if session_id and session_id in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[session_id]
-        elif not session_id and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+        elif user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+        elif "all" in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
-            if (not last_id and (now - evt_time > 3)) or (evt_time and (now - evt_time > 6)):
+            if (not last_id and (now - evt_time > 4)) or (evt_time and (now - evt_time > 10)):
                 return {"action": "none"}
             return evt
         return {"action": "none"}
@@ -853,9 +855,10 @@ def configurar_rutas_fastapi(app):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
         evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt
         if session_id:
             GLOBAL_WEB_TTS_EVENTS[session_id] = evt
-        elif user_id:
+        if user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         return {"status": "ok"}
 
@@ -4867,11 +4870,12 @@ def main(page: ft.Page):
             import time
             evt_id = f"stop_{int(time.time()*1000)}"
             evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            if user_info and user_info.get("id"):
+                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
             page_sess_id = getattr(page, "client_session_id", None)
             if page_sess_id:
                 GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
-            elif user_info and user_info.get("id"):
-                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
         except Exception:
             pass
 
@@ -5029,11 +5033,12 @@ def main(page: ft.Page):
                     "voice_gender": g_actual
                 }
                 
+                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+                if user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
                 page_sess_id = getattr(page, "client_session_id", None)
                 if page_sess_id:
                     GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
-                elif user_info and user_info.get("id"):
-                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5049,11 +5054,12 @@ def main(page: ft.Page):
                 evt_id = f"toggle_{int(time.time()*1000)}"
                 evt_action = "pause" if not current_speak_is_paused else "resume"
                 evt = {"id": evt_id, "action": evt_action, "timestamp": time.time()}
+                GLOBAL_WEB_TTS_EVENTS["all"] = evt
+                if user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt
                 page_sess_id = getattr(page, "client_session_id", None)
                 if page_sess_id:
                     GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt
-                elif user_info and user_info.get("id"):
-                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt
 
                 if active_sapi_instance[0]:
                     try:
@@ -16846,10 +16852,11 @@ REGLAS OBLIGATORIAS:
                     u_id_str = str(user_info.get("id", "1"))
                     evt_id = f"stop_{int(time.time()*1000)}"
                     evt_stop = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if u_id_str:
+                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
                     if page_sess_id:
                         GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
-                    elif u_id_str:
-                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
                 except Exception: pass
                 config_area.visible = True
                 chat_area.visible = False
@@ -17073,10 +17080,11 @@ REGLAS OBLIGATORIAS:
                     u_id_str = str(user_info.get("id", "1"))
                     evt_id = f"stop_{int(time.time()*1000)}"
                     evt_stop = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if u_id_str:
+                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
                     if page_sess_id:
                         GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
-                    elif u_id_str:
-                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
                 except Exception: pass
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
@@ -22119,10 +22127,11 @@ Ejemplo:
                     page_sess_id = getattr(page, "client_session_id", None)
                     u_id_str = str(user_info.get("id", "1"))
                     evt_stop = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if u_id_str:
+                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
                     if page_sess_id:
                         GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
-                    elif u_id_str:
-                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
             except Exception:
                 pass
             try:
@@ -22553,11 +22562,12 @@ Ejemplo:
                 "voice_id": v_id,
                 "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
             }
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            if user_info and user_info.get("id"):
+                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
             page_sess_id = getattr(page, "client_session_id", None)
             if page_sess_id:
                 GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
-            elif user_info and user_info.get("id"):
-                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
         def on_voice_changed(e):
             v_val = e.control.value if (e and hasattr(e, "control") and e.control and e.control.value) else (voice_dropdown.value or "jarvis")
