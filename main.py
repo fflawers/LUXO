@@ -1619,44 +1619,7 @@ def configurar_rutas_fastapi(app):
                         return did || '';
                     };
 
-                    if (!window._luxoTtsIntervalStarted) {
-                        window._luxoTtsIntervalStarted = true;
-                        setInterval(function() {
-                            try {
-                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
-                                .then(function(r) { return r.json(); })
-                                .then(function(data) {
-                                    if (!data || !data.action || data.action === 'none') return;
-                                    if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
-                                        lastHandledTtsId = data.id;
-                                        const evtTime = (data.timestamp ? data.timestamp * 1000 : Date.now());
-                                        const timeSinceLastClick = Date.now() - (window._lastUserClickTime || 0);
-                                        // Reproducir si este dispositivo interactuó en los últimos 20 segundos
-                                        if (timeSinceLastClick < 20000 || (window._lastUserClickTime === 0 && (Date.now() - evtTime) < 6000)) {
-                                            window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
-                                        } else {
-                                            console.log("Audio omitido en este dispositivo: iniciado en otra sesión.");
-                                        }
-                                    } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
-                                        lastHandledTtsId = data.id;
-                                        window.luxoStopTts();
-                                    } else if (data.action === 'pause') {
-                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.pause(); } catch(e){} }
-                                        if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
-                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
-                                    } else if (data.action === 'resume') {
-                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.play(); } catch(e){} }
-                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
-                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
-                                    }
-                                })
-                                .catch(function(){});
-                            } catch(e) {}
-                        }, 1000);
-                    }
-
+                    // Reproductor desacoplado de canales globales (100% local por sesion Flet)
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
                         if (!input) {
@@ -5076,24 +5039,7 @@ def main(page: ft.Page):
                     except Exception as ex_pl:
                         print("Notice session_audio.play:", ex_pl)
 
-                evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
-                evt_data = {
-                    "id": evt_id,
-                    "action": "speak",
-                    "text": clean_text,
-                    "audio_url": audio_url,
-                    "timestamp": time.time(),
-                    "voice_id": v_actual,
-                    "voice_gender": g_actual
-                }
-                
-                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-                if user_info and user_info.get("id"):
-                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-                page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None)
-                if page_sess_id:
-                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
-
+                # Audio reproducido directamente en session_audio local sin difusion global
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
                 stop_current_speak()
