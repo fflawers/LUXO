@@ -838,7 +838,7 @@ def configurar_rutas_fastapi(app):
         evt = GLOBAL_WEB_TTS_EVENTS.get(str(user_id)) or GLOBAL_WEB_TTS_EVENTS.get("all")
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
-            if evt_time and (now - evt_time > 30):
+            if (not last_id and (now - evt_time > 3)) or (evt_time and (now - evt_time > 6)):
                 return {"action": "none"}
             return evt
         return {"action": "none"}
@@ -1082,24 +1082,27 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    // Interceptor de clics físicos directos para el micrófono del simulador
+                    // Interceptor de toques y clics físicos directos para el micrófono del simulador
                     let lastSimClickTime = 0;
                     function handleSimDirectClick(e) {
                         try {
                             const now = Date.now();
-                            if (now - lastSimClickTime < 700) return;
+                            if (now - lastSimClickTime < 500) return;
 
                             let target = e.target;
                             let isSimMic = false;
                             let isSimVoz = false;
-                            for (let i = 0; i < 8 && target && target !== document.body; i++) {
-                                const title = (target.getAttribute && (target.getAttribute('title') || target.getAttribute('aria-label') || '')) || '';
-                                const txt = target.innerText || target.textContent || '';
-                                if (title.includes('Hablar por Micrófono') || title.includes('sim-mic') || (target.id && target.id.includes('sim-mic'))) {
+                            for (let i = 0; i < 10 && target && target !== document.body && target !== document.documentElement; i++) {
+                                const title = (target.getAttribute && (target.getAttribute('title') || target.getAttribute('aria-label') || target.getAttribute('data-tooltip') || '')) || '';
+                                const txt = (target.innerText || target.textContent || target.innerHTML || '').trim();
+                                const lowerTitle = title.toLowerCase();
+                                const lowerTxt = txt.toLowerCase();
+
+                                if (lowerTitle.includes('hablar por micrófono') || lowerTitle.includes('sim-mic') || (target.id && target.id.includes('sim-mic'))) {
                                     isSimMic = true;
                                     break;
                                 }
-                                if (txt.includes('Hablar Ahora') || title.includes('Hablar Ahora')) {
+                                if (lowerTxt.includes('hablar ahora') || lowerTitle.includes('hablar ahora') || lowerTxt.includes('hablar ahora 🎙') || lowerTitle.includes('hablar ahora 🎙')) {
                                     isSimVoz = true;
                                     break;
                                 }
@@ -1107,11 +1110,11 @@ def configurar_rutas_fastapi(app):
                             }
                             if (isSimMic) {
                                 lastSimClickTime = now;
-                                console.log('[SIMULADOR MIC] Clic físico interceptado en botón micrófono');
+                                console.log('[SIMULADOR MIC] Toque/Clic físico interceptado en botón micrófono');
                                 window.iniciarDictadoSimulador('chat');
                             } else if (isSimVoz) {
                                 lastSimClickTime = now;
-                                console.log('[SIMULADOR MIC] Clic físico interceptado en botón hablar voz');
+                                console.log('[SIMULADOR MIC] Toque/Clic físico interceptado en botón hablar voz');
                                 window.iniciarDictadoSimulador('voz');
                             }
                         } catch(err) {
@@ -1119,8 +1122,10 @@ def configurar_rutas_fastapi(app):
                         }
                     }
 
-                    document.addEventListener('click', handleSimDirectClick, true);
-                    document.addEventListener('pointerdown', handleSimDirectClick, true);
+                    document.addEventListener('touchstart', handleSimDirectClick, { passive: true, capture: true });
+                    document.addEventListener('pointerdown', handleSimDirectClick, { passive: true, capture: true });
+                    document.addEventListener('mousedown', handleSimDirectClick, { passive: true, capture: true });
+                    document.addEventListener('click', handleSimDirectClick, { passive: true, capture: true });
                 });
                 </script>
                 """
@@ -16322,18 +16327,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         except: pass
 
                     r_sim = sr.Recognizer()
-                    r_sim.pause_threshold = 1.8
-                    r_sim.non_speaking_duration = 1.0
-                    r_sim.dynamic_energy_threshold = False
-                    r_sim.energy_threshold = 300
+                    r_sim.pause_threshold = 1.0
+                    r_sim.non_speaking_duration = 0.8
+                    r_sim.dynamic_energy_threshold = True
 
                     with sr.Microphone() as source:
-                        r_sim.adjust_for_ambient_noise(source, duration=0.35)
-                        if r_sim.energy_threshold < 250:
-                            r_sim.energy_threshold = 250
+                        r_sim.adjust_for_ambient_noise(source, duration=0.3)
                         if sim_stop_requested[0]:
                             raise Exception("Cancelado por usuario")
-                        audio = r_sim.listen(source, timeout=8, phrase_time_limit=45)
+                        audio = r_sim.listen(source, timeout=6, phrase_time_limit=18)
 
                     if sim_stop_requested[0]:
                         raise Exception("Cancelado por usuario")
@@ -16800,6 +16802,14 @@ REGLAS OBLIGATORIAS:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_click(e):
+                try:
+                    page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
+                    import time
+                    u_id_str = str(user_info.get("id", "1"))
+                    evt_id = f"stop_{int(time.time()*1000)}"
+                    GLOBAL_WEB_TTS_EVENTS[u_id_str] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                except Exception: pass
                 config_area.visible = True
                 chat_area.visible = False
                 chat_history.clear()
@@ -17017,6 +17027,14 @@ REGLAS OBLIGATORIAS:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_voz_click(e):
+                try:
+                    page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
+                    import time
+                    u_id_str = str(user_info.get("id", "1"))
+                    evt_id = f"stop_{int(time.time()*1000)}"
+                    GLOBAL_WEB_TTS_EVENTS[u_id_str] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                except Exception: pass
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
                 voz_chat_history.clear()
@@ -17096,6 +17114,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
                 on_click=hablar_ahora_voz_click,
                 bgcolor="#1f6f43",
                 color="white",
+                tooltip="Hablar Ahora 🎙️",
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                 disabled=True
             )
@@ -22044,6 +22063,18 @@ Ejemplo:
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista):
             active_view[0] = vista
+            try:
+                # Silenciar cualquier lectura de audio o TTS de inmediato al cambiar de modulo
+                if page:
+                    try: page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
+                    except: pass
+                import time
+                u_id_str = str(user_info.get("id", "1"))
+                evt_stop = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
+                GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
+                GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+            except Exception:
+                pass
             try:
                 page.route = f"/{vista}"
             except Exception:
