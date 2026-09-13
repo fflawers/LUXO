@@ -840,9 +840,9 @@ def configurar_rutas_fastapi(app):
         token = device_id or session_id
         if token and token in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[token]
-        elif not token and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-        elif not token and "all" in GLOBAL_WEB_TTS_EVENTS:
+        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
@@ -857,11 +857,12 @@ def configurar_rutas_fastapi(app):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
         evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt
+        if user_id:
+            GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         token = device_id or session_id
         if token:
             GLOBAL_WEB_TTS_EVENTS[token] = evt
-        elif user_id:
-            GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -5062,13 +5063,12 @@ def main(page: ft.Page):
                     "voice_gender": g_actual
                 }
                 
+                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+                if user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
                 page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None)
                 if page_sess_id:
                     GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
-                elif user_info and user_info.get("id"):
-                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-                else:
-                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
