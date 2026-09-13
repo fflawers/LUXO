@@ -832,18 +832,15 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(user_id: str = "1", last_id: str = "", tab_id: str = "", device_id: str = "", session_id: str = ""):
+    def tts_poll_route(session_id: str = "", user_id: str = "1", last_id: str = ""):
         import time
         now = time.time()
-        client_token = tab_id or device_id or session_id
         evt = None
         
-        if client_token and client_token in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[client_token]
-        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+        if session_id and session_id in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[session_id]
+        elif not session_id and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
@@ -853,16 +850,14 @@ def configurar_rutas_fastapi(app):
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
-    def tts_stop_route(user_id: str = "1", tab_id: str = "", device_id: str = "", session_id: str = ""):
+    def tts_stop_route(session_id: str = "", user_id: str = "1"):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
         evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-        GLOBAL_WEB_TTS_EVENTS["all"] = evt
-        if user_id:
+        if session_id:
+            GLOBAL_WEB_TTS_EVENTS[session_id] = evt
+        elif user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
-        client_token = tab_id or device_id or session_id
-        if client_token:
-            GLOBAL_WEB_TTS_EVENTS[client_token] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -1600,12 +1595,27 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
+                    window.getLuxoSessionId = function() {
+                        if (window._luxoClientSessionId && window._luxoClientSessionId.length > 3) {
+                            return window._luxoClientSessionId;
+                        }
+                        let stored = null;
+                        try { stored = sessionStorage.getItem('luxo_client_session_id'); } catch(e){}
+                        if (!stored) {
+                            stored = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+                            try { sessionStorage.setItem('luxo_client_session_id', stored); } catch(e){}
+                        }
+                        window._luxoClientSessionId = stored;
+                        return window._luxoClientSessionId;
+                    };
+
                     if (!window._luxoTtsIntervalStarted) {
                         window._luxoTtsIntervalStarted = true;
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
@@ -4177,23 +4187,14 @@ def main(page: ft.Page):
         dev_token = f"dev_{uuid.uuid4().hex[:12]}"
     page.device_id = dev_token
     page.client_session_id = dev_token
-    page.connection_token = dev_token
+    import uuid
+    sess_id = f"sess_{uuid.uuid4().hex[:12]}"
+    page.client_session_id = sess_id
+    page.device_id = sess_id
 
+    # Sincronizar session_id inmediatamente con el cliente web
     try:
-        token_anchor = ft.Container(
-            content=ft.Text(dev_token, color="transparent", size=1),
-            key="luxo_conn_token_el",
-            width=0,
-            height=0,
-            visible=True
-        )
-        page.overlay.append(token_anchor)
-    except Exception:
-        pass
-
-    # Sincronizar device_id inmediatamente con el cliente web
-    try:
-        page.launch_url(f"javascript:void((function(){{try{{localStorage.setItem('luxo_device_token','{page.device_id}');sessionStorage.setItem('luxo_tab_id','{page.device_id}');window._luxoDevId='{page.device_id}';}}catch(e){{}}}})());")
+        page.launch_url(f"javascript:void((function(){{try{{window._luxoClientSessionId='{sess_id}';sessionStorage.setItem('luxo_client_session_id','{sess_id}');}}catch(e){{}}}})());")
     except Exception:
         pass
 
@@ -4899,12 +4900,11 @@ def main(page: ft.Page):
             import time
             evt_id = f"stop_{int(time.time()*1000)}"
             evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-            if user_info and user_info.get("id"):
+            page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None)
+            if page_sess_id:
+                GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
+            elif user_info and user_info.get("id"):
                 GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-            page_dev_id = getattr(page, "device_id", None)
-            if page_dev_id:
-                GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
         except Exception:
             pass
 
@@ -5064,17 +5064,13 @@ def main(page: ft.Page):
                     "voice_gender": g_actual
                 }
                 
-                uid = "all"
-                try:
-                    if user_info and user_info.get("id"):
-                        uid = str(user_info["id"])
-                except Exception:
-                    pass
-
-                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-                GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
-                if user_info and user_info.get("id"):
+                page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None)
+                if page_sess_id:
+                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
+                elif user_info and user_info.get("id"):
                     GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
+                else:
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5090,9 +5086,11 @@ def main(page: ft.Page):
                 evt_id = f"toggle_{int(time.time()*1000)}"
                 evt_action = "pause" if not current_speak_is_paused else "resume"
                 evt = {"id": evt_id, "action": evt_action, "timestamp": time.time()}
-                page_dev_id = getattr(page, "device_id", None)
-                if page_dev_id:
-                    GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt
+                page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None)
+                if page_sess_id:
+                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt
+                elif user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt
 
                 if current_speak_is_paused:
                     run_js("javascript:if(window.luxoResumeTts){window.luxoResumeTts();}")
@@ -24354,7 +24352,6 @@ Ejemplo:
                         active_sessions[user_id_key] = sess_dict
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
                         cargar_chat(initial_view=last_view_saved)
-                        reproducir_saludo_login(user_data['Nombre_Completo'])
                         return # Termina sin mostrar login
         except Exception as ex_r:
             print("Notice auto-restore session:", ex_r)
