@@ -832,17 +832,27 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
+    def tts_poll_route(tab_id: str = "", device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
         import time
         now = time.time()
-        target_id = device_id or session_id
+        client_token = tab_id or device_id or session_id
         evt = None
-        if target_id and target_id in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[target_id]
-        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS["all"]
+        
+        # 1. Búsqueda directa por token de dispositivo/pestaña
+        if client_token and client_token in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[client_token]
+        # 2. Búsqueda por ID de usuario con filtro de target_token
+        elif user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+            candidate = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+            cand_target = candidate.get("target_token")
+            if not cand_target or not client_token or cand_target == client_token:
+                evt = candidate
+        # 3. Búsqueda en cola global con filtro de target_token
+        elif "all" in GLOBAL_WEB_TTS_EVENTS:
+            candidate = GLOBAL_WEB_TTS_EVENTS["all"]
+            cand_target = candidate.get("target_token")
+            if not cand_target or not client_token or cand_target == client_token:
+                evt = candidate
 
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
@@ -852,16 +862,16 @@ def configurar_rutas_fastapi(app):
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
-    def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
+    def tts_stop_route(tab_id: str = "", device_id: str = "", session_id: str = "", user_id: str = "1"):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
-        evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+        client_token = tab_id or device_id or session_id
+        evt = {"id": evt_id, "action": "stop", "timestamp": time.time(), "target_token": client_token}
         GLOBAL_WEB_TTS_EVENTS["all"] = evt
         if user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
-        target_id = device_id or session_id
-        if target_id:
-            GLOBAL_WEB_TTS_EVENTS[target_id] = evt
+        if client_token:
+            GLOBAL_WEB_TTS_EVENTS[client_token] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -1423,22 +1433,7 @@ def configurar_rutas_fastapi(app):
                                             setTimeout(function() {
                                                 try { rec.start(); } catch(e2){}
                                             }, 1500);
-                                        }
-                                    }, 1200);
-                                }
-                            };
-
-                            rec.start();
-                        } catch(ex) {
-                            console.log("Exception in startRecognition:", ex);
-                        }
-                    }
-
-                    banner.onclick = function() {
-                        window.initLuxoMicPermission();
-                    };
-
-                    // ==========================================
+                                   // ==========================================
                     // LUXO CLIENT TTS ENGINE (Web / Mobile / Desktop)
                     // ==========================================
                     let lastHandledTtsId = null;
@@ -1454,20 +1449,32 @@ def configurar_rutas_fastapi(app):
                     }
 
                     window._luxoAudioUnlocked = false;
-                    window.luxoUnlockAudio = function() {
-                        if (window._luxoAudioUnlocked) return;
+                    function _unlockLuxoAudio() {
                         try {
-                            if (luxoAudioEl) {
-                                luxoAudioEl.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                                luxoAudioEl.play().then(function() {
-                                    window._luxoAudioUnlocked = true;
-                                }).catch(function(){});
+                            if (!luxoAudioEl) {
+                                luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
+                                luxoAudioEl.id = "luxo_global_tts_player";
+                                if (!document.body.contains(luxoAudioEl)) {
+                                    document.body.appendChild(luxoAudioEl);
+                                }
                             }
-                        } catch(e){}
-                    };
+                            if (!window._luxoAudioUnlocked) {
+                                luxoAudioEl.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+                                let p = luxoAudioEl.play();
+                                if (p !== undefined) {
+                                    p.then(function() { window._luxoAudioUnlocked = true; }).catch(function(){});
+                                }
+                            }
+                            if ('speechSynthesis' in window) {
+                                window.speechSynthesis.resume();
+                            }
+                        } catch(e) {}
+                    }
 
-                    document.addEventListener("click", window.luxoUnlockAudio, { passive: true });
-                    document.addEventListener("touchstart", window.luxoUnlockAudio, { passive: true });
+                    document.addEventListener("click", _unlockLuxoAudio, { passive: true, capture: true });
+                    document.addEventListener("touchstart", _unlockLuxoAudio, { passive: true, capture: true });
+                    document.addEventListener("pointerdown", _unlockLuxoAudio, { passive: true, capture: true });
+                    document.addEventListener("keydown", _unlockLuxoAudio, { passive: true, capture: true });
 
                     window.luxoStopTts = function() {
                         if (luxoAudioEl) {
@@ -1492,25 +1499,6 @@ def configurar_rutas_fastapi(app):
                         window.speechSynthesis.onvoiceschanged = _refreshLuxoVoices;
                     }
 
-                    // Desbloqueador de audio en primer clic/toque del usuario (evita bloqueos de Autoplay de Chrome/Edge)
-                    function _unlockLuxoAudio() {
-                        try {
-                            if (!luxoAudioEl) {
-                                luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
-                                luxoAudioEl.id = "luxo_global_tts_player";
-                                if (!document.body.contains(luxoAudioEl)) {
-                                    document.body.appendChild(luxoAudioEl);
-                                }
-                            }
-                            if ('speechSynthesis' in window) {
-                                window.speechSynthesis.resume();
-                            }
-                        } catch(e) {}
-                    }
-                    window.addEventListener('click', _unlockLuxoAudio, { passive: true });
-                    window.addEventListener('touchstart', _unlockLuxoAudio, { passive: true });
-                    window.addEventListener('keydown', _unlockLuxoAudio, { passive: true });
-
                     window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, fallbackUrl) {
                         if (!('speechSynthesis' in window) || !text) {
                             if (fallbackUrl && luxoAudioEl) {
@@ -1521,6 +1509,7 @@ def configurar_rutas_fastapi(app):
                         }
                         try {
                             window.speechSynthesis.cancel();
+                            window.speechSynthesis.resume();
                             _refreshLuxoVoices();
                             const u = new SpeechSynthesisUtterance(text);
                             const vId = (voiceId || '').toLowerCase();
@@ -1591,7 +1580,7 @@ def configurar_rutas_fastapi(app):
                                         playPromise.catch(function(err) {
                                             console.log("Audio play attempt failed, retries left:", retriesLeft, err);
                                             if (retriesLeft > 0) {
-                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                                             } else {
                                                 console.log("Falling back to WebSpeech API");
                                                 window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
@@ -1600,7 +1589,7 @@ def configurar_rutas_fastapi(app):
                                     }
                                 } catch(err) {
                                     if (retriesLeft > 0) {
-                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                                     } else {
                                         window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                                     }
@@ -1612,35 +1601,27 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    window.getLuxoDeviceId = function() {
-                        let devId = null;
+                    window.getLuxoConnectionToken = function() {
+                        if (window._luxoDevId && window._luxoDevId.length > 3) return window._luxoDevId;
                         try {
-                            for (let i = 0; i < localStorage.length; i++) {
-                                let k = localStorage.key(i);
-                                if (k && k.includes('luxo_device_token')) {
-                                    let v = localStorage.getItem(k);
-                                    if (v) {
-                                        devId = v.replace(/["'\\]/g, '').trim();
-                                        break;
-                                    }
-                                }
+                            let el = document.querySelector('[key="luxo_conn_token_el"]');
+                            if (el && el.innerText && el.innerText.trim().length > 3) {
+                                window._luxoDevId = el.innerText.trim();
+                                return window._luxoDevId;
                             }
-                            if (!devId) {
-                                let direct = localStorage.getItem('luxo_device_token');
-                                if (direct) devId = direct.replace(/["'\\]/g, '').trim();
+                        } catch(e){}
+                        let tid = null;
+                        try {
+                            tid = sessionStorage.getItem('luxo_tab_id');
+                            if (!tid) {
+                                tid = 'tab_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
+                                sessionStorage.setItem('luxo_tab_id', tid);
                             }
-                            if (!devId) {
-                                devId = 'dev_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
-                                localStorage.setItem('luxo_device_token', devId);
-                                try { localStorage.setItem('flet_client_storage:luxo_device_token', JSON.stringify(devId)); } catch(e){}
-                            }
-                        } catch(e) {
-                            if (!window._luxoDevId) {
-                                window._luxoDevId = 'dev_' + Math.random().toString(36).substring(2, 11);
-                            }
-                            devId = window._luxoDevId;
+                        } catch(e){
+                            tid = 'tab_' + Math.random().toString(36).substring(2, 10);
                         }
-                        return devId;
+                        window._luxoDevId = tid;
+                        return tid;
                     };
 
                     if (!window._luxoTtsIntervalStarted) {
@@ -1648,8 +1629,8 @@ def configurar_rutas_fastapi(app):
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                const token = window.getLuxoConnectionToken ? window.getLuxoConnectionToken() : '';
+                                fetch('/api/tts/poll?tab_id=' + encodeURIComponent(token) + '&device_id=' + encodeURIComponent(token) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
@@ -1663,6 +1644,14 @@ def configurar_rutas_fastapi(app):
                                         if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
                                     } else if (data.action === 'resume') {
+                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
+                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+                                    }
+                                })
+                                .catch(function(){});
+                            } catch(e) {}
+                        }, 1000);
+                    } (data.action === 'resume') {
                                         if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
                                     }
@@ -4219,10 +4208,23 @@ def main(page: ft.Page):
         dev_token = f"dev_{uuid.uuid4().hex[:12]}"
     page.device_id = dev_token
     page.client_session_id = dev_token
+    page.connection_token = dev_token
+
+    try:
+        token_anchor = ft.Container(
+            content=ft.Text(dev_token, color="transparent", size=1),
+            key="luxo_conn_token_el",
+            width=0,
+            height=0,
+            visible=True
+        )
+        page.overlay.append(token_anchor)
+    except Exception:
+        pass
 
     # Sincronizar device_id inmediatamente con el cliente web
     try:
-        page.launch_url(f"javascript:void((function(){{try{{localStorage.setItem('luxo_device_token','{page.device_id}');window._luxoDevId='{page.device_id}';}}catch(e){{}}}})());")
+        page.launch_url(f"javascript:void((function(){{try{{localStorage.setItem('luxo_device_token','{page.device_id}');sessionStorage.setItem('luxo_tab_id','{page.device_id}');window._luxoDevId='{page.device_id}';}}catch(e){{}}}})());")
     except Exception:
         pass
 
@@ -5082,6 +5084,7 @@ def main(page: ft.Page):
 
                 audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
 
+                conn_token = getattr(page, "connection_token", None) or getattr(page, "device_id", None)
                 evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
                 evt_data = {
                     "id": evt_id,
@@ -5090,7 +5093,8 @@ def main(page: ft.Page):
                     "audio_url": audio_url,
                     "timestamp": time.time(),
                     "voice_id": v_actual,
-                    "voice_gender": g_actual
+                    "voice_gender": g_actual,
+                    "target_token": conn_token
                 }
                 
                 uid = "all"
@@ -5104,9 +5108,8 @@ def main(page: ft.Page):
                 GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
                 if user_info and user_info.get("id"):
                     GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-                page_dev_id = getattr(page, "device_id", None)
-                if page_dev_id:
-                    GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
+                if conn_token:
+                    GLOBAL_WEB_TTS_EVENTS[conn_token] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
