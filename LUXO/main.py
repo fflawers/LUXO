@@ -832,10 +832,15 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(user_id: str = "1", last_id: str = ""):
+    def tts_poll_route(session_id: str = "", user_id: str = "1", last_id: str = ""):
         import time
         now = time.time()
-        evt = GLOBAL_WEB_TTS_EVENTS.get(str(user_id)) or GLOBAL_WEB_TTS_EVENTS.get("all")
+        evt = None
+        if session_id and session_id in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[session_id]
+        elif not session_id and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
             if (not last_id and (now - evt_time > 3)) or (evt_time and (now - evt_time > 6)):
@@ -844,12 +849,14 @@ def configurar_rutas_fastapi(app):
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
-    def tts_stop_route(user_id: str = "1"):
+    def tts_stop_route(session_id: str = "", user_id: str = "1"):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
-        evt = {"id": evt_id, "action": "stop"}
-        GLOBAL_WEB_TTS_EVENTS["all"] = evt
-        GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
+        evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+        if session_id:
+            GLOBAL_WEB_TTS_EVENTS[session_id] = evt
+        elif user_id:
+            GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -1569,12 +1576,26 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
+                    window.getLuxoSessionId = function() {
+                        if (!window._luxoClientSessionId) {
+                            let stored = null;
+                            try { stored = sessionStorage.getItem('luxo_client_session_id'); } catch(e){}
+                            if (!stored) {
+                                stored = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+                                try { sessionStorage.setItem('luxo_client_session_id', stored); } catch(e){}
+                            }
+                            window._luxoClientSessionId = stored;
+                        }
+                        return window._luxoClientSessionId;
+                    };
+
                     if (!window._luxoTtsIntervalStarted) {
                         window._luxoTtsIntervalStarted = true;
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
@@ -1594,7 +1615,7 @@ def configurar_rutas_fastapi(app):
                                 })
                                 .catch(function(){});
                             } catch(e) {}
-                        }, 1500);
+                        }, 1200);
                     }
 
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
@@ -4134,6 +4155,16 @@ def descargar_pdf_archivo(id_manual, page=None):
 # =========================================
 
 def main(page: ft.Page):
+    import uuid
+    if not hasattr(page, "client_session_id") or not page.client_session_id:
+        page.client_session_id = f"sess_{uuid.uuid4().hex[:12]}"
+
+    # Sincronizar session_id con el cliente web
+    try:
+        page.launch_url(f"javascript:window._luxoClientSessionId='{page.client_session_id}';try{{sessionStorage.setItem('luxo_client_session_id','{page.client_session_id}');}}catch(e){{}}")
+    except Exception:
+        pass
+
     # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
     _w = page.width or 400
     is_mobile = _w < 700
@@ -4835,8 +4866,12 @@ def main(page: ft.Page):
         try:
             import time
             evt_id = f"stop_{int(time.time()*1000)}"
-            evt_data = {"id": evt_id, "action": "stop"}
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+            page_sess_id = getattr(page, "client_session_id", None)
+            if page_sess_id:
+                GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
+            elif user_info and user_info.get("id"):
+                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
         except Exception:
             pass
 
@@ -4994,20 +5029,10 @@ def main(page: ft.Page):
                     "voice_gender": g_actual
                 }
                 
-                uid = "all"
-                try:
-                    if user_info and user_info.get("id"):
-                        uid = str(user_info["id"])
-                    elif hasattr(page, "client_storage") and page.client_storage:
-                        stored_uid = page.client_storage.get("logged_user_id")
-                        if stored_uid:
-                            uid = str(stored_uid)
-                except Exception:
-                    pass
-                    
-                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-                GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
-                if user_info and user_info.get("id"):
+                page_sess_id = getattr(page, "client_session_id", None)
+                if page_sess_id:
+                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
+                elif user_info and user_info.get("id"):
                     GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
             except Exception as e:
@@ -5023,7 +5048,12 @@ def main(page: ft.Page):
                 import time
                 evt_id = f"toggle_{int(time.time()*1000)}"
                 evt_action = "pause" if not current_speak_is_paused else "resume"
-                GLOBAL_WEB_TTS_EVENTS["all"] = {"id": evt_id, "action": evt_action}
+                evt = {"id": evt_id, "action": evt_action, "timestamp": time.time()}
+                page_sess_id = getattr(page, "client_session_id", None)
+                if page_sess_id:
+                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt
+                elif user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt
 
                 if active_sapi_instance[0]:
                     try:
@@ -16812,10 +16842,14 @@ REGLAS OBLIGATORIAS:
                 try:
                     page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
                     import time
+                    page_sess_id = getattr(page, "client_session_id", None)
                     u_id_str = str(user_info.get("id", "1"))
                     evt_id = f"stop_{int(time.time()*1000)}"
-                    GLOBAL_WEB_TTS_EVENTS[u_id_str] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-                    GLOBAL_WEB_TTS_EVENTS["all"] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    evt_stop = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    if page_sess_id:
+                        GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
+                    elif u_id_str:
+                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
                 except Exception: pass
                 config_area.visible = True
                 chat_area.visible = False
@@ -17035,10 +17069,14 @@ REGLAS OBLIGATORIAS:
                 try:
                     page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
                     import time
+                    page_sess_id = getattr(page, "client_session_id", None)
                     u_id_str = str(user_info.get("id", "1"))
                     evt_id = f"stop_{int(time.time()*1000)}"
-                    GLOBAL_WEB_TTS_EVENTS[u_id_str] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-                    GLOBAL_WEB_TTS_EVENTS["all"] = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    evt_stop = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    if page_sess_id:
+                        GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
+                    elif u_id_str:
+                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
                 except Exception: pass
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
@@ -22078,10 +22116,13 @@ Ejemplo:
                         try: page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
                         except: pass
                     import time
+                    page_sess_id = getattr(page, "client_session_id", None)
                     u_id_str = str(user_info.get("id", "1"))
                     evt_stop = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
-                    GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
-                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if page_sess_id:
+                        GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
+                    elif u_id_str:
+                        GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
             except Exception:
                 pass
             try:
@@ -22512,8 +22553,10 @@ Ejemplo:
                 "voice_id": v_id,
                 "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
             }
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-            if user_info and user_info.get("id"):
+            page_sess_id = getattr(page, "client_session_id", None)
+            if page_sess_id:
+                GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
+            elif user_info and user_info.get("id"):
                 GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
         def on_voice_changed(e):
