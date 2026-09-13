@@ -832,32 +832,31 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(session_id: str = "", user_id: str = "1", last_id: str = ""):
+    def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
         import time
         now = time.time()
+        target_id = device_id or session_id
         evt = None
-        if session_id and session_id in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[session_id]
+        if target_id and target_id in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[target_id]
         elif user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-        elif "all" in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
-            if (not last_id and (now - evt_time > 4)) or (evt_time and (now - evt_time > 10)):
+            if (not last_id and (now - evt_time > 8)) or (evt_time and (now - evt_time > 15)):
                 return {"action": "none"}
             return evt
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
-    def tts_stop_route(session_id: str = "", user_id: str = "1"):
+    def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
         evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-        GLOBAL_WEB_TTS_EVENTS["all"] = evt
-        if session_id:
-            GLOBAL_WEB_TTS_EVENTS[session_id] = evt
+        target_id = device_id or session_id
+        if target_id:
+            GLOBAL_WEB_TTS_EVENTS[target_id] = evt
         if user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         return {"status": "ok"}
@@ -1077,7 +1076,8 @@ def configurar_rutas_fastapi(app):
                                 if (txt) {
                                     playToneSim(2);
                                     const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                                    fetch('/simulador_text_input?device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
                             rSim.onerror = function(ev) { 
@@ -1489,6 +1489,25 @@ def configurar_rutas_fastapi(app):
                         window.speechSynthesis.onvoiceschanged = _refreshLuxoVoices;
                     }
 
+                    // Desbloqueador de audio en primer clic/toque del usuario (evita bloqueos de Autoplay de Chrome/Edge)
+                    function _unlockLuxoAudio() {
+                        try {
+                            if (!luxoAudioEl) {
+                                luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
+                                luxoAudioEl.id = "luxo_global_tts_player";
+                                if (!document.body.contains(luxoAudioEl)) {
+                                    document.body.appendChild(luxoAudioEl);
+                                }
+                            }
+                            if ('speechSynthesis' in window) {
+                                window.speechSynthesis.resume();
+                            }
+                        } catch(e) {}
+                    }
+                    window.addEventListener('click', _unlockLuxoAudio, { passive: true });
+                    window.addEventListener('touchstart', _unlockLuxoAudio, { passive: true });
+                    window.addEventListener('keydown', _unlockLuxoAudio, { passive: true });
+
                     window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, fallbackUrl) {
                         if (!('speechSynthesis' in window) || !text) {
                             if (fallbackUrl && luxoAudioEl) {
@@ -1558,6 +1577,10 @@ def configurar_rutas_fastapi(app):
                                 try {
                                     if (!luxoAudioEl) {
                                         luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
+                                        luxoAudioEl.id = "luxo_global_tts_player";
+                                        if (!document.body.contains(luxoAudioEl)) {
+                                            document.body.appendChild(luxoAudioEl);
+                                        }
                                     }
                                     luxoAudioEl.src = audioUrl;
                                     let playPromise = luxoAudioEl.play();
@@ -1566,30 +1589,55 @@ def configurar_rutas_fastapi(app):
                                             console.log("Audio play attempt failed, retries left:", retriesLeft, err);
                                             if (retriesLeft > 0) {
                                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                            } else {
+                                                console.log("Falling back to WebSpeech API");
+                                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                                             }
                                         });
                                     }
                                 } catch(err) {
                                     if (retriesLeft > 0) {
                                         setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                    } else {
+                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                                     }
                                 }
                             }
-                            tryPlayAudio(5);
+                            tryPlayAudio(3);
+                        } else {
+                            window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                         }
                     };
 
-                    window.getLuxoSessionId = function() {
-                        if (!window._luxoClientSessionId) {
-                            let stored = null;
-                            try { stored = sessionStorage.getItem('luxo_client_session_id'); } catch(e){}
-                            if (!stored) {
-                                stored = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-                                try { sessionStorage.setItem('luxo_client_session_id', stored); } catch(e){}
+                    window.getLuxoDeviceId = function() {
+                        let devId = null;
+                        try {
+                            for (let i = 0; i < localStorage.length; i++) {
+                                let k = localStorage.key(i);
+                                if (k && k.includes('luxo_device_token')) {
+                                    let v = localStorage.getItem(k);
+                                    if (v) {
+                                        devId = v.replace(/["'\\]/g, '').trim();
+                                        break;
+                                    }
+                                }
                             }
-                            window._luxoClientSessionId = stored;
+                            if (!devId) {
+                                let direct = localStorage.getItem('luxo_device_token');
+                                if (direct) devId = direct.replace(/["'\\]/g, '').trim();
+                            }
+                            if (!devId) {
+                                devId = 'dev_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
+                                localStorage.setItem('luxo_device_token', devId);
+                                try { localStorage.setItem('flet_client_storage:luxo_device_token', JSON.stringify(devId)); } catch(e){}
+                            }
+                        } catch(e) {
+                            if (!window._luxoDevId) {
+                                window._luxoDevId = 'dev_' + Math.random().toString(36).substring(2, 11);
+                            }
+                            devId = window._luxoDevId;
                         }
-                        return window._luxoClientSessionId;
+                        return devId;
                     };
 
                     if (!window._luxoTtsIntervalStarted) {
@@ -1597,8 +1645,8 @@ def configurar_rutas_fastapi(app):
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
-                                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
@@ -1618,7 +1666,7 @@ def configurar_rutas_fastapi(app):
                                 })
                                 .catch(function(){});
                             } catch(e) {}
-                        }, 1200);
+                        }, 1000);
                     }
 
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
@@ -2195,12 +2243,16 @@ def configurar_rutas_fastapi(app):
             return {"status": "error", "detail": str(e)}
 
     @app.api_route("/simulador_text_input", methods=["GET", "POST"])
-    async def post_simulador_text_input(user_id: str = "1", text: str = ""):
+    async def post_simulador_text_input(device_id: str = "", user_id: str = "1", text: str = ""):
         import traceback
         try:
-            print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido con user_id={user_id}, text='{text}'")
-            user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
-            session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
+            print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido con device_id={device_id}, user_id={user_id}, text='{text}'")
+            session = None
+            if device_id and device_id in active_sessions:
+                session = active_sessions[device_id]
+            elif user_id:
+                user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
+                session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
             if not session and active_sessions:
                 session = list(active_sessions.values())[-1]
 
@@ -2211,17 +2263,9 @@ def configurar_rutas_fastapi(app):
 
                 if btn_mic_sim:
                     try:
-                        btn_mic_sim.bgcolor = "#9D50BB"
-                        btn_mic_sim.border = ft.Border.all(2, "#00FFFF")
+                        btn_mic_sim.bgcolor = "#1E1E2E"
+                        btn_mic_sim.border = ft.Border.all(1.5, "#9D50BB")
                         btn_mic_sim.update()
-                        def revert_sim_mic(b):
-                            import time
-                            time.sleep(1.5)
-                            b.bgcolor = "#1E1E2E"
-                            b.border = ft.Border.all(1.5, "#9D50BB")
-                            try: b.update()
-                            except: pass
-                        threading.Thread(target=revert_sim_mic, args=(btn_mic_sim,), daemon=True).start()
                     except: pass
 
                 if modo_activo == "voz" and session.get("sim_voz_enviar_fn"):
@@ -4159,12 +4203,23 @@ def descargar_pdf_archivo(id_manual, page=None):
 
 def main(page: ft.Page):
     import uuid
-    if not hasattr(page, "client_session_id") or not page.client_session_id:
-        page.client_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-
-    # Sincronizar session_id con el cliente web
+    dev_token = None
     try:
-        page.launch_url(f"javascript:window._luxoClientSessionId='{page.client_session_id}';try{{sessionStorage.setItem('luxo_client_session_id','{page.client_session_id}');}}catch(e){{}}")
+        if hasattr(page, "client_storage") and page.client_storage:
+            dev_token = page.client_storage.get("luxo_device_token")
+            if not dev_token:
+                dev_token = f"dev_{uuid.uuid4().hex[:12]}"
+                page.client_storage.set("luxo_device_token", dev_token)
+    except Exception:
+        pass
+    if not dev_token:
+        dev_token = f"dev_{uuid.uuid4().hex[:12]}"
+    page.device_id = dev_token
+    page.client_session_id = dev_token
+
+    # Sincronizar device_id inmediatamente con el cliente web
+    try:
+        page.launch_url(f"javascript:void((function(){{try{{localStorage.setItem('luxo_device_token','{page.device_id}');window._luxoDevId='{page.device_id}';}}catch(e){{}}}})());")
     except Exception:
         pass
 
@@ -4870,18 +4925,17 @@ def main(page: ft.Page):
             import time
             evt_id = f"stop_{int(time.time()*1000)}"
             evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            page_dev_id = getattr(page, "device_id", None)
+            if page_dev_id:
+                GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
             if user_info and user_info.get("id"):
                 GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-            page_sess_id = getattr(page, "client_session_id", None)
-            if page_sess_id:
-                GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
         except Exception:
             pass
 
         try:
             import platform, ctypes
-            if platform.system() == "Windows":
+            if platform.system() == "Windows" and not getattr(page, "web", False):
                 mci = ctypes.windll.winmm.mciSendStringW
                 mci("stop luxo_mci_audio", None, 0, 0)
                 mci("close luxo_mci_audio", None, 0, 0)
@@ -5016,8 +5070,8 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # Reproducir directamente en bocinas de Windows si existe el archivo
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                # Reproducir directamente en bocinas de Windows solo si es app de escritorio nativa
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0 and not getattr(page, "web", False):
                     reproducir_audio_mp3_local(filepath)
 
                 audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
@@ -5033,12 +5087,11 @@ def main(page: ft.Page):
                     "voice_gender": g_actual
                 }
                 
-                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+                page_dev_id = getattr(page, "device_id", None)
+                if page_dev_id:
+                    GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
                 if user_info and user_info.get("id"):
                     GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-                page_sess_id = getattr(page, "client_session_id", None)
-                if page_sess_id:
-                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5054,12 +5107,11 @@ def main(page: ft.Page):
                 evt_id = f"toggle_{int(time.time()*1000)}"
                 evt_action = "pause" if not current_speak_is_paused else "resume"
                 evt = {"id": evt_id, "action": evt_action, "timestamp": time.time()}
-                GLOBAL_WEB_TTS_EVENTS["all"] = evt
+                page_dev_id = getattr(page, "device_id", None)
+                if page_dev_id:
+                    GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt
                 if user_info and user_info.get("id"):
                     GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt
-                page_sess_id = getattr(page, "client_session_id", None)
-                if page_sess_id:
-                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt
 
                 if active_sapi_instance[0]:
                     try:
@@ -8780,6 +8832,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         }
         if user_info.get("id"):
             active_sessions[user_info["id"]] = sess_data
+            active_sessions[str(user_info["id"])] = sess_data
+        page_dev = getattr(page, "device_id", None)
+        if page_dev:
+            active_sessions[page_dev] = sess_data
 
 
         # =================================
@@ -16429,8 +16485,35 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     mostrar_snack("⏹️ Grabación detenida", "#FFD700")
                     return
                 
+                sim_dictado_en_progreso[0] = True
+                sim_stop_requested[0] = False
                 mostrar_snack("🎙️ Escuchando... di tu respuesta al cliente", "#00FFFF")
-                threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
+
+                btn_mic_sim_container.bgcolor = "#FF0000"
+                btn_mic_sim_container.border = ft.Border.all(2, "white")
+                try: btn_mic_sim_container.update()
+                except: pass
+
+                def revert_sim_ui():
+                    import time
+                    time.sleep(6)
+                    sim_dictado_en_progreso[0] = False
+                    try:
+                        btn_mic_sim_container.bgcolor = "#1E1E2E"
+                        btn_mic_sim_container.border = ft.Border.all(1.5, "#9D50BB")
+                        btn_mic_sim_container.update()
+                    except Exception: pass
+
+                if getattr(page, "web", False):
+                    async def _lanzar_sim_js():
+                        try:
+                            await page.launch_url("javascript:window.iniciarDictadoSimulador('chat');")
+                        except Exception as ex:
+                            print("[SIMULADOR-MIC] Error lanzando JS:", ex)
+                    page.run_task(_lanzar_sim_js)
+                    threading.Thread(target=revert_sim_ui, daemon=True).start()
+                else:
+                    threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
 
             btn_mic_sim_icon = ft.IconButton(
                 icon=ft.Icons.MIC_ROUNDED,
@@ -16550,6 +16633,16 @@ REGLAS OBLIGATORIAS:
                     sess["sim_user_input"] = user_input
                     sess["sim_enviar_fn"] = enviar_mensaje_simulacion
                     sess["btn_mic_simulador_container"] = btn_mic_sim_container
+                    sess["sim_modo_activo"] = "chat"
+            dev_id_k = getattr(page, "device_id", None)
+            if dev_id_k:
+                if dev_id_k not in active_sessions:
+                    active_sessions[dev_id_k] = {}
+                active_sessions[dev_id_k]["sim_user_input"] = user_input
+                active_sessions[dev_id_k]["sim_enviar_fn"] = enviar_mensaje_simulacion
+                active_sessions[dev_id_k]["btn_mic_simulador_container"] = btn_mic_sim_container
+                active_sessions[dev_id_k]["sim_modo_activo"] = "chat"
+                active_sessions[dev_id_k]["page"] = page
 
             eval_detail_card = ft.Column(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
 
@@ -16820,6 +16913,16 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                         sess["sim_user_input"] = user_input
                         sess["sim_enviar_fn"] = enviar_mensaje_simulacion
                         sess["btn_mic_simulador_container"] = btn_mic_sim_container
+                        sess["sim_modo_activo"] = "chat"
+                dev_id_k = getattr(page, "device_id", None)
+                if dev_id_k:
+                    if dev_id_k not in active_sessions:
+                        active_sessions[dev_id_k] = {}
+                    active_sessions[dev_id_k]["sim_user_input"] = user_input
+                    active_sessions[dev_id_k]["sim_enviar_fn"] = enviar_mensaje_simulacion
+                    active_sessions[dev_id_k]["btn_mic_simulador_container"] = btn_mic_sim_container
+                    active_sessions[dev_id_k]["sim_modo_activo"] = "chat"
+                    active_sessions[dev_id_k]["page"] = page
                 
                 system_prompt = f"""Eres un cliente que entra a una tienda Sunglass Hut en México. Tu perfil es: '{perfil_cliente_txt[0]}'.
 REGLAS OBLIGATORIAS:
@@ -17051,6 +17154,12 @@ REGLAS OBLIGATORIAS:
                 active_sessions[sess_uid]["sim_modo_activo"] = "voz"
                 active_sessions[sess_uid]["page"] = page
                 active_sessions[str(sess_uid)] = active_sessions[sess_uid]
+                dev_id_k = getattr(page, "device_id", None)
+                if dev_id_k:
+                    active_sessions[dev_id_k] = active_sessions.get(dev_id_k, {})
+                    active_sessions[dev_id_k]["sim_voz_enviar_fn"] = enviar_mensaje_simulacion_voz
+                    active_sessions[dev_id_k]["sim_modo_activo"] = "voz"
+                    active_sessions[dev_id_k]["page"] = page
 
                 system_prompt = f"""Eres un cliente que entra a una tienda Sunglass Hut en México. Tu perfil es: '{perfil_cliente_txt[0]}'.
 REGLAS OBLIGATORIAS:
@@ -17076,15 +17185,14 @@ REGLAS OBLIGATORIAS:
                 try:
                     page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
                     import time
-                    page_sess_id = getattr(page, "client_session_id", None)
+                    page_dev_id = getattr(page, "device_id", None)
                     u_id_str = str(user_info.get("id", "1"))
                     evt_id = f"stop_{int(time.time()*1000)}"
                     evt_stop = {"id": evt_id, "action": "stop", "timestamp": time.time()}
-                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if page_dev_id:
+                        GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
                     if u_id_str:
                         GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
-                    if page_sess_id:
-                        GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
                 except Exception: pass
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
@@ -22124,14 +22232,13 @@ Ejemplo:
                         try: page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
                         except: pass
                     import time
-                    page_sess_id = getattr(page, "client_session_id", None)
+                    page_dev_id = getattr(page, "device_id", None)
                     u_id_str = str(user_info.get("id", "1"))
                     evt_stop = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
-                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if page_dev_id:
+                        GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
                     if u_id_str:
                         GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
-                    if page_sess_id:
-                        GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_stop
             except Exception:
                 pass
             try:
@@ -22562,12 +22669,11 @@ Ejemplo:
                 "voice_id": v_id,
                 "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
             }
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            page_dev_id = getattr(page, "device_id", None)
+            if page_dev_id:
+                GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
             if user_info and user_info.get("id"):
                 GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-            page_sess_id = getattr(page, "client_session_id", None)
-            if page_sess_id:
-                GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
 
         def on_voice_changed(e):
             v_val = e.control.value if (e and hasattr(e, "control") and e.control and e.control.value) else (voice_dropdown.value or "jarvis")
