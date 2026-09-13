@@ -883,36 +883,20 @@ def configurar_rutas_fastapi(app):
         return ""
 
     @app.api_route("/api/tts/synthesize", methods=["GET", "POST"])
-    async def tts_synthesize_route(request: Request, text: str = "", voice_id: str = "jarvis"):
+    async def tts_synthesize_route(request: Request, text: str = "", voice_id: str = "jarvis", voice_gender: str = ""):
         if request.method == "POST":
             try:
                 body = await request.json()
                 text = body.get("text", text)
                 voice_id = body.get("voice_id", voice_id)
+                voice_gender = body.get("voice_gender", voice_gender)
             except Exception:
                 pass
         audio_url = await generar_audio_tts_edge_local(text, voice_id)
-        if audio_url:
-            return {"status": "ok", "audio_url": audio_url, "text": text}
-        return {"status": "error", "message": "No se pudo generar audio"}
+        return {"audio_url": audio_url}
 
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
-        import time
-        now = time.time()
-        req_session = session_id or device_id
-        data = None
-        # 1. Buscar primero por session_id específico
-        if req_session and str(req_session) in GLOBAL_WEB_TTS_EVENTS:
-            data = GLOBAL_WEB_TTS_EVENTS.pop(str(req_session), None)
-        # 2. Respaldo por user_id solo si es reciente (<= 3.5 segundos) para no dejar mudo el audio
-        elif user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            candidate = GLOBAL_WEB_TTS_EVENTS.get(str(user_id))
-            if candidate and (now - candidate.get("timestamp", 0) <= 3.5):
-                data = candidate
-        
-        if data and data.get("id") != last_id:
-            return data
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
@@ -1680,72 +1664,32 @@ def configurar_rutas_fastapi(app):
                         document.addEventListener("touchstart", window.unlockLuxoAudio, { passive: true, capture: true });
                     } catch(e) {}
 
-                    window.luxoDirectSpeak = function(text, voiceId) {
-                        window.unlockLuxoAudio();
-                        window.luxoStopTts();
-                        const vId = voiceId || 'jarvis';
-                        const vGen = (['helena', 'sabina', 'barbara', 'luxo_avatar'].indexOf(vId) !== -1) ? 'female' : 'male';
-                        fetch('/api/tts/synthesize', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: text, voice_id: vId })
-                        })
-                        .then(function(r) { return r.json(); })
-                        .then(function(res) {
-                            if (res && res.status === 'ok' && res.audio_url) {
-                                window.luxoPlayTts(text, res.audio_url, 'dir_' + Date.now(), vId, vGen);
-                            } else {
-                                window.luxoSpeakWebSpeech(text, vId, vGen);
+                    window.luxoPlayDirect = async function(text, voiceId, voiceGender) {
+                        try {
+                            if (window.unlockLuxoAudio) window.unlockLuxoAudio();
+                            if (window.luxoStopTts) window.luxoStopTts();
+                            let audio = new Audio();
+                            window._currentLuxoAudio = audio;
+                            let res = await fetch('/api/tts/synthesize', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({ text: text, voice_id: voiceId, voice_gender: voiceGender })
+                            });
+                            let data = await res.json();
+                            if (data && data.audio_url) {
+                                audio.src = data.audio_url;
+                                audio.volume = 1.0;
+                                await audio.play();
+                            } else if (window.luxoSpeakWebSpeech) {
+                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                             }
-                        })
-                        .catch(function(err) {
-                            window.luxoSpeakWebSpeech(text, vId, vGen);
-                        });
-                    };
-
-                    window.getLuxoLocalSessionId = function() {
-                        let s = sessionStorage.getItem('luxo_tab_sess_id');
-                        if (!s) {
-                            s = 'sess_' + Math.random().toString(36).substring(2, 12) + Date.now();
-                            sessionStorage.setItem('luxo_tab_sess_id', s);
-                        }
-                        return s;
-                    };
-
-                    if (!window._luxoTtsIntervalStarted) {
-                        window._luxoTtsIntervalStarted = true;
-                        setInterval(function() {
+                        } catch (err) {
+                            console.error("Error en TTS directo:", err);
                             try {
-                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const mySessionId = window.getLuxoLocalSessionId();
-                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(mySessionId) + '&session_id=' + encodeURIComponent(mySessionId) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
-                                .then(function(r) { return r.json(); })
-                                .then(function(data) {
-                                    if (!data || !data.action || data.action === 'none') return;
-                                    if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
-                                        lastHandledTtsId = data.id;
-                                        // Filtro por sesión: si trae session_id explícito y no coincide con esta pestaña, ignorar
-                                        if (data.session_id && mySessionId && data.session_id !== mySessionId && data.session_id.startsWith('sess_')) {
-                                            return;
-                                        }
-                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
-                                    } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
-                                        lastHandledTtsId = data.id;
-                                        window.luxoStopTts();
-                                    } else if (data.action === 'pause') {
-                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.pause(); } catch(e){} }
-                                        if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
-                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
-                                    } else if (data.action === 'resume') {
-                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.play(); } catch(e){} }
-                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
-                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
-                                    }
-                                })
-                                .catch(function(){});
+                                if (window.luxoSpeakWebSpeech) window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                             } catch(e) {}
-                        }, 1000);
-                    }
+                        }
+                    };
 
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
@@ -5074,11 +5018,12 @@ def main(page: ft.Page):
         if not text:
             return
 
-        # Disparar reproducción directa vía WebSocket exclusivamente a este cliente/pestaña
+        # Disparar reproducción directa vía HTTP en JavaScript exclusivamente a este cliente/pestaña
         try:
             import json
             v_actual_direct = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
-            run_js(f"javascript:if(window.luxoDirectSpeak){{window.luxoDirectSpeak({json.dumps(text)}, {json.dumps(v_actual_direct)});}}")
+            g_actual_direct = voice_gender or ("female" if v_actual_direct in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
+            run_js(f"window.luxoPlayDirect({json.dumps(text)}, '{v_actual_direct}', '{g_actual_direct}');")
         except Exception:
             pass
 
@@ -5162,33 +5107,9 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # Reproducir directamente en bocinas de Windows si existe el archivo
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                # Reproducir directamente en bocinas de Windows si existe el archivo (solo en modo escritorio local)
+                if not getattr(page, "web", False) and os.path.exists(filepath) and os.path.getsize(filepath) > 0:
                     reproducir_audio_mp3_local(filepath)
-
-                audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
-
-                if not getattr(page, "_luxo_unique_session_id", None):
-                    import uuid
-                    page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-                page_sess_id = page._luxo_unique_session_id
-
-                evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
-                evt_data = {
-                    "id": evt_id,
-                    "action": "speak",
-                    "text": clean_text,
-                    "audio_url": audio_url,
-                    "timestamp": time.time(),
-                    "voice_id": v_actual,
-                    "voice_gender": g_actual,
-                    "session_id": str(page_sess_id)
-                }
-                
-                if page_sess_id:
-                    GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_data
-                if user_info and user_info.get("id"):
-                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -8637,6 +8558,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             stop_current_speak()
                         else:
                             v_sel = user_voice_pref[0] if user_voice_pref else "jarvis"
+                            g_sel = "female" if v_sel in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
+                            try:
+                                import json
+                                page.run_js(f"window.luxoPlayDirect({json.dumps(txt)}, '{v_sel}', '{g_sel}');")
+                            except Exception:
+                                pass
                             start_speak(txt, bs, bpp, voice_id=v_sel)
                             
                     def handle_play_pause_click(e):
@@ -23844,6 +23771,12 @@ Ejemplo:
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
             v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
+            g_pref = "female" if v_pref in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
+            try:
+                import json
+                page.run_js(f"window.luxoPlayDirect({json.dumps(saludo_txt)}, '{v_pref}', '{g_pref}');")
+            except Exception:
+                pass
             start_speak(saludo_txt, voice_id=v_pref)
         except Exception: pass
 
