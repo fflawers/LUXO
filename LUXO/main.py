@@ -1,4 +1,9 @@
 import flet as ft
+try:
+    import flet_audio as fta
+    ft.Audio = fta.Audio
+except Exception:
+    pass
 from datetime import datetime, timedelta
 import mysql.connector
 import requests
@@ -29,7 +34,6 @@ from optics_engine import analizar_tecnologia_optica, generar_resumen_voz
 
 BASE_PATH = os.path.dirname(__file__)
 ASSETS_PATH = os.path.join(BASE_PATH, "custom_assets")
-GLOBAL_WEB_TTS_EVENTS = {}
 
 # Valores de APIs leídos desde entorno (.env) o valores por defecto
 _K1 = "".join(["gs", "k_7Gb4UGvZQJMl8mvBV", "ps8WGdyb3FYvLln5u4O", "Zd7fY5AtoV9z3jq6"])
@@ -676,6 +680,62 @@ def optimizar_archivo_multimedia(filepath):
         print("Error en optimización multimedia:", ex_opt)
 
 
+def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
+    import re, urllib.parse, hashlib, os, asyncio
+    try:
+        import edge_tts
+    except ImportError:
+        return ""
+    clean_text = re.sub(r'https?://\S+', '', text or '')
+    clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
+    clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
+    clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    if not clean_text:
+        return ""
+    if len(clean_text) > 500:
+        clean_text = clean_text[:500] + "..."
+
+    temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
+    os.makedirs(temp_audio_dir, exist_ok=True)
+    
+    v_actual = voice_id or "jarvis"
+    text_hash = hashlib.md5(f"{clean_text}_{v_actual}".encode("utf-8")).hexdigest()
+    filename = f"speak_{text_hash}_{v_actual}.mp3"
+    filepath = os.path.join(temp_audio_dir, filename)
+    
+    if not os.path.exists(filepath):
+        VOICE_EDGE_SPECS = {
+            "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+            "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+            "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+2%", "pitch": "+35Hz"},
+            "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
+            "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
+            "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
+            "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
+            "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
+            "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
+        }
+        spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
+        try:
+            async def _synthesize():
+                comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
+                await comm.save(filepath)
+            asyncio.run(_synthesize())
+        except Exception:
+            try:
+                async def _retry():
+                    comm = edge_tts.Communicate(clean_text, "es-ES-AlvaroNeural")
+                    await comm.save(filepath)
+                asyncio.run(_retry())
+            except Exception:
+                pass
+    
+    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+        return f"/temp_audio/{urllib.parse.quote(filename)}"
+    return ""
+
+
 def configurar_rutas_fastapi(app):
     os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
     temp_pdfs_dir = os.path.join(ASSETS_PATH, "temp_pdfs")
@@ -901,12 +961,6 @@ def configurar_rutas_fastapi(app):
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
-        import time
-        req_session = session_id or device_id
-        evt_id = f"stop_{int(time.time()*1000)}"
-        evt = {"id": evt_id, "action": "stop", "timestamp": time.time(), "session_id": str(req_session) if req_session else ""}
-        if req_session:
-            GLOBAL_WEB_TTS_EVENTS[str(req_session)] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -1483,213 +1537,7 @@ def configurar_rutas_fastapi(app):
                         window.initLuxoMicPermission();
                     };
 
-                    // ==========================================
-                    // LUXO CLIENT TTS ENGINE (Web / Mobile / Desktop)
-                    // ==========================================
-                    let lastHandledTtsId = null;
 
-                    // --- REPRODUCTOR DE AUDIO GLOBAL Y DESBLOQUEO DE AUTOPLAY ---
-                    let luxoAudioEl = document.getElementById("luxo_global_tts_player");
-                    if (!luxoAudioEl) {
-                        luxoAudioEl = document.createElement("audio");
-                        luxoAudioEl.id = "luxo_global_tts_player";
-                        luxoAudioEl.preload = "auto";
-                        luxoAudioEl.style.display = "none";
-                        document.body.appendChild(luxoAudioEl);
-                    }
-
-                    window._luxoAudioUnlocked = false;
-                    function _unlockLuxoAudio() {
-                        try {
-                            if (!luxoAudioEl) {
-                                luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
-                                luxoAudioEl.id = "luxo_global_tts_player";
-                                if (!document.body.contains(luxoAudioEl)) {
-                                    document.body.appendChild(luxoAudioEl);
-                                }
-                            }
-                            if (!window._luxoAudioUnlocked) {
-                                luxoAudioEl.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-                                let p = luxoAudioEl.play();
-                                if (p !== undefined) {
-                                    p.then(function() { window._luxoAudioUnlocked = true; }).catch(function(){});
-                                }
-                            }
-                            if ('speechSynthesis' in window) {
-                                window.speechSynthesis.resume();
-                            }
-                        } catch(e) {}
-                    }
-
-                    document.addEventListener("click", _unlockLuxoAudio, { passive: true, capture: true });
-                    document.addEventListener("touchstart", _unlockLuxoAudio, { passive: true, capture: true });
-                    document.addEventListener("pointerdown", _unlockLuxoAudio, { passive: true, capture: true });
-                    document.addEventListener("keydown", _unlockLuxoAudio, { passive: true, capture: true });
-
-                    window._currentLuxoAudio = null;
-                    window.luxoStopTts = function() {
-                        if (window._currentLuxoAudio) {
-                            try {
-                                window._currentLuxoAudio.pause();
-                                window._currentLuxoAudio.currentTime = 0;
-                            } catch(e){}
-                        }
-                        if (luxoAudioEl) {
-                            try {
-                                luxoAudioEl.pause();
-                                luxoAudioEl.currentTime = 0;
-                            } catch(e){}
-                        }
-                        if ('speechSynthesis' in window) {
-                            try { window.speechSynthesis.cancel(); } catch(e){}
-                        }
-                    };
-
-                    let _luxoCachedVoices = [];
-                    function _refreshLuxoVoices() {
-                        if ('speechSynthesis' in window) {
-                            _luxoCachedVoices = window.speechSynthesis.getVoices() || [];
-                        }
-                    }
-                    _refreshLuxoVoices();
-                    if ('speechSynthesis' in window) {
-                        window.speechSynthesis.onvoiceschanged = _refreshLuxoVoices;
-                    }
-
-                    window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, fallbackUrl) {
-                        if (!('speechSynthesis' in window) || !text) {
-                            if (fallbackUrl) {
-                                try {
-                                    let audioFb = new Audio(fallbackUrl);
-                                    window._currentLuxoAudio = audioFb;
-                                    audioFb.play().catch(function(){});
-                                } catch(e){}
-                            }
-                            return;
-                        }
-                        try {
-                            window.speechSynthesis.cancel();
-                            setTimeout(function() {
-                                try {
-                                    window.speechSynthesis.resume();
-                                    _refreshLuxoVoices();
-                                    const u = new SpeechSynthesisUtterance(text);
-                                    const vId = (voiceId || '').toLowerCase();
-                                    const voices = (_luxoCachedVoices.length > 0) ? _luxoCachedVoices : (window.speechSynthesis.getVoices() || []);
-
-                                    const esVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
-                                    const maleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('alvaro') || v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('enrique')));
-                                    const femaleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('laura')));
-
-                                    if (vId === 'jarvis' || vId === 'yarvis') {
-                                        u.lang = "es-ES";
-                                        u.pitch = 0.55;
-                                        u.rate = 0.90;
-                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
-                                        else if (esVoices.length > 0) u.voice = esVoices[0];
-                                    } else if (vId === 'jorge' || vId === 'alonso') {
-                                        u.lang = "es-MX";
-                                        u.pitch = 0.65;
-                                        u.rate = 0.92;
-                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
-                                        else if (esVoices.length > 0) u.voice = esVoices[0];
-                                    } else if (vId === 'luxo_avatar' || vId === 'barbara') {
-                                        u.lang = "es-MX";
-                                        u.pitch = 1.35;
-                                        u.rate = 1.10;
-                                        if (femaleVoices.length > 0) u.voice = femaleVoices[0];
-                                        else if (esVoices.length > 0) u.voice = esVoices[0];
-                                    } else if (vId === 'helena' || vId === 'sabina') {
-                                        u.lang = "es-MX";
-                                        u.pitch = 1.15;
-                                        u.rate = 1.02;
-                                        if (femaleVoices.length > 0) u.voice = femaleVoices[0];
-                                        else if (esVoices.length > 0) u.voice = esVoices[0];
-                                    } else {
-                                        u.lang = "es-MX";
-                                        u.pitch = (voiceGender === 'female') ? 1.20 : ((voiceGender === 'male') ? 0.65 : 1.0);
-                                        u.rate = 1.0;
-                                        if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
-                                        else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
-                                        else if (esVoices.length > 0) u.voice = esVoices[0];
-                                    }
-
-                                    window.speechSynthesis.speak(u);
-                                } catch(e){}
-                            }, 50);
-                        } catch(e) {
-                            console.log("SpeechSynthesis error:", e);
-                        }
-                    };
-
-                    window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
-                        window.luxoStopTts();
-                        if (audioUrl) {
-                            try {
-                                let audio = new Audio(audioUrl);
-                                window._currentLuxoAudio = audio;
-                                audio.volume = 1.0;
-                                let playPromise = audio.play();
-                                if (playPromise !== undefined) {
-                                    playPromise.catch(function(err) {
-                                        console.log("Audio play attempt catch:", err);
-                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
-                                    });
-                                }
-                            } catch(err) {
-                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
-                            }
-                        } else {
-                            window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                        }
-                    };
-
-                    window._luxoAudioUnlocked = false;
-                    window.unlockLuxoAudio = function() {
-                        try {
-                            if (!window._luxoAudioUnlocked) {
-                                window._luxoAudioUnlocked = true;
-                                let dummy = new Audio();
-                                dummy.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-                                let p = dummy.play();
-                                if (p !== undefined) {
-                                    p.catch(function(){});
-                                }
-                            }
-                        } catch(e) {}
-                    };
-                    try {
-                        document.addEventListener("pointerdown", window.unlockLuxoAudio, { passive: true, capture: true });
-                        document.addEventListener("click", window.unlockLuxoAudio, { passive: true, capture: true });
-                        document.addEventListener("touchstart", window.unlockLuxoAudio, { passive: true, capture: true });
-                    } catch(e) {}
-
-                    window.luxoPlayDirect = async function(text, voiceId, voiceGender) {
-                        try {
-                            if (window.unlockLuxoAudio) window.unlockLuxoAudio();
-                            if (window.luxoStopTts) window.luxoStopTts();
-                            let audio = new Audio();
-                            window._currentLuxoAudio = audio;
-                            let res = await fetch('/api/tts/synthesize', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({ text: text, voice_id: voiceId, voice_gender: voiceGender })
-                            });
-                            let data = await res.json();
-                            if (data && data.audio_url) {
-                                audio.src = data.audio_url;
-                                audio.volume = 1.0;
-                                await audio.play();
-                            } else if (window.luxoSpeakWebSpeech) {
-                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                            }
-                        } catch (err) {
-                            console.error("Error en TTS directo:", err);
-                            try {
-                                if (window.luxoSpeakWebSpeech) window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                            } catch(e) {}
-                        }
-                    };
 
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
@@ -4224,6 +4072,26 @@ def descargar_pdf_archivo(id_manual, page=None):
 # =========================================
 
 def main(page: ft.Page):
+    local_audio = None
+    try:
+        import flet_audio as fta
+        local_audio = fta.Audio(autoplay=False)
+        page.overlay.append(local_audio)
+        page.update()
+    except Exception as ex_aud:
+        print("Error montando local_audio:", ex_aud)
+
+    def reproducir_audio_local(url):
+        if not url:
+            return
+        try:
+            if local_audio:
+                local_audio.src = url
+                local_audio.update()
+                local_audio.play()
+        except Exception as ex:
+            print("Error en reproducir_audio_local:", ex)
+
     import uuid
     dev_token = None
     try:
@@ -4234,19 +4102,12 @@ def main(page: ft.Page):
                 page.client_storage.set("luxo_device_token", dev_token)
     except Exception:
         pass
-    import uuid
     if not getattr(page, "_luxo_unique_session_id", None):
         page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
     page_sess_id = page._luxo_unique_session_id
     page.client_session_id = page_sess_id
     page.device_id = page_sess_id
     page.session_id = page_sess_id
-
-    # Sincronizar session_id inmediatamente con el cliente web
-    try:
-        page.launch_url(f"javascript:void((function(){{try{{window._luxoLocalSessionId='{page_sess_id}';window._luxoClientSessionId='{page_sess_id}';sessionStorage.setItem('luxo_local_session_id','{page_sess_id}');sessionStorage.setItem('luxo_client_session_id','{page_sess_id}');}}catch(e){{}}}})());")
-    except Exception:
-        pass
 
     # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
     _w = page.width or 400
@@ -4948,21 +4809,11 @@ def main(page: ft.Page):
 
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
-        
         try:
-            import time
-            if not getattr(page, "_luxo_unique_session_id", None):
-                import uuid
-                page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-            page_sess_id = page._luxo_unique_session_id
-            evt_id = f"stop_{int(time.time()*1000)}"
-            evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time(), "session_id": str(page_sess_id)}
-            if page_sess_id:
-                GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_data
+            if local_audio:
+                local_audio.pause()
         except Exception:
             pass
-
-        run_js("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
 
         try:
             import platform, ctypes
@@ -5021,15 +4872,6 @@ def main(page: ft.Page):
         if not text:
             return
 
-        # Disparar reproducción directa vía HTTP en JavaScript exclusivamente a este cliente/pestaña
-        try:
-            import json
-            v_actual_direct = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
-            g_actual_direct = voice_gender or ("female" if v_actual_direct in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
-            run_js(f"window.luxoPlayDirect({json.dumps(text)}, '{v_actual_direct}', '{g_actual_direct}');")
-        except Exception:
-            pass
-
         current_speak_btn_speaker = btn_speaker
         current_speak_btn_play_pause = btn_play_pause
         current_speak_is_paused = False
@@ -5053,54 +4895,9 @@ def main(page: ft.Page):
 
         def _speak_worker():
             try:
-                import re, urllib.parse, hashlib, random, time, asyncio, json, edge_tts
-                clean_text = re.sub(r'https?://\S+', '', text)
-                clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
-                clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
-                clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
-                clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                if len(clean_text) > 500:
-                    clean_text = clean_text[:500] + "..."
-
-                temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
-                os.makedirs(temp_audio_dir, exist_ok=True)
-                
                 v_actual = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
-                g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
-
-                text_hash = hashlib.md5(f"{clean_text}_{v_actual}".encode("utf-8")).hexdigest()
-                filename = f"speak_{text_hash}_{v_actual}.mp3"
-                filepath = os.path.join(temp_audio_dir, filename)
+                audio_url = generar_audio_tts_edge_sync(text, v_actual)
                 
-                if not os.path.exists(filepath):
-                    VOICE_EDGE_SPECS = {
-                        "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
-                        "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
-                        "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+2%", "pitch": "+35Hz"},
-                        "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
-                        "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
-                        "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
-                        "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
-                        "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
-                        "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
-                    }
-                    spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
-                    
-                    try:
-                        async def _synthesize():
-                            comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
-                            await comm.save(filepath)
-                        asyncio.run(_synthesize())
-                    except Exception as ex_edge:
-                        print("Error en edge_tts, reintentando:", ex_edge)
-                        try:
-                            async def _retry_synthesize():
-                                comm = edge_tts.Communicate(clean_text, spec.get("voice", "es-ES-AlvaroNeural"))
-                                await comm.save(filepath)
-                            asyncio.run(_retry_synthesize())
-                        except Exception as ex_retry:
-                            print("Error reintento edge_tts:", ex_retry)
-
                 # Actualizar icono a reproduciendo
                 if btn_speaker and current_speak_btn_speaker == btn_speaker:
                     btn_speaker.icon = ft.Icons.VOLUME_OFF_ROUNDED
@@ -5110,9 +4907,15 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # Reproducir directamente en bocinas de Windows si existe el archivo (solo en modo escritorio local)
-                if not getattr(page, "web", False) and os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-                    reproducir_audio_mp3_local(filepath)
+                # Reproducir usando el componente nativo oficial flet ft.Audio montado en esta página
+                if audio_url:
+                    reproducir_audio_local(audio_url)
+
+                # Si es escritorio local Windows (no web), reproducir también en hardware local
+                if not getattr(page, "web", False) and audio_url:
+                    fp = os.path.join(ASSETS_PATH, "temp_audio", os.path.basename(audio_url))
+                    if os.path.exists(fp):
+                        reproducir_audio_mp3_local(fp)
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -5122,58 +4925,28 @@ def main(page: ft.Page):
 
     def toggle_pause_speak():
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
-        if current_speak_btn_play_pause:
+        if not current_speak_btn_speaker:
+            return
+        if not current_speak_is_paused:
+            current_speak_is_paused = True
+            if current_speak_btn_play_pause:
+                current_speak_btn_play_pause.icon = ft.Icons.PLAY_ARROW_ROUNDED
+                current_speak_btn_play_pause.tooltip = "Reanudar lectura"
+                try: current_speak_btn_play_pause.update()
+                except Exception: pass
             try:
-                import time
-                if not getattr(page, "_luxo_unique_session_id", None):
-                    import uuid
-                    page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-                page_sess_id = page._luxo_unique_session_id
-                evt_id = f"toggle_{int(time.time()*1000)}"
-                evt_action = "pause" if not current_speak_is_paused else "resume"
-                evt = {"id": evt_id, "action": evt_action, "timestamp": time.time(), "session_id": str(page_sess_id)}
-                if page_sess_id:
-                    GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt
-
-                if current_speak_is_paused:
-                    run_js("javascript:if(window.luxoResumeTts){window.luxoResumeTts();}")
-                else:
-                    run_js("javascript:if(window.luxoPauseTts){window.luxoPauseTts();}")
-
-                if active_sapi_instance[0]:
-                    try:
-                        if current_speak_is_paused:
-                            active_sapi_instance[0].Resume()
-                        else:
-                            active_sapi_instance[0].Pause()
-                    except Exception:
-                        pass
-
-                try:
-                    import platform, ctypes
-                    if platform.system() == "Windows":
-                        mci = ctypes.windll.winmm.mciSendStringW
-                        if current_speak_is_paused:
-                            mci("resume luxo_mci_audio", None, 0, 0)
-                        else:
-                            mci("pause luxo_mci_audio", None, 0, 0)
-                except Exception:
-                    pass
-
-                if current_speak_is_paused:
-                    current_speak_btn_play_pause.icon = ft.Icons.PAUSE_ROUNDED
-                    current_speak_btn_play_pause.tooltip = "Pausar lectura"
-                    current_speak_is_paused = False
-                else:
-                    current_speak_btn_play_pause.icon = ft.Icons.PLAY_ARROW_ROUNDED
-                    current_speak_btn_play_pause.tooltip = "Reanudar lectura"
-                    current_speak_is_paused = True
-                try:
-                    current_speak_btn_play_pause.update()
-                except Exception:
-                    pass
-            except Exception as e:
-                print("ERROR TOGGLE PAUSE:", e)
+                if local_audio: local_audio.pause()
+            except Exception: pass
+        else:
+            current_speak_is_paused = False
+            if current_speak_btn_play_pause:
+                current_speak_btn_play_pause.icon = ft.Icons.PAUSE_ROUNDED
+                current_speak_btn_play_pause.tooltip = "Pausar lectura"
+                try: current_speak_btn_play_pause.update()
+                except Exception: pass
+            try:
+                if local_audio: local_audio.resume()
+            except Exception: pass
 
 
 
@@ -16979,14 +16752,7 @@ REGLAS OBLIGATORIAS:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_click(e):
-                try:
-                    if not getattr(page, "_luxo_unique_session_id", None):
-                        import uuid
-                        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-                    page_sess_id = page._luxo_unique_session_id
-                    if page_sess_id:
-                        GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_stop
-                except Exception: pass
+                stop_current_speak()
                 config_area.visible = True
                 chat_area.visible = False
                 chat_history.clear()
@@ -17208,14 +16974,7 @@ REGLAS OBLIGATORIAS:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_voz_click(e):
-                try:
-                    if not getattr(page, "_luxo_unique_session_id", None):
-                        import uuid
-                        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-                    page_sess_id = page._luxo_unique_session_id
-                    if page_sess_id:
-                        GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_stop
-                except Exception: pass
+                stop_current_speak()
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
                 voz_chat_history.clear()
@@ -22245,17 +22004,9 @@ Ejemplo:
         def cambiar_vista(vista, desde_menu_manual=False):
             active_view[0] = vista
             try:
-                if page:
-                    try: page.launch_url(f"javascript:window._luxoActiveView='{vista}';")
-                    except: pass
                 # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu
                 if desde_menu_manual:
-                    if not getattr(page, "_luxo_unique_session_id", None):
-                        import uuid
-                        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-                    page_sess_id = page._luxo_unique_session_id
-                    if page_sess_id:
-                        GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_stop
+                    stop_current_speak()
             except Exception:
                 pass
             try:
@@ -22661,38 +22412,14 @@ Ejemplo:
             sample_file = f"sample_{v_id}.mp3"
             sample_path = os.path.join(ASSETS_PATH, "temp_audio", sample_file)
             
-            # 1. Reproducir inmediatamente en las bocinas de la PC con Windows MCI solo si no es web
+            # Reproducir usando el reproductor local ft.Audio montado en la página
+            sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
+            if sample_url:
+                reproducir_audio_local(sample_url)
+
+            # Reproducir también en hardware local si es Windows desktop
             if not getattr(page, "web", False) and os.path.exists(sample_path) and os.path.getsize(sample_path) > 0:
                 reproducir_audio_mp3_local(sample_path)
-
-            # 2. Reproducir nativamente en Flet Web / Móviles (Render)
-            sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
-            if sample_url and getattr(page, "web", False):
-                try:
-                    page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
-                    audio_ctrl = ft.Audio(src=sample_url, autoplay=True)
-                    page.overlay.append(audio_ctrl)
-                    page.update()
-                except Exception: pass
-
-            # 3. Despachar también el evento web para móviles/navegadores
-            evt_id = f"sample_{int(time.time()*1000)}"
-            evt_data = {
-                "id": evt_id,
-                "action": "speak",
-                "text": "Muestra de voz",
-                "audio_url": sample_url,
-                "timestamp": time.time(),
-                "voice_id": v_id,
-                "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male",
-                "session_id": str(getattr(page, "_luxo_unique_session_id", None) or "")
-            }
-            if not getattr(page, "_luxo_unique_session_id", None):
-                import uuid
-                page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-            page_sess_id = page._luxo_unique_session_id
-            if page_sess_id:
-                GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_data
 
         def on_voice_changed(e):
             v_val = e.control.value if (e and hasattr(e, "control") and e.control and e.control.value) else (voice_dropdown.value or "jarvis")
@@ -23769,8 +23496,11 @@ Ejemplo:
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
             v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
-            g_pref = "female" if v_pref in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
-            start_speak(saludo_txt, voice_id=v_pref, voice_gender=g_pref)
+            def _saludo_worker():
+                url_bienvenida = generar_audio_tts_edge_sync(saludo_txt, v_pref)
+                if url_bienvenida:
+                    reproducir_audio_local(url_bienvenida)
+            threading.Thread(target=_saludo_worker, daemon=True).start()
         except Exception: pass
 
     # =====================================
