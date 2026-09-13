@@ -831,6 +831,71 @@ def configurar_rutas_fastapi(app):
             print("Error en endpoint download_excel_route:", ex)
         return {"error": "Archivo no encontrado"}
 
+    async def generar_audio_tts_edge_local(text: str, voice_id: str = "jarvis") -> str:
+        import re, urllib.parse, hashlib, os
+        try:
+            import edge_tts
+        except ImportError:
+            return ""
+        clean_text = re.sub(r'https?://\S+', '', text or '')
+        clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
+        clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
+        clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
+        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        if not clean_text:
+            return ""
+        if len(clean_text) > 500:
+            clean_text = clean_text[:500] + "..."
+
+        temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
+        os.makedirs(temp_audio_dir, exist_ok=True)
+        
+        v_actual = voice_id or "jarvis"
+        text_hash = hashlib.md5(f"{clean_text}_{v_actual}".encode("utf-8")).hexdigest()
+        filename = f"speak_{text_hash}_{v_actual}.mp3"
+        filepath = os.path.join(temp_audio_dir, filename)
+        
+        if not os.path.exists(filepath):
+            VOICE_EDGE_SPECS = {
+                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+2%", "pitch": "+35Hz"},
+                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
+                "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
+                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
+                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
+                "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
+            }
+            spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
+            try:
+                comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
+                await comm.save(filepath)
+            except Exception:
+                try:
+                    comm = edge_tts.Communicate(clean_text, "es-ES-AlvaroNeural")
+                    await comm.save(filepath)
+                except Exception:
+                    pass
+        
+        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+            return f"/temp_audio/{urllib.parse.quote(filename)}"
+        return ""
+
+    @app.api_route("/api/tts/synthesize", methods=["GET", "POST"])
+    async def tts_synthesize_route(request: Request, text: str = "", voice_id: str = "jarvis"):
+        if request.method == "POST":
+            try:
+                body = await request.json()
+                text = body.get("text", text)
+                voice_id = body.get("voice_id", voice_id)
+            except Exception:
+                pass
+        audio_url = await generar_audio_tts_edge_local(text, voice_id)
+        if audio_url:
+            return {"status": "ok", "audio_url": audio_url, "text": text}
+        return {"status": "error", "message": "No se pudo generar audio"}
+
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
         import time
@@ -1593,6 +1658,49 @@ def configurar_rutas_fastapi(app):
                         } else {
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                         }
+                    };
+
+                    window._luxoAudioUnlocked = false;
+                    window.unlockLuxoAudio = function() {
+                        try {
+                            if (!window._luxoAudioUnlocked) {
+                                window._luxoAudioUnlocked = true;
+                                let dummy = new Audio();
+                                dummy.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+                                let p = dummy.play();
+                                if (p !== undefined) {
+                                    p.catch(function(){});
+                                }
+                            }
+                        } catch(e) {}
+                    };
+                    try {
+                        document.addEventListener("pointerdown", window.unlockLuxoAudio, { passive: true, capture: true });
+                        document.addEventListener("click", window.unlockLuxoAudio, { passive: true, capture: true });
+                        document.addEventListener("touchstart", window.unlockLuxoAudio, { passive: true, capture: true });
+                    } catch(e) {}
+
+                    window.luxoDirectSpeak = function(text, voiceId) {
+                        window.unlockLuxoAudio();
+                        window.luxoStopTts();
+                        const vId = voiceId || 'jarvis';
+                        const vGen = (['helena', 'sabina', 'barbara', 'luxo_avatar'].indexOf(vId) !== -1) ? 'female' : 'male';
+                        fetch('/api/tts/synthesize', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: text, voice_id: vId })
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(res) {
+                            if (res && res.status === 'ok' && res.audio_url) {
+                                window.luxoPlayTts(text, res.audio_url, 'dir_' + Date.now(), vId, vGen);
+                            } else {
+                                window.luxoSpeakWebSpeech(text, vId, vGen);
+                            }
+                        })
+                        .catch(function(err) {
+                            window.luxoSpeakWebSpeech(text, vId, vGen);
+                        });
                     };
 
                     window.getLuxoLocalSessionId = function() {
@@ -4965,6 +5073,14 @@ def main(page: ft.Page):
         
         if not text:
             return
+
+        # Disparar reproducción directa vía WebSocket exclusivamente a este cliente/pestaña
+        try:
+            import json
+            v_actual_direct = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
+            run_js(f"javascript:if(window.luxoDirectSpeak){{window.luxoDirectSpeak({json.dumps(text)}, {json.dumps(v_actual_direct)});}}")
+        except Exception:
+            pass
 
         current_speak_btn_speaker = btn_speaker
         current_speak_btn_play_pause = btn_play_pause
