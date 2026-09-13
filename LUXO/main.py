@@ -1611,9 +1611,6 @@ def configurar_rutas_fastapi(app):
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        if (document.hidden) {
-                                            return;
-                                        }
                                         window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
@@ -24357,6 +24354,7 @@ Ejemplo:
                         active_sessions[user_id_key] = sess_dict
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
                         cargar_chat(initial_view=last_view_saved)
+                        reproducir_saludo_login(user_data['Nombre_Completo'])
                         return # Termina sin mostrar login
         except Exception as ex_r:
             print("Notice auto-restore session:", ex_r)
