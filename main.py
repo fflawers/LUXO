@@ -832,27 +832,18 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(tab_id: str = "", device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
+    def tts_poll_route(user_id: str = "1", last_id: str = "", tab_id: str = "", device_id: str = "", session_id: str = ""):
         import time
         now = time.time()
         client_token = tab_id or device_id or session_id
         evt = None
         
-        # 1. Búsqueda directa por token de dispositivo/pestaña
         if client_token and client_token in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[client_token]
-        # 2. Búsqueda por ID de usuario con filtro de target_token
-        elif user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            candidate = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-            cand_target = candidate.get("target_token")
-            if not cand_target or not client_token or cand_target == client_token:
-                evt = candidate
-        # 3. Búsqueda en cola global con filtro de target_token
-        elif "all" in GLOBAL_WEB_TTS_EVENTS:
-            candidate = GLOBAL_WEB_TTS_EVENTS["all"]
-            cand_target = candidate.get("target_token")
-            if not cand_target or not client_token or cand_target == client_token:
-                evt = candidate
+        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
@@ -862,14 +853,14 @@ def configurar_rutas_fastapi(app):
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
-    def tts_stop_route(tab_id: str = "", device_id: str = "", session_id: str = "", user_id: str = "1"):
+    def tts_stop_route(user_id: str = "1", tab_id: str = "", device_id: str = "", session_id: str = ""):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
-        client_token = tab_id or device_id or session_id
-        evt = {"id": evt_id, "action": "stop", "timestamp": time.time(), "target_token": client_token}
+        evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
         GLOBAL_WEB_TTS_EVENTS["all"] = evt
         if user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
+        client_token = tab_id or device_id or session_id
         if client_token:
             GLOBAL_WEB_TTS_EVENTS[client_token] = evt
         return {"status": "ok"}
@@ -1491,7 +1482,14 @@ def configurar_rutas_fastapi(app):
                     document.addEventListener("pointerdown", _unlockLuxoAudio, { passive: true, capture: true });
                     document.addEventListener("keydown", _unlockLuxoAudio, { passive: true, capture: true });
 
+                    window._currentLuxoAudio = null;
                     window.luxoStopTts = function() {
+                        if (window._currentLuxoAudio) {
+                            try {
+                                window._currentLuxoAudio.pause();
+                                window._currentLuxoAudio.currentTime = 0;
+                            } catch(e){}
+                        }
                         if (luxoAudioEl) {
                             try {
                                 luxoAudioEl.pause();
@@ -1516,127 +1514,90 @@ def configurar_rutas_fastapi(app):
 
                     window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, fallbackUrl) {
                         if (!('speechSynthesis' in window) || !text) {
-                            if (fallbackUrl && luxoAudioEl) {
-                                luxoAudioEl.src = fallbackUrl;
-                                luxoAudioEl.play().catch(function(){});
+                            if (fallbackUrl) {
+                                try {
+                                    let audioFb = new Audio(fallbackUrl);
+                                    window._currentLuxoAudio = audioFb;
+                                    audioFb.play().catch(function(){});
+                                } catch(e){}
                             }
                             return;
                         }
                         try {
                             window.speechSynthesis.cancel();
-                            window.speechSynthesis.resume();
-                            _refreshLuxoVoices();
-                            const u = new SpeechSynthesisUtterance(text);
-                            const vId = (voiceId || '').toLowerCase();
-                            const voices = (_luxoCachedVoices.length > 0) ? _luxoCachedVoices : (window.speechSynthesis.getVoices() || []);
+                            setTimeout(function() {
+                                try {
+                                    window.speechSynthesis.resume();
+                                    _refreshLuxoVoices();
+                                    const u = new SpeechSynthesisUtterance(text);
+                                    const vId = (voiceId || '').toLowerCase();
+                                    const voices = (_luxoCachedVoices.length > 0) ? _luxoCachedVoices : (window.speechSynthesis.getVoices() || []);
 
-                            const esVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
-                            const maleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('alvaro') || v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('enrique')));
-                            const femaleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('laura')));
+                                    const esVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
+                                    const maleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('alvaro') || v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('enrique')));
+                                    const femaleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('laura')));
 
-                            if (vId === 'jarvis' || vId === 'yarvis') {
-                                u.lang = "es-ES";
-                                u.pitch = 0.55;
-                                u.rate = 0.90;
-                                if (maleVoices.length > 0) u.voice = maleVoices[0];
-                                else if (esVoices.length > 0) u.voice = esVoices[0];
-                            } else if (vId === 'jorge' || vId === 'alonso') {
-                                u.lang = "es-MX";
-                                u.pitch = 0.65;
-                                u.rate = 0.92;
-                                if (maleVoices.length > 0) u.voice = maleVoices[0];
-                                else if (esVoices.length > 0) u.voice = esVoices[0];
-                            } else if (vId === 'luxo_avatar' || vId === 'barbara') {
-                                u.lang = "es-MX";
-                                u.pitch = 1.35;
-                                u.rate = 1.10;
-                                if (femaleVoices.length > 0) u.voice = femaleVoices[0];
-                                else if (esVoices.length > 0) u.voice = esVoices[0];
-                            } else if (vId === 'helena' || vId === 'sabina') {
-                                u.lang = "es-MX";
-                                u.pitch = 1.15;
-                                u.rate = 1.02;
-                                if (femaleVoices.length > 0) u.voice = femaleVoices[0];
-                                else if (esVoices.length > 0) u.voice = esVoices[0];
-                            } else {
-                                u.lang = "es-MX";
-                                u.pitch = (voiceGender === 'female') ? 1.20 : ((voiceGender === 'male') ? 0.65 : 1.0);
-                                u.rate = 1.0;
-                                if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
-                                else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
-                                else if (esVoices.length > 0) u.voice = esVoices[0];
-                            }
+                                    if (vId === 'jarvis' || vId === 'yarvis') {
+                                        u.lang = "es-ES";
+                                        u.pitch = 0.55;
+                                        u.rate = 0.90;
+                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else if (vId === 'jorge' || vId === 'alonso') {
+                                        u.lang = "es-MX";
+                                        u.pitch = 0.65;
+                                        u.rate = 0.92;
+                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else if (vId === 'luxo_avatar' || vId === 'barbara') {
+                                        u.lang = "es-MX";
+                                        u.pitch = 1.35;
+                                        u.rate = 1.10;
+                                        if (femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else if (vId === 'helena' || vId === 'sabina') {
+                                        u.lang = "es-MX";
+                                        u.pitch = 1.15;
+                                        u.rate = 1.02;
+                                        if (femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else {
+                                        u.lang = "es-MX";
+                                        u.pitch = (voiceGender === 'female') ? 1.20 : ((voiceGender === 'male') ? 0.65 : 1.0);
+                                        u.rate = 1.0;
+                                        if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
+                                        else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    }
 
-                            window.speechSynthesis.speak(u);
+                                    window.speechSynthesis.speak(u);
+                                } catch(e){}
+                            }, 50);
                         } catch(e) {
                             console.log("SpeechSynthesis error:", e);
-                            if (fallbackUrl && luxoAudioEl) {
-                                luxoAudioEl.src = fallbackUrl;
-                                luxoAudioEl.play().catch(function(){});
-                            }
                         }
                     };
 
                     window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
                         window.luxoStopTts();
                         if (audioUrl) {
-                            function tryPlayAudio(retriesLeft) {
-                                try {
-                                    if (!luxoAudioEl) {
-                                        luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
-                                        luxoAudioEl.id = "luxo_global_tts_player";
-                                        if (!document.body.contains(luxoAudioEl)) {
-                                            document.body.appendChild(luxoAudioEl);
-                                        }
-                                    }
-                                    luxoAudioEl.src = audioUrl;
-                                    let playPromise = luxoAudioEl.play();
-                                    if (playPromise !== undefined) {
-                                        playPromise.catch(function(err) {
-                                            console.log("Audio play attempt failed, retries left:", retriesLeft, err);
-                                            if (retriesLeft > 0) {
-                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
-                                            } else {
-                                                console.log("Falling back to WebSpeech API");
-                                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                                            }
-                                        });
-                                    }
-                                } catch(err) {
-                                    if (retriesLeft > 0) {
-                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
-                                    } else {
-                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                                    }
+                            try {
+                                let audio = new Audio(audioUrl);
+                                window._currentLuxoAudio = audio;
+                                audio.volume = 1.0;
+                                let playPromise = audio.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.catch(function(err) {
+                                        console.log("Audio play attempt catch:", err);
+                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
+                                    });
                                 }
+                            } catch(err) {
+                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                             }
-                            tryPlayAudio(3);
                         } else {
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                         }
-                    };
-
-                    window.getLuxoConnectionToken = function() {
-                        if (window._luxoDevId && window._luxoDevId.length > 3) return window._luxoDevId;
-                        try {
-                            let el = document.querySelector('[key="luxo_conn_token_el"]');
-                            if (el && el.innerText && el.innerText.trim().length > 3) {
-                                window._luxoDevId = el.innerText.trim();
-                                return window._luxoDevId;
-                            }
-                        } catch(e){}
-                        let tid = null;
-                        try {
-                            tid = sessionStorage.getItem('luxo_tab_id');
-                            if (!tid) {
-                                tid = 'tab_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
-                                sessionStorage.setItem('luxo_tab_id', tid);
-                            }
-                        } catch(e){
-                            tid = 'tab_' + Math.random().toString(36).substring(2, 10);
-                        }
-                        window._luxoDevId = tid;
-                        return tid;
                     };
 
                     if (!window._luxoTtsIntervalStarted) {
@@ -1644,21 +1605,25 @@ def configurar_rutas_fastapi(app):
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const token = window.getLuxoConnectionToken ? window.getLuxoConnectionToken() : '';
-                                fetch('/api/tts/poll?tab_id=' + encodeURIComponent(token) + '&device_id=' + encodeURIComponent(token) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
+                                        if (document.hidden) {
+                                            return;
+                                        }
                                         window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
                                     } else if (data.action === 'pause') {
+                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.pause(); } catch(e){} }
                                         if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
                                     } else if (data.action === 'resume') {
+                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.play(); } catch(e){} }
                                         if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
                                     }
@@ -5091,7 +5056,6 @@ def main(page: ft.Page):
 
                 audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
 
-                conn_token = getattr(page, "connection_token", None) or getattr(page, "device_id", None)
                 evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
                 evt_data = {
                     "id": evt_id,
@@ -5100,8 +5064,7 @@ def main(page: ft.Page):
                     "audio_url": audio_url,
                     "timestamp": time.time(),
                     "voice_id": v_actual,
-                    "voice_gender": g_actual,
-                    "target_token": conn_token
+                    "voice_gender": g_actual
                 }
                 
                 uid = "all"
@@ -5115,8 +5078,6 @@ def main(page: ft.Page):
                 GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
                 if user_info and user_info.get("id"):
                     GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
-                if conn_token:
-                    GLOBAL_WEB_TTS_EVENTS[conn_token] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
