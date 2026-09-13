@@ -4,6 +4,10 @@ import mysql.connector
 import requests
 import os
 import flet_video as fv
+try:
+    import flet_audio as fta
+except Exception:
+    fta = None
 import base64
 import fitz
 import tempfile
@@ -4172,30 +4176,13 @@ def descargar_pdf_archivo(id_manual, page=None):
 # =========================================
 
 def main(page: ft.Page):
-    import uuid
-    dev_token = None
+    session_audio = None
     try:
-        if hasattr(page, "client_storage") and page.client_storage:
-            dev_token = page.client_storage.get("luxo_device_token")
-            if not dev_token:
-                dev_token = f"dev_{uuid.uuid4().hex[:12]}"
-                page.client_storage.set("luxo_device_token", dev_token)
-    except Exception:
-        pass
-    if not dev_token:
-        dev_token = f"dev_{uuid.uuid4().hex[:12]}"
-    page.device_id = dev_token
-    page.client_session_id = dev_token
-    import uuid
-    sess_id = f"sess_{uuid.uuid4().hex[:12]}"
-    page.client_session_id = sess_id
-    page.device_id = sess_id
-
-    # Sincronizar session_id inmediatamente con el cliente web
-    try:
-        page.launch_url(f"javascript:void((function(){{try{{window._luxoClientSessionId='{sess_id}';sessionStorage.setItem('luxo_client_session_id','{sess_id}');}}catch(e){{}}}})());")
-    except Exception:
-        pass
+        if fta:
+            session_audio = fta.Audio(src="", autoplay=True)
+            page.overlay.append(session_audio)
+    except Exception as ex_init_aud:
+        print("Notice session_audio init:", ex_init_aud)
 
     # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
     _w = page.width or 400
@@ -4907,6 +4894,14 @@ def main(page: ft.Page):
         except Exception:
             pass
 
+        if session_audio:
+            try:
+                session_audio.pause()
+                session_audio.release()
+                page.update()
+            except Exception:
+                pass
+
         run_js("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
 
         try:
@@ -5046,11 +5041,26 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # Reproducir directamente en bocinas de Windows si existe el archivo
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                # Reproducir directamente en bocinas de Windows si existe el archivo (modo local desktop)
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0 and not getattr(page, "web", False):
                     reproducir_audio_mp3_local(filepath)
 
                 audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
+
+                if session_audio and audio_url:
+                    try:
+                        session_audio.src = audio_url
+                        session_audio.autoplay = True
+                        try:
+                            session_audio.update()
+                        except Exception:
+                            page.update()
+                        try:
+                            page.run_task(session_audio.play)
+                        except Exception:
+                            pass
+                    except Exception as ex_pl:
+                        print("Notice session_audio.play:", ex_pl)
 
                 evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
                 evt_data = {
@@ -5080,6 +5090,15 @@ def main(page: ft.Page):
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
         if current_speak_btn_play_pause:
             try:
+                if session_audio:
+                    try:
+                        if current_speak_is_paused:
+                            page.run_task(session_audio.resume)
+                        else:
+                            page.run_task(session_audio.pause)
+                        session_audio.update()
+                    except Exception:
+                        pass
                 import time
                 evt_id = f"toggle_{int(time.time()*1000)}"
                 evt_action = "pause" if not current_speak_is_paused else "resume"
@@ -22627,13 +22646,13 @@ Ejemplo:
 
             # 2. Reproducir nativamente en Flet Web / Móviles (Render)
             sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
-            if sample_url and getattr(page, "web", False):
-                try:
-                    page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
-                    audio_ctrl = ft.Audio(src=sample_url, autoplay=True)
-                    page.overlay.append(audio_ctrl)
-                    page.update()
-                except Exception: pass
+            if sample_url:
+                if session_audio:
+                    try:
+                        session_audio.src = sample_url
+                        session_audio.play()
+                        page.update()
+                    except Exception: pass
 
             # 3. Despachar también el evento web para móviles/navegadores
             evt_id = f"sample_{int(time.time()*1000)}"
