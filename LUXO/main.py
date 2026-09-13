@@ -4,10 +4,6 @@ import mysql.connector
 import requests
 import os
 import flet_video as fv
-try:
-    import flet_audio as fta
-except Exception:
-    fta = None
 import base64
 import fitz
 import tempfile
@@ -1604,22 +1600,51 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    window._lastUserClickTime = 0;
-                    try {
-                        document.addEventListener("pointerdown", function() { window._lastUserClickTime = Date.now(); }, true);
-                        document.addEventListener("click", function() { window._lastUserClickTime = Date.now(); }, true);
-                        document.addEventListener("touchstart", function() { window._lastUserClickTime = Date.now(); }, true);
-                    } catch(e) {}
-
-                    window.getLuxoDeviceId = function() {
-                        let did = null;
-                        try {
-                            did = localStorage.getItem('luxo_device_token') || sessionStorage.getItem('luxo_device_token') || sessionStorage.getItem('luxo_client_session_id');
-                        } catch(e) {}
-                        return did || '';
+                    window.getLuxoLocalSessionId = function() {
+                        let sid = window._luxoClientSessionId;
+                        if (!sid) {
+                            try {
+                                sid = sessionStorage.getItem('luxo_client_session_id') || localStorage.getItem('luxo_device_token');
+                            } catch(e) {}
+                        }
+                        return sid || '';
                     };
 
-                    // Reproductor desacoplado de canales globales (100% local por sesion Flet)
+                    if (!window._luxoTtsIntervalStarted) {
+                        window._luxoTtsIntervalStarted = true;
+                        setInterval(function() {
+                            try {
+                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                const mySessionId = window.getLuxoLocalSessionId();
+                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(mySessionId) + '&session_id=' + encodeURIComponent(mySessionId) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                .then(function(r) { return r.json(); })
+                                .then(function(data) {
+                                    if (!data || !data.action || data.action === 'none') return;
+                                    if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
+                                        lastHandledTtsId = data.id;
+                                        // Filtro estricto por sesion: Si el evento trae session_id, solo reproducir si coincide con la sesion local
+                                        if (data.session_id && mySessionId && data.session_id !== mySessionId) {
+                                            return;
+                                        }
+                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                    } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
+                                        lastHandledTtsId = data.id;
+                                        window.luxoStopTts();
+                                    } else if (data.action === 'pause') {
+                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.pause(); } catch(e){} }
+                                        if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
+                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
+                                    } else if (data.action === 'resume') {
+                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.play(); } catch(e){} }
+                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
+                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+                                    }
+                                })
+                                .catch(function(){});
+                            } catch(e) {}
+                        }, 1000);
+                    }
+
                     window.luxoTriggerFileUpload = function(acceptFilter, userId, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
                         if (!input) {
@@ -4153,13 +4178,30 @@ def descargar_pdf_archivo(id_manual, page=None):
 # =========================================
 
 def main(page: ft.Page):
-    session_audio = None
+    import uuid
+    dev_token = None
     try:
-        if fta:
-            session_audio = fta.Audio(src="", autoplay=True)
-            page.overlay.append(session_audio)
-    except Exception as ex_init_aud:
-        print("Notice session_audio init:", ex_init_aud)
+        if hasattr(page, "client_storage") and page.client_storage:
+            dev_token = page.client_storage.get("luxo_device_token")
+            if not dev_token:
+                dev_token = f"dev_{uuid.uuid4().hex[:12]}"
+                page.client_storage.set("luxo_device_token", dev_token)
+    except Exception:
+        pass
+    if not dev_token:
+        dev_token = f"dev_{uuid.uuid4().hex[:12]}"
+    page.device_id = dev_token
+    page.client_session_id = dev_token
+    import uuid
+    sess_id = f"sess_{uuid.uuid4().hex[:12]}"
+    page.client_session_id = sess_id
+    page.device_id = sess_id
+
+    # Sincronizar session_id inmediatamente con el cliente web
+    try:
+        page.launch_url(f"javascript:void((function(){{try{{window._luxoClientSessionId='{sess_id}';sessionStorage.setItem('luxo_client_session_id','{sess_id}');}}catch(e){{}}}})());")
+    except Exception:
+        pass
 
     # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
     _w = page.width or 400
@@ -4871,14 +4913,6 @@ def main(page: ft.Page):
         except Exception:
             pass
 
-        if session_audio:
-            try:
-                session_audio.pause()
-                session_audio.release()
-                page.update()
-            except Exception:
-                pass
-
         run_js("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
 
         try:
@@ -5018,28 +5052,31 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # Reproducir directamente en bocinas de Windows si existe el archivo (modo local desktop)
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 0 and not getattr(page, "web", False):
+                # Reproducir directamente en bocinas de Windows si existe el archivo
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
                     reproducir_audio_mp3_local(filepath)
 
                 audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
 
-                if session_audio and audio_url:
-                    try:
-                        session_audio.src = audio_url
-                        session_audio.autoplay = True
-                        try:
-                            session_audio.update()
-                        except Exception:
-                            page.update()
-                        try:
-                            page.run_task(session_audio.play)
-                        except Exception:
-                            pass
-                    except Exception as ex_pl:
-                        print("Notice session_audio.play:", ex_pl)
+                page_sess_id = getattr(page, "client_session_id", None) or getattr(page, "device_id", None) or getattr(page, "session_id", None)
+                evt_id = f"spk_{int(time.time()*1000)}_{random.randint(100, 999)}"
+                evt_data = {
+                    "id": evt_id,
+                    "action": "speak",
+                    "text": clean_text,
+                    "audio_url": audio_url,
+                    "timestamp": time.time(),
+                    "voice_id": v_actual,
+                    "voice_gender": g_actual,
+                    "session_id": page_sess_id
+                }
+                
+                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+                if user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
+                if page_sess_id:
+                    GLOBAL_WEB_TTS_EVENTS[page_sess_id] = evt_data
 
-                # Audio reproducido directamente en session_audio local sin difusion global
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
                 stop_current_speak()
@@ -5050,15 +5087,6 @@ def main(page: ft.Page):
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
         if current_speak_btn_play_pause:
             try:
-                if session_audio:
-                    try:
-                        if current_speak_is_paused:
-                            page.run_task(session_audio.resume)
-                        else:
-                            page.run_task(session_audio.pause)
-                        session_audio.update()
-                    except Exception:
-                        pass
                 import time
                 evt_id = f"toggle_{int(time.time()*1000)}"
                 evt_action = "pause" if not current_speak_is_paused else "resume"
@@ -22606,13 +22634,13 @@ Ejemplo:
 
             # 2. Reproducir nativamente en Flet Web / Móviles (Render)
             sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
-            if sample_url:
-                if session_audio:
-                    try:
-                        session_audio.src = sample_url
-                        session_audio.play()
-                        page.update()
-                    except Exception: pass
+            if sample_url and getattr(page, "web", False):
+                try:
+                    page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
+                    audio_ctrl = ft.Audio(src=sample_url, autoplay=True)
+                    page.overlay.append(audio_ctrl)
+                    page.update()
+                except Exception: pass
 
             # 3. Despachar también el evento web para móviles/navegadores
             evt_id = f"sample_{int(time.time()*1000)}"
