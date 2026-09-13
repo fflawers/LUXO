@@ -5970,52 +5970,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         import time
         time.sleep(0.01)
 
-        def _formatear_codigo_parentesis_para_voz(texto):
-            import re
-            def _separar_codigo(match):
-                contenido = match.group(1).strip()
-                bloques = []
-                partes = re.findall(r'[A-Za-z]+|\d+', contenido)
-                for parte in partes:
-                    if parte.isalpha():
-                        bloques.append(" ".join(list(parte.upper())))
-                    else:
-                        nums = [parte[i:i+2] for i in range(0, len(parte), 2)]
-                        bloques.append(" ".join(nums))
-                return " ".join(bloques)
-            return re.sub(r'\((.*?)\)', _separar_codigo, texto)
-
-        def emitir_saludo_bienvenida_thread():
-            try:
-                time.sleep(1.2)
-                nombre_u = (user_info.get("nombre") or "").strip()
-                usuario_u = (user_info.get("usuario") or "").strip()
-                tienda_u = (user_info.get("tienda") or "").strip()
-
-                is_store = False
-                if usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda "):
-                    is_store = True
-
-                if is_store:
-                    nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
-                    if not nombre_tienda and tienda_u:
-                        nombre_tienda = tienda_u
-                    saludo_raw = f"¡Hola Tienda {nombre_tienda}, bienvenido a LUXO!"
-                elif nombre_u:
-                    primer_nombre = nombre_u.split()[0].title()
-                    saludo_raw = f"¡Hola {primer_nombre}, bienvenido a LUXO!"
-                else:
-                    saludo_raw = "¡Bienvenido a LUXO System!"
-                
-                saludo_txt = _formatear_codigo_parentesis_para_voz(saludo_raw)
-                start_speak(saludo_txt)
-            except Exception as ex_w:
-                print("Notice saludo bienvenida:", ex_w)
-
-        if desde_login and not getattr(page, "_saludo_ya_emitido", False):
-            page._saludo_ya_emitido = True
-            threading.Thread(target=emitir_saludo_bienvenida_thread, daemon=True).start()
-        
         page.clean()
 
         # Cargar interfaz de chat y vista principal
@@ -23583,10 +23537,21 @@ Ejemplo:
 
     def reproducir_saludo_login(nombre_completo):
         try:
-            first_n = nombre_completo.strip().split(" ")[0] if nombre_completo else "Usuario"
-            mostrar_snack(f"✨ ¡Bienvenid@, {first_n}!", color="#00FFFF")
+            nombre_u = (nombre_completo or "").strip()
+            if nombre_u.lower().startswith("tienda "):
+                display_name = nombre_u
+                saludo_txt = f"Bienvenida, {nombre_u}. Sistemas de LUXO en línea y a su servicio."
+            elif nombre_u:
+                first_n = nombre_u.split(" ")[0].title()
+                display_name = first_n
+                saludo_txt = f"Bienvenido, {first_n}. Sistemas de LUXO en línea y a su servicio."
+            else:
+                display_name = "Usuario"
+                saludo_txt = "Bienvenido a LUXO. Sistemas en línea y a su servicio."
+
+            mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
             v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
-            start_speak(f"Bienvenido, {first_n}. Sistemas de LUXO en línea y a su servicio.", voice_id=v_pref)
+            start_speak(saludo_txt, voice_id=v_pref)
         except Exception: pass
 
     # =====================================
