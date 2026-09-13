@@ -1433,7 +1433,22 @@ def configurar_rutas_fastapi(app):
                                             setTimeout(function() {
                                                 try { rec.start(); } catch(e2){}
                                             }, 1500);
-                                   // ==========================================
+                                        }
+                                    }, 1200);
+                                }
+                            };
+
+                            rec.start();
+                        } catch(ex) {
+                            console.log("Exception in startRecognition:", ex);
+                        }
+                    }
+
+                    banner.onclick = function() {
+                        window.initLuxoMicPermission();
+                    };
+
+                    // ==========================================
                     // LUXO CLIENT TTS ENGINE (Web / Mobile / Desktop)
                     // ==========================================
                     let lastHandledTtsId = null;
@@ -1644,14 +1659,6 @@ def configurar_rutas_fastapi(app):
                                         if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
                                     } else if (data.action === 'resume') {
-                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
-                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
-                                    }
-                                })
-                                .catch(function(){});
-                            } catch(e) {}
-                        }, 1000);
-                    } (data.action === 'resume') {
                                         if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
                                     }
