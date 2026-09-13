@@ -839,10 +839,14 @@ def configurar_rutas_fastapi(app):
         evt = None
         if target_id and target_id in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[target_id]
+        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
             evt_time = evt.get("timestamp", 0)
-            if (not last_id and (now - evt_time > 8)) or (evt_time and (now - evt_time > 15)):
+            if evt_time and (now - evt_time > 30):
                 return {"action": "none"}
             return evt
         return {"action": "none"}
@@ -852,6 +856,9 @@ def configurar_rutas_fastapi(app):
         import time
         evt_id = f"stop_{int(time.time()*1000)}"
         evt = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt
+        if user_id:
+            GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         target_id = device_id or session_id
         if target_id:
             GLOBAL_WEB_TTS_EVENTS[target_id] = evt
@@ -4921,6 +4928,9 @@ def main(page: ft.Page):
             import time
             evt_id = f"stop_{int(time.time()*1000)}"
             evt_data = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            if user_info and user_info.get("id"):
+                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
             page_dev_id = getattr(page, "device_id", None)
             if page_dev_id:
                 GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
@@ -5083,13 +5093,20 @@ def main(page: ft.Page):
                     "voice_gender": g_actual
                 }
                 
+                uid = "all"
+                try:
+                    if user_info and user_info.get("id"):
+                        uid = str(user_info["id"])
+                except Exception:
+                    pass
+
+                GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+                GLOBAL_WEB_TTS_EVENTS[uid] = evt_data
+                if user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
                 page_dev_id = getattr(page, "device_id", None)
                 if page_dev_id:
                     GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
-
-                # Enviar de inmediato vía WebSocket al navegador de este usuario específico
-                js_speak = f"javascript:if(window.luxoPlayTts){{window.luxoPlayTts({json.dumps(clean_text)}, {json.dumps(audio_url)}, '{evt_id}', '{v_actual}', '{g_actual}');}}"
-                run_js(js_speak)
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -16955,9 +16972,9 @@ REGLAS OBLIGATORIAS:
                 try:
                     page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
                     import time
-                    page_dev_id = getattr(page, "device_id", None)
-                    evt_id = f"stop_{int(time.time()*1000)}"
-                    evt_stop = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if user_info and user_info.get("id"):
+                        GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_stop
                     if page_dev_id:
                         GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
                 except Exception: pass
@@ -17185,9 +17202,9 @@ REGLAS OBLIGATORIAS:
                 try:
                     page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
                     import time
-                    page_dev_id = getattr(page, "device_id", None)
-                    evt_id = f"stop_{int(time.time()*1000)}"
-                    evt_stop = {"id": evt_id, "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if user_info and user_info.get("id"):
+                        GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_stop
                     if page_dev_id:
                         GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
                 except Exception: pass
@@ -22230,7 +22247,9 @@ Ejemplo:
                         except: pass
                     import time
                     page_dev_id = getattr(page, "device_id", None)
-                    evt_stop = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                    if user_info and user_info.get("id"):
+                        GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_stop
                     if page_dev_id:
                         GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_stop
             except Exception:
@@ -22663,12 +22682,12 @@ Ejemplo:
                 "voice_id": v_id,
                 "voice_gender": "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
             }
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+            if user_info and user_info.get("id"):
+                GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
             page_dev_id = getattr(page, "device_id", None)
             if page_dev_id:
                 GLOBAL_WEB_TTS_EVENTS[page_dev_id] = evt_data
-            import json
-            js_sample = f"javascript:if(window.luxoPlayTts){{window.luxoPlayTts('Muestra de voz', {json.dumps(sample_url)}, '{evt_id}', '{v_id}', '{evt_data['voice_gender']}');}}"
-            run_js(js_sample)
 
         def on_voice_changed(e):
             v_val = e.control.value if (e and hasattr(e, "control") and e.control and e.control.value) else (voice_dropdown.value or "jarvis")
