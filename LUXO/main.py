@@ -983,7 +983,12 @@ def configurar_rutas_fastapi(app):
                                 const txt = ev.results[0][0].transcript;
                                 if (txt) {
                                     playBeep(2);
-                                    fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                    if (window._luxoActiveView === 'simulador' || (window.location && (window.location.hash.includes('simulador') || window.location.pathname.includes('simulador')))) {
+                                        fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    } else {
+                                        fetch('/text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    }
                                 }
                             };
                             r.onerror = function(ev) { 
@@ -1018,7 +1023,8 @@ def configurar_rutas_fastapi(app):
                                 return; 
                             }
                             if (window._simRecognitionActive) {
-                                try { window._simRecognitionActive.abort(); } catch(e){}
+                                console.log("[SIMULADOR MIC] Micrófono ya se encuentra activo");
+                                return;
                             }
                             const rSim = new SR();
                             rSim.lang = 'es-MX';
@@ -1079,6 +1085,7 @@ def configurar_rutas_fastapi(app):
                             rSim.start();
                         } catch(e) {
                             console.log("Error iniciando micrófono del simulador:", e);
+                            window._simRecognitionActive = null;
                         }
                     };
 
@@ -16908,15 +16915,13 @@ REGLAS OBLIGATORIAS:
                     except Exception: pass
 
                     # En Windows de escritorio local, ejecutar también el worker de PyAudio si no está activo
-                    if not sim_dictado_en_progreso[0]:
+                    import platform
+                    if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                 except Exception as ex_act:
                     print("Error activar_mic_voz_automatico:", ex_act)
 
             def hablar_ahora_voz_click(e):
-                try:
-                    page.launch_url("javascript:window.iniciarDictadoSimulador('voz');")
-                except Exception: pass
                 if sim_dictado_en_progreso[0]:
                     sim_stop_requested[0] = True
                     mostrar_snack("⏹️ Grabación detenida", "#FFD700")
@@ -21877,13 +21882,13 @@ Ejemplo:
 
         btn_chat = ft.TextButton(
             content=ft.Row([ft.Text("✨", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Asistente Chat ✨", "Chat Assistant ✨", "Assistant Chat ✨", "Assistente Chat ✨", "聊天助手 ✨"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("chat"),
+            on_click=lambda e: cambiar_vista("chat", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_historial = ft.TextButton(
             content=ft.Row([ft.Text("⏳", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Mi Historial ⏳", "My History ⏳", "Mon Historique ⏳", "La Mia Cronologia ⏳", "我的历史记录 ⏳"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("historial"),
+            on_click=lambda e: cambiar_vista("historial", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
@@ -21892,139 +21897,139 @@ Ejemplo:
                 ft.Text("🔑", color="#00FFFF", size=14, weight="bold"),
                 ft.Text(tr("Aperturas y Cierres 🔑", "Openings & Closings 🔑", "Ouvertures & Fermetures 🔑", "Aperture & Chiusure 🔑", "开门与关门 🔑"), color="white", weight="bold")
             ], spacing=10),
-            on_click=lambda e: cambiar_vista("operacion_diaria"),
+            on_click=lambda e: cambiar_vista("operacion_diaria", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_checklists = ft.TextButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Checklists 📋", "Checklists 📋", "Listes 📋", "Liste 📋", "任务清单 📋"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("checklists"),
+            on_click=lambda e: cambiar_vista("checklists", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_manuales = ft.TextButton(
             content=ft.Row([ft.Text("📚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Manuales 📚", "Manuals 📚", "Manuels 📚", "Manuali 📚", "手册 📚"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("manuales"),
+            on_click=lambda e: cambiar_vista("manuales", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_catalogo_upc = ft.TextButton(
             content=ft.Row([ft.Text("🔍", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Catálogo UPCs 🔍", "UPC Catalog 🔍", "Catalogue UPC 🔍", "Catalogo UPC 🔍", "UPC 目录 🔍"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("catalogo_upc"),
+            on_click=lambda e: cambiar_vista("catalogo_upc", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_garantias = ft.TextButton(
             content=ft.Row([ft.Text("👓", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Garantías 👓", "Warranties 👓", "Garanties 👓", "Garanzie 👓", "保修 👓"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("garantias"),
+            on_click=lambda e: cambiar_vista("garantias", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_tareas = ft.TextButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Tareas 📋", "Tasks 📋", "Tâches 📋", "Attività 📋", "任务 📋"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("tareas"),
+            on_click=lambda e: cambiar_vista("tareas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_campanas = ft.TextButton(
             content=ft.Row([ft.Text("📸", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Campañas 📸", "Campaigns 📸", "Campagnes 📸", "Campagne 📸", "活动 📸"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("campanas"),
+            on_click=lambda e: cambiar_vista("campanas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_presupuesto = ft.TextButton(
             content=ft.Row([ft.Text("💰", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Presupuesto 💰", "Budget 💰", "Budget 💰", "Budget 💰", "预算 💰"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("presupuesto"),
+            on_click=lambda e: cambiar_vista("presupuesto", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_reto = ft.TextButton(
             content=ft.Row([ft.Text("🏆", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Reto del Día 🏆", "Daily Quiz 🏆", "Défi du Jour 🏆", "Sfida del Giorno 🏆", "每日挑战 🏆"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("reto"),
+            on_click=lambda e: cambiar_vista("reto", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_vendedores = ft.TextButton(
             content=ft.Row([ft.Text("👥", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Configuración Tienda 👥", "Store Config 👥", "Configuration 👥", "Configurazione 👥", "店铺配置 👥"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("vendedores"),
+            on_click=lambda e: cambiar_vista("vendedores", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_fedex = ft.TextButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("FedEx Traspasos 🚚", "FedEx Shipping 🚚", "FedEx Expédition 🚚", "FedEx Spedizione 🚚", "FedEx 物流 🚚"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("fedex"),
+            on_click=lambda e: cambiar_vista("fedex", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_simulador = ft.TextButton(
             content=ft.Row([ft.Text("🎭", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Simulador IA 🎭", "AI Simulator 🎭", "Simulateur IA 🎭", "Simulatore IA 🎭", "AI 模拟器 🎭"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("simulador"),
+            on_click=lambda e: cambiar_vista("simulador", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_crm = ft.TextButton(
             content=ft.Row([ft.Text("📱", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("CRM Cobertura Oops 📱", "CRM Coverage Oops 📱", "CRM Couverture Oops 📱", "CRM Copertura Oops 📱", "CRM 意外保障 📱"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("crm"),
+            on_click=lambda e: cambiar_vista("crm", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_facturacion = ft.TextButton(
             content=ft.Row([ft.Text("🧾", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Facturación CFDI 🧾", "CFDI Invoicing 🧾", "Facturation CFDI 🧾", "Fatturazione CFDI 🧾", "CFDI 发票 🧾"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("facturacion"),
+            on_click=lambda e: cambiar_vista("facturacion", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_meta_semanal = ft.TextButton(
             content=ft.Row([ft.Text("🎯", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Metas y Métricas 🎯", "Goals & Metrics 🎯", "Objectifs & Métriques 🎯", "Obiettivi & Metriche 🎯", "目标与指标 🎯"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("meta_semanal"),
+            on_click=lambda e: cambiar_vista("meta_semanal", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_weekly = ft.TextButton(
             content=ft.Row([ft.Text("🗓️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("weekly"),
+            on_click=lambda e: cambiar_vista("weekly", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_polar = ft.TextButton(
             content=ft.Row([ft.Text("🕶️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Polar RB y OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "偏光 RB & OO 🕶️"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("polar"),
+            on_click=lambda e: cambiar_vista("polar", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_ciclicos = ft.TextButton(
             content=ft.Row([ft.Text("🔄", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("ciclicos"),
+            on_click=lambda e: cambiar_vista("ciclicos", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_descuentos = ft.TextButton(
             content=ft.Row([ft.Text("🏷️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Descuentos 🏷️", "Discounts 🏷️", "Remises 🏷️", "Sconti 🏷️", "折扣 🏷️"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("descuentos"),
+            on_click=lambda e: cambiar_vista("descuentos", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_panamericano = ft.TextButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Fichas Panamericano 🚚", "Panamericano Files 🚚", "Fiches Panamericano 🚚", "Fiche Panamericano 🚚", "Panamericano 🚚"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("panamericano"),
+            on_click=lambda e: cambiar_vista("panamericano", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_enfoque = ft.TextButton(
             content=ft.Row([ft.Text("☀️", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Enfoque Diario ☀️", "Daily Focus ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("enfoque_diario"),
+            on_click=lambda e: cambiar_vista("enfoque_diario", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_enfoque_semanal = ft.TextButton(
             content=ft.Row([ft.Text("📅", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("enfoque_semanal"),
+            on_click=lambda e: cambiar_vista("enfoque_semanal", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
         btn_parroquiales_minutas = ft.TextButton(
             content=ft.Row([ft.Text("📢", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Parroquiales y Minutas 📝", "Announcements & Minutes 📝", "Paroissiales & Procès-verbaux 📝", "Avvisi & Verbali 📝", "通告与会议纪要 📝"), color="white", weight="bold")], spacing=10),
-            on_click=lambda e: cambiar_vista("parroquiales_minutas"),
+            on_click=lambda e: cambiar_vista("parroquiales_minutas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
@@ -22032,7 +22037,7 @@ Ejemplo:
         if es_admin():
             btn_dashboard = ft.TextButton(
                 content=ft.Row([ft.Text("🎮", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Panel de Control 🎮", "Admin Panel 🎮", "Panneau de Contrôle 🎮", "Pannello di Controllo 🎮", "控制面板 🎮"), color="white", weight="bold")], spacing=10),
-                on_click=lambda e: cambiar_vista("dashboard"),
+                on_click=lambda e: cambiar_vista("dashboard", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
             )
 
@@ -22040,7 +22045,7 @@ Ejemplo:
         if es_admin():
             btn_admin_trivia = ft.TextButton(
                 content=ft.Row([ft.Text("❓", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Gestionar Trivia 🧠", "Manage Trivia 🧠", "Gérer Quiz 🧠", "Gestisci Trivia 🧠", "管理问答 🧠"), color="white", weight="bold")], spacing=10),
-                on_click=lambda e: cambiar_vista("admin_trivia"),
+                on_click=lambda e: cambiar_vista("admin_trivia", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
             )
 
@@ -22048,7 +22053,7 @@ Ejemplo:
         if es_admin():
             btn_bitacora = ft.TextButton(
                 content=ft.Row([ft.Text("🛡️", color="#00FFAA", size=14, weight="bold"), ft.Text("Bitácora de Seguridad 🛡️", color="white", weight="bold")], spacing=10),
-                on_click=lambda e: cambiar_vista("bitacora"),
+                on_click=lambda e: cambiar_vista("bitacora", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
             )
 
@@ -22061,18 +22066,22 @@ Ejemplo:
         content_area = ft.Container(content=build_chat_view(), expand=True)
 
         # Cambiar vistas con hover y estilos activos
-        def cambiar_vista(vista):
+        def cambiar_vista(vista, desde_menu_manual=False):
             active_view[0] = vista
             try:
-                # Silenciar cualquier lectura de audio o TTS de inmediato al cambiar de modulo
                 if page:
-                    try: page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
+                    try: page.launch_url(f"javascript:window._luxoActiveView='{vista}';")
                     except: pass
-                import time
-                u_id_str = str(user_info.get("id", "1"))
-                evt_stop = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
-                GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
-                GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
+                # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu
+                if desde_menu_manual:
+                    if page:
+                        try: page.launch_url("javascript:if(window.luxoStopTts){window.luxoStopTts();}")
+                        except: pass
+                    import time
+                    u_id_str = str(user_info.get("id", "1"))
+                    evt_stop = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
+                    GLOBAL_WEB_TTS_EVENTS[u_id_str] = evt_stop
+                    GLOBAL_WEB_TTS_EVENTS["all"] = evt_stop
             except Exception:
                 pass
             try:
