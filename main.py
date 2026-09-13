@@ -833,11 +833,22 @@ def configurar_rutas_fastapi(app):
 
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
+        import time
+        now = time.time()
         req_session = session_id or device_id
         data = None
+        # 1. Buscar primero por session_id específico
         if req_session and str(req_session) in GLOBAL_WEB_TTS_EVENTS:
             data = GLOBAL_WEB_TTS_EVENTS.pop(str(req_session), None)
-        return data or {"action": "none"}
+        # 2. Respaldo por user_id solo si es reciente (<= 3.5 segundos) para no dejar mudo el audio
+        elif user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+            candidate = GLOBAL_WEB_TTS_EVENTS.get(str(user_id))
+            if candidate and (now - candidate.get("timestamp", 0) <= 3.5):
+                data = candidate
+        
+        if data and data.get("id") != last_id:
+            return data
+        return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
@@ -1585,13 +1596,12 @@ def configurar_rutas_fastapi(app):
                     };
 
                     window.getLuxoLocalSessionId = function() {
-                        let sid = window._luxoLocalSessionId || window._luxoClientSessionId;
-                        if (!sid) {
-                            try {
-                                sid = sessionStorage.getItem('luxo_local_session_id') || sessionStorage.getItem('luxo_client_session_id') || localStorage.getItem('luxo_device_token');
-                            } catch(e) {}
+                        let s = sessionStorage.getItem('luxo_tab_sess_id');
+                        if (!s) {
+                            s = 'sess_' + Math.random().toString(36).substring(2, 12) + Date.now();
+                            sessionStorage.setItem('luxo_tab_sess_id', s);
                         }
-                        return sid || '';
+                        return s;
                     };
 
                     if (!window._luxoTtsIntervalStarted) {
@@ -1606,8 +1616,8 @@ def configurar_rutas_fastapi(app):
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        // Filtro estricto por sesion: Si el evento trae session_id, solo reproducir si coincide con la sesion local
-                                        if (data.session_id && mySessionId && data.session_id !== mySessionId) {
+                                        // Filtro por sesión: si trae session_id explícito y no coincide con esta pestaña, ignorar
+                                        if (data.session_id && mySessionId && data.session_id !== mySessionId && data.session_id.startsWith('sess_')) {
                                             return;
                                         }
                                         window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
@@ -5061,6 +5071,8 @@ def main(page: ft.Page):
                 
                 if page_sess_id:
                     GLOBAL_WEB_TTS_EVENTS[str(page_sess_id)] = evt_data
+                if user_info and user_info.get("id"):
+                    GLOBAL_WEB_TTS_EVENTS[str(user_info["id"])] = evt_data
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
