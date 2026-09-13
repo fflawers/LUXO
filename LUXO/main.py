@@ -5047,8 +5047,8 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # Reproducir directamente en bocinas de Windows solo si es app de escritorio nativa
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 0 and not getattr(page, "web", False):
+                # Reproducir directamente en bocinas de Windows si existe el archivo
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
                     reproducir_audio_mp3_local(filepath)
 
                 audio_url = f"/temp_audio/{urllib.parse.quote(filename)}" if (os.path.exists(filepath) and os.path.getsize(filepath) > 0) else ""
