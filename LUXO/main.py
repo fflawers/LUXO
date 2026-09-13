@@ -4934,9 +4934,12 @@ def main(page: ft.Page):
     except Exception: pass
 
     def run_js(js_code):
+        clean_code = (js_code or "").strip()
+        if not clean_code.startswith("javascript:"):
+            clean_code = f"javascript:void((function(){{try{{{clean_code}}}catch(e){{console.error('JS error:', e);}}}})());"
         async def _exec_js():
             try:
-                await page.launch_url(js_code)
+                await page.launch_url(clean_code, web_popup_window_name="_self")
             except Exception as ex:
                 print("Error ejecutando JS:", ex)
         page.run_task(_exec_js)
@@ -8559,12 +8562,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         else:
                             v_sel = user_voice_pref[0] if user_voice_pref else "jarvis"
                             g_sel = "female" if v_sel in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
-                            try:
-                                import json
-                                page.run_js(f"window.luxoPlayDirect({json.dumps(txt)}, '{v_sel}', '{g_sel}');")
-                            except Exception:
-                                pass
-                            start_speak(txt, bs, bpp, voice_id=v_sel)
+                            start_speak(txt, bs, bpp, voice_id=v_sel, voice_gender=g_sel)
                             
                     def handle_play_pause_click(e):
                         toggle_pause_speak()
@@ -23772,12 +23770,7 @@ Ejemplo:
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
             v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
             g_pref = "female" if v_pref in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
-            try:
-                import json
-                page.run_js(f"window.luxoPlayDirect({json.dumps(saludo_txt)}, '{v_pref}', '{g_pref}');")
-            except Exception:
-                pass
-            start_speak(saludo_txt, voice_id=v_pref)
+            start_speak(saludo_txt, voice_id=v_pref, voice_gender=g_pref)
         except Exception: pass
 
     # =====================================
