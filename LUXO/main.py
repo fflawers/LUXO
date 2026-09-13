@@ -731,6 +731,8 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
     return ""
 
 
+TAB_TTS_EVENTS = {}
+
 def configurar_rutas_fastapi(app):
     os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
     temp_pdfs_dir = os.path.join(ASSETS_PATH, "temp_pdfs")
@@ -952,7 +954,13 @@ def configurar_rutas_fastapi(app):
 
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
-        return {"action": "none"}
+        token = device_id or session_id
+        if not token or token not in TAB_TTS_EVENTS:
+            return {"action": "none"}
+        evt = TAB_TTS_EVENTS[token]
+        if evt.get("id") == last_id:
+            return {"action": "none"}
+        return evt
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
@@ -1532,6 +1540,24 @@ def configurar_rutas_fastapi(app):
                         window.initLuxoMicPermission();
                     };
 
+                    window.getLuxoDeviceId = function() {
+                        try {
+                            for (let i = 0; i < localStorage.length; i++) {
+                                let key = localStorage.key(i);
+                                if (key && key.includes('luxo_device_token')) {
+                                    let val = localStorage.getItem(key);
+                                    if (val) return val.replace(/["']/g, '');
+                                }
+                            }
+                        } catch(e) {}
+                        let fallbackId = sessionStorage.getItem('luxo_tab_id');
+                        if (!fallbackId) {
+                            fallbackId = 'tab_' + Math.random().toString(36).substring(2, 10);
+                            sessionStorage.setItem('luxo_tab_id', fallbackId);
+                        }
+                        return fallbackId;
+                    };
+
                     window._currentLuxoAudio = null;
                     window.luxoPlayAudio = function(url) {
                         try {
@@ -1568,6 +1594,31 @@ def configurar_rutas_fastapi(app):
                             }
                         } catch(e) {}
                     };
+
+                    let lastHandledTtsId = null;
+                    if (!window._luxoTtsIntervalStarted) {
+                        window._luxoTtsIntervalStarted = true;
+                        setInterval(async function() {
+                            try {
+                                let did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                                if (!did) return;
+                                let res = await fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''));
+                                if (!res.ok) return;
+                                let data = await res.json();
+                                if (!data || !data.action || data.action === 'none') return;
+                                if (data.id && data.id === lastHandledTtsId) return;
+                                lastHandledTtsId = data.id;
+
+                                if (data.action === 'speak' && data.audio_url) {
+                                    window.luxoPlayAudio(data.audio_url);
+                                } else if (data.action === 'stop' || data.action === 'pause') {
+                                    window.luxoPauseAudio();
+                                } else if (data.action === 'resume') {
+                                    window.luxoResumeAudio();
+                                }
+                            } catch(e) {}
+                        }, 500);
+                    }
                         let input = document.getElementById("luxo_global_file_input");
                         if (!input) {
                             input = document.createElement("input");
@@ -4100,27 +4151,7 @@ def descargar_pdf_archivo(id_manual, page=None):
 # =========================================
 
 def main(page: ft.Page):
-    def run_js(js_code):
-        clean_code = (js_code or "").strip()
-        if not clean_code.startswith("javascript:"):
-            clean_code = f"javascript:void((function(){{try{{{clean_code}}}catch(e){{}}}})());"
-        async def _exec_js():
-            try:
-                await page.launch_url(clean_code, web_popup_window_name="_self")
-            except Exception:
-                pass
-        page.run_task(_exec_js)
-
-    def reproducir_audio_local(url):
-        if not url:
-            return
-        try:
-            import json
-            run_js(f"window.luxoPlayAudio({json.dumps(url)});")
-        except Exception as ex:
-            print("Error en reproducir_audio_local:", ex)
-
-    import uuid
+    import uuid, time
     dev_token = None
     try:
         if hasattr(page, "client_storage") and page.client_storage:
@@ -4130,12 +4161,25 @@ def main(page: ft.Page):
                 page.client_storage.set("luxo_device_token", dev_token)
     except Exception:
         pass
-    if not getattr(page, "_luxo_unique_session_id", None):
-        page._luxo_unique_session_id = f"sess_{uuid.uuid4().hex[:12]}"
-    page_sess_id = page._luxo_unique_session_id
-    page.client_session_id = page_sess_id
-    page.device_id = page_sess_id
-    page.session_id = page_sess_id
+    if not dev_token:
+        dev_token = f"dev_{uuid.uuid4().hex[:12]}"
+    page._luxo_token = dev_token
+    page._luxo_unique_session_id = dev_token
+    page.client_session_id = dev_token
+    page.device_id = dev_token
+    page.session_id = dev_token
+
+    def reproducir_audio_local(url):
+        if not url:
+            return
+        tok = getattr(page, "_luxo_token", None) or dev_token
+        if tok:
+            TAB_TTS_EVENTS[tok] = {
+                "id": f"spk_{int(time.time()*1000)}",
+                "action": "speak",
+                "audio_url": url,
+                "timestamp": time.time()
+            }
 
     # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
     _w = page.width or 400
@@ -4837,10 +4881,13 @@ def main(page: ft.Page):
 
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
-        try:
-            run_js("window.luxoPauseAudio();")
-        except Exception:
-            pass
+        tok = getattr(page, "_luxo_token", None) or dev_token
+        if tok:
+            TAB_TTS_EVENTS[tok] = {
+                "id": f"stop_{int(time.time()*1000)}",
+                "action": "stop",
+                "timestamp": time.time()
+            }
 
         try:
             import platform, ctypes
@@ -4961,9 +5008,13 @@ def main(page: ft.Page):
                 current_speak_btn_play_pause.tooltip = "Reanudar lectura"
                 try: current_speak_btn_play_pause.update()
                 except Exception: pass
-            try:
-                run_js("window.luxoPauseAudio();")
-            except Exception: pass
+            tok = getattr(page, "_luxo_token", None) or dev_token
+            if tok:
+                TAB_TTS_EVENTS[tok] = {
+                    "id": f"pause_{int(time.time()*1000)}",
+                    "action": "pause",
+                    "timestamp": time.time()
+                }
         else:
             current_speak_is_paused = False
             if current_speak_btn_play_pause:
@@ -4971,9 +5022,13 @@ def main(page: ft.Page):
                 current_speak_btn_play_pause.tooltip = "Pausar lectura"
                 try: current_speak_btn_play_pause.update()
                 except Exception: pass
-            try:
-                run_js("window.luxoResumeAudio();")
-            except Exception: pass
+            tok = getattr(page, "_luxo_token", None) or dev_token
+            if tok:
+                TAB_TTS_EVENTS[tok] = {
+                    "id": f"resume_{int(time.time()*1000)}",
+                    "action": "resume",
+                    "timestamp": time.time()
+                }
 
 
 
