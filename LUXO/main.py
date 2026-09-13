@@ -1604,6 +1604,13 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
+                    window._lastUserClickTime = 0;
+                    try {
+                        document.addEventListener("pointerdown", function() { window._lastUserClickTime = Date.now(); }, true);
+                        document.addEventListener("click", function() { window._lastUserClickTime = Date.now(); }, true);
+                        document.addEventListener("touchstart", function() { window._lastUserClickTime = Date.now(); }, true);
+                    } catch(e) {}
+
                     window.getLuxoDeviceId = function() {
                         let did = null;
                         try {
@@ -1624,7 +1631,14 @@ def configurar_rutas_fastapi(app):
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                        const evtTime = (data.timestamp ? data.timestamp * 1000 : Date.now());
+                                        const timeSinceLastClick = Date.now() - (window._lastUserClickTime || 0);
+                                        // Reproducir si este dispositivo interactuó en los últimos 20 segundos
+                                        if (timeSinceLastClick < 20000 || (window._lastUserClickTime === 0 && (Date.now() - evtTime) < 6000)) {
+                                            window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                        } else {
+                                            console.log("Audio omitido en este dispositivo: iniciado en otra sesión.");
+                                        }
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
