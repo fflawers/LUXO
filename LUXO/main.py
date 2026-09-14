@@ -1649,6 +1649,13 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
+                    let myTabId = sessionStorage.getItem('_luxo_tid');
+                    if (!myTabId) {
+                        myTabId = 't_' + Math.random().toString(36).substr(2, 9);
+                        sessionStorage.setItem('_luxo_tid', myTabId);
+                    }
+                    window._luxoTabId = myTabId;
+
                     let luxoAudioEl = document.getElementById("luxo_global_tts_player");
                     if (!luxoAudioEl) {
                         luxoAudioEl = document.createElement("audio");
@@ -1722,15 +1729,21 @@ def configurar_rutas_fastapi(app):
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
+                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&tab_id=' + encodeURIComponent(myTabId) + '&_t=' + Date.now(), { cache: 'no-store' })
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
+                                        const myTid = window._luxoTabId || sessionStorage.getItem('_luxo_tid');
+                                        if (data.origin_device && data.origin_device !== 'default' && data.origin_device !== 'all') {
+                                            if (data.origin_device !== myTid && !data.origin_device.includes(myTid)) {
+                                                return;
+                                            }
+                                        }
                                         const timeSinceInt = Date.now() - (window._lastInteractionTime || 0);
                                         const evtAge = data.timestamp ? (Date.now() - (data.timestamp * 1000)) : 0;
-                                        if (timeSinceInt < 30000 || evtAge < 10000) {
+                                        if (timeSinceInt < 30000 || evtAge < 10000 || (data.origin_device && data.origin_device === myTid)) {
                                             window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
                                         }
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
@@ -4321,6 +4334,7 @@ def main(page: ft.Page):
     def reproducir_audio_local(url, text="", voice_id="jarvis", voice_gender="male"):
         if not url and not text:
             return
+        origin_dev = getattr(page, "_tab_id", None) or getattr(page, "device_id", None) or getattr(page, "session_id", None) or getattr(page, "_luxo_token", None) or dev_token or "default"
         tok = getattr(page, "_luxo_token", None) or dev_token
         try:
             if hasattr(page, "client_storage") and page.client_storage:
@@ -4341,16 +4355,16 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time(),
             "device_id": tok or "",
-            "device_type": d_type
+            "device_type": d_type,
+            "origin_device": str(origin_dev)
         }
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
-        channel_key = f"{u_id}_{d_type}"
-        GLOBAL_WEB_TTS_EVENTS[channel_key] = evt_data
-        GLOBAL_WEB_TTS_EVENTS[f"all_{d_type}"] = evt_data
         GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
         GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
+        if str(origin_dev) != "default":
+            GLOBAL_WEB_TTS_EVENTS[str(origin_dev)] = evt_data
 
     page.title = "LUXO"
 
