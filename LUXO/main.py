@@ -961,6 +961,8 @@ def configurar_rutas_fastapi(app):
             target_key = f"{user_id}_{device_type}"
             if target_key in GLOBAL_WEB_TTS_EVENTS:
                 evt = GLOBAL_WEB_TTS_EVENTS[target_key]
+        if not evt and device_type and f"all_{device_type}" in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[f"all_{device_type}"]
         if not evt and token and token in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[token]
         if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
@@ -979,10 +981,14 @@ def configurar_rutas_fastapi(app):
         return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
-    def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
+    def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1", device_type: str = ""):
         import time
         token = device_id or session_id
-        evt = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
+        evt = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time(), "device_type": device_type}
+        if device_type:
+            GLOBAL_WEB_TTS_EVENTS[f"all_{device_type}"] = evt
+            if user_id:
+                GLOBAL_WEB_TTS_EVENTS[f"{user_id}_{device_type}"] = evt
         GLOBAL_WEB_TTS_EVENTS["all"] = evt
         if user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
@@ -4334,7 +4340,9 @@ def main(page: ft.Page):
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
         channel_key = f"{u_id}_{d_type}"
         GLOBAL_WEB_TTS_EVENTS[channel_key] = evt_data
+        GLOBAL_WEB_TTS_EVENTS[f"all_{d_type}"] = evt_data
         GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -5045,7 +5053,9 @@ def main(page: ft.Page):
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
         channel_key = f"{u_id}_{d_type}"
         GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
+        GLOBAL_WEB_TTS_EVENTS[f"all_{d_type}"] = evt
         GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
@@ -5181,7 +5191,9 @@ def main(page: ft.Page):
             u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
             channel_key = f"{u_id}_{d_type}"
             GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
+            GLOBAL_WEB_TTS_EVENTS[f"all_{d_type}"] = evt
             GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
         else:
@@ -5201,7 +5213,9 @@ def main(page: ft.Page):
             u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
             channel_key = f"{u_id}_{d_type}"
             GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
+            GLOBAL_WEB_TTS_EVENTS[f"all_{d_type}"] = evt
             GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
