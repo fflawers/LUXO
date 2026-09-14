@@ -954,10 +954,14 @@ def configurar_rutas_fastapi(app):
         return {"audio_url": audio_url}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
+    def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", device_type: str = "", last_id: str = ""):
         token = device_id or session_id
         evt = None
-        if token and token in GLOBAL_WEB_TTS_EVENTS:
+        if user_id and device_type:
+            target_key = f"{user_id}_{device_type}"
+            if target_key in GLOBAL_WEB_TTS_EVENTS:
+                evt = GLOBAL_WEB_TTS_EVENTS[target_key]
+        if not evt and token and token in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[token]
         if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
@@ -1692,11 +1696,14 @@ def configurar_rutas_fastapi(app):
                         return did;
                     };
 
-                    window._lastUserClickTime = 0;
-                    document.addEventListener('click', function() { window._lastUserClickTime = Date.now(); }, true);
-                    document.addEventListener('touchstart', function() { window._lastUserClickTime = Date.now(); }, true);
-                    document.addEventListener('pointerdown', function() { window._lastUserClickTime = Date.now(); }, true);
-                    document.addEventListener('keydown', function() { window._lastUserClickTime = Date.now(); }, true);
+                    function getLuxoDeviceType() {
+                        try {
+                            let isMob = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth < 700);
+                            return isMob ? 'mobile' : 'desktop';
+                        } catch(e) {
+                            return 'desktop';
+                        }
+                    }
 
                     let lastHandledTtsId = null;
                     if (!window._luxoTtsIntervalStarted) {
@@ -1705,21 +1712,14 @@ def configurar_rutas_fastapi(app):
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
                                 const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                                if (!did) return;
-                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                const dtype = getLuxoDeviceType();
+                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&device_type=' + encodeURIComponent(dtype) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        const timeSinceLastClick = (window._lastUserClickTime > 0) ? (Date.now() - window._lastUserClickTime) : 999999;
-                                        const isMyDevice = (data.device_id && data.device_id === did);
-                                        // Reproducir si es mi dispositivo exacto o si este equipo tuvo interacción directa en los últimos 8 segundos
-                                        if (isMyDevice || timeSinceLastClick < 8000) {
-                                            window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
-                                        } else {
-                                            console.log("Audio omitido en este dispositivo: iniciado en otra sesión/equipo.");
-                                        }
+                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
@@ -4285,6 +4285,12 @@ def main(page: ft.Page):
     page.device_id = dev_token
     page.session_id = dev_token
 
+    # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
+    _w = page.width or 400
+    _ua = str(getattr(page, "client_user_agent", "") or "")
+    is_mobile = (_w < 700) or any(k in _ua for k in ["Mobile", "Android", "iPhone", "iPad", "iPod", "BlackBerry", "IEMobile", "Opera Mini"])
+    dev_type = "mobile" if is_mobile else "desktop"
+
     def reproducir_audio_local(url, text="", voice_id="jarvis", voice_gender="male"):
         if not url and not text:
             return
@@ -4306,18 +4312,14 @@ def main(page: ft.Page):
             "voice_id": voice_id,
             "voice_gender": voice_gender,
             "timestamp": time.time(),
-            "device_id": tok or ""
+            "device_id": tok or "",
+            "device_type": dev_type
         }
-        GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
-        u_id = getattr(page, "user_id", None)
-        if u_id:
-            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
+        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
+        channel_key = f"{u_id}_{dev_type}"
+        GLOBAL_WEB_TTS_EVENTS[channel_key] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
-
-    # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
-    _w = page.width or 400
-    is_mobile = _w < 700
 
     page.title = "LUXO"
 
@@ -5021,10 +5023,9 @@ def main(page: ft.Page):
             "action": "stop",
             "timestamp": time.time()
         }
-        GLOBAL_WEB_TTS_EVENTS["all"] = evt
-        u_id = getattr(page, "user_id", None)
-        if u_id:
-            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
+        channel_key = f"{u_id}_{dev_type}"
+        GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
@@ -5155,10 +5156,9 @@ def main(page: ft.Page):
                 "action": "pause",
                 "timestamp": time.time()
             }
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt
-            u_id = getattr(page, "user_id", None)
-            if u_id:
-                GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+            u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
+            channel_key = f"{u_id}_{dev_type}"
+            GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
         else:
@@ -5174,10 +5174,9 @@ def main(page: ft.Page):
                 "action": "resume",
                 "timestamp": time.time()
             }
-            GLOBAL_WEB_TTS_EVENTS["all"] = evt
-            u_id = getattr(page, "user_id", None)
-            if u_id:
-                GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+            u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
+            channel_key = f"{u_id}_{dev_type}"
+            GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
