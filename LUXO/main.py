@@ -731,7 +731,7 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
     return ""
 
 
-TAB_TTS_EVENTS = {}
+GLOBAL_WEB_TTS_EVENTS = {}
 
 def configurar_rutas_fastapi(app):
     os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
@@ -955,15 +955,20 @@ def configurar_rutas_fastapi(app):
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
         token = device_id or session_id
-        if not token or token not in TAB_TTS_EVENTS:
+        if not token or token not in GLOBAL_WEB_TTS_EVENTS:
             return {"action": "none"}
-        evt = TAB_TTS_EVENTS[token]
+        evt = GLOBAL_WEB_TTS_EVENTS[token]
         if evt.get("id") == last_id:
             return {"action": "none"}
         return evt
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
+        import time
+        token = device_id or session_id
+        evt = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
+        if token:
+            GLOBAL_WEB_TTS_EVENTS[token] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -1540,82 +1545,160 @@ def configurar_rutas_fastapi(app):
                         window.initLuxoMicPermission();
                     };
 
-                    window.getLuxoDeviceId = function() {
+                    let _luxoCachedVoices = [];
+                    function _luxoInitVoices() {
+                        if ('speechSynthesis' in window) {
+                            _luxoCachedVoices = window.speechSynthesis.getVoices() || [];
+                            window.speechSynthesis.onvoiceschanged = function() {
+                                _luxoCachedVoices = window.speechSynthesis.getVoices() || [];
+                            };
+                        }
+                    }
+                    _luxoInitVoices();
+
+                    window.luxoStopTts = function() {
+                        if (window._currentLuxoAudio) {
+                            try {
+                                window._currentLuxoAudio.pause();
+                                window._currentLuxoAudio.currentTime = 0;
+                            } catch(e) {}
+                            window._currentLuxoAudio = null;
+                        }
+                        if ('speechSynthesis' in window) {
+                            try { window.speechSynthesis.cancel(); } catch(e) {}
+                        }
+                    };
+
+                    window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, failedAudioUrl) {
                         try {
-                            for (let i = 0; i < localStorage.length; i++) {
-                                let key = localStorage.key(i);
-                                if (key && key.includes('luxo_device_token')) {
-                                    let val = localStorage.getItem(key);
-                                    if (val) return val.replace(/["']/g, '');
+                            if (!('speechSynthesis' in window)) return;
+                            window.speechSynthesis.cancel();
+
+                            let cleanText = (text || '').replace(/https?:\/\/\S+/g, '')
+                                                      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+                                                      .replace(/[*_#`~>\[\]\(\)\|\-]+/g, ' ')
+                                                      .replace(/["']/g, '')
+                                                      .replace(/\s+/g, ' ')
+                                                      .trim();
+                            if (!cleanText) return;
+
+                            setTimeout(function() {
+                                try {
+                                    const u = new SpeechSynthesisUtterance(cleanText);
+                                    const vId = (voiceId || '').toLowerCase();
+                                    const voices = (_luxoCachedVoices.length > 0) ? _luxoCachedVoices : (window.speechSynthesis.getVoices() || []);
+
+                                    const esVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
+                                    const maleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('raul') || v.name.toLowerCase().includes('pablo') || v.name.toLowerCase().includes('jorge') || v.name.toLowerCase().includes('david') || v.name.toLowerCase().includes('alvaro') || v.name.toLowerCase().includes('alonso') || v.name.toLowerCase().includes('enrique')));
+                                    const femaleVoices = esVoices.filter(v => (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('sabina') || v.name.toLowerCase().includes('helena') || v.name.toLowerCase().includes('monica') || v.name.toLowerCase().includes('lucia') || v.name.toLowerCase().includes('dalia') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('laura')));
+
+                                    if (vId === 'jarvis' || vId === 'yarvis') {
+                                        u.lang = "es-ES";
+                                        u.pitch = 0.55;
+                                        u.rate = 0.90;
+                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else if (vId === 'jorge' || vId === 'alonso') {
+                                        u.lang = "es-MX";
+                                        u.pitch = 0.65;
+                                        u.rate = 0.92;
+                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else if (vId === 'luxo_avatar' || vId === 'barbara') {
+                                        u.lang = "es-MX";
+                                        u.pitch = 1.35;
+                                        u.rate = 1.10;
+                                        if (femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else if (vId === 'helena' || vId === 'sabina') {
+                                        u.lang = "es-MX";
+                                        u.pitch = 1.15;
+                                        u.rate = 1.02;
+                                        if (femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else {
+                                        u.lang = "es-MX";
+                                        u.pitch = (voiceGender === 'female') ? 1.20 : ((voiceGender === 'male') ? 0.65 : 1.0);
+                                        u.rate = 1.0;
+                                        if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
+                                        else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    }
+
+                                    window.speechSynthesis.speak(u);
+                                } catch(e){}
+                            }, 50);
+                        } catch(e) {
+                            console.log("SpeechSynthesis error:", e);
+                        }
+                    };
+
+                    window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
+                        window.luxoStopTts();
+                        if (audioUrl) {
+                            try {
+                                let audio = new Audio(audioUrl);
+                                window._currentLuxoAudio = audio;
+                                audio.volume = 1.0;
+                                let playPromise = audio.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.catch(function(err) {
+                                        console.log("Audio play attempt catch:", err);
+                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
+                                    });
+                                }
+                            } catch(err) {
+                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
+                            }
+                        } else {
+                            window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
+                        }
+                    };
+
+                    window.getLuxoDeviceId = function() {
+                        let did = null;
+                        try {
+                            did = localStorage.getItem('luxo_device_token') || sessionStorage.getItem('luxo_device_token');
+                            if (!did) {
+                                for (let i = 0; i < localStorage.length; i++) {
+                                    let k = localStorage.key(i);
+                                    if (k && k.includes('luxo_device_token')) {
+                                        let v = localStorage.getItem(k);
+                                        if (v) { did = v.replace(/["']/g, ''); break; }
+                                    }
                                 }
                             }
                         } catch(e) {}
-                        let fallbackId = sessionStorage.getItem('luxo_tab_id');
-                        if (!fallbackId) {
-                            fallbackId = 'tab_' + Math.random().toString(36).substring(2, 10);
-                            sessionStorage.setItem('luxo_tab_id', fallbackId);
-                        }
-                        return fallbackId;
-                    };
-
-                    window._currentLuxoAudio = null;
-                    window.luxoPlayAudio = function(url) {
-                        try {
-                            if (!url) return;
-                            if (window._currentLuxoAudio) {
-                                try {
-                                    window._currentLuxoAudio.pause();
-                                    window._currentLuxoAudio.currentTime = 0;
-                                } catch(e) {}
-                            }
-                            let audio = new Audio(url);
-                            window._currentLuxoAudio = audio;
-                            audio.volume = 1.0;
-                            audio.play().catch(function(err) {
-                                console.log("Audio play error:", err);
-                            });
-                        } catch(ex) {
-                            console.error("luxoPlayAudio error:", ex);
-                        }
-                    };
-
-                    window.luxoPauseAudio = function() {
-                        try {
-                            if (window._currentLuxoAudio) {
-                                window._currentLuxoAudio.pause();
-                            }
-                        } catch(e) {}
-                    };
-
-                    window.luxoResumeAudio = function() {
-                        try {
-                            if (window._currentLuxoAudio) {
-                                window._currentLuxoAudio.play().catch(function(){});
-                            }
-                        } catch(e) {}
+                        return did || '';
                     };
 
                     let lastHandledTtsId = null;
                     if (!window._luxoTtsIntervalStarted) {
                         window._luxoTtsIntervalStarted = true;
-                        setInterval(async function() {
+                        setInterval(function() {
                             try {
-                                let did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
                                 if (!did) return;
-                                let res = await fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''));
-                                if (!res.ok) return;
-                                let data = await res.json();
-                                if (!data || !data.action || data.action === 'none') return;
-                                if (data.id && data.id === lastHandledTtsId) return;
-                                lastHandledTtsId = data.id;
-
-                                if (data.action === 'speak' && data.audio_url) {
-                                    window.luxoPlayAudio(data.audio_url);
-                                } else if (data.action === 'stop' || data.action === 'pause') {
-                                    window.luxoPauseAudio();
-                                } else if (data.action === 'resume') {
-                                    window.luxoResumeAudio();
-                                }
+                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                .then(function(r) { return r.json(); })
+                                .then(function(data) {
+                                    if (!data || !data.action || data.action === 'none') return;
+                                    if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
+                                        lastHandledTtsId = data.id;
+                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                    } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
+                                        lastHandledTtsId = data.id;
+                                        window.luxoStopTts();
+                                    } else if (data.action === 'pause') {
+                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.pause(); } catch(e){} }
+                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
+                                    } else if (data.action === 'resume') {
+                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.play(); } catch(e){} }
+                                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+                                    }
+                                })
+                                .catch(function(){});
                             } catch(e) {}
                         }, 500);
                     }
@@ -4169,15 +4252,18 @@ def main(page: ft.Page):
     page.device_id = dev_token
     page.session_id = dev_token
 
-    def reproducir_audio_local(url):
-        if not url:
+    def reproducir_audio_local(url, text="", voice_id="jarvis", voice_gender="male"):
+        if not url and not text:
             return
         tok = getattr(page, "_luxo_token", None) or dev_token
         if tok:
-            TAB_TTS_EVENTS[tok] = {
+            GLOBAL_WEB_TTS_EVENTS[tok] = {
                 "id": f"spk_{int(time.time()*1000)}",
                 "action": "speak",
+                "text": text,
                 "audio_url": url,
+                "voice_id": voice_id,
+                "voice_gender": voice_gender,
                 "timestamp": time.time()
             }
 
@@ -4981,9 +5067,8 @@ def main(page: ft.Page):
                     except Exception:
                         pass
 
-                # Reproducir usando el componente nativo oficial flet ft.Audio montado en esta página
-                if audio_url:
-                    reproducir_audio_local(audio_url)
+                g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
+                reproducir_audio_local(audio_url, text=text, voice_id=v_actual, voice_gender=g_actual)
 
                 # Si es escritorio local Windows (no web), reproducir también en hardware local
                 if not getattr(page, "web", False) and audio_url:
@@ -22494,10 +22579,10 @@ Ejemplo:
             sample_file = f"sample_{v_id}.mp3"
             sample_path = os.path.join(ASSETS_PATH, "temp_audio", sample_file)
             
-            # Reproducir usando el reproductor local ft.Audio montado en la página
             sample_url = f"/temp_audio/{sample_file}" if (os.path.exists(sample_path) and os.path.getsize(sample_path) > 0) else ""
+            g_id = "female" if v_id in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
             if sample_url:
-                reproducir_audio_local(sample_url)
+                reproducir_audio_local(sample_url, text="Muestra de voz de LUXO", voice_id=v_id, voice_gender=g_id)
 
             # Reproducir también en hardware local si es Windows desktop
             if not getattr(page, "web", False) and os.path.exists(sample_path) and os.path.getsize(sample_path) > 0:
@@ -23578,10 +23663,10 @@ Ejemplo:
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
             v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
+            g_pref = "female" if v_pref in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
             def _saludo_worker():
                 url_bienvenida = generar_audio_tts_edge_sync(saludo_txt, v_pref)
-                if url_bienvenida:
-                    reproducir_audio_local(url_bienvenida)
+                reproducir_audio_local(url_bienvenida, text=saludo_txt, voice_id=v_pref, voice_gender=g_pref)
             threading.Thread(target=_saludo_worker, daemon=True).start()
         except Exception: pass
 
