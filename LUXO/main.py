@@ -1649,10 +1649,6 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
-                        window.luxoStopTts();
-                        if (audioUrl) {
-                            try {
                     let luxoAudioEl = document.getElementById("luxo_global_tts_player");
                     if (!luxoAudioEl) {
                         luxoAudioEl = document.createElement("audio");
