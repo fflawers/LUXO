@@ -972,9 +972,18 @@ def configurar_rutas_fastapi(app):
         if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
+        response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
-            return evt
-        return {"action": "none"}
+            response_data = evt
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=response_data,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1", device_type: str = ""):
@@ -1658,18 +1667,22 @@ def configurar_rutas_fastapi(app):
                         window.luxoStopTts();
                         if (audioUrl) {
                             try {
-                                let audio = new Audio(audioUrl);
+                                let fullUrl = audioUrl;
+                                if (fullUrl.startsWith('/')) {
+                                    fullUrl = window.location.origin + fullUrl;
+                                }
+                                let audio = new Audio(fullUrl);
                                 window._currentLuxoAudio = audio;
                                 audio.volume = 1.0;
                                 let playPromise = audio.play();
                                 if (playPromise !== undefined) {
                                     playPromise.catch(function(err) {
-                                        console.log("Audio play attempt catch:", err);
-                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
+                                        console.log("Audio HTML5 fallo, usando WebSpeech:", err);
+                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                                     });
                                 }
                             } catch(err) {
-                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
+                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                             }
                         } else {
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
@@ -1730,7 +1743,7 @@ def configurar_rutas_fastapi(app):
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
                                 const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
                                 const dtype = getLuxoDeviceType();
-                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&device_type=' + encodeURIComponent(dtype) + '&last_id=' + encodeURIComponent(lastHandledTtsId || ''))
+                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&device_type=' + encodeURIComponent(dtype) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
@@ -1738,7 +1751,7 @@ def configurar_rutas_fastapi(app):
                                         lastHandledTtsId = data.id;
                                         const timeSinceInt = Date.now() - (window._lastInteractionTime || 0);
                                         const evtAge = data.timestamp ? (Date.now() - (data.timestamp * 1000)) : 0;
-                                        if (timeSinceInt < 30000 || evtAge < 8000) {
+                                        if (timeSinceInt < 30000 || evtAge < 10000) {
                                             window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
                                         } else {
                                             console.log("Audio omitido en pestaña inactiva.");
