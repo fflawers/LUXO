@@ -955,18 +955,26 @@ def configurar_rutas_fastapi(app):
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", last_id: str = ""):
         token = device_id or session_id
-        if not token or token not in GLOBAL_WEB_TTS_EVENTS:
-            return {"action": "none"}
-        evt = GLOBAL_WEB_TTS_EVENTS[token]
-        if evt.get("id") == last_id:
-            return {"action": "none"}
-        return evt
+        evt = None
+        if token and token in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[token]
+        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS["all"]
+
+        if evt and evt.get("id") != last_id:
+            return evt
+        return {"action": "none"}
 
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1"):
         import time
         token = device_id or session_id
         evt = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt
+        if user_id:
+            GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
         if token:
             GLOBAL_WEB_TTS_EVENTS[token] = evt
         return {"status": "ok"}
@@ -1683,6 +1691,11 @@ def configurar_rutas_fastapi(app):
                         return did;
                     };
 
+                    window._lastUserClickTime = Date.now();
+                    document.addEventListener('click', function() { window._lastUserClickTime = Date.now(); }, true);
+                    document.addEventListener('touchstart', function() { window._lastUserClickTime = Date.now(); }, true);
+                    document.addEventListener('keydown', function() { window._lastUserClickTime = Date.now(); }, true);
+
                     let lastHandledTtsId = null;
                     if (!window._luxoTtsIntervalStarted) {
                         window._luxoTtsIntervalStarted = true;
@@ -1697,7 +1710,15 @@ def configurar_rutas_fastapi(app):
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                        const evtTime = (data.timestamp ? data.timestamp * 1000 : Date.now());
+                                        const timeSinceLastClick = Date.now() - (window._lastUserClickTime || 0);
+                                        const isMyDevice = (data.device_id && data.device_id === did);
+                                        // Reproducir si es mi dispositivo o si este equipo tuvo interacción en los últimos 20 segundos
+                                        if (isMyDevice || timeSinceLastClick < 20000 || (window._lastUserClickTime === 0 && (Date.now() - evtTime) < 6000)) {
+                                            window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                        } else {
+                                            console.log("Audio omitido en este dispositivo: iniciado en otra sesión.");
+                                        }
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
@@ -4275,16 +4296,23 @@ def main(page: ft.Page):
                     page._luxo_token = stored
         except Exception:
             pass
+        evt_id = f"spk_{int(time.time()*1000)}"
+        evt_data = {
+            "id": evt_id,
+            "action": "speak",
+            "text": text,
+            "audio_url": url,
+            "voice_id": voice_id,
+            "voice_gender": voice_gender,
+            "timestamp": time.time(),
+            "device_id": tok or ""
+        }
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
+        u_id = getattr(page, "user_id", None)
+        if u_id:
+            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
         if tok:
-            GLOBAL_WEB_TTS_EVENTS[tok] = {
-                "id": f"spk_{int(time.time()*1000)}",
-                "action": "speak",
-                "text": text,
-                "audio_url": url,
-                "voice_id": voice_id,
-                "voice_gender": voice_gender,
-                "timestamp": time.time()
-            }
+            GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
     # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
     _w = page.width or 400
@@ -5075,7 +5103,10 @@ def main(page: ft.Page):
         def _speak_worker():
             try:
                 v_actual = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
-                audio_url = generar_audio_tts_edge_sync(text, v_actual)
+                try:
+                    audio_url = generar_audio_tts_edge_sync(text, v_actual)
+                except Exception:
+                    audio_url = ""
                 
                 # Actualizar icono a reproduciendo
                 if btn_speaker and current_speak_btn_speaker == btn_speaker:
@@ -23684,7 +23715,10 @@ Ejemplo:
             v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
             g_pref = "female" if v_pref in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
             def _saludo_worker():
-                url_bienvenida = generar_audio_tts_edge_sync(saludo_txt, v_pref)
+                try:
+                    url_bienvenida = generar_audio_tts_edge_sync(saludo_txt, v_pref)
+                except Exception:
+                    url_bienvenida = ""
                 reproducir_audio_local(url_bienvenida, text=saludo_txt, voice_id=v_pref, voice_gender=g_pref)
             threading.Thread(target=_saludo_worker, daemon=True).start()
         except Exception: pass
