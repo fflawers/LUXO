@@ -1668,8 +1668,19 @@ def configurar_rutas_fastapi(app):
                                     }
                                 }
                             }
-                        } catch(e) {}
-                        return did || '';
+                            if (!did) {
+                                did = 'dev_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
+                                try {
+                                    localStorage.setItem('luxo_device_token', did);
+                                    sessionStorage.setItem('luxo_device_token', did);
+                                    localStorage.setItem('flet_client_storage:luxo_device_token', JSON.stringify(did));
+                                    localStorage.setItem('flutter.luxo_device_token', JSON.stringify(did));
+                                } catch(e){}
+                            }
+                        } catch(e) {
+                            did = 'dev_guest_' + Date.now();
+                        }
+                        return did;
                     };
 
                     let lastHandledTtsId = null;
@@ -4256,6 +4267,14 @@ def main(page: ft.Page):
         if not url and not text:
             return
         tok = getattr(page, "_luxo_token", None) or dev_token
+        try:
+            if hasattr(page, "client_storage") and page.client_storage:
+                stored = page.client_storage.get("luxo_device_token")
+                if stored:
+                    tok = stored
+                    page._luxo_token = stored
+        except Exception:
+            pass
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = {
                 "id": f"spk_{int(time.time()*1000)}",
