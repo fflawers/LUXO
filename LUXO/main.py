@@ -1678,6 +1678,10 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
+                    window.luxoPlayDirect = function(audioUrl, text, voiceId, voiceGender) {
+                        window.luxoPlayTts(text, audioUrl, 'direct_' + Date.now(), voiceId, voiceGender);
+                    };
+
                     window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
                         window.luxoStopTts();
                         if (audioUrl) {
@@ -4336,6 +4340,43 @@ def main(page: ft.Page):
         GLOBAL_WEB_TTS_EVENTS["all"] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
+
+        # Disparo directo a la sesión de este navegador (aislamiento 100% nativo)
+        clean_js_text = str(text or "").replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", " ").replace("\r", "")
+        js_play = f"""
+        (function() {{
+            try {{
+                let fullUrl = '{url}';
+                if (fullUrl && fullUrl.startsWith('/')) {{
+                    fullUrl = window.location.origin + fullUrl;
+                }}
+                if (window.luxoPlayDirect) {{
+                    window.luxoPlayDirect(fullUrl, '{clean_js_text}', '{voice_id}', '{voice_gender}');
+                }} else if (window.luxoPlayTts) {{
+                    window.luxoPlayTts('{clean_js_text}', fullUrl, '{evt_id}', '{voice_id}', '{voice_gender}');
+                }} else {{
+                    if (fullUrl) {{
+                        let a = document.getElementById("luxo_global_tts_player") || new Audio(fullUrl);
+                        a.src = fullUrl;
+                        a.play().catch(function() {{
+                            if ('speechSynthesis' in window) {{
+                                let u = new SpeechSynthesisUtterance('{clean_js_text}');
+                                u.lang = 'es-MX';
+                                window.speechSynthesis.speak(u);
+                            }}
+                        }});
+                    }} else if ('speechSynthesis' in window) {{
+                        let u = new SpeechSynthesisUtterance('{clean_js_text}');
+                        u.lang = 'es-MX';
+                        window.speechSynthesis.speak(u);
+                    }}
+                }}
+            }} catch(e) {{
+                console.log("Error reproducir_audio_local JS direct:", e);
+            }}
+        }})();
+        """
+        ejecutar_js_flet(page, js_play)
 
     page.title = "LUXO"
 
