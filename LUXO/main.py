@@ -676,7 +676,7 @@ def optimizar_archivo_multimedia(filepath):
 
 
 def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
-    import re, urllib.parse, hashlib, os, asyncio
+    import re, urllib.parse, hashlib, os, asyncio, threading
     try:
         import edge_tts
     except ImportError:
@@ -699,7 +699,7 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
     filename = f"speak_{text_hash}_{v_actual}.mp3"
     filepath = os.path.join(temp_audio_dir, filename)
     
-    if not os.path.exists(filepath):
+    if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
         VOICE_EDGE_SPECS = {
             "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
             "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
@@ -712,19 +712,23 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
             "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
         }
         spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
-        try:
-            async def _synthesize():
-                comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
-                await comm.save(filepath)
-            asyncio.run(_synthesize())
-        except Exception:
+        
+        async def _synthesize():
+            comm = edge_tts.Communicate(clean_text, spec["voice"], rate=spec.get("rate", "+0%"), pitch=spec.get("pitch", "+0Hz"))
+            await comm.save(filepath)
+
+        def _do_run():
             try:
-                async def _retry():
-                    comm = edge_tts.Communicate(clean_text, "es-ES-AlvaroNeural")
-                    await comm.save(filepath)
-                asyncio.run(_retry())
-            except Exception:
-                pass
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(_synthesize())
+                loop.close()
+            except Exception as ex_syn:
+                print("Error edge_tts _do_run:", ex_syn)
+
+        t = threading.Thread(target=_do_run)
+        t.start()
+        t.join(timeout=8.0)
     
     if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
         return f"/temp_audio/{urllib.parse.quote(filename)}"
