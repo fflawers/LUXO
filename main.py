@@ -959,17 +959,10 @@ def configurar_rutas_fastapi(app):
 
     @app.get("/api/tts/poll")
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", device_type: str = "", last_id: str = ""):
-        token = device_id or session_id
         evt = None
-        if user_id and device_type and f"{user_id}_{device_type}" in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[f"{user_id}_{device_type}"]
-        if not evt and device_type and f"all_{device_type}" in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[f"all_{device_type}"]
-        if not evt and token and token in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[token]
-        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+        if user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-        if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
+        elif "all" in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         response_data = {"action": "none"}
@@ -988,17 +981,10 @@ def configurar_rutas_fastapi(app):
     @app.api_route("/api/tts/stop", methods=["GET", "POST"])
     def tts_stop_route(device_id: str = "", session_id: str = "", user_id: str = "1", device_type: str = ""):
         import time
-        token = device_id or session_id
-        evt = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time(), "device_type": device_type}
-        if device_type:
-            GLOBAL_WEB_TTS_EVENTS[f"all_{device_type}"] = evt
-            if user_id:
-                GLOBAL_WEB_TTS_EVENTS[f"{user_id}_{device_type}"] = evt
+        evt = {"id": f"stop_{int(time.time()*1000)}", "action": "stop", "timestamp": time.time()}
         GLOBAL_WEB_TTS_EVENTS["all"] = evt
         if user_id:
             GLOBAL_WEB_TTS_EVENTS[str(user_id)] = evt
-        if token:
-            GLOBAL_WEB_TTS_EVENTS[token] = evt
         return {"status": "ok"}
 
     @app.middleware("http")
@@ -1667,55 +1653,13 @@ def configurar_rutas_fastapi(app):
                         window.luxoStopTts();
                         if (audioUrl) {
                             try {
-                                let fullUrl = audioUrl;
-                                if (fullUrl.startsWith('/')) {
-                                    fullUrl = window.location.origin + fullUrl;
-                                }
-                                let audio = new Audio(fullUrl);
-                                window._currentLuxoAudio = audio;
-                                audio.volume = 1.0;
-                                let playPromise = audio.play();
-                                if (playPromise !== undefined) {
-                                    playPromise.catch(function(err) {
-                                        console.log("Audio HTML5 fallo, usando WebSpeech:", err);
-                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                                    });
-                                }
-                            } catch(err) {
-                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                            }
-                        } else {
-                            window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
-                        }
-                    };
-
-                    window.getLuxoDeviceId = function() {
-                        let did = null;
-                        try {
-                            did = localStorage.getItem('luxo_device_token') || sessionStorage.getItem('luxo_device_token');
-                            if (!did) {
-                                for (let i = 0; i < localStorage.length; i++) {
-                                    let k = localStorage.key(i);
-                                    if (k && k.includes('luxo_device_token')) {
-                                        let v = localStorage.getItem(k);
-                                        if (v) { did = v.replace(/["']/g, ''); break; }
-                                    }
-                                }
-                            }
-                            if (!did) {
-                                did = 'dev_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
-                                try {
-                                    localStorage.setItem('luxo_device_token', did);
-                                    sessionStorage.setItem('luxo_device_token', did);
-                                    localStorage.setItem('flet_client_storage:luxo_device_token', JSON.stringify(did));
-                                    localStorage.setItem('flutter.luxo_device_token', JSON.stringify(did));
-                                } catch(e){}
-                            }
-                        } catch(e) {
-                            did = 'dev_guest_' + Date.now();
-                        }
-                        return did;
-                    };
+                    let luxoAudioEl = document.getElementById("luxo_global_tts_player");
+                    if (!luxoAudioEl) {
+                        luxoAudioEl = document.createElement("audio");
+                        luxoAudioEl.id = "luxo_global_tts_player";
+                        luxoAudioEl.style.display = "none";
+                        document.body.appendChild(luxoAudioEl);
+                    }
 
                     window._lastInteractionTime = Date.now();
                     try {
@@ -1726,14 +1670,55 @@ def configurar_rutas_fastapi(app):
                         window.addEventListener('keydown', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
                     } catch(e) {}
 
-                    function getLuxoDeviceType() {
-                        try {
-                            let isMob = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth < 700);
-                            return isMob ? 'mobile' : 'desktop';
-                        } catch(e) {
-                            return 'desktop';
+                    window.luxoStopTts = function() {
+                        if (luxoAudioEl) {
+                            try {
+                                luxoAudioEl.pause();
+                                luxoAudioEl.currentTime = 0;
+                            } catch(e){}
                         }
-                    }
+                        if ('speechSynthesis' in window) {
+                            try { window.speechSynthesis.cancel(); } catch(e){}
+                        }
+                    };
+
+                    window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
+                        window.luxoStopTts();
+                        if (audioUrl) {
+                            function tryPlayAudio(retriesLeft) {
+                                try {
+                                    if (!luxoAudioEl) {
+                                        luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
+                                    }
+                                    let fullUrl = audioUrl;
+                                    if (fullUrl.startsWith('/')) {
+                                        fullUrl = window.location.origin + fullUrl;
+                                    }
+                                    luxoAudioEl.src = fullUrl;
+                                    let playPromise = luxoAudioEl.play();
+                                    if (playPromise !== undefined) {
+                                        playPromise.catch(function(err) {
+                                            console.log("Audio play attempt failed, retries left:", retriesLeft, err);
+                                            if (retriesLeft > 0) {
+                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 300);
+                                            } else {
+                                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
+                                            }
+                                        });
+                                    }
+                                } catch(err) {
+                                    if (retriesLeft > 0) {
+                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 300);
+                                    } else {
+                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
+                                    }
+                                }
+                            }
+                            tryPlayAudio(4);
+                        } else {
+                            window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
+                        }
+                    };
 
                     let lastHandledTtsId = null;
                     if (!window._luxoTtsIntervalStarted) {
@@ -1741,9 +1726,7 @@ def configurar_rutas_fastapi(app):
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                                const dtype = getLuxoDeviceType();
-                                fetch('/api/tts/poll?device_id=' + encodeURIComponent(did) + '&session_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&device_type=' + encodeURIComponent(dtype) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
+                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
@@ -1753,17 +1736,15 @@ def configurar_rutas_fastapi(app):
                                         const evtAge = data.timestamp ? (Date.now() - (data.timestamp * 1000)) : 0;
                                         if (timeSinceInt < 30000 || evtAge < 10000) {
                                             window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
-                                        } else {
-                                            console.log("Audio omitido en pestaña inactiva.");
                                         }
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
                                     } else if (data.action === 'pause') {
-                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.pause(); } catch(e){} }
+                                        if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
                                     } else if (data.action === 'resume') {
-                                        if (window._currentLuxoAudio) { try { window._currentLuxoAudio.play(); } catch(e){} }
+                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
                                     }
                                 })
