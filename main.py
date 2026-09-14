@@ -732,6 +732,7 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
 
 
 GLOBAL_WEB_TTS_EVENTS = {}
+TAB_TTS_EVENTS = GLOBAL_WEB_TTS_EVENTS
 
 def configurar_rutas_fastapi(app):
     os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
@@ -1691,9 +1692,10 @@ def configurar_rutas_fastapi(app):
                         return did;
                     };
 
-                    window._lastUserClickTime = Date.now();
+                    window._lastUserClickTime = 0;
                     document.addEventListener('click', function() { window._lastUserClickTime = Date.now(); }, true);
                     document.addEventListener('touchstart', function() { window._lastUserClickTime = Date.now(); }, true);
+                    document.addEventListener('pointerdown', function() { window._lastUserClickTime = Date.now(); }, true);
                     document.addEventListener('keydown', function() { window._lastUserClickTime = Date.now(); }, true);
 
                     let lastHandledTtsId = null;
@@ -1710,14 +1712,13 @@ def configurar_rutas_fastapi(app):
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        const evtTime = (data.timestamp ? data.timestamp * 1000 : Date.now());
-                                        const timeSinceLastClick = Date.now() - (window._lastUserClickTime || 0);
+                                        const timeSinceLastClick = (window._lastUserClickTime > 0) ? (Date.now() - window._lastUserClickTime) : 999999;
                                         const isMyDevice = (data.device_id && data.device_id === did);
-                                        // Reproducir si es mi dispositivo o si este equipo tuvo interacción en los últimos 20 segundos
-                                        if (isMyDevice || timeSinceLastClick < 20000 || (window._lastUserClickTime === 0 && (Date.now() - evtTime) < 6000)) {
+                                        // Reproducir si es mi dispositivo exacto o si este equipo tuvo interacción directa en los últimos 8 segundos
+                                        if (isMyDevice || timeSinceLastClick < 8000) {
                                             window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
                                         } else {
-                                            console.log("Audio omitido en este dispositivo: iniciado en otra sesión.");
+                                            console.log("Audio omitido en este dispositivo: iniciado en otra sesión/equipo.");
                                         }
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
@@ -5015,12 +5016,17 @@ def main(page: ft.Page):
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         tok = getattr(page, "_luxo_token", None) or dev_token
+        evt = {
+            "id": f"stop_{int(time.time()*1000)}",
+            "action": "stop",
+            "timestamp": time.time()
+        }
+        GLOBAL_WEB_TTS_EVENTS["all"] = evt
+        u_id = getattr(page, "user_id", None)
+        if u_id:
+            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
         if tok:
-            TAB_TTS_EVENTS[tok] = {
-                "id": f"stop_{int(time.time()*1000)}",
-                "action": "stop",
-                "timestamp": time.time()
-            }
+            GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
         try:
             import platform, ctypes
@@ -5144,12 +5150,17 @@ def main(page: ft.Page):
                 try: current_speak_btn_play_pause.update()
                 except Exception: pass
             tok = getattr(page, "_luxo_token", None) or dev_token
+            evt = {
+                "id": f"pause_{int(time.time()*1000)}",
+                "action": "pause",
+                "timestamp": time.time()
+            }
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt
+            u_id = getattr(page, "user_id", None)
+            if u_id:
+                GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             if tok:
-                TAB_TTS_EVENTS[tok] = {
-                    "id": f"pause_{int(time.time()*1000)}",
-                    "action": "pause",
-                    "timestamp": time.time()
-                }
+                GLOBAL_WEB_TTS_EVENTS[tok] = evt
         else:
             current_speak_is_paused = False
             if current_speak_btn_play_pause:
@@ -5158,12 +5169,17 @@ def main(page: ft.Page):
                 try: current_speak_btn_play_pause.update()
                 except Exception: pass
             tok = getattr(page, "_luxo_token", None) or dev_token
+            evt = {
+                "id": f"resume_{int(time.time()*1000)}",
+                "action": "resume",
+                "timestamp": time.time()
+            }
+            GLOBAL_WEB_TTS_EVENTS["all"] = evt
+            u_id = getattr(page, "user_id", None)
+            if u_id:
+                GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             if tok:
-                TAB_TTS_EVENTS[tok] = {
-                    "id": f"resume_{int(time.time()*1000)}",
-                    "action": "resume",
-                    "timestamp": time.time()
-                }
+                GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
 
 
