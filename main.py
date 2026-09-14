@@ -957,24 +957,16 @@ def configurar_rutas_fastapi(app):
     def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", device_type: str = "", last_id: str = ""):
         token = device_id or session_id
         evt = None
-        if user_id and device_type:
-            target_key = f"{user_id}_{device_type}"
-            if target_key in GLOBAL_WEB_TTS_EVENTS:
-                evt = GLOBAL_WEB_TTS_EVENTS[target_key]
+        if user_id and device_type and f"{user_id}_{device_type}" in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[f"{user_id}_{device_type}"]
         if not evt and device_type and f"all_{device_type}" in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[f"all_{device_type}"]
         if not evt and token and token in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[token]
         if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            cand = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-            cand_dev = cand.get("device_type", "")
-            if not device_type or not cand_dev or cand_dev == device_type:
-                evt = cand
+            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
         if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
-            cand = GLOBAL_WEB_TTS_EVENTS["all"]
-            cand_dev = cand.get("device_type", "")
-            if not device_type or not cand_dev or cand_dev == device_type:
-                evt = cand
+            evt = GLOBAL_WEB_TTS_EVENTS["all"]
 
         if evt and evt.get("id") != last_id:
             return evt
@@ -1708,6 +1700,15 @@ def configurar_rutas_fastapi(app):
                         return did;
                     };
 
+                    window._lastInteractionTime = Date.now();
+                    try {
+                        window.addEventListener('pointerdown', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
+                        window.addEventListener('touchstart', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
+                        window.addEventListener('mousedown', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
+                        window.addEventListener('click', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
+                        window.addEventListener('keydown', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
+                    } catch(e) {}
+
                     function getLuxoDeviceType() {
                         try {
                             let isMob = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth < 700);
@@ -1731,7 +1732,13 @@ def configurar_rutas_fastapi(app):
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                        const timeSinceInt = Date.now() - (window._lastInteractionTime || 0);
+                                        const evtAge = data.timestamp ? (Date.now() - (data.timestamp * 1000)) : 0;
+                                        if (timeSinceInt < 30000 || evtAge < 8000) {
+                                            window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                                        } else {
+                                            console.log("Audio omitido en pestaña inactiva.");
+                                        }
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
