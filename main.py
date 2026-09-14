@@ -4312,6 +4312,11 @@ def main(page: ft.Page):
             return "mobile"
         return "desktop"
 
+    # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
+    _w = page.width or 400
+    _ua_scope = str(getattr(page, "client_user_agent", "") or "").lower()
+    is_mobile = (_w < 700) or any(k in _ua_scope for k in ["android", "iphone", "ipad", "ipod", "mobile"])
+
     def reproducir_audio_local(url, text="", voice_id="jarvis", voice_gender="male"):
         if not url and not text:
             return
