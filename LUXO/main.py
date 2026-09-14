@@ -958,9 +958,12 @@ def configurar_rutas_fastapi(app):
         return {"audio_url": audio_url}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(device_id: str = "", session_id: str = "", user_id: str = "1", device_type: str = "", last_id: str = ""):
+    def tts_poll_route(session_id: str = "", user_id: str = "1", last_id: str = "", device_id: str = "", device_type: str = ""):
+        token = session_id or device_id
         evt = None
-        if user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+        if token and token in GLOBAL_WEB_TTS_EVENTS:
+            evt = GLOBAL_WEB_TTS_EVENTS[token]
+        elif user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
         elif "all" in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS["all"]
@@ -1700,7 +1703,7 @@ def configurar_rutas_fastapi(app):
                                         playPromise.catch(function(err) {
                                             console.log("Audio play attempt failed, retries left:", retriesLeft, err);
                                             if (retriesLeft > 0) {
-                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 300);
+                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
                                             } else {
                                                 window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                                             }
@@ -1708,16 +1711,29 @@ def configurar_rutas_fastapi(app):
                                     }
                                 } catch(err) {
                                     if (retriesLeft > 0) {
-                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 300);
+                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
                                     } else {
                                         window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                                     }
                                 }
                             }
-                            tryPlayAudio(4);
+                            tryPlayAudio(5);
                         } else {
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                         }
+                    };
+
+                    window.getLuxoSessionId = function() {
+                        if (!window._luxoClientSessionId) {
+                            let stored = null;
+                            try { stored = sessionStorage.getItem('luxo_client_session_id'); } catch(e){}
+                            if (!stored) {
+                                stored = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+                                try { sessionStorage.setItem('luxo_client_session_id', stored); } catch(e){}
+                            }
+                            window._luxoClientSessionId = stored;
+                        }
+                        return window._luxoClientSessionId;
                     };
 
                     let lastHandledTtsId = null;
@@ -1726,16 +1742,14 @@ def configurar_rutas_fastapi(app):
                         setInterval(function() {
                             try {
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                fetch('/api/tts/poll?user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
+                                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
                                 .then(function(r) { return r.json(); })
                                 .then(function(data) {
                                     if (!data || !data.action || data.action === 'none') return;
                                     if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
-                                        const timeSinceInt = Date.now() - (window._lastInteractionTime || 0);
-                                        if (timeSinceInt < 15000) {
-                                            window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
-                                        }
+                                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
                                     } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
