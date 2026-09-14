@@ -964,9 +964,15 @@ def configurar_rutas_fastapi(app):
         if not evt and token and token in GLOBAL_WEB_TTS_EVENTS:
             evt = GLOBAL_WEB_TTS_EVENTS[token]
         if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+            cand = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+            cand_dev = cand.get("device_type", "")
+            if not device_type or not cand_dev or cand_dev == device_type:
+                evt = cand
         if not evt and "all" in GLOBAL_WEB_TTS_EVENTS:
-            evt = GLOBAL_WEB_TTS_EVENTS["all"]
+            cand = GLOBAL_WEB_TTS_EVENTS["all"]
+            cand_dev = cand.get("device_type", "")
+            if not device_type or not cand_dev or cand_dev == device_type:
+                evt = cand
 
         if evt and evt.get("id") != last_id:
             return evt
@@ -4285,11 +4291,20 @@ def main(page: ft.Page):
     page.device_id = dev_token
     page.session_id = dev_token
 
-    # page.width puede ser None en el primer render web/móvil — usar 400 como fallback seguro
-    _w = page.width or 400
-    _ua = str(getattr(page, "client_user_agent", "") or "")
-    is_mobile = (_w < 700) or any(k in _ua for k in ["Mobile", "Android", "iPhone", "iPad", "iPod", "BlackBerry", "IEMobile", "Opera Mini"])
-    dev_type = "mobile" if is_mobile else "desktop"
+    def _detect_page_device_type():
+        plat = getattr(page, "platform", None)
+        if plat in [ft.PagePlatform.IOS, ft.PagePlatform.ANDROID, ft.PagePlatform.ANDROID_TV]:
+            return "mobile"
+        if plat in [ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX]:
+            return "desktop"
+        ua = str(getattr(page, "client_user_agent", "") or "").lower()
+        if any(k in ua for k in ["android", "iphone", "ipad", "ipod", "mobile"]):
+            return "mobile"
+        if any(k in ua for k in ["windows", "macintosh", "linux"]):
+            return "desktop"
+        if page.width and page.width < 700:
+            return "mobile"
+        return "desktop"
 
     def reproducir_audio_local(url, text="", voice_id="jarvis", voice_gender="male"):
         if not url and not text:
@@ -4303,6 +4318,7 @@ def main(page: ft.Page):
                     page._luxo_token = stored
         except Exception:
             pass
+        d_type = _detect_page_device_type()
         evt_id = f"spk_{int(time.time()*1000)}"
         evt_data = {
             "id": evt_id,
@@ -4313,11 +4329,12 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time(),
             "device_id": tok or "",
-            "device_type": dev_type
+            "device_type": d_type
         }
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
-        channel_key = f"{u_id}_{dev_type}"
+        channel_key = f"{u_id}_{d_type}"
         GLOBAL_WEB_TTS_EVENTS[channel_key] = evt_data
+        GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -5018,14 +5035,17 @@ def main(page: ft.Page):
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         tok = getattr(page, "_luxo_token", None) or dev_token
+        d_type = _detect_page_device_type()
         evt = {
             "id": f"stop_{int(time.time()*1000)}",
             "action": "stop",
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "device_type": d_type
         }
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
-        channel_key = f"{u_id}_{dev_type}"
+        channel_key = f"{u_id}_{d_type}"
         GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
+        GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
@@ -5143,6 +5163,7 @@ def main(page: ft.Page):
         nonlocal current_speak_btn_play_pause, current_speak_is_paused
         if not current_speak_btn_speaker:
             return
+        d_type = _detect_page_device_type()
         if not current_speak_is_paused:
             current_speak_is_paused = True
             if current_speak_btn_play_pause:
@@ -5154,11 +5175,13 @@ def main(page: ft.Page):
             evt = {
                 "id": f"pause_{int(time.time()*1000)}",
                 "action": "pause",
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "device_type": d_type
             }
             u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
-            channel_key = f"{u_id}_{dev_type}"
+            channel_key = f"{u_id}_{d_type}"
             GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
+            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
         else:
@@ -5172,11 +5195,13 @@ def main(page: ft.Page):
             evt = {
                 "id": f"resume_{int(time.time()*1000)}",
                 "action": "resume",
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "device_type": d_type
             }
             u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
-            channel_key = f"{u_id}_{dev_type}"
+            channel_key = f"{u_id}_{d_type}"
             GLOBAL_WEB_TTS_EVENTS[channel_key] = evt
+            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
