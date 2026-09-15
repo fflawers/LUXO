@@ -976,6 +976,12 @@ def configurar_rutas_fastapi(app):
             if cand and (now - cand.get("timestamp", now)) <= 12.0:
                 evt = cand
 
+        # 3. Fallback para eventos recién generados (Render sincronización inmediata)
+        if not evt and "latest_speak" in GLOBAL_WEB_TTS_EVENTS:
+            cand = GLOBAL_WEB_TTS_EVENTS["latest_speak"]
+            if cand and (now - cand.get("timestamp", now)) <= 10.0:
+                evt = cand
+
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
@@ -1660,23 +1666,38 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    let luxoAudioEl = document.getElementById("luxo_global_tts_player");
-                    if (!luxoAudioEl) {
-                        luxoAudioEl = document.createElement("audio");
-                        luxoAudioEl.id = "luxo_global_tts_player";
-                        luxoAudioEl.style.display = "none";
-                        luxoAudioEl.muted = false;
-                        luxoAudioEl.volume = 1.0;
-                        document.body.appendChild(luxoAudioEl);
+                    function getOrCreateAudioElement() {
+                        let el = document.getElementById("luxo_global_tts_player");
+                        if (!el) {
+                            el = document.createElement("audio");
+                            el.id = "luxo_global_tts_player";
+                            el.style.display = "none";
+                            el.setAttribute("preload", "auto");
+                            el.muted = false;
+                            el.volume = 1.0;
+                            (document.body || document.documentElement).appendChild(el);
+                        }
+                        return el;
                     }
 
                     window._lastInteractionTime = Date.now();
                     window.luxoUnmuteAudio = function() {
                         window._lastInteractionTime = Date.now();
-                        if (luxoAudioEl) {
-                            luxoAudioEl.muted = false;
-                            luxoAudioEl.volume = 1.0;
-                        }
+                        try {
+                            let el = getOrCreateAudioElement();
+                            el.muted = false;
+                            el.volume = 1.0;
+                            if (!window._luxoAudioUnlocked) {
+                                window._luxoAudioUnlocked = true;
+                                let p = el.play();
+                                if (p !== undefined) {
+                                    p.then(function() {
+                                        el.pause();
+                                        el.currentTime = 0;
+                                    }).catch(function(){});
+                                }
+                            }
+                        } catch(e){}
                     };
                     try {
                         window.addEventListener('pointerdown', window.luxoUnmuteAudio, { capture: true, passive: true });
@@ -1687,10 +1708,11 @@ def configurar_rutas_fastapi(app):
                     } catch(e) {}
 
                     window.luxoStopTts = function() {
-                        if (luxoAudioEl) {
+                        let el = document.getElementById("luxo_global_tts_player");
+                        if (el) {
                             try {
-                                luxoAudioEl.pause();
-                                luxoAudioEl.currentTime = 0;
+                                el.pause();
+                                el.currentTime = 0;
                             } catch(e){}
                         }
                         if ('speechSynthesis' in window) {
@@ -1707,22 +1729,20 @@ def configurar_rutas_fastapi(app):
                         if (audioUrl) {
                             function tryPlayAudio(retriesLeft) {
                                 try {
-                                    if (!luxoAudioEl) {
-                                        luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
-                                    }
-                                    luxoAudioEl.muted = false;
-                                    luxoAudioEl.volume = 1.0;
+                                    let el = getOrCreateAudioElement();
+                                    el.muted = false;
+                                    el.volume = 1.0;
                                     let fullUrl = audioUrl;
                                     if (fullUrl.startsWith('/')) {
                                         fullUrl = window.location.origin + fullUrl;
                                     }
-                                    luxoAudioEl.src = fullUrl;
-                                    let playPromise = luxoAudioEl.play();
+                                    el.src = fullUrl;
+                                    let playPromise = el.play();
                                     if (playPromise !== undefined) {
                                         playPromise.catch(function(err) {
                                             console.log("Audio play attempt failed, retries left:", retriesLeft, err);
                                             if (retriesLeft > 0) {
-                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                                setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                                             } else {
                                                 window.luxoSpeakWebSpeech(text, voiceId, voiceGender, fullUrl);
                                             }
@@ -1730,7 +1750,7 @@ def configurar_rutas_fastapi(app):
                                     }
                                 } catch(err) {
                                     if (retriesLeft > 0) {
-                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
+                                        setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                                     } else {
                                         window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                                     }
@@ -4374,6 +4394,7 @@ def main(page: ft.Page):
         }
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
         GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
+        GLOBAL_WEB_TTS_EVENTS["latest_speak"] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -5122,6 +5143,7 @@ def main(page: ft.Page):
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
         GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+        GLOBAL_WEB_TTS_EVENTS.pop("latest_speak", None)
 
         ejecutar_js_flet(page, "if (window.luxoStopTts) { window.luxoStopTts(); } else { let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); a.currentTime = 0; } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch(e){} } }")
 
