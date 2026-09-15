@@ -989,9 +989,6 @@ def configurar_rutas_fastapi(app):
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
-
-        print(f"[LUXO AUDIO DEBUG POLL] user_id='{user_id}', session_id='{session_id}', device_id='{device_id}', device_type='{device_type}', event_id_encontrado='{response_data.get('id')}', event_id_solicitado='{last_id}', action='{response_data.get('action')}', audio_url='{response_data.get('audio_url')}'")
-        if response_data.get("action") != "none":
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
         from fastapi.responses import JSONResponse
         return JSONResponse(
@@ -4445,7 +4442,6 @@ def main(page: ft.Page):
         if not url and not text:
             return
         tok = getattr(page, "_luxo_token", None) or dev_token
-        d_type = _detect_page_device_type()
         evt_id = f"spk_{int(time.time()*1000)}"
         evt_data = {
             "id": evt_id,
@@ -4454,17 +4450,13 @@ def main(page: ft.Page):
             "audio_url": url,
             "voice_id": voice_id,
             "voice_gender": voice_gender,
-            "timestamp": time.time(),
-            "device_type": d_type,
-            "session_id": tok or ""
+            "timestamp": time.time()
         }
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
         GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
         GLOBAL_WEB_TTS_EVENTS["latest_speak"] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
-
-        print(f"[LUXO AUDIO DEBUG SEND] user_id='{u_id}', session_id='{tok}', device_id='{tok}', device_type='{d_type}', event_id='{evt_id}', audio_url='{url}', timestamp={evt_data['timestamp']}")
 
         # Disparo directo a la sesión de este navegador (aislamiento 100% nativo)
         clean_js_text = str(text or "").replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", " ").replace("\r", "")
