@@ -23943,25 +23943,13 @@ Ejemplo:
             nombre_u = (nombre_completo or "").strip()
             if nombre_u.lower().startswith("tienda "):
                 display_name = nombre_u
-                saludo_txt = f"Bienvenida, {nombre_u}. Sistemas de LUXO en línea y a su servicio."
             elif nombre_u:
                 first_n = nombre_u.split(" ")[0].title()
                 display_name = first_n
-                saludo_txt = f"Bienvenido, {first_n}. Sistemas de LUXO en línea y a su servicio."
             else:
                 display_name = "Usuario"
-                saludo_txt = "Bienvenido a LUXO. Sistemas en línea y a su servicio."
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
-            v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
-            g_pref = "female" if v_pref in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
-            def _saludo_worker():
-                try:
-                    url_bienvenida = generar_audio_tts_edge_sync(saludo_txt, v_pref)
-                except Exception:
-                    url_bienvenida = ""
-                reproducir_audio_local(url_bienvenida, text=saludo_txt, voice_id=v_pref, voice_gender=g_pref)
-            threading.Thread(target=_saludo_worker, daemon=True).start()
         except Exception: pass
 
     # =====================================

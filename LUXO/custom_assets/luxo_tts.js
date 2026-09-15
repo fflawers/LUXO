@@ -234,6 +234,11 @@
                                 document_visibilityState: document.visibilityState,
                                 retriesLeft: retriesLeft
                             });
+                            // Si la reproducción fue abortada por una nueva solicitud de audio, no disparar WebSpeech
+                            if (err.name === 'AbortError') {
+                                console.log("[LUXO TTS] Play abortado de forma controlada por cambio de audio.");
+                                return;
+                            }
                             if (retriesLeft > 0) {
                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                             } else {
