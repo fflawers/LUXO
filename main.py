@@ -968,28 +968,16 @@ def configurar_rutas_fastapi(app):
         token = session_id or device_id
         evt = None
 
-        # 1. Prioridad: token de sesión directo
+        # 1. Prioridad y único criterio: token de sesión directo
         if token and token in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[token]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
-        # 2. Fallback por user_id (para Render donde launch_url es bloqueado)
-        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            cand = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
-            if cand and (now - cand.get("timestamp", now)) <= 12.0:
-                evt = cand
-
-        # 3. Fallback para eventos recién generados (Render sincronización inmediata)
-        if not evt and "latest_speak" in GLOBAL_WEB_TTS_EVENTS:
-            cand = GLOBAL_WEB_TTS_EVENTS["latest_speak"]
-            if cand and (now - cand.get("timestamp", now)) <= 10.0:
-                evt = cand
-
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
-            print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
+            print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content=response_data,
@@ -4400,17 +4388,7 @@ def descargar_pdf_archivo(id_manual, page=None):
 
 def main(page: ft.Page):
     import uuid, time
-    dev_token = None
-    try:
-        if hasattr(page, "client_storage") and page.client_storage:
-            dev_token = page.client_storage.get("luxo_device_token")
-            if not dev_token:
-                dev_token = f"dev_{uuid.uuid4().hex[:12]}"
-                page.client_storage.set("luxo_device_token", dev_token)
-    except Exception:
-        pass
-    if not dev_token:
-        dev_token = f"dev_{uuid.uuid4().hex[:12]}"
+    dev_token = f"dev_{uuid.uuid4().hex[:12]}"
     page._luxo_token = dev_token
     page._luxo_unique_session_id = dev_token
     page.client_session_id = dev_token
@@ -4452,9 +4430,6 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time()
         }
-        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
-        GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
-        GLOBAL_WEB_TTS_EVENTS["latest_speak"] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -5199,11 +5174,8 @@ def main(page: ft.Page):
             "timestamp": time.time(),
             "device_type": d_type
         }
-        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
-        GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
-        GLOBAL_WEB_TTS_EVENTS.pop("latest_speak", None)
 
         ejecutar_js_flet(page, "if (window.luxoStopTts) { window.luxoStopTts(); } else { let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); a.currentTime = 0; } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch(e){} } }")
 
@@ -5355,7 +5327,6 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
-            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }")
         else:
             current_speak_is_paused = False
@@ -5372,7 +5343,6 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
-            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.play(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }")
 
 
