@@ -6297,40 +6297,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         except: pass
         try: page.launch_url(f"javascript:window.luxoUserId = '{user_info.get('id', '1')}'; void(0);")
         except: pass
-        import time
-        time.sleep(0.01)
-
-        def emitir_saludo_bienvenida_thread():
-            try:
-                time.sleep(1.2)
-                nombre_u = (user_info.get("nombre") or "").strip()
-                usuario_u = (user_info.get("usuario") or "").strip()
-                tienda_u = (user_info.get("tienda") or "").strip()
-
-                is_store = False
-                if usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda "):
-                    is_store = True
-
-                if is_store:
-                    nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
-                    if not nombre_tienda and tienda_u:
-                        nombre_tienda = tienda_u
-                    saludo_raw = f"¡Hola Tienda {nombre_tienda}, bienvenido a LUXO!"
-                elif nombre_u:
-                    primer_nombre = nombre_u.split()[0].title()
-                    saludo_raw = f"¡Hola {primer_nombre}, bienvenido a LUXO!"
-                else:
-                    saludo_raw = "¡Bienvenido a LUXO System!"
-                
-                v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
-                start_speak(saludo_raw, voice_id=v_pref)
-            except Exception as ex_w:
-                print("Notice saludo bienvenida:", ex_w)
-
-        if desde_login and not getattr(page, "_saludo_ya_emitido", False):
-            page._saludo_ya_emitido = True
-            threading.Thread(target=emitir_saludo_bienvenida_thread, daemon=True).start()
-
+        # En cargar_chat ya no emitimos saludo de audio duplicado para evitar interrupciones
         page.clean()
 
         # Cargar interfaz de chat y vista principal
@@ -23941,16 +23908,56 @@ Ejemplo:
     def reproducir_saludo_login(nombre_completo):
         try:
             nombre_u = (nombre_completo or "").strip()
-            if nombre_u.lower().startswith("tienda "):
-                display_name = nombre_u
+            usuario_u = (user_info.get("usuario") or "").strip()
+            tienda_u = (user_info.get("tienda") or "").strip()
+
+            is_store = False
+            if usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda "):
+                is_store = True
+
+            if is_store:
+                nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
+                if not nombre_tienda and tienda_u:
+                    nombre_tienda = tienda_u
+                display_name = f"Tienda {nombre_tienda}"
+                target_name = f"equipo de {nombre_tienda}" if nombre_tienda else "equipo de Tienda"
             elif nombre_u:
-                first_n = nombre_u.split(" ")[0].title()
-                display_name = first_n
+                display_name = nombre_u.split(" ")[0].title()
+                target_name = display_name
             else:
                 display_name = "Usuario"
+                target_name = "Usuario"
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
-        except Exception: pass
+
+            # Determinar voz del usuario
+            v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
+
+            # 8 Frases personalizadas por voz
+            FRASES_BIENVENIDA = {
+                "jarvis": f"Bienvenido, {target_name}. Sistemas de LUXO en línea y listos para operar, señor.",
+                "yarvis": f"Bienvenido, {target_name}. Sistemas de LUXO en línea y listos para operar, señor.",
+                "barbara": f"¡Hola, {target_name}! Qué alegría saludarte. Recuerda que hoy puedes ser lo que quieras ser... ¡y hoy toca ser el número uno en ventas! Vamos a romper el récord juntos.",
+                "luxo_avatar": f"¡Hola {target_name}! LUXO está conectado. ¿Qué meta conquistamos hoy?",
+                "helena": f"¡Hola {target_name}, bienvenido! Todo listo por aquí, ¿en qué te puedo apoyar?",
+                "jorge": f"Bienvenido {target_name}. Métricas y protocolos de LUXO listos para su revisión.",
+                "sabina": f"¡Bienvenido {target_name}! Sistemas actualizados y preparados. Comencemos.",
+                "alonso": f"Bienvenido a LUXO, {target_name}. Todo el equipo operativo a tu disposición.",
+                "estandar": f"Bienvenido a LUXO, {target_name}. Sistema listo para tu consulta."
+            }
+
+            saludo_final = FRASES_BIENVENIDA.get(v_pref, FRASES_BIENVENIDA["jarvis"])
+            g_pref = "female" if v_pref in ["helena", "sabina", "barbara", "luxo_avatar"] else "male"
+
+            def _disparar_audio_saludo():
+                try:
+                    start_speak(saludo_final, voice_id=v_pref, voice_gender=g_pref)
+                except Exception as ex_sp:
+                    print("Notice audio saludo login:", ex_sp)
+
+            threading.Thread(target=_disparar_audio_saludo, daemon=True).start()
+        except Exception as ex_g:
+            print("Notice reproducir_saludo_login:", ex_g)
 
     # =====================================
     # LOGIN
