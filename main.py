@@ -731,7 +731,11 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
         t.join(timeout=8.0)
     
     if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-        return f"/temp_audio/{urllib.parse.quote(filename)}"
+        f_size = os.path.getsize(filepath)
+        audio_url = f"/temp_audio/{urllib.parse.quote(filename)}"
+        print(f"[LUXO TTS BACKEND] TTS FILE CREATED: filepath='{filepath}', size={f_size} bytes, audio_url='{audio_url}', voice='{v_actual}'")
+        return audio_url
+    print(f"[LUXO TTS BACKEND] TTS FILE CREATION FAILED: filepath='{filepath}', exists={os.path.exists(filepath)}")
     return ""
 
 
@@ -1676,6 +1680,25 @@ def configurar_rutas_fastapi(app):
                             el.muted = false;
                             el.volume = 1.0;
                             (document.body || document.documentElement).appendChild(el);
+
+                            // Listeners de diagnóstico para eventos de ciclo de vida del audio
+                            const ttsEvents = ['loadstart', 'loadedmetadata', 'canplay', 'canplaythrough', 'play', 'playing', 'pause', 'ended', 'error', 'stalled', 'abort'];
+                            ttsEvents.forEach(function(evName) {
+                                el.addEventListener(evName, function(e) {
+                                    console.log("[LUXO TTS EVENT] " + evName, {
+                                        src: el.src,
+                                        currentTime: el.currentTime,
+                                        duration: el.duration,
+                                        paused: el.paused,
+                                        muted: el.muted,
+                                        volume: el.volume,
+                                        readyState: el.readyState,
+                                        networkState: el.networkState,
+                                        error: el.error ? { code: el.error.code, message: el.error.message } : null,
+                                        visibilityState: document.visibilityState
+                                    });
+                                });
+                            });
                         }
                         return el;
                     }
@@ -1689,6 +1712,7 @@ def configurar_rutas_fastapi(app):
                             el.volume = 1.0;
                             if (!window._luxoAudioUnlocked) {
                                 window._luxoAudioUnlocked = true;
+                                console.log("[LUXO TTS] Desbloqueando audio por interaccion de usuario");
                                 let p = el.play();
                                 if (p !== undefined) {
                                     p.then(function() {
@@ -1736,19 +1760,54 @@ def configurar_rutas_fastapi(app):
                                     if (fullUrl.startsWith('/')) {
                                         fullUrl = window.location.origin + fullUrl;
                                     }
+                                    
+                                    console.log("[LUXO TTS] DIAGNOSTICO DE REPRODUCCION:", {
+                                        audioUrl_recibido: audioUrl,
+                                        url_absoluta_final: fullUrl,
+                                        window_location_origin: window.location.origin,
+                                        voiceId: voiceId,
+                                        voiceGender: voiceGender,
+                                        texto_longitud: (text || '').length,
+                                        audio_muted: el.muted,
+                                        audio_volume: el.volume,
+                                        audio_src: el.src,
+                                        audio_readyState: el.readyState,
+                                        audio_networkState: el.networkState,
+                                        audio_paused: el.paused,
+                                        audio_currentTime: el.currentTime,
+                                        audio_error: el.error,
+                                        document_visibilityState: document.visibilityState,
+                                        retriesLeft: retriesLeft
+                                    });
+
                                     el.src = fullUrl;
                                     let playPromise = el.play();
                                     if (playPromise !== undefined) {
-                                        playPromise.catch(function(err) {
-                                            console.log("Audio play attempt failed, retries left:", retriesLeft, err);
+                                        playPromise.then(function() {
+                                            console.log("[LUXO TTS SUCCESS] audio.play() iniciado exitosamente:", fullUrl);
+                                        }).catch(function(err) {
+                                            console.error("[LUXO TTS ERROR] audio.play() fue rechazado/fallo:", {
+                                                err_name: err.name,
+                                                err_message: err.message,
+                                                es_bloqueo_autoplay: (err.name === 'NotAllowedError'),
+                                                audio_src: el.src,
+                                                audio_muted: el.muted,
+                                                audio_volume: el.volume,
+                                                audio_readyState: el.readyState,
+                                                audio_networkState: el.networkState,
+                                                document_visibilityState: document.visibilityState,
+                                                retriesLeft: retriesLeft
+                                            });
                                             if (retriesLeft > 0) {
                                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                                             } else {
+                                                console.warn("[LUXO TTS FALLBACK] Activando WebSpeech como respaldo tras fallos en HTML5 Audio");
                                                 window.luxoSpeakWebSpeech(text, voiceId, voiceGender, fullUrl);
                                             }
                                         });
                                     }
                                 } catch(err) {
+                                    console.error("[LUXO TTS EXCEPTION] Excepcion sincrona en tryPlayAudio:", err);
                                     if (retriesLeft > 0) {
                                         setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                                     } else {
@@ -1758,6 +1817,7 @@ def configurar_rutas_fastapi(app):
                             }
                             tryPlayAudio(5);
                         } else if (text) {
+                            console.log("[LUXO TTS] Sin audioUrl, ejecutando WebSpeech directamente");
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                         }
                     };
