@@ -1657,16 +1657,25 @@ def configurar_rutas_fastapi(app):
                         luxoAudioEl = document.createElement("audio");
                         luxoAudioEl.id = "luxo_global_tts_player";
                         luxoAudioEl.style.display = "none";
+                        luxoAudioEl.muted = false;
+                        luxoAudioEl.volume = 1.0;
                         document.body.appendChild(luxoAudioEl);
                     }
 
                     window._lastInteractionTime = Date.now();
+                    window.luxoUnmuteAudio = function() {
+                        window._lastInteractionTime = Date.now();
+                        if (luxoAudioEl) {
+                            luxoAudioEl.muted = false;
+                            luxoAudioEl.volume = 1.0;
+                        }
+                    };
                     try {
-                        window.addEventListener('pointerdown', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
-                        window.addEventListener('touchstart', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
-                        window.addEventListener('mousedown', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
-                        window.addEventListener('click', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
-                        window.addEventListener('keydown', function() { window._lastInteractionTime = Date.now(); }, { capture: true, passive: true });
+                        window.addEventListener('pointerdown', window.luxoUnmuteAudio, { capture: true, passive: true });
+                        window.addEventListener('touchstart', window.luxoUnmuteAudio, { capture: true, passive: true });
+                        window.addEventListener('mousedown', window.luxoUnmuteAudio, { capture: true, passive: true });
+                        window.addEventListener('click', window.luxoUnmuteAudio, { capture: true, passive: true });
+                        window.addEventListener('keydown', window.luxoUnmuteAudio, { capture: true, passive: true });
                     } catch(e) {}
 
                     window.luxoStopTts = function() {
@@ -1693,6 +1702,8 @@ def configurar_rutas_fastapi(app):
                                     if (!luxoAudioEl) {
                                         luxoAudioEl = document.getElementById("luxo_global_tts_player") || document.createElement("audio");
                                     }
+                                    luxoAudioEl.muted = false;
+                                    luxoAudioEl.volume = 1.0;
                                     let fullUrl = audioUrl;
                                     if (fullUrl.startsWith('/')) {
                                         fullUrl = window.location.origin + fullUrl;
@@ -1705,7 +1716,7 @@ def configurar_rutas_fastapi(app):
                                             if (retriesLeft > 0) {
                                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
                                             } else {
-                                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
+                                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, fullUrl);
                                             }
                                         });
                                     }
@@ -1713,12 +1724,12 @@ def configurar_rutas_fastapi(app):
                                     if (retriesLeft > 0) {
                                         setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 400);
                                     } else {
-                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
+                                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                                     }
                                 }
                             }
                             tryPlayAudio(5);
-                        } else {
+                        } else if (text) {
                             window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                         }
                     };
