@@ -959,8 +959,22 @@ def configurar_rutas_fastapi(app):
 
     @app.get("/api/tts/poll")
     def tts_poll_route(session_id: str = "", user_id: str = "1", last_id: str = "", device_id: str = "", device_type: str = ""):
+        import time
+        now = time.time()
         token = session_id or device_id
-        evt = GLOBAL_WEB_TTS_EVENTS.get(token) if token else None
+        evt = None
+
+        # 1. Prioridad: token de sesión directo
+        if token and token in GLOBAL_WEB_TTS_EVENTS:
+            cand = GLOBAL_WEB_TTS_EVENTS[token]
+            if cand and (now - cand.get("timestamp", now)) <= 15.0:
+                evt = cand
+
+        # 2. Fallback por user_id (para Render donde launch_url es bloqueado)
+        if not evt and user_id and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
+            cand = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+            if cand and (now - cand.get("timestamp", now)) <= 12.0:
+                evt = cand
 
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
@@ -4358,6 +4372,8 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time()
         }
+        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
+        GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -5102,8 +5118,10 @@ def main(page: ft.Page):
             "timestamp": time.time(),
             "device_type": d_type
         }
+        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
+        GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
 
         ejecutar_js_flet(page, "if (window.luxoStopTts) { window.luxoStopTts(); } else { let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); a.currentTime = 0; } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch(e){} } }")
 
@@ -5234,6 +5252,7 @@ def main(page: ft.Page):
             return
         d_type = _detect_page_device_type()
         tok = getattr(page, "_luxo_token", None) or dev_token
+        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
         if not current_speak_is_paused:
             current_speak_is_paused = True
             if current_speak_btn_play_pause:
@@ -5249,6 +5268,7 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
+            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }")
         else:
             current_speak_is_paused = False
@@ -5265,6 +5285,7 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
+            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.play(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }")
 
 
