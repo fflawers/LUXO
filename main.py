@@ -5201,9 +5201,20 @@ def main(page: ft.Page):
                         pass
 
                 g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
+                
+                # 1. Reproducir nativamente en Flet Web (Render) si está soportado
+                if audio_url:
+                    try:
+                        page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
+                        audio_ctrl = ft.Audio(src=audio_url, autoplay=True)
+                        page.overlay.append(audio_ctrl)
+                        page.update()
+                    except Exception: pass
+
+                # 2. Despachar a navegador y eventos globales
                 reproducir_audio_local(audio_url, text=text, voice_id=v_actual, voice_gender=g_actual)
 
-                # Si es escritorio local Windows (no web), reproducir también en hardware local
+                # 3. Si es escritorio local Windows (no web), reproducir también en hardware local
                 if not getattr(page, "web", False) and audio_url:
                     fp = os.path.join(ASSETS_PATH, "temp_audio", os.path.basename(audio_url))
                     if os.path.exists(fp):
@@ -6189,6 +6200,37 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         except: pass
         import time
         time.sleep(0.01)
+
+        def emitir_saludo_bienvenida_thread():
+            try:
+                time.sleep(1.2)
+                nombre_u = (user_info.get("nombre") or "").strip()
+                usuario_u = (user_info.get("usuario") or "").strip()
+                tienda_u = (user_info.get("tienda") or "").strip()
+
+                is_store = False
+                if usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda "):
+                    is_store = True
+
+                if is_store:
+                    nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
+                    if not nombre_tienda and tienda_u:
+                        nombre_tienda = tienda_u
+                    saludo_raw = f"¡Hola Tienda {nombre_tienda}, bienvenido a LUXO!"
+                elif nombre_u:
+                    primer_nombre = nombre_u.split()[0].title()
+                    saludo_raw = f"¡Hola {primer_nombre}, bienvenido a LUXO!"
+                else:
+                    saludo_raw = "¡Bienvenido a LUXO System!"
+                
+                v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
+                start_speak(saludo_raw, voice_id=v_pref)
+            except Exception as ex_w:
+                print("Notice saludo bienvenida:", ex_w)
+
+        if desde_login and not getattr(page, "_saludo_ya_emitido", False):
+            page._saludo_ya_emitido = True
+            threading.Thread(target=emitir_saludo_bienvenida_thread, daemon=True).start()
 
         page.clean()
 
