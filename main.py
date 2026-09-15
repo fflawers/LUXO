@@ -989,6 +989,7 @@ def configurar_rutas_fastapi(app):
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
+            print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content=response_data,
