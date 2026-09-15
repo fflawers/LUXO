@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base href="/">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+          registration.unregister();
+        }
+      });
+    }
+  </script>
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Flet application.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Flet">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <title>Flet</title>
+  <link rel="manifest" href="manifest.json">
+
+  <script>
+    var flet = {
+      pyodide: false,
+      multiView: false,
+      noCdn: false,
+      webSocketEndpoint: "/ws",
+      entrypointBaseUrl: "/",
+      assetBase: "/",
+      routeUrlStrategy: "path",
+      canvasKitBaseUrl: "/canvaskit/",
+      pyodideUrl: "/pyodide/pyodide.js",
+      webRenderer: "auto",
+      fontFallbackBaseUrl: "assets/fonts/", // for Noto Emoji, use Google CDN
+      appPackageUrl: "app.tar.gz"
+    }
+
+    flet.flutterAppLoaded = new Promise((resolve) => {
+      flet.flutterAppResolve = resolve;
+    });
+
+    flet.flutterAppLoaded.then((flutterApp) => {
+      console.log("Flutter app loaded");
+      if (flet.multiView) {
+        console.log(flutterApp.addView({
+          hostElement: document.querySelector('#view-1'),
+          initialData: {
+            script: 'print("Hello from view 1")',
+            randomValue: Math.floor(Math.random() * 100),
+          },
+          viewConstraints: {
+            //maxWidth: Infinity,
+            maxHeight: Infinity,
+            minHeight: 300,
+            minWidth: 620
+          }
+        }));
+        console.log(flutterApp.addView({
+          hostElement: document.querySelector('#view-2'),
+          initialData: {
+            script: 'print("Hello from view 2")',
+            bar: "baz"
+          },
+          viewConstraints: {
+            minWidth: 620,
+            //maxWidth: 320,
+            //minHeight: 400,
+            maxHeight: 400,
+          }
+        }));
+      }
+    });
+  </script>
+
+  <!-- fletAppConfig -->
+
+  <script src="python.js"></script>
+</head>
+
+<body>
+  <div id="loading">
+    <style>
+      body {
+        inset: 0;
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
+        position: fixed;
+      }
+
+      #loading {
+        align-items: center;
+        display: flex;
+        height: 100%;
+        justify-content: center;
+        width: 100%;
+      }
+
+      #loading img {
+        animation: 1s ease-in-out 0s infinite alternate breathe;
+        opacity: .66;
+        transition: opacity .4s;
+      }
+
+      #loading.main_done img {
+        opacity: 1;
+      }
+
+      #loading.init_done img {
+        animation: .33s ease-in-out 0s 1 forwards zooooom;
+        opacity: .05;
+      }
+
+      @keyframes breathe {
+        from {
+          transform: scale(0.4);
+          opacity: 1.0;
+        }
+
+        to {
+          transform: scale(0.35);
+          opacity: .7;
+        }
+      }
+
+      @keyframes zooooom {
+        from {
+          transform: scale(0.4)
+        }
+
+        to {
+          transform: scale(10)
+        }
+      }
+    </style>
+    <img src="icons/loading-animation.png" alt="Loading..." />
+  </div>
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function() {
+      console.log("LUXO Voice Recorder initialized");
+      const serverBaseUrl = window.location.protocol + "//" + window.location.host;
+      let mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
+      let streamRef = null;
+      
+      let recognition = null;
+      let isListeningWakeWord = false;
+
+      function playBeep() {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) return;
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(800, ctx.currentTime);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.15);
+        } catch (e) {
+          console.error("Error playing beep:", e);
+        }
+      }
+
+      let isAccumulating = false;
+      let questionBuffer = "";
+      let sendTimeout = null;
+      let wakeTimeout = null;
+
+      async function sendTextInput(userId, text) {
+        try {
+          const url = `${serverBaseUrl}/text_input?user_id=${userId}&text=${encodeURIComponent(text)}`;
+          await fetch(url, { method: 'POST' });
+        } catch (err) {
+          console.error("Error al enviar comando de voz:", err);
+        }
+      }
+
+      function sendAccumulatedQuestion() {
+        if (!isAccumulating) return;
+        const currentUserId = getUserId();
+        const finalQuestion = questionBuffer.trim();
+        
+        if (finalQuestion) {
+          isAccumulating = false;
+          questionBuffer = "";
+          if (wakeTimeout) clearTimeout(wakeTimeout);
+          if (currentUserId !== "unknown") {
+            console.log("¡Enviando pregunta acumulada por silencio!", finalQuestion);
+            sendTextInput(currentUserId, finalQuestion);
+          }
+        }
+      }
+
+      function getUserId() {
+        if (window.currentUserId) return window.currentUserId;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key.includes("logged_user_id")) {
+            try {
+              const val = localStorage.getItem(key);
+              return JSON.parse(val);
+            } catch(e) {
+              return localStorage.getItem(key);
+            }
+          }
+        }
+        return "unknown";
+      }
+
+      function startSpeechRecognition() {
+        if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+          console.warn("Este navegador no soporta Reconocimiento de Voz para palabra de activación.");
+          return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'es-MX';
+
+        recognition.onstart = () => {
+          console.log("Escucha activa iniciada. Di 'Oye Luxo...'");
+          isListeningWakeWord = true;
+        };
+
+        recognition.onresult = async (event) => {
+          const currentUserId = getUserId();
+          if (currentUserId === "unknown" || isRecording) return;
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              let transcript = event.results[i][0].transcript.toLowerCase().trim();
+              console.log("Texto escuchado:", transcript);
+
+              const triggers = [
+                "oye luxo", "oye luxó", "oye lujo", "oye luso", 
+                "hoy el uso", "oye el uso", "oye luz o", "oye luco", 
+                "oye lucio", "oye luyo", "hola luxo", "hola lujo", 
+                "oye ruso", "hoy en luxo", "hoy luxo", "oí luxo"
+              ];
+              
+              let matchedTrigger = null;
+              let idx = -1;
+              
+              for (const trg of triggers) {
+                const tempIdx = transcript.indexOf(trg);
+                if (tempIdx !== -1) {
+                  if (idx === -1 || tempIdx < idx) {
+                    idx = tempIdx;
+                    matchedTrigger = trg;
+                  }
+                }
+              }
+
+              if (idx !== -1 && matchedTrigger) {
+                playBeep();
+                
+                isAccumulating = true;
+                questionBuffer = "";
+                
+                let question = transcript.substring(idx + matchedTrigger.length).trim();
+                if (question.startsWith(",") || question.startsWith("?") || question.startsWith("¿") || question.startsWith(".")) {
+                  question = question.substring(1).trim();
+                }
+                
+                if (question) {
+                  questionBuffer = question;
+                }
+                
+                if (sendTimeout) clearTimeout(sendTimeout);
+                if (wakeTimeout) clearTimeout(wakeTimeout);
+                
+                if (questionBuffer) {
+                  sendTimeout = setTimeout(sendAccumulatedQuestion, 4000);
+                } else {
+                  wakeTimeout = setTimeout(() => {
+                    isAccumulating = false;
+                    console.log("Tiempo de espera para pregunta agotado (10s).");
+                  }, 10000);
+                }
+                console.log("¡Palabra clave detectada! Iniciando acumulación con:", questionBuffer);
+              } else if (isAccumulating) {
+                let segmentText = transcript;
+                if (segmentText.startsWith(",") || segmentText.startsWith("?") || segmentText.startsWith("¿") || segmentText.startsWith(".")) {
+                  segmentText = segmentText.substring(1).trim();
+                }
+                
+                if (segmentText) {
+                  if (wakeTimeout) {
+                    clearTimeout(wakeTimeout);
+                    wakeTimeout = null;
+                  }
+                  questionBuffer += (questionBuffer ? " " : "") + segmentText;
+                }
+                
+                if (sendTimeout) clearTimeout(sendTimeout);
+                sendTimeout = setTimeout(sendAccumulatedQuestion, 4000);
+                console.log("¡Fragmento acumulado! Buffer actual:", questionBuffer);
+              }
+            }
+          }
+        };
+
+        recognition.onerror = (e) => {
+          console.error("Error en reconocimiento de voz:", e.error);
+        };
+
+        recognition.onend = () => {
+          console.log("El reconocimiento de voz se detuvo. Reiniciando...");
+          isListeningWakeWord = false;
+          setTimeout(() => {
+            if (!isListeningWakeWord && !isRecording) {
+              try {
+                recognition.start();
+              } catch(err) {
+                console.error("Error al reiniciar reconocimiento:", err);
+              }
+            }
+          }, 1500);
+        };
+
+        try {
+          recognition.start();
+        } catch(err) {
+          console.error("Error al iniciar reconocimiento:", err);
+        }
+      }
+
+      async function pollCommand() {
+        const currentUserId = getUserId();
+        if (currentUserId === "unknown") return;
+
+        try {
+          const response = await fetch(`${serverBaseUrl}/command?user_id=${currentUserId}`);
+          if (!response.ok) return;
+          const data = await response.json();
+          const cmd = data.command;
+          
+          if (cmd === "START" && !isRecording) {
+            let wasActive = false;
+            // Detener temporalmente el reconocimiento pasivo
+            if (recognition && isListeningWakeWord) {
+              try { recognition.stop(); } catch(e){}
+              isListeningWakeWord = false;
+              wasActive = true;
+            }
+
+            const startRecordingFlow = () => {
+              const isMicSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+              if (!isMicSupported) {
+                console.warn("MediaDevices no soportado (insecure HTTP context)");
+                fetch(`${serverBaseUrl}/status?user_id=${currentUserId}&state=NOT_SUPPORTED`);
+                return;
+              }
+              
+              console.log("Iniciando grabación en JS...");
+              navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                streamRef = stream;
+                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = e => {
+                  audioChunks.push(e.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                  console.log("Grabación detenida en JS. Subiendo...");
+                  const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                  const formData = new FormData();
+                  formData.append('file', audioBlob, 'voice.wav');
+                  
+                  const uploadUrl = `${serverBaseUrl}/upload?user_id=${currentUserId}`;
+                  
+                  try {
+                    const res = await fetch(uploadUrl, {
+                      method: 'POST',
+                      body: formData
+                    });
+                    if (res.ok) {
+                      console.log("Subida exitosa!");
+                    } else {
+                      console.error("Fallo de subida:", res.status);
+                      fetch(`${serverBaseUrl}/status?user_id=${currentUserId}&state=ERROR`);
+                    }
+                  } catch (err) {
+                    console.error("Error al subir:", err);
+                    fetch(`${serverBaseUrl}/status?user_id=${currentUserId}&state=ERROR`);
+                  }
+
+                  // Reactivar reconocimiento pasivo después de subir
+                  setTimeout(() => {
+                    if (recognition && !isListeningWakeWord && !isRecording) {
+                      try { recognition.start(); } catch(e){}
+                    }
+                  }, 1000);
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                fetch(`${serverBaseUrl}/status?user_id=${currentUserId}&state=RECORDING`);
+              }).catch(err => {
+                console.error("Error de acceso al micrófono:", err);
+                alert("Permiso de micrófono denegado: " + err.message);
+                fetch(`${serverBaseUrl}/status?user_id=${currentUserId}&state=ERROR`);
+                
+                // Reactivar en caso de error
+                setTimeout(() => {
+                  if (recognition && !isListeningWakeWord && !isRecording) {
+                    try { recognition.start(); } catch(e){}
+                  }
+                }, 1000);
+              });
+            };
+
+            if (wasActive) {
+              // Esperar 800ms para liberar el micrófono
+              setTimeout(startRecordingFlow, 800);
+            } else {
+              startRecordingFlow();
+            }
+          } else if (cmd === "STOP" && isRecording) {
+            console.log("Deteniendo grabación en JS...");
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+              mediaRecorder.stop();
+            }
+            if (streamRef) {
+              streamRef.getTracks().forEach(t => t.stop());
+            }
+            isRecording = false;
+          }
+        } catch (err) {
+          // Ignore network errors
+        }
+      }
+
+      setInterval(pollCommand, 300);
+      console.log("Bucle de consulta de comandos registrado exitosamente!");
+      
+      // Iniciar la escucha continua en segundo plano
+      setTimeout(startSpeechRecognition, 2000);
+    })();
+  </script>
+
+
+<script src="/custom_assets/luxo_tts.js"></script>
+</body>
+</html>
+
