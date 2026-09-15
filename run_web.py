@@ -39,6 +39,7 @@ if __name__ == "__main__":
 
     flet_asgi_app = ft.app(
         target=main, 
+        assets_dir="custom_assets",
         upload_dir="uploads", 
         view=ft.AppView.WEB_BROWSER,
         export_asgi_app=True

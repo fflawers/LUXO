@@ -39,13 +39,16 @@ if __name__ == "__main__":
 
     flet_asgi_app = ft.app(
         target=main, 
+        assets_dir="custom_assets",
         upload_dir="uploads", 
         view=ft.AppView.WEB_BROWSER,
         export_asgi_app=True
     )
     from fastapi.staticfiles import StaticFiles
     os.makedirs("custom_assets/temp_pdfs", exist_ok=True)
+    os.makedirs("custom_assets/temp_audio", exist_ok=True)
     app.mount("/temp_pdfs", StaticFiles(directory="custom_assets/temp_pdfs"), name="temp_pdfs")
+    app.mount("/temp_audio", StaticFiles(directory="custom_assets/temp_audio"), name="temp_audio")
     app.mount("/custom_assets", StaticFiles(directory="custom_assets"), name="custom_assets")
     app.mount("/", flet_asgi_app)
 
@@ -54,9 +57,9 @@ if __name__ == "__main__":
         app, 
         host="0.0.0.0", 
         port=puerto, 
-        ws_ping_interval=15.0, 
-        ws_ping_timeout=30.0, 
-        timeout_keep_alive=600, 
+        ws_ping_interval=3.0, 
+        ws_ping_timeout=5.0, 
+        timeout_keep_alive=30, 
         **ssl_args
     )
 
