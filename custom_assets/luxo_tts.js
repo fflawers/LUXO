@@ -41,6 +41,33 @@
         return window._luxoClientSessionId;
     };
 
+    // 2b. Obtener Device ID persistente por dispositivo
+    window.getLuxoDeviceId = function() {
+        try {
+            let devId = localStorage.getItem('luxo_device_unique_id');
+            if (!devId) {
+                devId = 'dev_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+                localStorage.setItem('luxo_device_unique_id', devId);
+            }
+            return devId;
+        } catch(e) {
+            return 'dev_unknown';
+        }
+    };
+
+    // 2c. Detectar Tipo de Dispositivo (PC / Móvil)
+    window.getLuxoDeviceType = function() {
+        try {
+            const ua = (navigator.userAgent || '').toLowerCase();
+            if (/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua)) {
+                return 'mobile';
+            }
+            return 'desktop';
+        } catch(e) {
+            return 'desktop';
+        }
+    };
+
     // 3. Crear / Obtener elemento de audio persistente en el DOM
     function getOrCreateAudioElement() {
         let el = document.getElementById("luxo_global_tts_player");
@@ -185,6 +212,24 @@
     };
 
     window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
+        const uId = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+        const sId = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+        const dId = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+        const dType = window.getLuxoDeviceType ? window.getLuxoDeviceType() : '';
+
+        console.log("[LUXO AUDIO DEBUG]", {
+            user_id: uId,
+            session_id: sId,
+            device_id: dId,
+            device_type: dType,
+            event_id_recibido: id,
+            audio_url_recibido: audioUrl,
+            timestamp: Date.now(),
+            page_url: window.location.href,
+            luxoPlayTts_llamado: true,
+            audio_play_llamado: false
+        });
+
         window.luxoStopTts();
         if (audioUrl) {
             function tryPlayAudio(retriesLeft) {
@@ -197,6 +242,21 @@
                         fullUrl = window.location.origin + fullUrl;
                     }
                     
+                    console.log("[LUXO AUDIO DEBUG] audio.play() por invocarse:", {
+                        user_id: uId,
+                        session_id: sId,
+                        device_id: dId,
+                        device_type: dType,
+                        event_id: id,
+                        audio_url: fullUrl,
+                        timestamp: Date.now(),
+                        page_url: window.location.href,
+                        luxoPlayTts_llamado: true,
+                        audio_play_llamado: true,
+                        audio_readyState: el.readyState,
+                        audio_paused: el.paused
+                    });
+
                     console.log("[LUXO TTS] DIAGNOSTICO DE REPRODUCCION:", {
                         audioUrl_recibido: audioUrl,
                         url_absoluta_final: fullUrl,
@@ -271,7 +331,9 @@
             try {
                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
                 const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
-                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
+                const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                const dtype = window.getLuxoDeviceType ? window.getLuxoDeviceType() : '';
+                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&device_id=' + encodeURIComponent(did) + '&device_type=' + encodeURIComponent(dtype) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data || !data.action || data.action === 'none') return;
