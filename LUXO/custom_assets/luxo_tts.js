@@ -9,19 +9,25 @@
 
     // 1. Obtener User ID
     window.getLuxoUserId = function() {
-        if (window.luxoUserId) return window.luxoUserId;
+        if (window.luxoUserId && String(window.luxoUserId) !== '1' && String(window.luxoUserId) !== 'unknown') {
+            return String(window.luxoUserId);
+        }
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 let key = localStorage.key(i);
-                if (key && key.includes('logged_user_id')) {
+                if (key && (key.includes('logged_user_id') || key === 'luxo_user_id')) {
                     let val = localStorage.getItem(key);
                     if (val) {
-                        try { return JSON.parse(val); } catch(e) { return val.replace(/["']/g, ''); }
+                        try { val = JSON.parse(val); } catch(e) { val = val.replace(/["']/g, ''); }
+                        if (val && String(val) !== '1' && String(val) !== 'unknown') {
+                            window.luxoUserId = String(val);
+                            return String(val);
+                        }
                     }
                 }
             }
         } catch(e) {}
-        return '1';
+        return '';
     };
 
     // 2. Obtener Session ID
@@ -269,7 +275,7 @@
         window._luxoTtsIntervalStarted = true;
         setInterval(function() {
             try {
-                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
                 const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
                 fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
