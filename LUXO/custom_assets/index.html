@@ -225,6 +225,16 @@
       }
 
       function startSpeechRecognition() {
+        // Detección estricta de dispositivo móvil/tablet para no iniciar escucha continua en segundo plano
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
+        const isMobileDevice = isTouchDevice || ((/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) && !isDesktopOS);
+
+        if (isMobileDevice) {
+          console.log("📱 [Luxo WakeWord]: Dispositivo móvil detectado. 'Oye LUXO' automático desactivado.");
+          return;
+        }
+
         if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
           console.warn("Este navegador no soporta Reconocimiento de Voz para palabra de activación.");
           return;
