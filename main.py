@@ -1796,10 +1796,12 @@ def configurar_rutas_fastapi(app):
                                         lastHandledTtsId = data.id;
                                         window.luxoStopTts();
                                     } else if (data.action === 'pause') {
-                                        if (luxoAudioEl) { try { luxoAudioEl.pause(); } catch(e){} }
+                                        let el = getOrCreateAudioElement();
+                                        if (el) { try { el.pause(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
                                     } else if (data.action === 'resume') {
-                                        if (luxoAudioEl) { try { luxoAudioEl.play(); } catch(e){} }
+                                        let el = getOrCreateAudioElement();
+                                        if (el) { try { el.play(); } catch(e){} }
                                         if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
                                     }
                                 })
@@ -5199,10 +5201,24 @@ def main(page: ft.Page):
 
     def start_speak(text, btn_speaker=None, btn_play_pause=None, voice_id=None, voice_gender=None):
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
-        stop_current_speak()
         
         if not text:
             return
+
+        if active_sapi_instance[0]:
+            try:
+                active_sapi_instance[0].Speak("", 2)
+            except Exception:
+                pass
+            active_sapi_instance[0] = None
+
+        if current_speak_btn_speaker and current_speak_btn_speaker != btn_speaker:
+            try:
+                current_speak_btn_speaker.icon = ft.Icons.VOLUME_UP_ROUNDED
+                current_speak_btn_speaker.tooltip = "Escuchar respuesta"
+                current_speak_btn_speaker.update()
+            except Exception:
+                pass
 
         current_speak_btn_speaker = btn_speaker
         current_speak_btn_play_pause = btn_play_pause
