@@ -1677,7 +1677,6 @@ def configurar_rutas_fastapi(app):
                             el = document.createElement("audio");
                             el.id = "luxo_global_tts_player";
                             el.style.display = "none";
-                            el.setAttribute("preload", "auto");
                             el.muted = false;
                             el.volume = 1.0;
                             (document.body || document.documentElement).appendChild(el);
@@ -1708,19 +1707,17 @@ def configurar_rutas_fastapi(app):
                     window.luxoUnmuteAudio = function() {
                         window._lastInteractionTime = Date.now();
                         try {
-                            let el = getOrCreateAudioElement();
-                            el.muted = false;
-                            el.volume = 1.0;
                             if (!window._luxoAudioUnlocked) {
                                 window._luxoAudioUnlocked = true;
-                                console.log("[LUXO TTS] Desbloqueando audio por interaccion de usuario");
-                                let p = el.play();
-                                if (p !== undefined) {
-                                    p.then(function() {
-                                        el.pause();
-                                        el.currentTime = 0;
-                                    }).catch(function(){});
-                                }
+                                try {
+                                    const AC = window.AudioContext || window.webkitAudioContext;
+                                    if (AC) {
+                                        if (!window._luxoACtx) window._luxoACtx = new AC();
+                                        if (window._luxoACtx.state === 'suspended') {
+                                            window._luxoACtx.resume();
+                                        }
+                                    }
+                                } catch(e){}
                             }
                         } catch(e){}
                     };
@@ -5321,16 +5318,7 @@ def main(page: ft.Page):
 
                 g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
                 
-                # 1. Reproducir nativamente en Flet Web (Render) si está soportado
-                if audio_url:
-                    try:
-                        page.overlay = [ctrl for ctrl in page.overlay if not isinstance(ctrl, ft.Audio)]
-                        audio_ctrl = ft.Audio(src=audio_url, autoplay=True)
-                        page.overlay.append(audio_ctrl)
-                        page.update()
-                    except Exception: pass
-
-                # 2. Despachar a navegador y eventos de sesión aislada
+                # Despachar a navegador y eventos de sesión aislada
                 reproducir_audio_local(audio_url, text=text, voice_id=v_actual, voice_gender=g_actual)
 
                 # 3. Si es escritorio local Windows (no web), reproducir también en hardware local
