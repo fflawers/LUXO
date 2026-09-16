@@ -2544,7 +2544,15 @@ def configurar_rutas_fastapi(app):
             if not session and username and str(username).strip().lower() not in ["", "unknown", "None", "null", "undefined"]:
                 session = active_sessions.get(str(username).strip().lower())
             
-            # Si no se encuentra sesión, NO usar fallback global; retornar error seguro
+            # 5. Fallback a cualquier sesión con simulador activo
+            if not session:
+                for s_key, s_val in list(active_sessions.items()):
+                    if isinstance(s_val, dict) and s_val.get("sim_modo_activo"):
+                        session = s_val
+                        print(f"🎙️ [SIMULADOR MIC] Encontrada sesión activa mediante fallback de simulador (key='{s_key}')")
+                        break
+            
+            # Si no se encuentra sesión, retornar error seguro
             if not session:
                 print(f"[SIMULADOR MIC] Sesión no encontrada para session_id='{session_id}', user_id='{user_id}', username='{username}'")
                 return {"status": "session_not_found"}
@@ -17406,8 +17414,7 @@ REGLAS OBLIGATORIAS:
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                     
                     # En celulares y navegador web, disparar Web Speech API del cliente
-                    if getattr(page, "web", False):
-                        ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');")
+                    ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');")
                 except Exception as ex_act:
                     print("Error activar_mic_voz_automatico:", ex_act)
 

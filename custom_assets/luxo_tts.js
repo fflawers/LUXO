@@ -360,13 +360,21 @@
     window.iniciarDictadoSimulador = function(modo) {
         try {
             _simCurrentMode = modo || _simCurrentMode || 'chat';
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+            let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SR) {
+                try {
+                    if (window.top) SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition;
+                } catch(eTop){}
+            }
             if (!SR) { 
-                alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome o Microsoft Edge.'); 
+                alert('❌ Tu navegador no soporta reconocimiento de voz nativo. Por favor usa Google Chrome o Microsoft Edge.'); 
                 return; 
             }
             if (_simRecognitionActive) {
-                try { _simRecognitionActive.stop(); } catch(e){}
+                try { 
+                    if (typeof _simRecognitionActive.abort === "function") _simRecognitionActive.abort();
+                    else if (typeof _simRecognitionActive.stop === "function") _simRecognitionActive.stop();
+                } catch(e){}
                 _simRecognitionActive = null;
             }
             const rSim = new SR();
