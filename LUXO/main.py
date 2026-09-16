@@ -16765,10 +16765,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         play_sim_beep("success")
                         print(f"🎙️ [SIMULADOR LOCAL MIC] Reconocido ({modo}): '{texto_reconocido}'")
                         if modo == "chat":
-                            user_input.value = texto_reconocido
+                            user_input.value = ""
                             try: user_input.update()
                             except: pass
-                            enviar_mensaje_simulacion(None)
+                            enviar_mensaje_simulacion(None, texto_forzado=texto_reconocido)
                         else:
                             enviar_mensaje_simulacion_voz(texto_reconocido)
                     else:
@@ -16801,6 +16801,9 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def on_mic_sim_click(e):
                 if user_input.disabled:
                     return
+                import platform
+                if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
+                    threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
                 ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');")
 
             btn_mic_sim_icon = ft.IconButton(
