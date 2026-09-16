@@ -16824,11 +16824,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         btn_mic_sim_container.update()
                     except Exception: pass
 
+                import platform
+                if platform.system() == "Windows":
+                    threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
+
                 if getattr(page, "web", False):
                     ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');")
                     threading.Thread(target=revert_sim_ui, daemon=True).start()
-                else:
-                    threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
 
             btn_mic_sim_icon = ft.IconButton(
                 icon=ft.Icons.MIC_ROUNDED,
@@ -17370,13 +17372,14 @@ REGLAS OBLIGATORIAS:
 
             def activar_mic_voz_automatico():
                 try:
+                    # En Windows de escritorio local, ejecutar el worker de PyAudio nativo
+                    import platform
+                    if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
+                        threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
+                    
                     # En celulares y navegador web, disparar Web Speech API del cliente
                     if getattr(page, "web", False):
                         ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');")
-                    # En Windows de escritorio local, ejecutar también el worker de PyAudio si no está activo
-                    import platform
-                    if platform.system() == "Windows" and not sim_dictado_en_progreso[0] and not getattr(page, "web", False):
-                        threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                 except Exception as ex_act:
                     print("Error activar_mic_voz_automatico:", ex_act)
 
