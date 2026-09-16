@@ -16755,7 +16755,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         r_sim.adjust_for_ambient_noise(source, duration=0.3)
                         if sim_stop_requested[0]:
                             raise Exception("Cancelado por usuario")
-                        audio = r_sim.listen(source, timeout=6, phrase_time_limit=18)
+                        audio = r_sim.listen(source, timeout=14, phrase_time_limit=25)
 
                     if sim_stop_requested[0]:
                         raise Exception("Cancelado por usuario")
@@ -16794,7 +16794,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     else:
                         btn_hablar_voz.bgcolor = "#1f6f43"
                         btn_hablar_voz.text = "Hablar Ahora 🎙️"
+                        sim_voz_estado_texto.value = "👂 Listo para hablar... pulsa 'Hablar Ahora'"
+                        sim_voz_estado_texto.color = "#8888AA"
+                        avatar_voz_container.border = ft.Border.all(3, "#00FFFF")
+                        avatar_voz_container.bgcolor = "#141424"
                         try: btn_hablar_voz.update()
+                        except: pass
+                        try: sim_voz_estado_texto.update()
+                        except: pass
+                        try: avatar_voz_container.update()
                         except: pass
 
             # Botón de Micrófono Dedicado Push-to-Talk para el Simulador
@@ -17358,12 +17366,12 @@ REGLAS OBLIGATORIAS:
                     print("Error activar_mic_voz_automatico:", ex_act)
 
             def hablar_ahora_voz_click(e):
-                async def _launch_sim_voz_mic():
-                    try:
-                        await page.launch_url("javascript:if(window.toggleSimuladorDictate){window.toggleSimuladorDictate('voz');}void(0);")
-                    except Exception as ex:
-                        print("Error hablar_ahora_voz_click:", ex)
-                page.run_task(_launch_sim_voz_mic)
+                if sim_dictado_en_progreso[0]:
+                    sim_stop_requested[0] = True
+                    mostrar_snack("⏹️ Grabación detenida", "#FFD700")
+                    return
+                mostrar_snack("🎙️ Micrófono activado. Di tu respuesta.", "#00FFFF")
+                activar_mic_voz_automatico()
 
             def agregar_mensaje_voz_chat(autor, texto, avatar_icon, color_borde):
                 sim_voz_chat_column.controls.append(
