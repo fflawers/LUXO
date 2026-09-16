@@ -17503,11 +17503,13 @@ REGLAS OBLIGATORIAS:
                     btn_hablar_voz.disabled = False
                     btn_finalizar_voz.disabled = False
                     agregar_mensaje_voz_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                    ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'voz');")
                     reproducir_voz_cliente(respuesta, on_finish_callback=activar_mic_voz_automatico)
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_voz_click(e):
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 stop_current_speak()
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
@@ -17522,6 +17524,7 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_voz_click(e):
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 if len(voz_chat_history) < 2:
                     mostrar_snack("La conversación debe tener al menos una intervención por voz del vendedor.", "red")
                     return

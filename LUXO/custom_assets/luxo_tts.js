@@ -315,4 +315,184 @@
             } catch(e) {}
         }, 400);
     }
+
+    // ==============================================================================
+    // RECONOCIMIENTO DE VOZ Y BOTÓN NATIVO PARA EL SIMULADOR IA (100% AISLADO)
+    // ==============================================================================
+    let _simRecognitionActive = null;
+    let _simCurrentMode = 'chat';
+
+    function playToneSim(count) {
+        try {
+            const cnt = count || 1;
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            function emit(freq, duration, delay) {
+                setTimeout(function() {
+                    try {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + duration);
+                    } catch(err){}
+                }, delay);
+            }
+            if (cnt === 1) { emit(880, 0.12, 0); } 
+            else { emit(1046, 0.1, 0); emit(1318, 0.15, 100); }
+        } catch(err) {}
+    }
+
+    window.iniciarDictadoSimulador = function(modo) {
+        try {
+            _simCurrentMode = modo || _simCurrentMode || 'chat';
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+            if (!SR) { 
+                alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome o Microsoft Edge.'); 
+                return; 
+            }
+            if (_simRecognitionActive) {
+                try { _simRecognitionActive.stop(); } catch(e){}
+                _simRecognitionActive = null;
+            }
+            const rSim = new SR();
+            rSim.lang = 'es-MX';
+            rSim.interimResults = false;
+            rSim.continuous = false;
+            rSim.maxAlternatives = 1;
+            _simRecognitionActive = rSim;
+
+            rSim.onstart = function() {
+                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: _simCurrentMode, timestamp: Date.now() });
+                playToneSim(1);
+                updateSimMicUiState(true);
+            };
+
+            rSim.onresult = function(ev) {
+                const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
+                if (txt) {
+                    playToneSim(2);
+                    console.log("[SIMULADOR MIC] Texto capturado:", txt);
+                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                    const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
+                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                    const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                    fetch('/simulador_text_input?session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&mode=' + encodeURIComponent(_simCurrentMode) + '&text=' + encodeURIComponent(txt), { method: 'POST' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        console.log("[SIMULADOR MIC] Respuesta backend:", res);
+                    }).catch(function(err){
+                        console.log("[SIMULADOR MIC] Error enviando texto:", err);
+                    });
+                }
+            };
+
+            rSim.onerror = function(ev) { 
+                console.log("[SIMULADOR MIC] Error:", ev.error);
+                _simRecognitionActive = null;
+                updateSimMicUiState(false);
+                if (ev.error === 'not-allowed') {
+                    alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
+                }
+            };
+
+            rSim.onend = function() { 
+                console.log("[SIMULADOR MIC] DETENIENDO MICROFONO", { timestamp: Date.now() });
+                _simRecognitionActive = null;
+                updateSimMicUiState(false);
+            };
+            
+            rSim.start();
+        } catch(e) {
+            console.log("Error iniciando micrófono del simulador:", e);
+            _simRecognitionActive = null;
+            updateSimMicUiState(false);
+        }
+    };
+
+    function updateSimMicUiState(isRecording) {
+        const btn = document.getElementById("luxo-sim-mic-btn");
+        if (btn) {
+            if (isRecording) {
+                btn.style.borderColor = "#FF0055";
+                btn.style.boxShadow = "0 0 25px rgba(255, 0, 85, 0.9)";
+                btn.style.background = "linear-gradient(135deg, #4A1525 0%, #2A1B4E 100%)";
+            } else {
+                btn.style.borderColor = "#9D50BB";
+                btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                btn.style.background = "linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%)";
+            }
+        }
+    }
+
+    function ensureSimMicBtnCreated() {
+        let simMicBtn = document.getElementById("luxo-sim-mic-btn");
+        if (!simMicBtn && (document.body || document.documentElement)) {
+            simMicBtn = document.createElement("div");
+            simMicBtn.id = "luxo-sim-mic-btn";
+            simMicBtn.innerHTML = `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00FFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+            `;
+            simMicBtn.setAttribute("title", "Hablar al Cliente (Simulador IA)");
+            simMicBtn.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                right: 76px;
+                width: 46px;
+                height: 46px;
+                border-radius: 23px;
+                background: linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%);
+                border: 2px solid #9D50BB;
+                box-shadow: 0 4px 18px rgba(157, 80, 187, 0.45);
+                display: none;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                z-index: 999999;
+                transition: all 0.2s ease;
+                touch-action: manipulation;
+                user-select: none;
+            `;
+            
+            function onSimMicPress(e) {
+                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-sim-mic-btn");
+                simMicBtn.style.transform = "scale(0.9)";
+                setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
+                window.iniciarDictadoSimulador(_simCurrentMode || 'chat');
+            }
+
+            simMicBtn.addEventListener("click", onSimMicPress);
+            simMicBtn.addEventListener("touchend", onSimMicPress);
+            (document.body || document.documentElement).appendChild(simMicBtn);
+        }
+        return simMicBtn;
+    }
+
+    window.showSimuladorMicBtn = function(visible, modo) {
+        _simCurrentMode = modo || _simCurrentMode || 'chat';
+        const btn = ensureSimMicBtnCreated();
+        if (btn) {
+            btn.style.display = visible ? "flex" : "none";
+            if (visible) {
+                btn.style.borderColor = "#9D50BB";
+                btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+            }
+        }
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ensureSimMicBtnCreated);
+    } else {
+        ensureSimMicBtnCreated();
+    }
 })();
