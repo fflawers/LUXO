@@ -462,7 +462,19 @@
         }
       }
 
-      setInterval(pollCommand, 300);
+      let isPollingCommand = false;
+      async function safePollLoop() {
+        if (!isPollingCommand) {
+          isPollingCommand = true;
+          try {
+            await pollCommand();
+          } catch(e) {}
+          isPollingCommand = false;
+        }
+        const delay = document.hidden ? 3000 : 1200;
+        setTimeout(safePollLoop, delay);
+      }
+      setTimeout(safePollLoop, 1500);
       console.log("Bucle de consulta de comandos registrado exitosamente!");
       
       // Iniciar la escucha continua en segundo plano

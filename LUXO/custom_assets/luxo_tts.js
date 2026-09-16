@@ -282,38 +282,48 @@
         }
     };
 
-    // 8. Bucle de Polling HTTP para entrega de eventos TTS
+    // 8. Bucle de Polling HTTP Inteligente para entrega de eventos TTS (0% CPU impact)
     let lastHandledTtsId = null;
+    let isTtsPolling = false;
     if (!window._luxoTtsIntervalStarted) {
         window._luxoTtsIntervalStarted = true;
-        setInterval(function() {
-            try {
-                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
-                const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
-                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
-                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (!data || !data.action || data.action === 'none') return;
-                    if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
-                        lastHandledTtsId = data.id;
-                        window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
-                    } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
-                        lastHandledTtsId = data.id;
-                        window.luxoStopTts();
-                    } else if (data.action === 'pause') {
-                        let el = getOrCreateAudioElement();
-                        if (el) { try { el.pause(); } catch(e){} }
-                        if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
-                    } else if (data.action === 'resume') {
-                        let el = getOrCreateAudioElement();
-                        if (el) { try { el.play(); } catch(e){} }
-                        if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+        
+        async function smartTtsPollLoop() {
+            if (!isTtsPolling) {
+                isTtsPolling = true;
+                try {
+                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                    const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
+                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                    const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' });
+                    if (res && res.ok) {
+                        const data = await res.json();
+                        if (data && data.action && data.action !== 'none') {
+                            if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                            } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                window.luxoStopTts();
+                            } else if (data.action === 'pause') {
+                                let el = getOrCreateAudioElement();
+                                if (el) { try { el.pause(); } catch(e){} }
+                                if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }
+                            } else if (data.action === 'resume') {
+                                let el = getOrCreateAudioElement();
+                                if (el) { try { el.play(); } catch(e){} }
+                                if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+                            }
+                        }
                     }
-                })
-                .catch(function(){});
-            } catch(e) {}
-        }, 400);
+                } catch(e) {}
+                isTtsPolling = false;
+            }
+            const nextDelay = document.hidden ? 2500 : 700;
+            setTimeout(smartTtsPollLoop, nextDelay);
+        }
+        
+        setTimeout(smartTtsPollLoop, 800);
     }
 
     // ==============================================================================
