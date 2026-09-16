@@ -313,6 +313,12 @@
                                 let el = getOrCreateAudioElement();
                                 if (el) { try { el.play(); } catch(e){} }
                                 if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }
+                            } else if (data.action === 'dictate_simulador' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO TTS POLL] Disparando dictado simulador vía evento:", data.mode);
+                                if (window.iniciarDictadoSimulador) {
+                                    window.iniciarDictadoSimulador(data.mode || 'chat');
+                                }
                             }
                         }
                     }

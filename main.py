@@ -16886,6 +16886,22 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                     threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
 
+                # Enviar evento de dictado a la cola de polling HTTP del cliente web (compatible Firefox/Chrome/Safari)
+                tok = getattr(page, "_luxo_token", None)
+                u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
+                u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
+                dev_id_k = getattr(page, "device_id", None)
+                evt_dict = {
+                    "id": f"sim_mic_{int(time.time()*1000)}",
+                    "action": "dictate_simulador",
+                    "mode": "chat",
+                    "timestamp": time.time()
+                }
+                if tok: GLOBAL_WEB_TTS_EVENTS[tok] = evt_dict
+                if dev_id_k: GLOBAL_WEB_TTS_EVENTS[dev_id_k] = evt_dict
+                if u_id: GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_dict
+                if u_name: GLOBAL_WEB_TTS_EVENTS[u_name] = evt_dict
+
                 js_sim_dictate = """javascript:void((function(){
                     try {
                         let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -17540,6 +17556,22 @@ REGLAS OBLIGATORIAS:
                     import platform
                     if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
+                    
+                    # Enviar evento de dictado a la cola de polling HTTP del cliente web (compatible Firefox/Chrome/Safari)
+                    tok = getattr(page, "_luxo_token", None)
+                    u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
+                    u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
+                    dev_id_k = getattr(page, "device_id", None)
+                    evt_dict = {
+                        "id": f"sim_mic_{int(time.time()*1000)}",
+                        "action": "dictate_simulador",
+                        "mode": "voz",
+                        "timestamp": time.time()
+                    }
+                    if tok: GLOBAL_WEB_TTS_EVENTS[tok] = evt_dict
+                    if dev_id_k: GLOBAL_WEB_TTS_EVENTS[dev_id_k] = evt_dict
+                    if u_id: GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_dict
+                    if u_name: GLOBAL_WEB_TTS_EVENTS[u_name] = evt_dict
                     
                     js_sim_voz = """javascript:void((function(){
                         try {
