@@ -2561,7 +2561,7 @@ def configurar_rutas_fastapi(app):
                                 tmp.write(audio_bytes)
                                 temp_path = tmp.name
                             try:
-                                headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+                                headers = {"Authorization": f"Bearer {get_groq_key()}"}
                                 with open(temp_path, "rb") as f:
                                     files = {"file": (f"sim_voice{ext}", f, mime)}
                                     data = {"model": "whisper-large-v3", "language": "es", "response_format": "json"}
