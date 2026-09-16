@@ -16580,8 +16580,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         `;
                         simWidget.style.cssText = `
                             position: fixed;
-                            bottom: 24px;
-                            right: 76px;
+                            bottom: 16px;
+                            right: 68px;
                             z-index: 999999;
                             display: none;
                             touch-action: manipulation;
@@ -16605,6 +16605,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         const el = topDoc.getElementById("luxo-sim-floating-widget") || simWidget;
                         if (el) {{
                             el.style.display = show ? "block" : "none";
+                            if (modo === 'chat') {{
+                                el.style.bottom = "16px";
+                                el.style.right = "68px";
+                            }} else {{
+                                el.style.bottom = "24px";
+                                el.style.right = "32px";
+                            }}
                             const inner = topDoc.getElementById("luxo-sim-widget-inner");
                             if (inner && !window._simDictating) {{
                                 inner.style.borderColor = "#9D50BB";
