@@ -2550,7 +2550,10 @@ def configurar_rutas_fastapi(app):
                 return {"status": "session_not_found"}
 
             if text:
-                modo_activo = mode or session.get("sim_modo_activo", "chat")
+                modo_activo = mode or session.get("sim_modo_activo")
+                if not modo_activo:
+                    print(f"[SIMULADOR MIC] Ignorando audio '{text}' porque la simulación no está activa en la sesión.")
+                    return {"status": "simulation_inactive"}
                 page = session.get("page")
                 btn_mic_sim = session.get("btn_mic_simulador_container")
 
@@ -16690,7 +16693,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 except: pass
                                 try: sim_voz_estado_texto.update()
                                 except: pass
-                                if on_finish_callback:
+                                if on_finish_callback and simulacion_activa[0] and not sim_stop_requested[0]:
                                     try: on_finish_callback()
                                     except Exception as ex_cb: print("Error en callback fin audio:", ex_cb)
 
@@ -16699,6 +16702,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     print("Error reproduciendo voz cliente simulado:", ex_v)
 
             # --- MOTOR DE GRABACIÓN Y RECONOCIMIENTO DE VOZ LOCAL DEDICADO PARA SIMULADOR ---
+            simulacion_activa = [False]
             sim_dictado_en_progreso = [False]
             sim_stop_requested = [False]
 
@@ -16719,7 +16723,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 threading.Thread(target=_beep_worker, daemon=True).start()
 
             def sim_dictado_local_worker(modo="chat"):
-                if sim_dictado_en_progreso[0]:
+                if not simulacion_activa[0] or sim_stop_requested[0] or sim_dictado_en_progreso[0]:
                     return
                 sim_dictado_en_progreso[0] = True
                 sim_stop_requested[0] = False
@@ -16761,7 +16765,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         raise Exception("Cancelado por usuario")
 
                     texto_reconocido = r_sim.recognize_google(audio, language="es-MX").strip()
-                    if texto_reconocido:
+                    if texto_reconocido and simulacion_activa[0] and not sim_stop_requested[0]:
                         play_sim_beep("success")
                         print(f"🎙️ [SIMULADOR LOCAL MIC] Reconocido ({modo}): '{texto_reconocido}'")
                         if modo == "chat":
@@ -16807,7 +16811,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 
             # Botón de Micrófono Dedicado Push-to-Talk para el Simulador
             def on_mic_sim_click(e):
-                if user_input.disabled:
+                if user_input.disabled or not simulacion_activa[0]:
                     return
                 import platform
                 if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
@@ -16893,6 +16897,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 page.update()
 
             def enviar_mensaje_simulacion(e, texto_forzado=None):
+                if not simulacion_activa[0] or sim_stop_requested[0]:
+                    return
                 msg_txt = (texto_forzado if texto_forzado is not None else (user_input.value or "")).strip()
                 if not msg_txt:
                     return
@@ -16915,6 +16921,8 @@ REGLAS OBLIGATORIAS:
                 mensajes_api = chat_history[-6:]
                 
                 ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
+                if not simulacion_activa[0] or sim_stop_requested[0]:
+                    return
                 if ok and respuesta:
                     chat_history.append({"role": "assistant", "content": respuesta})
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
@@ -16995,7 +17003,13 @@ REGLAS OBLIGATORIAS:
                 return "\n".join(nuevas_lineas)
 
             def volver_al_simulador(e=None):
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
+                simulacion_activa[0] = False
+                sim_stop_requested[0] = True
+                stop_current_speak()
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess["sim_modo_activo"] = None
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
                 eval_detail_wrapper.visible = False
                 sim_main_wrapper.visible = True
                 config_area.visible = True
@@ -17076,9 +17090,13 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_click(e):
+                simulacion_activa[0] = False
                 sim_stop_requested[0] = True
                 stop_current_speak()
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess["sim_modo_activo"] = None
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
                 if len(chat_history) < 2:
                     mostrar_snack("La simulación debe tener al menos una interacción del vendedor.", "red")
                     return
@@ -17217,6 +17235,8 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                     mostrar_snack("Por favor selecciona un perfil de cliente", "red")
                     return
                 
+                simulacion_activa[0] = True
+                sim_stop_requested[0] = False
                 v_val = vendedor_dropdown.value
                 vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
                 perfil_cliente_txt[0] = cliente_dropdown.value
@@ -17262,6 +17282,8 @@ REGLAS OBLIGATORIAS:
                 messages = [{"role": "user", "content": "Hola, buenas tardes."}]
                 
                 ok, respuesta, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=12, modo="simulador")
+                if not simulacion_activa[0] or sim_stop_requested[0]:
+                    return
                 if ok and respuesta:
                     chat_history.append({"role": "user", "content": "Hola, buenas tardes."})
                     chat_history.append({"role": "assistant", "content": respuesta})
@@ -17277,8 +17299,13 @@ REGLAS OBLIGATORIAS:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_click(e):
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
+                simulacion_activa[0] = False
+                sim_stop_requested[0] = True
                 stop_current_speak()
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess["sim_modo_activo"] = None
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
                 config_area.visible = True
                 chat_area.visible = False
                 chat_history.clear()
@@ -17370,6 +17397,8 @@ REGLAS OBLIGATORIAS:
             )
 
             def activar_mic_voz_automatico():
+                if not simulacion_activa[0] or sim_stop_requested[0]:
+                    return
                 try:
                     # En Windows de escritorio local, ejecutar el worker de PyAudio nativo
                     import platform
@@ -17383,6 +17412,8 @@ REGLAS OBLIGATORIAS:
                     print("Error activar_mic_voz_automatico:", ex_act)
 
             def hablar_ahora_voz_click(e):
+                if not simulacion_activa[0]:
+                    return
                 if sim_dictado_en_progreso[0]:
                     sim_stop_requested[0] = True
                     mostrar_snack("⏹️ Grabación detenida", "#FFD700")
@@ -17410,6 +17441,8 @@ REGLAS OBLIGATORIAS:
                 except Exception: pass
 
             def enviar_mensaje_simulacion_voz(msg_txt):
+                if not simulacion_activa[0] or sim_stop_requested[0]:
+                    return
                 if not msg_txt or not str(msg_txt).strip():
                     return
                 msg_txt = str(msg_txt).strip()
@@ -17434,6 +17467,8 @@ REGLAS OBLIGATORIAS:
 """
                 mensajes_api = voz_chat_history[-6:]
                 ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
+                if not simulacion_activa[0] or sim_stop_requested[0]:
+                    return
                 if not ok or not respuesta:
                     respuesta = generar_respuesta_simulador_fallback(mensajes_api, system_prompt, modo="simulador")
 
@@ -17457,6 +17492,8 @@ REGLAS OBLIGATORIAS:
                     mostrar_snack("Por favor selecciona un perfil de cliente", "red")
                     return
                 
+                simulacion_activa[0] = True
+                sim_stop_requested[0] = False
                 v_val = vendedor_voz_dropdown.value
                 vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
                 perfil_cliente_txt[0] = cliente_voz_dropdown.value
@@ -17497,6 +17534,8 @@ REGLAS OBLIGATORIAS:
 """
                 messages = [{"role": "user", "content": "Hola, buenas tardes."}]
                 ok, respuesta, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=12, modo="simulador")
+                if not simulacion_activa[0] or sim_stop_requested[0]:
+                    return
                 if ok and respuesta:
                     voz_chat_history.append({"role": "user", "content": "Hola, buenas tardes."})
                     voz_chat_history.append({"role": "assistant", "content": respuesta})
@@ -17511,8 +17550,13 @@ REGLAS OBLIGATORIAS:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_voz_click(e):
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
+                simulacion_activa[0] = False
+                sim_stop_requested[0] = True
                 stop_current_speak()
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess["sim_modo_activo"] = None
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
                 voz_chat_history.clear()
@@ -17526,9 +17570,13 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_voz_click(e):
+                simulacion_activa[0] = False
                 sim_stop_requested[0] = True
                 stop_current_speak()
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess["sim_modo_activo"] = None
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
                 if len(voz_chat_history) < 2:
                     mostrar_snack("La conversación debe tener al menos una intervención por voz del vendedor.", "red")
                     return
@@ -22555,14 +22603,18 @@ Ejemplo:
         def cambiar_vista(vista, desde_menu_manual=False):
             active_view[0] = vista
             if str(vista) not in ["capacitacion_ia", "simulador"]:
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess["sim_modo_activo"] = None
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
                 async def _hide_sim_w():
                     try:
                         await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(false);}void(0);")
                     except: pass
                 page.run_task(_hide_sim_w)
             try:
-                # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu
-                if desde_menu_manual:
+                # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu o sale del simulador
+                if desde_menu_manual or str(vista) not in ["capacitacion_ia", "simulador"]:
                     stop_current_speak()
             except Exception:
                 pass

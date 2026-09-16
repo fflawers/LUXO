@@ -488,8 +488,25 @@
         return simMicBtn;
     }
 
+    window.detenerDictadoSimulador = function() {
+        try {
+            if (_simRecognitionActive) {
+                if (typeof _simRecognitionActive.abort === "function") {
+                    _simRecognitionActive.abort();
+                } else if (typeof _simRecognitionActive.stop === "function") {
+                    _simRecognitionActive.stop();
+                }
+                _simRecognitionActive = null;
+            }
+            updateSimMicUiState(false);
+        } catch(e){}
+    };
+
     window.showSimuladorMicBtn = function(visible, modo) {
         _simCurrentMode = modo || _simCurrentMode || 'chat';
+        if (!visible) {
+            window.detenerDictadoSimulador();
+        }
         const btn = ensureSimMicBtnCreated();
         if (btn) {
             btn.style.display = visible ? "flex" : "none";
