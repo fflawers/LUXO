@@ -23915,15 +23915,27 @@ Ejemplo:
                 nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
                 if not nombre_tienda and tienda_u:
                     nombre_tienda = tienda_u
+
+                MAPEO_CODIGOS_TIENDAS = {
+                    "10540": "A540", "10615": "A615", "10637": "A637", "10876": "A876", "10955": "A955",
+                    "12943": "C943", "12964": "C964", "14499": "E499", "15364": "F364", "15536": "F536",
+                    "15610": "F610", "25163": "P163", "25164": "P164", "25237": "P237", "25245": "P245",
+                    "25858": "P858", "25859": "P859", "25977": "P977", "26153": "Q153", "26246": "Q246",
+                    "26369": "Q369", "26382": "Q382", "26503": "Q503", "26558": "A535", "27405": "R405"
+                }
+                for k_sap, v_real in MAPEO_CODIGOS_TIENDAS.items():
+                    if k_sap in nombre_tienda:
+                        nombre_tienda = re.sub(r'\b' + k_sap + r'\b', v_real, nombre_tienda)
+                        nombre_tienda = nombre_tienda.replace(f"({k_sap})", f"({v_real})")
+
                 display_name = f"Tienda {nombre_tienda}"
                 
-                # Formatear números para lectura clara (ej. 3502 -> 35 02, Q304 -> Q 3 04)
-                t_audio = nombre_tienda
+                # Formatear números para lectura clara (ej. 3502 -> 35 02, A535 -> A 535)
+                t_audio = nombre_tienda.replace("(", " ").replace(")", " ")
                 if t_audio:
                     t_audio = re.sub(r'([a-zA-Z]+)(\d+)', r'\1 \2', t_audio)
                     t_audio = re.sub(r'(\d+)([a-zA-Z]+)', r'\1 \2', t_audio)
                     t_audio = re.sub(r'\b(\d{2})(\d{2})\b', r'\1 \2', t_audio)
-                    t_audio = re.sub(r'\b(\d)(\d{2})\b', r'\1 \2', t_audio)
                     t_audio = re.sub(r'\s+', ' ', t_audio).strip()
                 
                 target_name = f"equipo de {t_audio}" if t_audio else "equipo de Tienda"
