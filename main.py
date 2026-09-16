@@ -550,16 +550,28 @@ def ejecutar_js_flet(page: ft.Page, js_code: str):
     if not page:
         return
     try:
-        encoded = urllib.parse.quote(js_code)
-        target_url = f"javascript:void(eval(decodeURIComponent('{encoded}')))"
+        if js_code.startswith("javascript:"):
+            target_url = js_code
+        else:
+            clean_js = js_code.strip().rstrip(";")
+            target_url = f"javascript:void((function(){{ try {{ {clean_js}; }} catch(e){{ console.log('[JS-EXEC-ERR]', e); }} }})());"
+        
         async def _do_launch():
             try:
-                res = page.launch_url(target_url)
+                res = page.launch_url(target_url, web_popup_window_name="_self")
                 if asyncio.iscoroutine(res):
                     await res
             except Exception as e_l:
-                print("Notice inner launch_url:", e_l)
-        page.run_task(_do_launch)
+                try:
+                    res2 = page.launch_url(target_url)
+                    if asyncio.iscoroutine(res2):
+                        await res2
+                except Exception: pass
+        
+        if hasattr(page, "run_task"):
+            page.run_task(_do_launch)
+        elif hasattr(page, "run_thread"):
+            page.run_thread(asyncio.run, _do_launch())
     except Exception as ex_ej:
         print("Error al ejecutar JS en Flet:", ex_ej)
 
