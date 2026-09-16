@@ -2574,17 +2574,18 @@ def configurar_rutas_fastapi(app):
                 else:
                     sim_input = session.get("sim_user_input")
                     sim_enviar = session.get("sim_enviar_fn")
-                    if sim_input and sim_enviar and page:
-                        sim_input.value = text
-                        try: sim_input.update()
-                        except Exception: pass
+                    if sim_enviar and page:
+                        if sim_input:
+                            sim_input.value = ""
+                            try: sim_input.update()
+                            except Exception: pass
                         try: page.update()
                         except Exception: pass
                         try:
                             if hasattr(page, "run_thread"):
-                                page.run_thread(sim_enviar, None)
+                                page.run_thread(sim_enviar, None, text)
                             else:
-                                sim_enviar(None)
+                                sim_enviar(None, texto_forzado=text)
                         except Exception as ex:
                             print(f"ERROR en sim_enviar: {ex}")
                         return {"status": "success", "mode": "chat"}
@@ -16999,12 +17000,112 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def on_mic_sim_click(e):
                 if user_input.disabled:
                     return
-                async def _launch_sim_mic():
-                    try:
-                        await page.launch_url("javascript:if(window.toggleSimuladorDictate){window.toggleSimuladorDictate('chat');}void(0);")
-                    except Exception as ex:
-                        print("Error on_mic_sim_click:", ex)
-                page.run_task(_launch_sim_mic)
+                if sim_dictado_en_progreso[0]:
+                    sim_stop_requested[0] = True
+                    mostrar_snack("⏹️ Grabación detenida", "#FFD700")
+                    return
+                sim_dictado_en_progreso[0] = True
+                sim_stop_requested[0] = False
+
+                try:
+                    mostrar_snack("🎙️ Escuchando... di tu respuesta al cliente", "#00FFFF")
+                    btn_mic_sim_container.bgcolor = "#FF0000"
+                    btn_mic_sim_container.border = ft.Border.all(2, "white")
+                    try: btn_mic_sim_container.update()
+                    except: pass
+
+                    tok = getattr(page, "_luxo_token", None) or ""
+                    u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "")
+                    u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
+                    dev_id_k = getattr(page, "device_id", None) or ""
+
+                    js_sim_dictate = f"""javascript:void((function(){{
+                        try {{
+                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+                            if (!SR) {{ 
+                                alert('❌ Reconocimiento de voz no soportado en este navegador.'); 
+                                return; 
+                            }}
+                            const r = new SR();
+                            r.lang = 'es-MX';
+                            r.interimResults = false;
+                            r.continuous = false;
+                            r.maxAlternatives = 1;
+                            
+                            r.onstart = function() {{
+                                console.log('[SIMULADOR-BAR-MIC] JS: onstart');
+                                try {{
+                                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                    const osc = ctx.createOscillator();
+                                    const gain = ctx.createGain();
+                                    osc.frequency.value = 880;
+                                    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.start();
+                                    osc.stop(ctx.currentTime + 0.12);
+                                }} catch(e){{}}
+                            }};
+                            r.onresult = function(ev) {{
+                                const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
+                                if (txt) {{
+                                    try {{
+                                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                        const osc = ctx.createOscillator();
+                                        const gain = ctx.createGain();
+                                        osc.frequency.value = 1320;
+                                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+                                        osc.connect(gain);
+                                        gain.connect(ctx.destination);
+                                        osc.start();
+                                        osc.stop(ctx.currentTime + 0.12);
+                                    }} catch(e){{}}
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '{u_id}';
+                                    const uname = window.getLuxoUsername ? window.getLuxoUsername() : '{u_name}';
+                                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '{tok}';
+                                    const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '{dev_id_k}';
+                                    fetch('/simulador_text_input?session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&mode=chat&text=' + encodeURIComponent(txt), {{ method: 'POST' }});
+                                }}
+                            }};
+                            r.onerror = function(ev) {{ 
+                                console.log('[SIMULADOR-BAR-MIC] Error JS:', ev.error);
+                                if (ev.error === 'not-allowed') {{
+                                    alert('⚠️ Permiso de micrófono denegado. Permítelo en tu navegador.');
+                                }}
+                            }};
+                            r.onend = function() {{ 
+                                console.log('[SIMULADOR-BAR-MIC] JS: onend');
+                            }};
+                            
+                            r.start();
+                        }} catch(err) {{
+                            alert('❌ Excepción micrófono: ' + err.message);
+                        }}
+                    }})());"""
+
+                    def revert_sim_btn_ui():
+                        import time
+                        time.sleep(6)
+                        sim_dictado_en_progreso[0] = False
+                        try:
+                            btn_mic_sim_container.bgcolor = "#1E1E2E"
+                            btn_mic_sim_container.border = ft.Border.all(1.5, "#9D50BB")
+                            btn_mic_sim_container.update()
+                        except Exception: pass
+
+                    threading.Thread(target=revert_sim_btn_ui, daemon=True).start()
+
+                    async def _lanzar_sim_js():
+                        try:
+                            await page.launch_url(js_sim_dictate)
+                        except Exception as ex:
+                            print("Error lanzando js_sim_dictate:", ex)
+                    page.run_task(_lanzar_sim_js)
+                except Exception as ex_m:
+                    sim_dictado_en_progreso[0] = False
+                    print("Error en on_mic_sim_click:", ex_m)
 
             btn_mic_sim_icon = ft.IconButton(
                 icon=ft.Icons.MIC_ROUNDED,
@@ -17084,8 +17185,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 except Exception: pass
                 page.update()
 
-            def enviar_mensaje_simulacion(e):
-                msg_txt = user_input.value.strip()
+            def enviar_mensaje_simulacion(e, texto_forzado=None):
+                msg_txt = (texto_forzado if texto_forzado is not None else (user_input.value or "")).strip()
                 if not msg_txt:
                     return
                 user_input.value = ""
