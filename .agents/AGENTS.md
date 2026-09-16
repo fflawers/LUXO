@@ -1,5 +1,9 @@
 # Reglas del Proyecto LUXO
 
+## 🔒 Regla Estricta de No Interferencia de Código
+**ESTÁ ESTRICTAMENTE PROHIBIDO MODIFICAR, REFACTORIZAR O TOCAR CUALQUIER FUNCIÓN O ARCHIVO QUE NO ESTÉ SIENDO SOLICITADO EXPLÍCITAMENTE POR EL USUARIO.**
+Cualquier cambio futuro debe limitarse de forma quirúrgica y exclusiva a la función o sección puntual requerida, manteniendo el resto del código 100% intacto para garantizar la estabilidad absoluta del sistema.
+
 ## 🛑 Módulos Intocables de Voz
 Las siguientes funciones y componentes son de máxima importancia para el sistema LUXO y **NUNCA DEBEN SER MODIFICADOS NI ALTERADOS** en ninguna tarea futura, a menos que el usuario lo solicite de forma explícita:
 
