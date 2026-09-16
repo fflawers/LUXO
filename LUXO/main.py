@@ -16505,212 +16505,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
 """
 
         def build_simulador_view():
-            def inyectar_script_simulador_voz():
-                tok = getattr(page, "_luxo_token", None) or ""
-                u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "")
-                u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
-                dev_id_k = getattr(page, "device_id", None) or ""
-
-                js_code = f"""javascript:void((function(){{
-                    if (window.luxoSimScriptInjected) return;
-                    window.luxoSimScriptInjected = true;
-
-                    let topDoc = document;
-                    try {{
-                        if (window.top && window.top.document) topDoc = window.top.document;
-                    }} catch(e) {{}}
-
-                    function playToneSim(count) {{
-                        try {{
-                            const cnt = count || 1;
-                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                            if (ctx.state === 'suspended') ctx.resume().catch(function(){{}});
-                            function emitTone(freq, duration, delay) {{
-                                setTimeout(function() {{
-                                    try {{
-                                        if (ctx.state === 'suspended') ctx.resume().catch(function(){{}});
-                                        const osc = ctx.createOscillator();
-                                        const gain = ctx.createGain();
-                                        osc.type = 'sine';
-                                        osc.frequency.value = freq;
-                                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-                                        osc.connect(gain);
-                                        gain.connect(ctx.destination);
-                                        osc.start();
-                                        osc.stop(ctx.currentTime + duration);
-                                    }} catch(e){{}}
-                                }}, delay);
-                            }}
-                            if (cnt === 1) emitTone(880, 0.12, 0);
-                            else if (cnt >= 2) {{
-                                emitTone(1050, 0.08, 0);
-                                emitTone(1320, 0.12, 100);
-                            }}
-                        }} catch(e){{}}
-                    }}
-
-                    let simWidget = topDoc.getElementById("luxo-sim-floating-widget");
-                    if (!simWidget) {{
-                        simWidget = topDoc.createElement("div");
-                        simWidget.id = "luxo-sim-floating-widget";
-                        simWidget.setAttribute("title", "Hablar al Cliente (Simulador IA)");
-                        simWidget.innerHTML = `
-                            <div id="luxo-sim-widget-inner" style="
-                                width: 50px;
-                                height: 50px;
-                                border-radius: 50%;
-                                background: linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%);
-                                border: 2.5px solid #9D50BB;
-                                box-shadow: 0 4px 18px rgba(157, 80, 187, 0.5);
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                cursor: pointer;
-                                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-                                user-select: none;
-                            ">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00FFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                                </svg>
-                            </div>
-                        `;
-                        simWidget.style.cssText = `
-                            position: fixed;
-                            bottom: 16px;
-                            right: 68px;
-                            z-index: 999999;
-                            display: none;
-                            touch-action: manipulation;
-                        `;
-                        
-                        function onSimWidgetClick(e) {{
-                            if (e) {{ try {{ e.preventDefault(); e.stopPropagation(); }} catch(err){{}} }}
-                            window.toggleSimuladorDictate(window._simCurrentModo || 'chat');
-                        }}
-                        simWidget.addEventListener("click", onSimWidgetClick);
-                        simWidget.addEventListener("touchend", onSimWidgetClick);
-                        topDoc.body.appendChild(simWidget);
-                    }}
-
-                    window._simCurrentModo = 'chat';
-                    window._simDictating = false;
-                    let rSimActive = null;
-
-                    window.showSimuladorMicWidget = function(show, modo) {{
-                        window._simCurrentModo = modo || 'chat';
-                        const el = topDoc.getElementById("luxo-sim-floating-widget") || simWidget;
-                        if (el) {{
-                            el.style.display = show ? "block" : "none";
-                            if (modo === 'chat') {{
-                                el.style.bottom = "16px";
-                                el.style.right = "68px";
-                            }} else {{
-                                el.style.bottom = "24px";
-                                el.style.right = "32px";
-                            }}
-                            const inner = topDoc.getElementById("luxo-sim-widget-inner");
-                            if (inner && !window._simDictating) {{
-                                inner.style.borderColor = "#9D50BB";
-                                inner.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.5)";
-                            }}
-                        }}
-                    }};
-
-                    window.toggleSimuladorDictate = function(modo) {{
-                        const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
-                        if (!SR) {{
-                            alert('❌ Reconocimiento de voz no soportado en este navegador.');
-                            return;
-                        }}
-                        const inner = topDoc.getElementById("luxo-sim-widget-inner");
-
-                        if (window._simDictating) {{
-                            window._simDictating = false;
-                            if (rSimActive) try {{ rSimActive.stop(); }} catch(e){{}}
-                            if (inner) {{
-                                inner.style.borderColor = "#9D50BB";
-                                inner.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.5)";
-                                inner.style.transform = "scale(1)";
-                            }}
-                            return;
-                        }}
-
-                        try {{
-                            if (rSimActive) try {{ rSimActive.stop(); }} catch(e){{}}
-                            let r = new SR();
-                            r.lang = 'es-MX';
-                            r.interimResults = false;
-                            r.continuous = false;
-                            r.maxAlternatives = 1;
-                            rSimActive = r;
-                            window._simDictating = true;
-
-                            r.onstart = function() {{
-                                console.log('[SIMULADOR CLONE MIC] Grabación iniciada en modo:', modo);
-                                playToneSim(1);
-                                if (inner) {{
-                                    inner.style.borderColor = "#FF0055";
-                                    inner.style.boxShadow = "0 0 24px rgba(255, 0, 85, 0.9)";
-                                    inner.style.transform = "scale(1.08)";
-                                }}
-                            }};
-
-                            r.onresult = function(ev) {{
-                                const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
-                                if (txt) {{
-                                    playToneSim(2);
-                                    console.log('[SIMULADOR CLONE MIC] Texto reconocido:', txt);
-                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '{u_id}';
-                                    const uname = window.getLuxoUsername ? window.getLuxoUsername() : '{u_name}';
-                                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '{tok}';
-                                    const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '{dev_id_k}';
-                                    fetch('/simulador_text_input?session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&mode=' + encodeURIComponent(modo || 'chat') + '&text=' + encodeURIComponent(txt), {{ method: 'POST' }});
-                                }}
-                            }};
-
-                            r.onerror = function(ev) {{
-                                console.log('[SIMULADOR CLONE MIC] Error:', ev.error);
-                                window._simDictating = false;
-                                if (inner) {{
-                                    inner.style.borderColor = "#9D50BB";
-                                    inner.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.5)";
-                                    inner.style.transform = "scale(1)";
-                                }}
-                                if (ev.error === 'not-allowed') {{
-                                    alert('⚠️ Permiso de micrófono denegado en el navegador.');
-                                }}
-                            }};
-
-                            r.onend = function() {{
-                                console.log('[SIMULADOR CLONE MIC] Grabación finalizada.');
-                                window._simDictating = false;
-                                if (inner) {{
-                                    inner.style.borderColor = "#9D50BB";
-                                    inner.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.5)";
-                                    inner.style.transform = "scale(1)";
-                                }}
-                            }};
-
-                            r.start();
-                        }} catch(err) {{
-                            console.log('Excepción en toggleSimuladorDictate:', err);
-                            window._simDictating = false;
-                        }}
-                    }};
-                }})());"""
-                async def _exec_sim_script():
-                    try:
-                        await page.launch_url(js_code)
-                    except Exception as ex:
-                        print("Error inyectar_script_simulador_voz:", ex)
-                page.run_task(_exec_sim_script)
-
-            inyectar_script_simulador_voz()
-
             vendedor_dropdown = EmojiDropdown(
                 label="Seleccionar Vendedor",
                 border_color="#9D50BB",
@@ -17007,112 +16801,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def on_mic_sim_click(e):
                 if user_input.disabled:
                     return
-                if sim_dictado_en_progreso[0]:
-                    sim_stop_requested[0] = True
-                    mostrar_snack("⏹️ Grabación detenida", "#FFD700")
-                    return
-                sim_dictado_en_progreso[0] = True
-                sim_stop_requested[0] = False
-
-                try:
-                    mostrar_snack("🎙️ Escuchando... di tu respuesta al cliente", "#00FFFF")
-                    btn_mic_sim_container.bgcolor = "#FF0000"
-                    btn_mic_sim_container.border = ft.Border.all(2, "white")
-                    try: btn_mic_sim_container.update()
-                    except: pass
-
-                    tok = getattr(page, "_luxo_token", None) or ""
-                    u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "")
-                    u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
-                    dev_id_k = getattr(page, "device_id", None) or ""
-
-                    js_sim_dictate = f"""javascript:void((function(){{
-                        try {{
-                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
-                            if (!SR) {{ 
-                                alert('❌ Reconocimiento de voz no soportado en este navegador.'); 
-                                return; 
-                            }}
-                            const r = new SR();
-                            r.lang = 'es-MX';
-                            r.interimResults = false;
-                            r.continuous = false;
-                            r.maxAlternatives = 1;
-                            
-                            r.onstart = function() {{
-                                console.log('[SIMULADOR-BAR-MIC] JS: onstart');
-                                try {{
-                                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                                    const osc = ctx.createOscillator();
-                                    const gain = ctx.createGain();
-                                    osc.frequency.value = 880;
-                                    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-                                    osc.connect(gain);
-                                    gain.connect(ctx.destination);
-                                    osc.start();
-                                    osc.stop(ctx.currentTime + 0.12);
-                                }} catch(e){{}}
-                            }};
-                            r.onresult = function(ev) {{
-                                const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
-                                if (txt) {{
-                                    try {{
-                                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                                        const osc = ctx.createOscillator();
-                                        const gain = ctx.createGain();
-                                        osc.frequency.value = 1320;
-                                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-                                        osc.connect(gain);
-                                        gain.connect(ctx.destination);
-                                        osc.start();
-                                        osc.stop(ctx.currentTime + 0.12);
-                                    }} catch(e){{}}
-                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '{u_id}';
-                                    const uname = window.getLuxoUsername ? window.getLuxoUsername() : '{u_name}';
-                                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '{tok}';
-                                    const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '{dev_id_k}';
-                                    fetch('/simulador_text_input?session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&mode=chat&text=' + encodeURIComponent(txt), {{ method: 'POST' }});
-                                }}
-                            }};
-                            r.onerror = function(ev) {{ 
-                                console.log('[SIMULADOR-BAR-MIC] Error JS:', ev.error);
-                                if (ev.error === 'not-allowed') {{
-                                    alert('⚠️ Permiso de micrófono denegado. Permítelo en tu navegador.');
-                                }}
-                            }};
-                            r.onend = function() {{ 
-                                console.log('[SIMULADOR-BAR-MIC] JS: onend');
-                            }};
-                            
-                            r.start();
-                        }} catch(err) {{
-                            alert('❌ Excepción micrófono: ' + err.message);
-                        }}
-                    }})());"""
-
-                    def revert_sim_btn_ui():
-                        import time
-                        time.sleep(6)
-                        sim_dictado_en_progreso[0] = False
-                        try:
-                            btn_mic_sim_container.bgcolor = "#1E1E2E"
-                            btn_mic_sim_container.border = ft.Border.all(1.5, "#9D50BB")
-                            btn_mic_sim_container.update()
-                        except Exception: pass
-
-                    threading.Thread(target=revert_sim_btn_ui, daemon=True).start()
-
-                    async def _lanzar_sim_js():
-                        try:
-                            await page.launch_url(js_sim_dictate)
-                        except Exception as ex:
-                            print("Error lanzando js_sim_dictate:", ex)
-                    page.run_task(_lanzar_sim_js)
-                except Exception as ex_m:
-                    sim_dictado_en_progreso[0] = False
-                    print("Error en on_mic_sim_click:", ex_m)
+                ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');")
 
             btn_mic_sim_icon = ft.IconButton(
                 icon=ft.Icons.MIC_ROUNDED,
@@ -17289,11 +16978,7 @@ REGLAS OBLIGATORIAS:
                 return texto
 
             def volver_al_simulador(e=None):
-                async def _hide_widget():
-                    try:
-                        await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(false);}void(0);")
-                    except: pass
-                page.run_task(_hide_widget)
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 eval_detail_wrapper.visible = False
                 sim_main_wrapper.visible = True
                 config_area.visible = True
@@ -17374,11 +17059,7 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_click(e):
-                async def _hide_widget():
-                    try:
-                        await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(false);}void(0);")
-                    except: pass
-                page.run_task(_hide_widget)
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 if len(chat_history) < 2:
                     mostrar_snack("La simulación debe tener al menos una interacción del vendedor.", "red")
                     return
@@ -17563,20 +17244,12 @@ REGLAS OBLIGATORIAS:
                     btn_mic_sim_icon.disabled = False
                     btn_finalizar.disabled = False
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
-                    async def _show_widget():
-                        try:
-                            await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(true, 'chat');}void(0);")
-                        except: pass
-                    page.run_task(_show_widget)
+                    ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'chat');")
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_click(e):
-                async def _hide_widget():
-                    try:
-                        await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(false);}void(0);")
-                    except: pass
-                page.run_task(_hide_widget)
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 stop_current_speak()
                 config_area.visible = True
                 chat_area.visible = False
@@ -17804,21 +17477,13 @@ REGLAS OBLIGATORIAS:
                     btn_hablar_voz.disabled = False
                     btn_finalizar_voz.disabled = False
                     agregar_mensaje_voz_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
-                    async def _show_voz_widget():
-                        try:
-                            await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(true, 'voz');}void(0);")
-                        except: pass
-                    page.run_task(_show_voz_widget)
+                    ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'voz');")
                     reproducir_voz_cliente(respuesta, on_finish_callback=activar_mic_voz_automatico)
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_voz_click(e):
-                async def _hide_voz_widget():
-                    try:
-                        await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(false);}void(0);")
-                    except: pass
-                page.run_task(_hide_voz_widget)
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 stop_current_speak()
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
@@ -17833,11 +17498,7 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_voz_click(e):
-                async def _hide_voz_widget():
-                    try:
-                        await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(false);}void(0);")
-                    except: pass
-                page.run_task(_hide_voz_widget)
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 if len(voz_chat_history) < 2:
                     mostrar_snack("La conversación debe tener al menos una intervención por voz del vendedor.", "red")
                     return

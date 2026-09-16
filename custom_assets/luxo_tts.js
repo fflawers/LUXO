@@ -484,6 +484,19 @@
         if (btn) {
             btn.style.display = visible ? "flex" : "none";
             if (visible) {
+                if (_simCurrentMode === 'chat') {
+                    btn.style.bottom = "18px";
+                    btn.style.right = "68px";
+                    btn.style.width = "44px";
+                    btn.style.height = "44px";
+                    btn.style.borderRadius = "22px";
+                } else {
+                    btn.style.bottom = "24px";
+                    btn.style.right = "32px";
+                    btn.style.width = "52px";
+                    btn.style.height = "52px";
+                    btn.style.borderRadius = "26px";
+                }
                 btn.style.borderColor = "#9D50BB";
                 btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
             }
