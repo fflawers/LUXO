@@ -329,6 +329,26 @@
           }
         };
 
+        window.pausarReconocimientoGlobal = function() {
+          window._simuladorActivo = true;
+          isListeningWakeWord = false;
+          if (recognition) {
+            try { 
+              if (typeof recognition.abort === "function") recognition.abort();
+              else if (typeof recognition.stop === "function") recognition.stop();
+            } catch(e){}
+          }
+        };
+
+        window.reanudarReconocimientoGlobal = function() {
+          window._simuladorActivo = false;
+          setTimeout(() => {
+            if (recognition && !isListeningWakeWord && !isRecording && !window._simuladorActivo) {
+              try { recognition.start(); } catch(e){}
+            }
+          }, 800);
+        };
+
         recognition.onerror = (e) => {
           console.error("Error en reconocimiento de voz:", e.error);
         };
@@ -337,7 +357,7 @@
           console.log("El reconocimiento de voz se detuvo. Reiniciando...");
           isListeningWakeWord = false;
           setTimeout(() => {
-            if (!isListeningWakeWord && !isRecording) {
+            if (!isListeningWakeWord && !isRecording && !window._simuladorActivo) {
               try {
                 recognition.start();
               } catch(err) {
@@ -483,7 +503,7 @@
   </script>
 
 
-<script src="/custom_assets/luxo_tts.js?v=20260916_v4"></script>
+<script src="/custom_assets/luxo_tts.js?v=20260916_v5"></script>
 </body>
 </html>
 

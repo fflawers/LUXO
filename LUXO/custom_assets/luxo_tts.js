@@ -357,19 +357,127 @@
         } catch(err) {}
     }
 
+    let _simMediaRecorder = null;
+    let _simAudioStream = null;
+    let _simAudioChunks = [];
+    let _simMediaStopTimer = null;
+
+    function iniciarGrabacionMediaRecorderSimulador(modo) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('❌ Tu navegador no permite acceso al micrófono.');
+            updateSimMicUiState(false);
+            return;
+        }
+
+        if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+        else window._simuladorActivo = true;
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            _simAudioStream = stream;
+            _simAudioChunks = [];
+            let mimeType = 'audio/webm';
+            if (!MediaRecorder.isTypeSupported('audio/webm') && MediaRecorder.isTypeSupported('audio/mp4')) {
+                mimeType = 'audio/mp4';
+            } else if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                mimeType = '';
+            }
+            
+            const options = mimeType ? { mimeType: mimeType } : {};
+            _simMediaRecorder = new MediaRecorder(stream, options);
+
+            _simMediaRecorder.ondataavailable = function(e) {
+                if (e.data && e.data.size > 0) {
+                    _simAudioChunks.push(e.data);
+                }
+            };
+
+            _simMediaRecorder.onstart = function() {
+                console.log("[SIMULADOR MIC] Grabando audio por MediaRecorder...");
+                playToneSim(1);
+                updateSimMicUiState(true);
+            };
+
+            _simMediaRecorder.onstop = function() {
+                console.log("[SIMULADOR MIC] Grabación MediaRecorder detenida, enviando a Whisper...");
+                updateSimMicUiState(false);
+                if (_simAudioStream) {
+                    _simAudioStream.getTracks().forEach(function(t) { t.stop(); });
+                    _simAudioStream = null;
+                }
+                if (_simAudioChunks.length > 0) {
+                    playToneSim(2);
+                    const audioBlob = new Blob(_simAudioChunks, { type: mimeType || 'audio/webm' });
+                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                    const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
+                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                    const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                    
+                    const formData = new FormData();
+                    formData.append('file', audioBlob, 'sim_recording.webm');
+                    formData.append('session_id', sid);
+                    formData.append('device_id', did);
+                    formData.append('user_id', uid);
+                    formData.append('username', uname);
+                    formData.append('mode', modo || 'chat');
+
+                    fetch('/simulador_text_input', {
+                        method: 'POST',
+                        body: formData
+                    }).then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        console.log("[SIMULADOR MIC] Respuesta backend Whisper:", res);
+                    }).catch(function(err) {
+                        console.log("[SIMULADOR MIC] Error enviando audio:", err);
+                    });
+                }
+            };
+
+            _simMediaRecorder.start();
+
+            if (_simMediaStopTimer) clearTimeout(_simMediaStopTimer);
+            _simMediaStopTimer = setTimeout(function() {
+                if (_simMediaRecorder && _simMediaRecorder.state === 'recording') {
+                    _simMediaRecorder.stop();
+                }
+            }, 8000);
+
+        }).catch(function(err) {
+            console.log("[SIMULADOR MIC] Error getUserMedia:", err);
+            updateSimMicUiState(false);
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
+            }
+        });
+    }
+
     window.iniciarDictadoSimulador = function(modo) {
         try {
             _simCurrentMode = modo || _simCurrentMode || 'chat';
+
+            // Si ya hay una grabación en progreso con MediaRecorder, detenerla para procesar
+            if (_simMediaRecorder && _simMediaRecorder.state === 'recording') {
+                if (_simMediaStopTimer) clearTimeout(_simMediaStopTimer);
+                _simMediaRecorder.stop();
+                return;
+            }
+
+            if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+            else window._simuladorActivo = true;
+
             let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SR) {
                 try {
                     if (window.top) SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition;
                 } catch(eTop){}
             }
+
+            // Si no hay WebSpeech disponible, usar fallback universal MediaRecorder
             if (!SR) { 
-                alert('❌ Tu navegador no soporta reconocimiento de voz nativo. Por favor usa Google Chrome o Microsoft Edge.'); 
+                console.log("[SIMULADOR MIC] WebSpeech no disponible, usando fallback MediaRecorder...");
+                iniciarGrabacionMediaRecorderSimulador(_simCurrentMode);
                 return; 
             }
+
             if (_simRecognitionActive) {
                 try { 
                     if (typeof _simRecognitionActive.abort === "function") _simRecognitionActive.abort();
@@ -377,6 +485,7 @@
                 } catch(e){}
                 _simRecognitionActive = null;
             }
+
             const rSim = new SR();
             rSim.lang = 'es-MX';
             rSim.interimResults = false;
@@ -385,7 +494,7 @@
             _simRecognitionActive = rSim;
 
             rSim.onstart = function() {
-                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: _simCurrentMode, timestamp: Date.now() });
+                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR (WebSpeech)", { modo: _simCurrentMode, timestamp: Date.now() });
                 playToneSim(1);
                 updateSimMicUiState(true);
             };
@@ -410,11 +519,15 @@
             };
 
             rSim.onerror = function(ev) { 
-                console.log("[SIMULADOR MIC] Error:", ev.error);
+                console.log("[SIMULADOR MIC] Error WebSpeech:", ev.error);
                 _simRecognitionActive = null;
                 updateSimMicUiState(false);
                 if (ev.error === 'not-allowed') {
                     alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
+                } else if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
+                    // Si WebSpeech falla por red u otra causa, usar fallback MediaRecorder
+                    console.log("[SIMULADOR MIC] Reintentando con MediaRecorder fallback...");
+                    iniciarGrabacionMediaRecorderSimulador(_simCurrentMode);
                 }
             };
 
@@ -426,9 +539,9 @@
             
             rSim.start();
         } catch(e) {
-            console.log("Error iniciando micrófono del simulador:", e);
+            console.log("Error iniciando WebSpeech, ejecutando fallback:", e);
             _simRecognitionActive = null;
-            updateSimMicUiState(false);
+            iniciarGrabacionMediaRecorderSimulador(_simCurrentMode);
         }
     };
 
@@ -498,6 +611,14 @@
 
     window.detenerDictadoSimulador = function() {
         try {
+            if (_simMediaRecorder && _simMediaRecorder.state === 'recording') {
+                if (_simMediaStopTimer) clearTimeout(_simMediaStopTimer);
+                _simMediaRecorder.stop();
+            }
+            if (_simAudioStream) {
+                _simAudioStream.getTracks().forEach(function(t) { t.stop(); });
+                _simAudioStream = null;
+            }
             if (_simRecognitionActive) {
                 if (typeof _simRecognitionActive.abort === "function") {
                     _simRecognitionActive.abort();
@@ -505,6 +626,11 @@
                     _simRecognitionActive.stop();
                 }
                 _simRecognitionActive = null;
+            }
+            if (window.reanudarReconocimientoGlobal) {
+                window.reanudarReconocimientoGlobal();
+            } else {
+                window._simuladorActivo = false;
             }
             updateSimMicUiState(false);
         } catch(e){}
@@ -514,6 +640,9 @@
         _simCurrentMode = modo || _simCurrentMode || 'chat';
         if (!visible) {
             window.detenerDictadoSimulador();
+        } else {
+            if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+            else window._simuladorActivo = true;
         }
         const btn = ensureSimMicBtnCreated();
         if (btn) {

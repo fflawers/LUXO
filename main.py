@@ -2536,10 +2536,46 @@ def configurar_rutas_fastapi(app):
             return {"status": "error", "detail": str(e)}
 
     @app.api_route("/simulador_text_input", methods=["GET", "POST"])
-    async def post_simulador_text_input(session_id: str = "", device_id: str = "", user_id: str = "", username: str = "", text: str = "", mode: str = "chat"):
+    async def post_simulador_text_input(request: Request = None, session_id: str = "", device_id: str = "", user_id: str = "", username: str = "", text: str = "", mode: str = "chat"):
         import traceback
         try:
-            print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido: session_id='{session_id}', device_id='{device_id}', user_id='{user_id}', username='{username}', mode='{mode}', text='{text}'")
+            texto_final = text or ""
+            modo_solicitado = mode or "chat"
+
+            if request and "multipart/form-data" in request.headers.get("content-type", ""):
+                try:
+                    form = await request.form()
+                    session_id = form.get("session_id") or session_id
+                    device_id = form.get("device_id") or device_id
+                    user_id = form.get("user_id") or user_id
+                    username = form.get("username") or username
+                    modo_solicitado = form.get("mode") or modo_solicitado
+                    audio_file = form.get("file")
+                    if audio_file:
+                        audio_bytes = await audio_file.read()
+                        if audio_bytes:
+                            is_webm = audio_bytes.startswith(b"\x1a\x45\xdf\xa3") or b"webm" in audio_bytes[:100]
+                            ext = ".webm" if is_webm else ".wav"
+                            mime = "audio/webm" if is_webm else "audio/wav"
+                            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                                tmp.write(audio_bytes)
+                                temp_path = tmp.name
+                            try:
+                                headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+                                with open(temp_path, "rb") as f:
+                                    files = {"file": (f"sim_voice{ext}", f, mime)}
+                                    data = {"model": "whisper-large-v3", "language": "es", "response_format": "json"}
+                                    res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=20)
+                                if res_w.status_code == 200:
+                                    texto_final = res_w.json().get("text", "").strip()
+                                    print(f"🎙️ [SIMULADOR WHISPER] Transcripción exitosa: '{texto_final}'")
+                            finally:
+                                try: os.unlink(temp_path)
+                                except Exception: pass
+                except Exception as ex_form:
+                    print("[SIMULADOR MIC] Error procesando form data:", ex_form)
+
+            print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido: session_id='{session_id}', device_id='{device_id}', user_id='{user_id}', username='{username}', mode='{modo_solicitado}', text='{texto_final}'")
             session = None
             
             # 1. Búsqueda estricta por token de sesión
@@ -2569,10 +2605,10 @@ def configurar_rutas_fastapi(app):
                 print(f"[SIMULADOR MIC] Sesión no encontrada para session_id='{session_id}', user_id='{user_id}', username='{username}'")
                 return {"status": "session_not_found"}
 
-            if text:
-                modo_activo = mode or session.get("sim_modo_activo")
+            if texto_final:
+                modo_activo = modo_solicitado or session.get("sim_modo_activo", "chat")
                 if not modo_activo:
-                    print(f"[SIMULADOR MIC] Ignorando audio '{text}' porque la simulación no está activa en la sesión.")
+                    print(f"[SIMULADOR MIC] Ignorando audio '{texto_final}' porque la simulación no está activa en la sesión.")
                     return {"status": "simulation_inactive"}
                 page = session.get("page")
                 btn_mic_sim = session.get("btn_mic_simulador_container")
@@ -2588,9 +2624,9 @@ def configurar_rutas_fastapi(app):
                     sim_voz_fn = session.get("sim_voz_enviar_fn")
                     try:
                         if hasattr(page, "run_thread"):
-                            page.run_thread(sim_voz_fn, text)
+                            page.run_thread(sim_voz_fn, texto_final)
                         else:
-                            sim_voz_fn(text)
+                            sim_voz_fn(texto_final)
                     except Exception as ex_v:
                         print(f"ERROR en sim_voz_enviar_fn: {ex_v}")
                     return {"status": "success", "mode": "voz"}
@@ -2606,9 +2642,9 @@ def configurar_rutas_fastapi(app):
                         except Exception: pass
                         try:
                             if hasattr(page, "run_thread"):
-                                page.run_thread(sim_enviar, None, text)
+                                page.run_thread(sim_enviar, None, texto_final)
                             else:
-                                sim_enviar(None, texto_forzado=text)
+                                sim_enviar(None, texto_forzado=texto_final)
                         except Exception as ex:
                             print(f"ERROR en sim_enviar: {ex}")
                         return {"status": "success", "mode": "chat"}
