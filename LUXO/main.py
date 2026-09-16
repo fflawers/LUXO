@@ -2599,6 +2599,11 @@ def configurar_rutas_fastapi(app):
                         session = s_val
                         print(f"🎙️ [SIMULADOR MIC] Encontrada sesión activa mediante fallback de simulador (key='{s_key}')")
                         break
+
+            # 6. Fallback final: última sesión en active_sessions
+            if not session and active_sessions:
+                session = list(active_sessions.values())[-1]
+                print(f"🎙️ [SIMULADOR MIC] Encontrada sesión activa mediante fallback de última sesión")
             
             # Si no se encuentra sesión, retornar error seguro
             if not session:
@@ -16869,10 +16874,85 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             def on_mic_sim_click(e):
                 if user_input.disabled or not simulacion_activa[0]:
                     return
+                try:
+                    mostrar_snack("🎙️ Escuchando tu respuesta...", "#00FFFF")
+                    btn_mic_sim_container.bgcolor = "#FF0000"
+                    btn_mic_sim_container.border = ft.Border.all(2, "white")
+                    btn_mic_sim_container.update()
+                except Exception:
+                    pass
+
                 import platform
                 if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                     threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
-                ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');")
+
+                js_sim_dictate = """javascript:void((function(){
+                    try {
+                        let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                        if (!SR && window.top) {
+                            try { SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition; } catch(e){}
+                        }
+                        if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+                        if (!SR) {
+                            if (window.iniciarDictadoSimulador) {
+                                window.iniciarDictadoSimulador('chat');
+                                return;
+                            }
+                            alert('❌ API de voz no soportada. Usa Google Chrome o Microsoft Edge.');
+                            return;
+                        }
+                        const r = new SR();
+                        r.lang = 'es-MX';
+                        r.interimResults = false;
+                        r.continuous = false;
+                        r.maxAlternatives = 1;
+                        r.onstart = function() {
+                            console.log('[SIMULADOR MIC CHAT] Escuchando...');
+                        };
+                        r.onresult = function(ev) {
+                            const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
+                            if (txt) {
+                                const uid = (window.getLuxoUserId ? window.getLuxoUserId() : '') || (window.luxoSessionToken || '');
+                                fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=chat&text=' + encodeURIComponent(txt), { method: 'POST' });
+                            }
+                        };
+                        r.onerror = function(ev) {
+                            console.log('[SIMULADOR MIC CHAT] Error:', ev.error);
+                            if (ev.error === 'not-allowed') {
+                                alert('⚠️ Permiso de micrófono denegado. Permite el micrófono en tu navegador.');
+                            } else if (window.iniciarDictadoSimulador) {
+                                window.iniciarDictadoSimulador('chat');
+                            }
+                        };
+                        r.onend = function() {
+                            if (window.reanudarReconocimientoGlobal) window.reanudarReconocimientoGlobal();
+                        };
+                        r.start();
+                    } catch(err) {
+                        console.log('[SIMULADOR MIC] Error:', err);
+                        if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');
+                    }
+                })());"""
+
+                def revert_sim_mic_ui():
+                    import time
+                    time.sleep(5)
+                    try:
+                        btn_mic_sim_container.bgcolor = "#1E1E2E"
+                        btn_mic_sim_container.border = ft.Border.all(1.5, "#9D50BB")
+                        btn_mic_sim_container.update()
+                    except Exception:
+                        pass
+
+                threading.Thread(target=revert_sim_mic_ui, daemon=True).start()
+
+                async def _lanzar_sim_js():
+                    try:
+                        await page.launch_url(js_sim_dictate)
+                    except Exception as ex:
+                        print("Error launch_url sim mic:", ex)
+
+                page.run_task(_lanzar_sim_js)
 
             btn_mic_sim_icon = ft.IconButton(
                 icon=ft.Icons.MIC_ROUNDED,
@@ -17461,8 +17541,61 @@ REGLAS OBLIGATORIAS:
                     if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                     
-                    # En celulares y navegador web, disparar Web Speech API del cliente
-                    ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');")
+                    js_sim_voz = """javascript:void((function(){
+                        try {
+                            let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                            if (!SR && window.top) {
+                                try { SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition; } catch(e){}
+                            }
+                            if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+                            if (!SR) {
+                                if (window.iniciarDictadoSimulador) {
+                                    window.iniciarDictadoSimulador('voz');
+                                    return;
+                                }
+                                alert('❌ API de voz no soportada. Usa Google Chrome o Microsoft Edge.');
+                                return;
+                            }
+                            const r = new SR();
+                            r.lang = 'es-MX';
+                            r.interimResults = false;
+                            r.continuous = false;
+                            r.maxAlternatives = 1;
+                            r.onstart = function() {
+                                console.log('[SIMULADOR MIC VOZ] Escuchando...');
+                            };
+                            r.onresult = function(ev) {
+                                const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
+                                if (txt) {
+                                    const uid = (window.getLuxoUserId ? window.getLuxoUserId() : '') || (window.luxoSessionToken || '');
+                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=voz&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                }
+                            };
+                            r.onerror = function(ev) {
+                                console.log('[SIMULADOR MIC VOZ] Error:', ev.error);
+                                if (ev.error === 'not-allowed') {
+                                    alert('⚠️ Permiso de micrófono denegado. Permite el micrófono en tu navegador.');
+                                } else if (window.iniciarDictadoSimulador) {
+                                    window.iniciarDictadoSimulador('voz');
+                                }
+                            };
+                            r.onend = function() {
+                                if (window.reanudarReconocimientoGlobal) window.reanudarReconocimientoGlobal();
+                            };
+                            r.start();
+                        } catch(err) {
+                            console.log('[SIMULADOR MIC VOZ] Error:', err);
+                            if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');
+                        }
+                    })());"""
+
+                    async def _lanzar_voz_js():
+                        try:
+                            await page.launch_url(js_sim_voz)
+                        except Exception as ex:
+                            print("Error launch_url sim voz mic:", ex)
+
+                    page.run_task(_lanzar_voz_js)
                 except Exception as ex_act:
                     print("Error activar_mic_voz_automatico:", ex_act)
 
