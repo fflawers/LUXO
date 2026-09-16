@@ -16949,44 +16949,50 @@ REGLAS OBLIGATORIAS:
                 if not texto:
                     return "No hay contenido de evaluación disponible."
                 
-                # Si contiene tablas Markdown (| col | col |), convertirlas a formato de tarjetas/viñetas amigables con celulares
-                if "|" in texto and ("---" in texto or "Puntos" in texto or "Criterio" in texto or "Score" in texto):
-                    lineas = texto.split("\n")
-                    nuevas_lineas = []
-                    
-                    for l in lineas:
-                        l_str = l.strip()
-                        if l_str.startswith("|") and l_str.endswith("|"):
-                            partes = [p.strip() for p in l_str.split("|")[1:-1]]
-                            # Saltar separadores tipo |---|---|
-                            if all(all(c in "- :" for c in p) for p in partes if p):
-                                continue
-                            # Saltar cabecera
-                            if any(h in l_str.lower() for h in ["criterio", "ítem", "puntos", "observaciones", "comentario"]):
-                                continue
-                            
-                            if len(partes) >= 3:
-                                num = partes[0] if partes[0].isdigit() else ""
-                                crit = partes[1] if len(partes) > 1 else ""
-                                pts_pos = partes[2] if len(partes) > 2 else ""
-                                pts_obt = partes[3] if len(partes) > 3 else ""
-                                com = partes[4] if len(partes) > 4 else (partes[2] if len(partes) == 3 else "")
-                                
-                                titulo = f"**{num}. {crit}**" if num else f"**{crit}**"
-                                pts_str = f" `[{pts_obt} / {pts_pos} pts]`" if pts_pos and pts_obt else ""
-                                icon = "✅" if (pts_obt and pts_pos and pts_obt == pts_pos and pts_obt != "0") else ("❌" if pts_obt == "0" else "🔹")
-                                
-                                nuevas_lineas.append(f"\n{icon} {titulo}{pts_str}")
-                                if com:
-                                    nuevas_lineas.append(f"> {com}")
-                            else:
-                                nuevas_lineas.append(f"- {' | '.join(partes)}")
-                        else:
-                            nuevas_lineas.append(l)
-                    
-                    return "\n".join(nuevas_lineas)
+                lineas = texto.split("\n")
+                nuevas_lineas = []
                 
-                return texto
+                for l in lineas:
+                    l_str = l.strip()
+                    if not l_str:
+                        nuevas_lineas.append("")
+                        continue
+
+                    # Eliminar formato de blockquote '>' para evitar la caja azul ilegible de Flet
+                    if l_str.startswith(">"):
+                        l_clean = l_str.lstrip(">").strip()
+                        if l_clean:
+                            nuevas_lineas.append(f"  💬 *{l_clean}*")
+                        continue
+                    
+                    # Convertir tablas (| col | col |) a tarjetas de viñetas legibles
+                    if l_str.startswith("|") and l_str.endswith("|"):
+                        partes = [p.strip() for p in l_str.split("|")[1:-1]]
+                        if all(all(c in "- :" for c in p) for p in partes if p):
+                            continue
+                        if any(h in l_str.lower() for h in ["criterio", "ítem", "puntos", "observaciones", "comentario"]):
+                            continue
+                        
+                        if len(partes) >= 3:
+                            num = partes[0] if partes[0].isdigit() else ""
+                            crit = partes[1] if len(partes) > 1 else ""
+                            pts_pos = partes[2] if len(partes) > 2 else ""
+                            pts_obt = partes[3] if len(partes) > 3 else ""
+                            com = partes[4] if len(partes) > 4 else (partes[2] if len(partes) == 3 else "")
+                            
+                            titulo = f"**{num}. {crit}**" if num else f"**{crit}**"
+                            pts_str = f" `[{pts_obt}/{pts_pos} pts]`" if pts_pos and pts_obt else ""
+                            icon = "✅" if (pts_obt and pts_pos and pts_obt == pts_pos and pts_obt != "0") else ("❌" if pts_obt == "0" else "🔹")
+                            
+                            nuevas_lineas.append(f"\n{icon} {titulo}{pts_str}")
+                            if com:
+                                nuevas_lineas.append(f"  💬 *{com}*")
+                        else:
+                            nuevas_lineas.append(f"- {' • '.join(partes)}")
+                    else:
+                        nuevas_lineas.append(l)
+                
+                return "\n".join(nuevas_lineas)
 
             def volver_al_simulador(e=None):
                 ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
@@ -17044,10 +17050,10 @@ REGLAS OBLIGATORIAS:
                                     border=ft.Border.all(1.5, badge_color)
                                 )
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center"),
-                            ft.Divider(color="#333333", height=15),
+                            ft.Divider(color="#333355", height=15),
                             ft.Row([
                                 ft.Text(f"👤 Asesor: {nombre_vendedor}", color="white", weight="bold", size=13),
-                                ft.Text(f"📅 Fecha: {fecha}", color="#888888", size=12),
+                                ft.Text(f"📅 Fecha: {fecha}", color="#AAAAAA", size=12),
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                             ft.Text(f"🎯 Escenario / Perfil: {perfil}", color="#D8B4FE", size=12, italic=True),
                         ], spacing=8),
@@ -17058,10 +17064,10 @@ REGLAS OBLIGATORIAS:
                     ),
                     ft.Container(
                         content=md_content,
-                        bgcolor="#111111",
-                        padding=15,
+                        bgcolor="#161628",
+                        padding=18,
                         border_radius=10,
-                        border=ft.Border.all(1, "#333333")
+                        border=ft.Border.all(1, "#3A2B5E")
                     )
                 ])
 
