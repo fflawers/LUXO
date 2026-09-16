@@ -1180,8 +1180,8 @@ def configurar_rutas_fastapi(app):
                                 return; 
                             }
                             if (window._simRecognitionActive) {
-                                console.log("[SIMULADOR MIC] Micrófono ya se encuentra activo");
-                                return;
+                                try { window._simRecognitionActive.stop(); } catch(e){}
+                                window._simRecognitionActive = null;
                             }
                             const rSim = new SR();
                             rSim.lang = 'es-MX';
@@ -1220,12 +1220,20 @@ def configurar_rutas_fastapi(app):
                                 playToneSim(1);
                             };
                             rSim.onresult = function(ev) {
-                                const txt = ev.results[0][0].transcript;
+                                const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
                                 if (txt) {
                                     playToneSim(2);
-                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                                    const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
+                                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
                                     const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                                    fetch('/simulador_text_input?device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    fetch('/simulador_text_input?session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&mode=' + encodeURIComponent(modo || 'chat') + '&text=' + encodeURIComponent(txt), { method: 'POST' })
+                                    .then(function(r) { return r.json(); })
+                                    .then(function(res) {
+                                        console.log("[SIMULADOR MIC] Respuesta backend:", res);
+                                    }).catch(function(err){
+                                        console.log("[SIMULADOR MIC] Error enviando texto:", err);
+                                    });
                                 }
                             };
                             rSim.onerror = function(ev) { 
@@ -2440,21 +2448,33 @@ def configurar_rutas_fastapi(app):
             return {"status": "error", "detail": str(e)}
 
     @app.api_route("/simulador_text_input", methods=["GET", "POST"])
-    async def post_simulador_text_input(device_id: str = "", user_id: str = "1", text: str = ""):
+    async def post_simulador_text_input(session_id: str = "", device_id: str = "", user_id: str = "", username: str = "", text: str = "", mode: str = "chat"):
         import traceback
         try:
-            print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido con device_id={device_id}, user_id={user_id}, text='{text}'")
+            print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido: session_id='{session_id}', device_id='{device_id}', user_id='{user_id}', username='{username}', mode='{mode}', text='{text}'")
             session = None
-            if device_id and device_id in active_sessions:
+            
+            # 1. Búsqueda estricta por token de sesión
+            if session_id and session_id in active_sessions:
+                session = active_sessions[session_id]
+            # 2. Búsqueda por device_id
+            if not session and device_id and device_id in active_sessions:
                 session = active_sessions[device_id]
-            elif user_id:
-                user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
+            # 3. Búsqueda por user_id autenticado
+            if not session and user_id and str(user_id).strip() not in ["", "unknown", "None", "null", "undefined"]:
+                user_id_val = int(user_id) if str(user_id).isdigit() else user_id
                 session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
-            if not session and active_sessions:
-                session = list(active_sessions.values())[-1]
+            # 4. Búsqueda por username autenticado
+            if not session and username and str(username).strip().lower() not in ["", "unknown", "None", "null", "undefined"]:
+                session = active_sessions.get(str(username).strip().lower())
+            
+            # Si no se encuentra sesión, NO usar fallback global; retornar error seguro
+            if not session:
+                print(f"[SIMULADOR MIC] Sesión no encontrada para session_id='{session_id}', user_id='{user_id}', username='{username}'")
+                return {"status": "session_not_found"}
 
-            if session and text:
-                modo_activo = session.get("sim_modo_activo", "chat")
+            if text:
+                modo_activo = mode or session.get("sim_modo_activo", "chat")
                 page = session.get("page")
                 btn_mic_sim = session.get("btn_mic_simulador_container")
 
@@ -2463,7 +2483,7 @@ def configurar_rutas_fastapi(app):
                         btn_mic_sim.bgcolor = "#1E1E2E"
                         btn_mic_sim.border = ft.Border.all(1.5, "#9D50BB")
                         btn_mic_sim.update()
-                    except: pass
+                    except Exception: pass
 
                 if modo_activo == "voz" and session.get("sim_voz_enviar_fn"):
                     sim_voz_fn = session.get("sim_voz_enviar_fn")
@@ -2492,7 +2512,7 @@ def configurar_rutas_fastapi(app):
                         except Exception as ex:
                             print(f"ERROR en sim_enviar: {ex}")
                         return {"status": "success", "mode": "chat"}
-            return {"status": "session_or_input_not_found"}
+            return {"status": "empty_text"}
         except Exception as e:
             print(f"ERROR en /simulador_text_input: {traceback.format_exc()}")
             return {"status": "error", "detail": str(e)}
@@ -16729,12 +16749,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     except Exception: pass
 
                 if getattr(page, "web", False):
-                    async def _lanzar_sim_js():
-                        try:
-                            await page.launch_url("javascript:window.iniciarDictadoSimulador('chat');")
-                        except Exception as ex:
-                            print("[SIMULADOR-MIC] Error lanzando JS:", ex)
-                    page.run_task(_lanzar_sim_js)
+                    ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');")
                     threading.Thread(target=revert_sim_ui, daemon=True).start()
                 else:
                     threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
@@ -17131,22 +17146,32 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                 chat_history.clear()
                 sim_chat_column.controls.clear()
 
-                # Vincular referencias en active_sessions
-                for uid, sess in list(active_sessions.items()):
-                    if sess.get("page") == page:
-                        sess["sim_user_input"] = user_input
-                        sess["sim_enviar_fn"] = enviar_mensaje_simulacion
-                        sess["btn_mic_simulador_container"] = btn_mic_sim_container
-                        sess["sim_modo_activo"] = "chat"
+                # Vincular referencias en active_sessions con aislamiento estricto
+                tok = getattr(page, "_luxo_token", None)
+                u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
+                u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
                 dev_id_k = getattr(page, "device_id", None)
+                
+                sim_data = {
+                    "page": page,
+                    "sim_user_input": user_input,
+                    "sim_enviar_fn": enviar_mensaje_simulacion,
+                    "btn_mic_simulador_container": btn_mic_sim_container,
+                    "sim_modo_activo": "chat"
+                }
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess.update(sim_data)
+                if tok:
+                    active_sessions[tok] = {**active_sessions.get(tok, {}), **sim_data}
                 if dev_id_k:
-                    if dev_id_k not in active_sessions:
-                        active_sessions[dev_id_k] = {}
-                    active_sessions[dev_id_k]["sim_user_input"] = user_input
-                    active_sessions[dev_id_k]["sim_enviar_fn"] = enviar_mensaje_simulacion
-                    active_sessions[dev_id_k]["btn_mic_simulador_container"] = btn_mic_sim_container
-                    active_sessions[dev_id_k]["sim_modo_activo"] = "chat"
-                    active_sessions[dev_id_k]["page"] = page
+                    active_sessions[dev_id_k] = {**active_sessions.get(dev_id_k, {}), **sim_data}
+                if u_id:
+                    active_sessions[str(u_id)] = {**active_sessions.get(str(u_id), {}), **sim_data}
+                    if str(u_id).isdigit():
+                        active_sessions[int(u_id)] = {**active_sessions.get(int(u_id), {}), **sim_data}
+                if u_name:
+                    active_sessions[u_name] = {**active_sessions.get(u_name, {}), **sim_data}
                 
                 system_prompt = f"""Eres un cliente que entra a una tienda Sunglass Hut en México. Tu perfil es: '{perfil_cliente_txt[0]}'.
 REGLAS OBLIGATORIAS:
@@ -17266,13 +17291,11 @@ REGLAS OBLIGATORIAS:
             def activar_mic_voz_automatico():
                 try:
                     # En celulares y navegador web, disparar Web Speech API del cliente
-                    try:
-                        page.launch_url("javascript:window.iniciarDictadoSimulador('voz');")
-                    except Exception: pass
-
+                    if getattr(page, "web", False):
+                        ejecutar_js_flet(page, "if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');")
                     # En Windows de escritorio local, ejecutar también el worker de PyAudio si no está activo
                     import platform
-                    if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
+                    if platform.system() == "Windows" and not sim_dictado_en_progreso[0] and not getattr(page, "web", False):
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                 except Exception as ex_act:
                     print("Error activar_mic_voz_automatico:", ex_act)
@@ -17360,18 +17383,29 @@ REGLAS OBLIGATORIAS:
                 voz_chat_history.clear()
                 sim_voz_chat_column.controls.clear()
 
-                sess_uid = user_info.get("id", 1)
-                active_sessions[sess_uid] = active_sessions.get(sess_uid, {})
-                active_sessions[sess_uid]["sim_voz_enviar_fn"] = enviar_mensaje_simulacion_voz
-                active_sessions[sess_uid]["sim_modo_activo"] = "voz"
-                active_sessions[sess_uid]["page"] = page
-                active_sessions[str(sess_uid)] = active_sessions[sess_uid]
+                tok = getattr(page, "_luxo_token", None)
+                u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
+                u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
                 dev_id_k = getattr(page, "device_id", None)
+                
+                sim_voz_data = {
+                    "page": page,
+                    "sim_voz_enviar_fn": enviar_mensaje_simulacion_voz,
+                    "sim_modo_activo": "voz"
+                }
+                for uid_k, sess in list(active_sessions.items()):
+                    if sess.get("page") == page:
+                        sess.update(sim_voz_data)
+                if tok:
+                    active_sessions[tok] = {**active_sessions.get(tok, {}), **sim_voz_data}
                 if dev_id_k:
-                    active_sessions[dev_id_k] = active_sessions.get(dev_id_k, {})
-                    active_sessions[dev_id_k]["sim_voz_enviar_fn"] = enviar_mensaje_simulacion_voz
-                    active_sessions[dev_id_k]["sim_modo_activo"] = "voz"
-                    active_sessions[dev_id_k]["page"] = page
+                    active_sessions[dev_id_k] = {**active_sessions.get(dev_id_k, {}), **sim_voz_data}
+                if u_id:
+                    active_sessions[str(u_id)] = {**active_sessions.get(str(u_id), {}), **sim_voz_data}
+                    if str(u_id).isdigit():
+                        active_sessions[int(u_id)] = {**active_sessions.get(int(u_id), {}), **sim_voz_data}
+                if u_name:
+                    active_sessions[u_name] = {**active_sessions.get(u_name, {}), **sim_voz_data}
 
                 system_prompt = f"""Eres un cliente que entra a una tienda Sunglass Hut en México. Tu perfil es: '{perfil_cliente_txt[0]}'.
 REGLAS OBLIGATORIAS:
