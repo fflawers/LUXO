@@ -1172,6 +1172,67 @@ def configurar_rutas_fastapi(app):
                     }
 
                     // --- RECONOCIMIENTO DE VOZ DEDICADO PARA SIMULADOR DE VENTAS IA ---
+                    let simMicBtn = document.getElementById("luxo-sim-mic-btn");
+                    if (!simMicBtn) {
+                        simMicBtn = document.createElement("div");
+                        simMicBtn.id = "luxo-sim-mic-btn";
+                        simMicBtn.innerHTML = `
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00FFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        `;
+                        simMicBtn.setAttribute("title", "Hablar al Cliente (Simulador IA)");
+                        simMicBtn.style.cssText = `
+                            position: fixed;
+                            bottom: 24px;
+                            right: 76px;
+                            width: 44px;
+                            height: 44px;
+                            border-radius: 22px;
+                            background: linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%);
+                            border: 2px solid #9D50BB;
+                            box-shadow: 0 4px 18px rgba(157, 80, 187, 0.45);
+                            display: none;
+                            align-items: center;
+                            justify-content: center;
+                            cursor: pointer;
+                            z-index: 999999;
+                            transition: all 0.2s ease;
+                            touch-action: manipulation;
+                            user-select: none;
+                        `;
+                        
+                        function onSimMicPress(e) {
+                            if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                            console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-sim-mic-btn");
+                            simMicBtn.style.transform = "scale(0.92)";
+                            simMicBtn.style.borderColor = "#FF0055";
+                            simMicBtn.style.boxShadow = "0 0 22px rgba(255, 0, 85, 0.8)";
+                            setTimeout(function() {
+                                simMicBtn.style.transform = "scale(1)";
+                            }, 180);
+                            window.iniciarDictadoSimulador('chat');
+                        }
+
+                        simMicBtn.addEventListener("click", onSimMicPress);
+                        simMicBtn.addEventListener("touchend", onSimMicPress);
+                        document.body.appendChild(simMicBtn);
+                    }
+
+                    window.showSimuladorMicBtn = function(visible) {
+                        const btn = document.getElementById("luxo-sim-mic-btn");
+                        if (btn) {
+                            btn.style.display = visible ? "flex" : "none";
+                            if (visible) {
+                                btn.style.borderColor = "#9D50BB";
+                                btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                            }
+                        }
+                    };
+
                     window.iniciarDictadoSimulador = function(modo) {
                         try {
                             const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
@@ -1218,6 +1279,11 @@ def configurar_rutas_fastapi(app):
                             rSim.onstart = function() {
                                 console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: modo, timestamp: Date.now() });
                                 playToneSim(1);
+                                const btn = document.getElementById("luxo-sim-mic-btn");
+                                if (btn) {
+                                    btn.style.borderColor = "#FF0055";
+                                    btn.style.boxShadow = "0 0 22px rgba(255, 0, 85, 0.9)";
+                                }
                             };
                             rSim.onresult = function(ev) {
                                 const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
@@ -1239,6 +1305,11 @@ def configurar_rutas_fastapi(app):
                             rSim.onerror = function(ev) { 
                                 console.log("[SIMULADOR MIC] Error:", ev.error);
                                 window._simRecognitionActive = null;
+                                const btn = document.getElementById("luxo-sim-mic-btn");
+                                if (btn) {
+                                    btn.style.borderColor = "#9D50BB";
+                                    btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                                }
                                 if (ev.error === 'not-allowed') {
                                     alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
                                 }
@@ -1246,6 +1317,11 @@ def configurar_rutas_fastapi(app):
                             rSim.onend = function() { 
                                 console.log("[SIMULADOR MIC] DETENIENDO MICROFONO", { timestamp: Date.now() });
                                 window._simRecognitionActive = null;
+                                const btn = document.getElementById("luxo-sim-mic-btn");
+                                if (btn) {
+                                    btn.style.borderColor = "#9D50BB";
+                                    btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                                }
                             };
                             
                             rSim.start();
@@ -16929,6 +17005,7 @@ REGLAS OBLIGATORIAS:
                 return texto
 
             def volver_al_simulador(e=None):
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 eval_detail_wrapper.visible = False
                 sim_main_wrapper.visible = True
                 config_area.visible = True
@@ -17009,6 +17086,7 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_click(e):
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 if len(chat_history) < 2:
                     mostrar_snack("La simulación debe tener al menos una interacción del vendedor.", "red")
                     return
@@ -17193,10 +17271,12 @@ REGLAS OBLIGATORIAS:
                     btn_mic_sim_icon.disabled = False
                     btn_finalizar.disabled = False
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                    ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true);")
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
             def cancelar_simulacion_click(e):
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 stop_current_speak()
                 config_area.visible = True
                 chat_area.visible = False
@@ -22457,6 +22537,8 @@ Ejemplo:
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista, desde_menu_manual=False):
             active_view[0] = vista
+            if str(vista) not in ["capacitacion_ia", "simulador"]:
+                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
             try:
                 # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu
                 if desde_menu_manual:
