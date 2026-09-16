@@ -23911,11 +23911,22 @@ Ejemplo:
                 is_store = True
 
             if is_store:
+                import re
                 nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
                 if not nombre_tienda and tienda_u:
                     nombre_tienda = tienda_u
                 display_name = f"Tienda {nombre_tienda}"
-                target_name = f"equipo de {nombre_tienda}" if nombre_tienda else "equipo de Tienda"
+                
+                # Formatear números para lectura clara (ej. 3502 -> 35 02, Q304 -> Q 3 04)
+                t_audio = nombre_tienda
+                if t_audio:
+                    t_audio = re.sub(r'([a-zA-Z]+)(\d+)', r'\1 \2', t_audio)
+                    t_audio = re.sub(r'(\d+)([a-zA-Z]+)', r'\1 \2', t_audio)
+                    t_audio = re.sub(r'\b(\d{2})(\d{2})\b', r'\1 \2', t_audio)
+                    t_audio = re.sub(r'\b(\d)(\d{2})\b', r'\1 \2', t_audio)
+                    t_audio = re.sub(r'\s+', ' ', t_audio).strip()
+                
+                target_name = f"equipo de {t_audio}" if t_audio else "equipo de Tienda"
             elif nombre_u:
                 display_name = nombre_u.split(" ")[0].title()
                 target_name = display_name
