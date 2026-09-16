@@ -16747,15 +16747,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         except: pass
 
                     r_sim = sr.Recognizer()
-                    r_sim.pause_threshold = 1.0
-                    r_sim.non_speaking_duration = 0.8
+                    r_sim.pause_threshold = 2.2
+                    r_sim.non_speaking_duration = 1.8
                     r_sim.dynamic_energy_threshold = True
 
                     with sr.Microphone() as source:
                         r_sim.adjust_for_ambient_noise(source, duration=0.3)
                         if sim_stop_requested[0]:
                             raise Exception("Cancelado por usuario")
-                        audio = r_sim.listen(source, timeout=14, phrase_time_limit=25)
+                        audio = r_sim.listen(source, timeout=14, phrase_time_limit=35)
 
                     if sim_stop_requested[0]:
                         raise Exception("Cancelado por usuario")
@@ -17070,127 +17070,138 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_click(e):
+                sim_stop_requested[0] = True
+                stop_current_speak()
                 ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 if len(chat_history) < 2:
                     mostrar_snack("La simulación debe tener al menos una interacción del vendedor.", "red")
                     return
                 
+                btn_finalizar.disabled = True
+                btn_finalizar.text = "Evaluando con IA... ⏳"
                 mostrar_snack("Analizando auditoría de neuroventas y protocolo...", "#00FFFF")
                 user_input.disabled = True
                 btn_enviar.disabled = True
                 btn_mic_sim_icon.disabled = True
-                btn_finalizar.disabled = True
-                page.update()
+                try: page.update()
+                except: pass
 
-                perfil_nombre = cliente_dropdown.value or "Cliente General"
-                es_caso_seguridad = "🛡️" in perfil_nombre
+                def _eval_chat_bg():
+                    perfil_nombre = cliente_dropdown.value or "Cliente General"
+                    es_caso_seguridad = "🛡️" in perfil_nombre
 
-                if es_caso_seguridad:
-                    eval_prompt = """Analiza la siguiente conversación de roleplay de Prevención de Robo y Seguridad Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente sospechoso o grupo distractor.
-                    Evalúa el desempeño del vendedor según los Protocolos de Seguridad Sunglass Hut (100 Puntos Máx):
-                    1. Control de Huecos y Bandeja (¿Mantuvo el límite de máximo 3 armazones en bandeja a la vez?) (20 pts).
-                    2. Control Visual y Presencia (¿Mantuvo el control visual de la tienda y la entrada sin dar la espalda al cliente ni al exhibidor?) (20 pts).
-                    3. Desplazamiento Acompañado ('Jalar al cliente') (¿Acompañó al cliente al mueble correspondiente sin dejarlo caminar solo?) (20 pts).
-                    4. Manejo de Distracciones y Saludo desde Caja (¿Saludó de inmediato a nuevos visitantes y evitó ser sacado de su zona de control?) (20 pts).
-                    5. Profesionalismo y Templanza (¿Mantuvo una postura atenta, amable y preventiva sin caer en confrontación ni acusaciones directas agresivas?) (20 pts).
-                    
-                    Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
-                    SCORE: [Número]
-                    [Salto de línea]
-                    
-                    FORMATO OBLIGATORIO (Usa títulos y viñetas claras con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
-                    Para cada punto indica:
-                    - ✅ o ❌ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Comentario explicativo y qué debió hacer/decir si faltó algo.
-                    
-                    Al final incluye:
-                    ### 🏆 Fortalezas de Seguridad
-                    ### 🎯 Consejos Clave de Prevención
-                    """
-                else:
-                    eval_prompt = """Analiza la siguiente conversación de roleplay de venta en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente.
-                    Evalúa el desempeño del vendedor en base a los Criterios Oficiales de Auditoría de Tienda y Neuroventas Sunglass Hut (100 Puntos Máx):
-                    
-                    ⚠️ REGLA DE DETECCIÓN DE FRASES PROHIBIDAS (ANTI-VENTAS):
-                    - Si el vendedor utilizó frases como 'pruébeselo sin compromiso', '¿le puedo ayudar en algo?', 'está caro' o 'es lo más barato':
-                      PENALIZA severamente e incluye una alerta destacada:
-                      '❌ ALERTA DE NEUROVENTAS: Detectada frase prohibida (\"sin compromiso\" / \"ayudar en algo\"). En venta de lujo esto desvaloriza el producto y fomenta no comprar. La frase recomendada de reemplazo es: \"Pruébeselas frente al espejo para que sienta el confort y la ligereza del armazón\".'
+                    if es_caso_seguridad:
+                        eval_prompt = """Analiza la siguiente conversación de roleplay de Prevención de Robo y Seguridad Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente sospechoso o grupo distractor.
+                        Evalúa el desempeño del vendedor según los Protocolos de Seguridad Sunglass Hut (100 Puntos Máx):
+                        1. Control de Huecos y Bandeja (¿Mantuvo el límite de máximo 3 armazones en bandeja a la vez?) (20 pts).
+                        2. Control Visual y Presencia (¿Mantuvo el control visual de la tienda y la entrada sin dar la espalda al cliente ni al exhibidor?) (20 pts).
+                        3. Desplazamiento Acompañado ('Jalar al cliente') (¿Acompañó al cliente al mueble correspondiente sin dejarlo caminar solo?) (20 pts).
+                        4. Manejo de Distracciones y Saludo desde Caja (¿Saludó de inmediato a nuevos visitantes y evitó ser sacado de su zona de control?) (20 pts).
+                        5. Profesionalismo y Templanza (¿Mantuvo una postura atenta, amable y preventiva sin caer en confrontación ni acusaciones directas agresivas?) (20 pts).
+                        
+                        Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
+                        SCORE: [Número]
+                        [Salto de línea]
+                        
+                        FORMATO OBLIGATORIO (Usa títulos y viñetas claras con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
+                        Para cada punto indica:
+                        - ✅ o ❌ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Comentario explicativo y qué debió hacer/decir si faltó algo.
+                        
+                        Al final incluye:
+                        ### 🏆 Fortalezas de Seguridad
+                        ### 🎯 Consejos Clave de Prevención
+                        """
+                    else:
+                        eval_prompt = """Analiza la siguiente conversación de roleplay de venta en Sunglass Hut entre un Asesor de Ventas (Vendedor) y un Cliente.
+                        Evalúa el desempeño del vendedor en base a los Criterios Oficiales de Auditoría de Tienda y Neuroventas Sunglass Hut (100 Puntos Máx):
+                        
+                        ⚠️ REGLA DE DETECCIÓN DE FRASES PROHIBIDAS (ANTI-VENTAS):
+                        - Si el vendedor utilizó frases como 'pruébeselo sin compromiso', '¿le puedo ayudar en algo?', 'está caro' o 'es lo más barato':
+                          PENALIZA severamente e incluye una alerta destacada:
+                          '❌ ALERTA DE NEUROVENTAS: Detectada frase prohibida (\"sin compromiso\" / \"ayudar en algo\"). En venta de lujo esto desvaloriza el producto y fomenta no comprar. La frase recomendada de reemplazo es: \"Pruébeselas frente al espejo para que sienta el confort y la ligereza del armazón\".'
 
-                    CRITERIOS DE AUDITORÍA (100 PTS TOTAL):
-                    1. Presentación del vendedor por nombre (10 pts)
-                    2. Pedir/Indagar el nombre del cliente (10 pts)
-                    3. Rompehielos y Apertura (10 pts)
-                    4. Preguntas de sondeo abiertas y cerradas (10 pts)
-                    5. Invitación a ponerse/probarse las gafas (10 pts)
-                    6. Demostración y explicación del polarizado/Chromance/UV400 (10 pts)
-                    7. Ofrecer el Ajuste Perfecto (5 pts)
-                    8. Actitud de servicio, cortesía y Regla 80/20 (10 pts)
-                    9. Ofrecer Kit de Limpieza y explicar el beneficio técnico (10 pts)
-                    10. Venta Cruzada / UPT (tratar de vender 2do par) (10 pts)
-                    11. Despedida por el nombre del cliente (5 pts)
-                    12. Invitar a regresar a la tienda (compre o no) (5 pts)
+                        CRITERIOS DE AUDITORÍA (100 PTS TOTAL):
+                        1. Presentación del vendedor por nombre (10 pts)
+                        2. Pedir/Indagar el nombre del cliente (10 pts)
+                        3. Rompehielos y Apertura (10 pts)
+                        4. Preguntas de sondeo abiertas y cerradas (10 pts)
+                        5. Invitación a ponerse/probarse las gafas (10 pts)
+                        6. Demostración y explicación del polarizado/Chromance/UV400 (10 pts)
+                        7. Ofrecer el Ajuste Perfecto (5 pts)
+                        8. Actitud de servicio, cortesía y Regla 80/20 (10 pts)
+                        9. Ofrecer Kit de Limpieza y explicar el beneficio técnico (10 pts)
+                        10. Venta Cruzada / UPT (tratar de vender 2do par) (10 pts)
+                        11. Despedida por el nombre del cliente (5 pts)
+                        12. Invitar a regresar a la tienda (compre o no) (5 pts)
 
-                    Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
-                    SCORE: [Número]
-                    [Salto de línea]
+                        Tu respuesta DEBE comenzar con un Score numérico entre 0 y 100 de la siguiente forma EXACTA:
+                        SCORE: [Número]
+                        [Salto de línea]
+                        
+                        FORMATO OBLIGATORIO (Usa viñetas y títulos claros con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
+                        Desglosa los criterios uno por uno:
+                        - Si se cumplió: ✅ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Breve comentario positivo.
+                        - Si se omitió o falló: ❌ [0 / Puntos Posibles] Nombre del Criterio: Explica claramente qué faltó y da un consejo práctico específico de qué debió decir o hacer el vendedor.
+
+                        Al final incluye:
+                        ### 🚫 Análisis de Lenguaje y Frases a Evitar
+                        ### 🏆 Fortalezas Detectadas
+                        ### 🎯 Plan de Acción y Consejos Clave para la Próxima Simulación
+                        """
                     
-                    FORMATO OBLIGATORIO (Usa viñetas y títulos claros con ✅ y ❌, NO uses tablas anchas de múltiples columnas):
-                    Desglosa los criterios uno por uno:
-                    - Si se cumplió: ✅ [Puntos Obtenidos / Puntos Posibles] Nombre del Criterio: Breve comentario positivo.
-                    - Si se omitió o falló: ❌ [0 / Puntos Posibles] Nombre del Criterio: Explica claramente qué faltó y da un consejo práctico específico de qué debió decir o hacer el vendedor.
-
-                    Al final incluye:
-                    ### 🚫 Análisis de Lenguaje y Frases a Evitar
-                    ### 🏆 Fortalezas Detectadas
-                    ### 🎯 Plan de Acción y Consejos Clave para la Próxima Simulación
-                    """
-                
-                for msg in chat_history:
-                    rol_label = "VENDEDOR (ASESOR DE VENTAS)" if msg['role'] == 'user' else "CLIENTE (COMPRADOR SIMULADO)"
-                    eval_prompt += f"\n{rol_label}: {msg['content']}"
-                
-                messages = [{"role": "user", "content": eval_prompt}]
-                system_prompt = f"""Eres un auditor operativo, coach de ventas de élite y evaluador experto de Sunglass Hut.
+                    for msg in chat_history:
+                        rol_label = "VENDEDOR (ASESOR DE VENTAS)" if msg['role'] == 'user' else "CLIENTE (COMPRADOR SIMULADO)"
+                        eval_prompt += f"\n{rol_label}: {msg['content']}"
+                    
+                    messages = [{"role": "user", "content": eval_prompt}]
+                    system_prompt = f"""Eres un auditor operativo, coach de ventas de élite y evaluador experto de Sunglass Hut.
 Tu función es evaluar la conversación de venta utilizando estrictamente los principios, técnicas de neuroventas, sondeo y protocolos del siguiente manual:
 
 {MANUAL_NEUROVENTAS_LUXO}
 
 Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. Usa viñetas con ✅ y ❌ para cada criterio (NUNCA generes tablas anchas que se rompan en celular). Tu respuesta DEBE comenzar obligatoriamente con el Score en formato 'SCORE: [Número 0-100]'.
 """
-                
-                ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15, modo="evaluacion")
-                if ok and eval_text:
-                    score_val = 70
-                    match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
-                    if match_score:
-                        score_val = int(match_score.group(1))
                     
-                    nom_vend_txt = "Asesor de Ventas"
-                    try:
-                        for op in vendedor_dropdown.options:
-                            if op.key == vendedor_dropdown.value:
-                                nom_vend_txt = op.text
-                                break
-                    except Exception: pass
+                    ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15, modo="evaluacion")
+                    btn_finalizar.text = "Finalizar y Evaluar 📊"
+                    if ok and eval_text:
+                        score_val = 70
+                        match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
+                        if match_score:
+                            score_val = int(match_score.group(1))
+                        
+                        nom_vend_txt = "Asesor de Ventas"
+                        try:
+                            for op in vendedor_dropdown.options:
+                                if op.key == vendedor_dropdown.value:
+                                    nom_vend_txt = op.text
+                                    break
+                        except Exception: pass
 
-                    try:
-                        v_id_val = int(vendedor_dropdown.value) if vendedor_dropdown.value and str(vendedor_dropdown.value).isdigit() else 1
-                        db = conectar_db()
-                        if db:
-                            cursor = db.cursor()
-                            cursor.execute("""
-                                INSERT INTO evaluaciones_simulador (ID_Vendedor, Cliente_Simulado, Score_Evaluacion, Feedback_Detallado)
-                                VALUES (%s, %s, %s, %s)
-                            """, (v_id_val, cliente_dropdown.value, score_val, eval_text))
-                            db.commit()
-                            db.close()
-                    except Exception as ex_db_eval:
-                        print("Error guardando eval en DB:", ex_db_eval)
-                    
-                    from datetime import datetime
-                    fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
-                    mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, cliente_dropdown.value, fecha_ahora)
-                else:
-                    mostrar_snack(f"Error de conexión al evaluar ({status})", "red")
+                        try:
+                            v_id_val = int(vendedor_dropdown.value) if vendedor_dropdown.value and str(vendedor_dropdown.value).isdigit() else 1
+                            db = conectar_db()
+                            if db:
+                                cursor = db.cursor()
+                                cursor.execute("""
+                                    INSERT INTO evaluaciones_simulador (ID_Vendedor, Cliente_Simulado, Score_Evaluacion, Feedback_Detallado)
+                                    VALUES (%s, %s, %s, %s)
+                                """, (v_id_val, cliente_dropdown.value, score_val, eval_text))
+                                db.commit()
+                                db.close()
+                        except Exception as ex_db_eval:
+                            print("Error guardando eval en DB:", ex_db_eval)
+                        
+                        from datetime import datetime
+                        fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, cliente_dropdown.value, fecha_ahora)
+                    else:
+                        btn_finalizar.disabled = False
+                        try: page.update()
+                        except: pass
+                        mostrar_snack(f"Error de conexión al evaluar ({status})", "red")
+
+                threading.Thread(target=_eval_chat_bg, daemon=True).start()
 
             def iniciar_simulacion_click(e):
                 if not vendedor_dropdown.value:
@@ -17509,60 +17520,72 @@ REGLAS OBLIGATORIAS:
                 page.update()
 
             def finalizar_simulacion_voz_click(e):
+                sim_stop_requested[0] = True
+                stop_current_speak()
                 ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);")
                 if len(voz_chat_history) < 2:
                     mostrar_snack("La conversación debe tener al menos una intervención por voz del vendedor.", "red")
                     return
-                mostrar_snack("Analizando auditoría de neuroventas y conversación de voz...", "#00FFFF")
+                
                 btn_hablar_voz.disabled = True
                 btn_finalizar_voz.disabled = True
-                page.update()
+                btn_finalizar_voz.text = "Evaluando con IA... ⏳"
+                mostrar_snack("Analizando auditoría de neuroventas y conversación de voz...", "#00FFFF")
+                try: page.update()
+                except: pass
 
-                perfil_nombre = cliente_voz_dropdown.value or "Cliente General"
-                eval_prompt = f"""Analiza la siguiente conversación de roleplay 100% de voz entre un Asesor de Ventas Sunglass Hut y un Cliente ('{perfil_nombre}').
+                def _eval_voz_bg():
+                    perfil_nombre = cliente_voz_dropdown.value or "Cliente General"
+                    eval_prompt = f"""Analiza la siguiente conversación de roleplay 100% de voz entre un Asesor de Ventas Sunglass Hut y un Cliente ('{perfil_nombre}').
 Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de frases prohibidas de neuroventas (como 'sin compromiso' o 'ayudar en algo'):
 """
-                for msg in voz_chat_history:
-                    rol_label = "VENDEDOR" if msg['role'] == 'user' else "CLIENTE"
-                    eval_prompt += f"\n{rol_label}: {msg['content']}"
+                    for msg in voz_chat_history:
+                        rol_label = "VENDEDOR" if msg['role'] == 'user' else "CLIENTE"
+                        eval_prompt += f"\n{rol_label}: {msg['content']}"
 
-                messages = [{"role": "user", "content": eval_prompt}]
-                system_prompt = f"""Eres un coach y auditor de ventas de Sunglass Hut. Evalúa rigurosamente en Markdown iniciando con 'SCORE: [Número 0-100]'. Manual de referencia: {MANUAL_NEUROVENTAS_LUXO}"""
+                    messages = [{"role": "user", "content": eval_prompt}]
+                    system_prompt = f"""Eres un coach y auditor de ventas de Sunglass Hut. Evalúa rigurosamente en Markdown iniciando con 'SCORE: [Número 0-100]'. Manual de referencia: {MANUAL_NEUROVENTAS_LUXO}"""
 
-                ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15, modo="evaluacion")
-                if ok and eval_text:
-                    score_val = 75
-                    match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
-                    if match_score:
-                        score_val = int(match_score.group(1))
-                    
-                    nom_vend_txt = "Asesor de Ventas"
-                    try:
-                        for op in vendedor_voz_dropdown.options:
-                            if op.key == vendedor_voz_dropdown.value:
-                                nom_vend_txt = op.text
-                                break
-                    except Exception: pass
+                    ok, eval_text, status = consultar_groq_api(messages, system_prompt=system_prompt, timeout=15, modo="evaluacion")
+                    btn_finalizar_voz.text = "Finalizar y Evaluar 📊"
+                    if ok and eval_text:
+                        score_val = 75
+                        match_score = re.search(r"SCORE:\s*(\d+)", eval_text, re.IGNORECASE)
+                        if match_score:
+                            score_val = int(match_score.group(1))
+                        
+                        nom_vend_txt = "Asesor de Ventas"
+                        try:
+                            for op in vendedor_voz_dropdown.options:
+                                if op.key == vendedor_voz_dropdown.value:
+                                    nom_vend_txt = op.text
+                                    break
+                        except Exception: pass
 
-                    try:
-                        v_id_val = int(vendedor_voz_dropdown.value) if vendedor_voz_dropdown.value and str(vendedor_voz_dropdown.value).isdigit() else 1
-                        db = conectar_db()
-                        if db:
-                            cursor = db.cursor()
-                            cursor.execute("""
-                                INSERT INTO evaluaciones_simulador (ID_Vendedor, Cliente_Simulado, Score_Evaluacion, Feedback_Detallado)
-                                VALUES (%s, %s, %s, %s)
-                            """, (v_id_val, f"🎙️ [Voz] {cliente_voz_dropdown.value}", score_val, eval_text))
-                            db.commit()
-                            db.close()
-                    except Exception as ex_db_eval:
-                        print("Error guardando eval voz en DB:", ex_db_eval)
+                        try:
+                            v_id_val = int(vendedor_voz_dropdown.value) if vendedor_voz_dropdown.value and str(vendedor_voz_dropdown.value).isdigit() else 1
+                            db = conectar_db()
+                            if db:
+                                cursor = db.cursor()
+                                cursor.execute("""
+                                    INSERT INTO evaluaciones_simulador (ID_Vendedor, Cliente_Simulado, Score_Evaluacion, Feedback_Detallado)
+                                    VALUES (%s, %s, %s, %s)
+                                """, (v_id_val, f"🎙️ [Voz] {cliente_voz_dropdown.value}", score_val, eval_text))
+                                db.commit()
+                                db.close()
+                        except Exception as ex_db_eval:
+                            print("Error guardando eval voz en DB:", ex_db_eval)
 
-                    from datetime import datetime
-                    fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
-                    mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, f"🎙️ [Voz en Vivo] {cliente_voz_dropdown.value}", fecha_ahora)
-                else:
-                    mostrar_snack(f"Error de conexión al evaluar voz ({status})", "red")
+                        from datetime import datetime
+                        fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, f"🎙️ [Voz en Vivo] {cliente_voz_dropdown.value}", fecha_ahora)
+                    else:
+                        btn_finalizar_voz.disabled = False
+                        try: page.update()
+                        except: pass
+                        mostrar_snack(f"Error de conexión al evaluar voz ({status})", "red")
+
+                threading.Thread(target=_eval_voz_bg, daemon=True).start()
 
             btn_iniciar_voz = ft.ElevatedButton(
                 "Iniciar Conversación por Voz 🎙️",
