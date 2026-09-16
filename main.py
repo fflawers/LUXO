@@ -962,7 +962,7 @@ def configurar_rutas_fastapi(app):
         return {"audio_url": audio_url}
 
     @app.get("/api/tts/poll")
-    def tts_poll_route(session_id: str = "", user_id: str = "", last_id: str = "", device_id: str = "", device_type: str = ""):
+    def tts_poll_route(session_id: str = "", user_id: str = "", username: str = "", last_id: str = "", device_id: str = "", device_type: str = ""):
         import time
         now = time.time()
         token = session_id or device_id
@@ -974,16 +974,22 @@ def configurar_rutas_fastapi(app):
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
-        # 2. Enlace por ID de usuario autenticado (estricto, sin defaults globales)
-        if not evt and user_id and str(user_id) not in ["1", "unknown", "", "None"] and str(user_id) in GLOBAL_WEB_TTS_EVENTS:
-            cand = GLOBAL_WEB_TTS_EVENTS[str(user_id)]
+        # 2. Enlace por ID de usuario autenticado
+        if not evt and user_id and str(user_id).strip() not in ["unknown", "", "None", "null", "undefined"] and str(user_id).strip() in GLOBAL_WEB_TTS_EVENTS:
+            cand = GLOBAL_WEB_TTS_EVENTS[str(user_id).strip()]
+            if cand and (now - cand.get("timestamp", now)) <= 15.0:
+                evt = cand
+
+        # 3. Enlace por Username autenticado (ej. mx204562, sgh3502)
+        if not evt and username and str(username).strip().lower() not in ["unknown", "", "None", "null", "undefined"] and str(username).strip().lower() in GLOBAL_WEB_TTS_EVENTS:
+            cand = GLOBAL_WEB_TTS_EVENTS[str(username).strip().lower()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
-            print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
+            print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content=response_data,
@@ -4437,8 +4443,11 @@ def main(page: ft.Page):
             "timestamp": time.time()
         }
         u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
-        if u_id and str(u_id) not in ["1", "unknown", "", "None"]:
-            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt_data
+        u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
+        if u_id and str(u_id).strip() not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_data
+        if u_name and u_name not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[u_name] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -24031,7 +24040,8 @@ Ejemplo:
                         user_session["region_activa_id"] = r_clean
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     page.user_id = str(res["ID_Usuario"])
-                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); }} catch(e){{}}")
+                    u_clean_login = str(res.get("Usuario") or "").lower().strip()
+                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
                     reproducir_saludo_login(res["Nombre_Completo"])
                     
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único

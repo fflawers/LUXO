@@ -7,9 +7,9 @@
     window._luxoAudioEngineLoaded = true;
     console.log("[LUXO TTS] Motor de audio web inicializado con éxito.");
 
-    // 1. Obtener User ID
+    // 1. Obtener User ID y Username
     window.getLuxoUserId = function() {
-        if (window.luxoUserId && String(window.luxoUserId) !== '1' && String(window.luxoUserId) !== 'unknown') {
+        if (window.luxoUserId && !['unknown', '', 'null', 'undefined'].includes(String(window.luxoUserId).toLowerCase())) {
             return String(window.luxoUserId);
         }
         try {
@@ -19,12 +19,25 @@
                     let val = localStorage.getItem(key);
                     if (val) {
                         try { val = JSON.parse(val); } catch(e) { val = val.replace(/["']/g, ''); }
-                        if (val && String(val) !== '1' && String(val) !== 'unknown') {
+                        if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
                             window.luxoUserId = String(val);
                             return String(val);
                         }
                     }
                 }
+            }
+        } catch(e) {}
+        return '';
+    };
+
+    window.getLuxoUsername = function() {
+        if (window.luxoUsername && !['unknown', '', 'null', 'undefined'].includes(String(window.luxoUsername).toLowerCase())) {
+            return String(window.luxoUsername).toLowerCase().trim();
+        }
+        try {
+            let val = localStorage.getItem('logged_username') || sessionStorage.getItem('logged_username');
+            if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
+                return String(val).toLowerCase().trim();
             }
         } catch(e) {}
         return '';
@@ -276,8 +289,9 @@
         setInterval(function() {
             try {
                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                 const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
-                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
+                fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data || !data.action || data.action === 'none') return;
