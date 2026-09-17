@@ -584,15 +584,20 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
     js_code = f"""
     (function() {{
         window._simuladorModo = '{modo}';
+        window._simCurrentMode = '{modo}';
         window._simuladorVisible = {vis_str};
         window._luxoActiveView = {'"simulador"' if visible else '""'};
+        if (window.showSimuladorMicBtn) {{
+            window.showSimuladorMicBtn({vis_str}, '{modo}');
+            return;
+        }}
         let btn = document.getElementById('luxo-floating-sim-mic') || document.getElementById('luxo-sim-mic-btn');
         if (!btn && document.body) {{
             btn = document.createElement('div');
             btn.id = 'luxo-floating-sim-mic';
-            btn.innerHTML = '<span style="font-size:18px;">🎙️</span><span style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">SIM</span>';
+            btn.innerHTML = '<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>';
             btn.setAttribute('title', 'Micrófono Simulador de Ventas IA');
-            btn.style.cssText = 'position:fixed;bottom:12px;right:118px;z-index:9999999;font-size:18px;background:linear-gradient(135deg,#7928CA 0%,#B800FF 100%);border:1.8px solid #00FFFF;border-radius:23px;width:52px;height:46px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(184,0,255,0.7);cursor:pointer;transition:background 0.3s ease,border-color 0.3s ease,box-shadow 0.3s ease;touch-action:manipulation;user-select:none;';
+            btn.style.cssText = 'position:fixed;bottom:12px;right:118px;z-index:9999999;font-size:18px;background:linear-gradient(135deg,#7928CA 0%,#B800FF 100%);border:1.8px solid #00FFFF;border-radius:23px;width:56px;height:46px;display:none;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(184,0,255,0.7);cursor:pointer;transition:background 0.3s ease,border-color 0.3s ease,box-shadow 0.3s ease;touch-action:manipulation;user-select:none;';
             
             let isDragging = false;
             let startX, startY, initialX, initialY;
@@ -613,7 +618,7 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
                 if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {{
                     isDragging = true;
                     e.preventDefault();
-                    let newX = Math.max(0, Math.min(initialX + dx, window.innerWidth - 52));
+                    let newX = Math.max(0, Math.min(initialX + dx, window.innerWidth - 56));
                     let newY = Math.max(0, Math.min(initialY + dy, window.innerHeight - 46));
                     btn.style.left = newX + 'px';
                     btn.style.top = newY + 'px';
@@ -627,8 +632,9 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
             function onSimMicClick(e) {{
                 if (isDragging) return;
                 if (e) {{ try {{ e.preventDefault(); e.stopPropagation(); }} catch(err){{}} }}
+                const currentModo = window._simCurrentMode || window._simuladorModo || '{modo}';
                 if (window.iniciarDictadoSimulador) {{
-                    window.iniciarDictadoSimulador(window._simuladorModo || '{modo}');
+                    window.iniciarDictadoSimulador(currentModo);
                 }}
             }}
             btn.addEventListener('click', onSimMicClick);
@@ -636,6 +642,21 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
         }}
         if (btn) {{
             btn.style.display = {vis_str} ? 'flex' : 'none';
+            if ({vis_str}) {{
+                if ('{modo}' === 'voz') {{
+                    btn.innerHTML = '<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFAA;margin-left:2px;">VOZ</span>';
+                    btn.style.background = 'linear-gradient(135deg, #0575E6 0%, #00F260 100%)';
+                    btn.style.borderColor = '#00FFAA';
+                    btn.style.boxShadow = '0 0 14px rgba(0, 255, 170, 0.7)';
+                    btn.setAttribute('title', 'Hablar al Cliente por Voz (Simulador IA)');
+                }} else {{
+                    btn.innerHTML = '<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>';
+                    btn.style.background = 'linear-gradient(135deg, #7928CA 0%, #B800FF 100%)';
+                    btn.style.borderColor = '#00FFFF';
+                    btn.style.boxShadow = '0 0 12px rgba(184, 0, 255, 0.7)';
+                    btn.setAttribute('title', 'Dictar Respuesta Roleplay Chat (Simulador IA)');
+                }}
+            }}
         }}
     }})();
     """
@@ -1381,9 +1402,9 @@ def configurar_rutas_fastapi(app):
                         if (!simMicBtn) {
                             simMicBtn = document.createElement("div");
                             simMicBtn.id = "luxo-floating-sim-mic";
-                            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">SIM</span>`;
+                            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
                             simMicBtn.setAttribute("title", "Micrófono Simulador de Ventas IA");
-                            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 52px; height: 46px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
+                            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 56px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
                             
                             let isDraggingSim = false;
                             let startXSim, startYSim, initialXSim, initialYSim;
@@ -1407,7 +1428,7 @@ def configurar_rutas_fastapi(app):
                                 if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
                                     isDraggingSim = true;
                                     e.preventDefault();
-                                    let newX = Math.max(0, Math.min(initialXSim + dx, window.innerWidth - 52));
+                                    let newX = Math.max(0, Math.min(initialXSim + dx, window.innerWidth - 56));
                                     let newY = Math.max(0, Math.min(initialYSim + dy, window.innerHeight - 46));
                                     
                                     simMicBtn.style.left = newX + 'px';
@@ -1424,8 +1445,13 @@ def configurar_rutas_fastapi(app):
                             function onSimMicPress(e) {
                                 if (isDraggingSim) return;
                                 if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                                console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-floating-sim-mic");
-                                window.iniciarDictadoSimulador(window._simuladorModo || 'chat');
+                                const currentModo = window._simCurrentMode || window._simuladorModo || 'chat';
+                                console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-floating-sim-mic con modo:", currentModo);
+                                simMicBtn.style.transform = "scale(0.9)";
+                                setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
+                                if (window.iniciarDictadoSimulador) {
+                                    window.iniciarDictadoSimulador(currentModo);
+                                }
                             }
 
                             simMicBtn.onclick = onSimMicPress;
@@ -1434,12 +1460,28 @@ def configurar_rutas_fastapi(app):
                     }
 
                     window.showSimuladorMicBtn = function(visible, modo) {
-                        window._simuladorModo = modo || 'chat';
+                        window._simuladorModo = modo || window._simuladorModo || 'chat';
+                        window._simCurrentMode = window._simuladorModo;
                         window._simuladorVisible = (visible !== false);
                         initButtons();
                         const btn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
                         if (btn) {
                             btn.style.display = (visible !== false) ? "flex" : "none";
+                            if (visible !== false) {
+                                if (window._simuladorModo === 'voz') {
+                                    btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFAA;margin-left:2px;">VOZ</span>`;
+                                    btn.style.background = "linear-gradient(135deg, #0575E6 0%, #00F260 100%)";
+                                    btn.style.borderColor = "#00FFAA";
+                                    btn.style.boxShadow = "0 0 14px rgba(0, 255, 170, 0.7)";
+                                    btn.setAttribute("title", "Hablar al Cliente por Voz (Simulador IA)");
+                                } else {
+                                    btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
+                                    btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                                    btn.style.borderColor = "#00FFFF";
+                                    btn.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)";
+                                    btn.setAttribute("title", "Dictar Respuesta Roleplay Chat (Simulador IA)");
+                                }
+                            }
                         }
                     };
 
@@ -1449,12 +1491,15 @@ def configurar_rutas_fastapi(app):
                         initButtons();
                     }
 
-                    // Asegurar que ambos botones siempre existan
+                    // Asegurar que ambos botones siempre existan y respeten visibilidad
                     setInterval(function() {
                         const btnSim = document.getElementById("luxo-floating-sim-mic");
                         const btnMain = document.getElementById("luxo-floating-main-mic");
-                        if ((!btnSim || !btnMain) && document.body) {
+                        if (!btnMain && document.body) {
                             initButtons();
+                        }
+                        if (btnSim && !window._simuladorVisible) {
+                            btnSim.style.display = "none";
                         }
                     }, 1000);
 
@@ -18343,11 +18388,24 @@ Ejemplo:
                 perfiles_cards_container
             ], expand=True)
 
+            def on_tab_change(e):
+                try:
+                    idx = getattr(e.control, "selected_index", 0)
+                    if idx == 0:
+                        activar_mic_simulador_js(page, True, "chat")
+                    elif idx == 1:
+                        activar_mic_simulador_js(page, True, "voz")
+                    else:
+                        activar_mic_simulador_js(page, False)
+                except Exception as ex_tab:
+                    print("Error on_tab_change simulador:", ex_tab)
+
             tabs = ft.Tabs(
                 selected_index=0,
                 animation_duration=300,
                 length=4,
                 expand=True,
+                on_change=on_tab_change,
                 content=ft.Column(
                     expand=True,
                     controls=[
