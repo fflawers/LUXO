@@ -1449,19 +1449,14 @@ def configurar_rutas_fastapi(app):
                         initButtons();
                     }
 
-                    // Intervalo de seguridad para mantener visibilidad sincronizada
+                    // Asegurar que ambos botones siempre existan
                     setInterval(function() {
-                        const btn = document.getElementById("luxo-sim-mic-btn");
-                        if (!btn) {
-                            if (document.body) initButtons();
-                            return;
+                        const btnSim = document.getElementById("luxo-floating-sim-mic");
+                        const btnMain = document.getElementById("luxo-floating-main-mic");
+                        if ((!btnSim || !btnMain) && document.body) {
+                            initButtons();
                         }
-                        if (window._simuladorVisible === false && window._luxoActiveView !== 'simulador') {
-                            btn.style.display = "none";
-                        } else if (window._simuladorVisible === true || window._luxoActiveView === 'simulador') {
-                            btn.style.display = "flex";
-                        }
-                    }, 500);
+                    }, 1000);
 
                     // Interceptor de toques y clics físicos directos para los botones del simulador en Flutter
                     let lastSimClickTime = 0;
