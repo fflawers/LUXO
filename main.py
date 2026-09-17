@@ -595,6 +595,8 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
         GLOBAL_SIM_VIEW_STATE[str(u_id)] = st_val
         if str(u_id).isdigit():
             GLOBAL_SIM_VIEW_STATE[int(u_id)] = st_val
+    GLOBAL_SIM_VIEW_STATE["1"] = st_val
+    GLOBAL_SIM_VIEW_STATE["unknown"] = st_val
     GLOBAL_SIM_VIEW_STATE["global"] = st_val
 
     # Actualizar en active_sessions
@@ -1052,15 +1054,22 @@ def configurar_rutas_fastapi(app):
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
         
         sim_st = None
-        for k in [token, str(user_id).strip(), str(username).strip().lower()]:
+        for k in [token, str(user_id).strip(), str(username).strip().lower(), "1", "unknown"]:
             if k and k in GLOBAL_SIM_VIEW_STATE:
                 sim_st = GLOBAL_SIM_VIEW_STATE[k]
                 break
             if k and k in active_sessions:
                 sess_info = active_sessions[k]
-                if sess_info.get("active_view") == "simulador":
+                if isinstance(sess_info, dict) and sess_info.get("active_view") == "simulador":
                     sim_st = {"visible": True, "mode": sess_info.get("sim_modo_activo") or "chat"}
                     break
+        
+        if not sim_st:
+            for s_key, sess_info in list(active_sessions.items()):
+                if isinstance(sess_info, dict) and sess_info.get("active_view") == "simulador":
+                    sim_st = {"visible": True, "mode": sess_info.get("sim_modo_activo") or "chat"}
+                    break
+
         if not sim_st and "global" in GLOBAL_SIM_VIEW_STATE:
             sim_st = GLOBAL_SIM_VIEW_STATE["global"]
         if not sim_st:
@@ -1464,13 +1473,27 @@ def configurar_rutas_fastapi(app):
                     }
 
                     function evaluarVisibilidadSimulador() {
+                        let isDomSim = false;
+                        let domMode = null;
+                        try {
+                            const bodyText = (document.body && document.body.innerText) ? document.body.innerText.toLowerCase() : '';
+                            if (bodyText.includes('simulador de ventas') || bodyText.includes('roleplay') || bodyText.includes('iniciar roleplay') || bodyText.includes('hablar al cliente') || bodyText.includes('finalizar y evaluar')) {
+                                isDomSim = true;
+                                if (bodyText.includes('conversación por voz') || bodyText.includes('ia hablada') || bodyText.includes('grabando voz...')) {
+                                    domMode = 'voz';
+                                } else if (bodyText.includes('roleplay de ventas') || bodyText.includes('chat con el cliente')) {
+                                    domMode = 'chat';
+                                }
+                            }
+                        } catch(e){}
+
                         const hash = (window.location.hash || '').toLowerCase();
                         const path = (window.location.pathname || '').toLowerCase();
                         const isUrlSim = hash.includes('simulador') || path.includes('simulador') || hash.includes('capacitacion') || path.includes('capacitacion');
                         const isStateSim = (window._simuladorVisible === true) || (window._luxoActiveView === 'simulador') || (window._luxoActiveView === 'capacitacion_ia');
                         const isPollSim = (window._simPollVisible === true);
                         
-                        const shouldBeVisible = (isUrlSim || isStateSim || isPollSim);
+                        const shouldBeVisible = (isDomSim || isUrlSim || isStateSim || isPollSim);
                         const btn = ensureSimMicBtnCreated();
                         if (btn) {
                             const currentDisplay = btn.style.display;
@@ -1479,7 +1502,8 @@ def configurar_rutas_fastapi(app):
                                 btn.style.display = targetDisplay;
                             }
                             if (shouldBeVisible) {
-                                updateSimMicButtonMode(window._simCurrentMode || 'chat');
+                                const targetModo = domMode || window._simCurrentMode || 'chat';
+                                updateSimMicButtonMode(targetModo);
                             }
                         }
                         return shouldBeVisible;

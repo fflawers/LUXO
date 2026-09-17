@@ -675,18 +675,33 @@
     };
 
     function evaluarVisibilidadSimulador() {
-        // 1. Detección por ruta de URL en navegador (Flet SPA routing)
+        // 1. Detección por texto real presente en el DOM de la página
+        let isDomSim = false;
+        let domMode = null;
+        try {
+            const bodyText = (document.body && document.body.innerText) ? document.body.innerText.toLowerCase() : '';
+            if (bodyText.includes('simulador de ventas') || bodyText.includes('roleplay') || bodyText.includes('iniciar roleplay') || bodyText.includes('hablar al cliente') || bodyText.includes('finalizar y evaluar')) {
+                isDomSim = true;
+                if (bodyText.includes('conversación por voz') || bodyText.includes('ia hablada') || bodyText.includes('grabando voz...')) {
+                    domMode = 'voz';
+                } else if (bodyText.includes('roleplay de ventas') || bodyText.includes('chat con el cliente')) {
+                    domMode = 'chat';
+                }
+            }
+        } catch(e){}
+
+        // 2. Detección por ruta de URL en navegador (Flet SPA routing)
         const hash = (window.location.hash || '').toLowerCase();
         const path = (window.location.pathname || '').toLowerCase();
         const isUrlSim = hash.includes('simulador') || path.includes('simulador') || hash.includes('capacitacion') || path.includes('capacitacion');
         
-        // 2. Detección por estado en memoria JS
+        // 3. Detección por estado en memoria JS
         const isStateSim = (window._simuladorVisible === true) || (window._luxoActiveView === 'simulador') || (window._luxoActiveView === 'capacitacion_ia');
         
-        // 3. Detección por respuesta de polling backend
+        // 4. Detección por respuesta de polling backend
         const isPollSim = (window._simPollVisible === true);
         
-        const shouldBeVisible = (isUrlSim || isStateSim || isPollSim);
+        const shouldBeVisible = (isDomSim || isUrlSim || isStateSim || isPollSim);
         const btn = ensureSimMicBtnCreated();
         if (btn) {
             const currentDisplay = btn.style.display;
@@ -695,7 +710,8 @@
                 btn.style.display = targetDisplay;
             }
             if (shouldBeVisible) {
-                updateSimMicButtonMode(window._simCurrentMode || _simCurrentMode || 'chat');
+                const targetModo = domMode || window._simCurrentMode || _simCurrentMode || 'chat';
+                updateSimMicButtonMode(targetModo);
             }
         }
         return shouldBeVisible;
