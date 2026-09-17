@@ -1365,39 +1365,42 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    // Interceptor de toques y clics físicos directos para el micrófono del simulador
+                    // Interceptor de toques y clics físicos directos para los botones del simulador en Flutter
                     let lastSimClickTime = 0;
                     function handleSimDirectClick(e) {
                         try {
                             const now = Date.now();
-                            if (now - lastSimClickTime < 500) return;
+                            if (now - lastSimClickTime < 400) return;
 
-                            let target = e.target;
                             let isSimMic = false;
                             let isSimVoz = false;
-                            for (let i = 0; i < 10 && target && target !== document.body && target !== document.documentElement; i++) {
-                                const title = (target.getAttribute && (target.getAttribute('title') || target.getAttribute('aria-label') || target.getAttribute('data-tooltip') || '')) || '';
-                                const txt = (target.innerText || target.textContent || target.innerHTML || '').trim();
-                                const lowerTitle = title.toLowerCase();
-                                const lowerTxt = txt.toLowerCase();
+                            const path = (e.composedPath && e.composedPath()) || [];
+                            
+                            for (let i = 0; i < path.length; i++) {
+                                const el = path[i];
+                                if (!el || el === document || el === window) continue;
+                                const title = (el.getAttribute && (el.getAttribute('title') || el.getAttribute('aria-label') || el.getAttribute('data-tooltip') || el.getAttribute('tooltip') || '')) || '';
+                                const txt = (el.innerText || el.textContent || el.innerHTML || '').trim();
+                                const cls = (el.className && typeof el.className === 'string') ? el.className : '';
+                                const idStr = (el.id && typeof el.id === 'string') ? el.id : '';
+                                const combined = (title + ' ' + txt + ' ' + cls + ' ' + idStr).toLowerCase();
 
-                                if (lowerTitle.includes('hablar por micrófono') || lowerTitle.includes('sim-mic') || (target.id && target.id.includes('sim-mic'))) {
+                                if (combined.includes('sim-mic-chat') || combined.includes('hablar por micrófono') || combined.includes('hablar por microfono') || (idStr.includes('sim-mic') && !idStr.includes('luxo-sim-mic-btn'))) {
                                     isSimMic = true;
                                     break;
                                 }
-                                if (lowerTxt.includes('hablar ahora') || lowerTitle.includes('hablar ahora') || lowerTxt.includes('hablar ahora 🎙') || lowerTitle.includes('hablar ahora 🎙')) {
+                                if (combined.includes('sim-mic-voz') || combined.includes('hablar ahora')) {
                                     isSimVoz = true;
                                     break;
                                 }
-                                target = target.parentElement;
                             }
                             if (isSimMic) {
                                 lastSimClickTime = now;
-                                console.log('[SIMULADOR MIC] Toque/Clic físico interceptado en botón micrófono');
+                                console.log('[SIMULADOR MIC] Clic físico interceptado en botón micrófono Chat');
                                 window.iniciarDictadoSimulador('chat');
                             } else if (isSimVoz) {
                                 lastSimClickTime = now;
-                                console.log('[SIMULADOR MIC] Toque/Clic físico interceptado en botón hablar voz');
+                                console.log('[SIMULADOR MIC] Clic físico interceptado en botón Hablar Ahora Voz');
                                 window.iniciarDictadoSimulador('voz');
                             }
                         } catch(err) {
@@ -1405,8 +1408,8 @@ def configurar_rutas_fastapi(app):
                         }
                     }
 
-                    document.addEventListener('touchstart', handleSimDirectClick, { passive: true, capture: true });
                     document.addEventListener('pointerdown', handleSimDirectClick, { passive: true, capture: true });
+                    document.addEventListener('touchstart', handleSimDirectClick, { passive: true, capture: true });
                     document.addEventListener('mousedown', handleSimDirectClick, { passive: true, capture: true });
                     document.addEventListener('click', handleSimDirectClick, { passive: true, capture: true });
                 });
@@ -16974,7 +16977,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 icon=ft.Icons.MIC_ROUNDED,
                 icon_color="#00FFFF",
                 icon_size=20,
-                tooltip="Hablar por Micrófono 🎙️",
+                tooltip="sim-mic-chat-btn Hablar por Micrófono 🎙️",
                 on_click=on_mic_sim_click,
                 disabled=True
             )
@@ -16986,7 +16989,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 width=44,
                 height=44,
                 alignment=ft.alignment.Alignment(0, 0),
-                tooltip="Hablar por Micrófono 🎙️"
+                tooltip="sim-mic-chat-btn Hablar por Micrófono 🎙️"
             )
 
             vendedor_seleccionado_id = [None]
@@ -17889,7 +17892,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
                 on_click=hablar_ahora_voz_click,
                 bgcolor="#1f6f43",
                 color="white",
-                tooltip="Hablar Ahora 🎙️",
+                tooltip="sim-mic-voz-btn Hablar Ahora 🎙️",
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                 disabled=True
             )
