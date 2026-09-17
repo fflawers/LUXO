@@ -552,64 +552,75 @@
     };
 
     function updateSimMicUiState(isRecording) {
-        const btn = document.getElementById("luxo-sim-mic-btn");
+        const btn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
         if (btn) {
             if (isRecording) {
-                btn.style.borderColor = "#FF0055";
-                btn.style.boxShadow = "0 0 25px rgba(255, 0, 85, 0.9)";
-                btn.style.background = "linear-gradient(135deg, #4A1525 0%, #2A1B4E 100%)";
+                btn.style.borderColor = "#FFFFFF";
+                btn.style.boxShadow = "0 0 25px #FF0055";
+                btn.style.background = "#FF0000";
             } else {
-                btn.style.borderColor = "#9D50BB";
-                btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
-                btn.style.background = "linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%)";
+                btn.style.borderColor = "#00FFFF";
+                btn.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)";
+                btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
             }
         }
     }
 
     function ensureSimMicBtnCreated() {
-        let simMicBtn = document.getElementById("luxo-sim-mic-btn");
+        let simMicBtn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
         if (!simMicBtn && (document.body || document.documentElement)) {
             simMicBtn = document.createElement("div");
-            simMicBtn.id = "luxo-sim-mic-btn";
-            simMicBtn.innerHTML = `
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00FFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg>
-            `;
-            simMicBtn.setAttribute("title", "Hablar al Cliente (Simulador IA)");
-            simMicBtn.style.cssText = `
-                position: fixed;
-                bottom: 24px;
-                right: 76px;
-                width: 46px;
-                height: 46px;
-                border-radius: 23px;
-                background: linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%);
-                border: 2px solid #9D50BB;
-                box-shadow: 0 4px 18px rgba(157, 80, 187, 0.45);
-                display: none;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                z-index: 999999;
-                transition: all 0.2s ease;
-                touch-action: manipulation;
-                user-select: none;
-            `;
+            simMicBtn.id = "luxo-floating-sim-mic";
+            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">SIM</span>`;
+            simMicBtn.setAttribute("title", "Micrófono Simulador de Ventas IA");
+            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 52px; height: 46px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
+            
+            let isDraggingSim = false;
+            let startXSim, startYSim, initialXSim, initialYSim;
+            
+            simMicBtn.addEventListener('touchstart', function(e) {
+                isDraggingSim = false;
+                let touch = e.touches[0];
+                startXSim = touch.clientX;
+                startYSim = touch.clientY;
+                let rect = simMicBtn.getBoundingClientRect();
+                initialXSim = rect.left;
+                initialYSim = rect.top;
+                simMicBtn.style.transition = 'none';
+            });
+
+            simMicBtn.addEventListener('touchmove', function(e) {
+                let touch = e.touches[0];
+                let dx = touch.clientX - startXSim;
+                let dy = touch.clientY - startYSim;
+                
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    isDraggingSim = true;
+                    e.preventDefault();
+                    let newX = Math.max(0, Math.min(initialXSim + dx, window.innerWidth - 52));
+                    let newY = Math.max(0, Math.min(initialYSim + dy, window.innerHeight - 46));
+                    
+                    simMicBtn.style.left = newX + 'px';
+                    simMicBtn.style.top = newY + 'px';
+                    simMicBtn.style.right = 'auto';
+                    simMicBtn.style.bottom = 'auto';
+                }
+            }, { passive: false });
+
+            simMicBtn.addEventListener('touchend', function(e) {
+                simMicBtn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease';
+            });
             
             function onSimMicPress(e) {
+                if (isDraggingSim) return;
                 if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-sim-mic-btn");
+                console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-floating-sim-mic");
                 simMicBtn.style.transform = "scale(0.9)";
                 setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
-                window.iniciarDictadoSimulador(_simCurrentMode || 'chat');
+                window.iniciarDictadoSimulador(window._simCurrentMode || _simCurrentMode || 'chat');
             }
 
-            simMicBtn.addEventListener("click", onSimMicPress);
-            simMicBtn.addEventListener("touchend", onSimMicPress);
+            simMicBtn.onclick = onSimMicPress;
             (document.body || document.documentElement).appendChild(simMicBtn);
         }
         return simMicBtn;
@@ -644,6 +655,7 @@
 
     window.showSimuladorMicBtn = function(visible, modo) {
         _simCurrentMode = modo || _simCurrentMode || 'chat';
+        window._simCurrentMode = _simCurrentMode;
         if (!visible) {
             window.detenerDictadoSimulador();
         } else {
@@ -652,24 +664,7 @@
         }
         const btn = ensureSimMicBtnCreated();
         if (btn) {
-            btn.style.display = visible ? "flex" : "none";
-            if (visible) {
-                if (_simCurrentMode === 'chat') {
-                    btn.style.bottom = "18px";
-                    btn.style.right = "68px";
-                    btn.style.width = "44px";
-                    btn.style.height = "44px";
-                    btn.style.borderRadius = "22px";
-                } else {
-                    btn.style.bottom = "24px";
-                    btn.style.right = "32px";
-                    btn.style.width = "52px";
-                    btn.style.height = "52px";
-                    btn.style.borderRadius = "26px";
-                }
-                btn.style.borderColor = "#9D50BB";
-                btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
-            }
+            btn.style.display = (visible !== false) ? "flex" : "none";
         }
     };
 
@@ -678,4 +673,12 @@
     } else {
         ensureSimMicBtnCreated();
     }
+    
+    // Intervalo de seguridad para mantener el boton del simulador disponible
+    setInterval(function() {
+        const btn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
+        if (!btn && (document.body || document.documentElement)) {
+            ensureSimMicBtnCreated();
+        }
+    }, 1000);
 })();
