@@ -1148,21 +1148,8 @@ def configurar_rutas_fastapi(app):
                             if (txt) {
                                 playBeep(2);
                                 const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                const bodyTxt = document.body ? (document.body.innerText || '') : '';
-                                const isSim = (window._luxoActiveView === 'simulador') || 
-                                              (window.location && (window.location.hash.includes('simulador') || window.location.pathname.includes('simulador'))) ||
-                                              bodyTxt.includes('Simulador de Ventas') || 
-                                              bodyTxt.includes('Roleplay de Ventas') ||
-                                              bodyTxt.includes('Cliente en Tienda') ||
-                                              bodyTxt.includes('Modo 100% Voz');
-                                const modo = bodyTxt.includes('Modo 100% Voz') ? 'voz' : 'chat';
-                                if (isSim) {
-                                    console.log('[MIC FLOTANTE] Transcripción para SIMULADOR (' + modo + '):', txt);
-                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=' + encodeURIComponent(modo) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
-                                } else {
-                                    console.log('[MIC FLOTANTE] Transcripción para CHAT GENERAL:', txt);
-                                    fetch('/text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
-                                }
+                                console.log('[MIC MAESTRO LUXO] Enviando consulta a LUXO general:', txt);
+                                fetch('/text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                             }
                         };
                         r.onerror = function(ev) { 
@@ -1191,7 +1178,7 @@ def configurar_rutas_fastapi(app):
                     mobileMicBtn.onclick = onMainFloatingMicClick;
                     document.body.appendChild(mobileMicBtn);
 
-                    // --- RECONOCIMIENTO DE VOZ DEDICADO PARA SIMULADOR DE VENTAS IA ---
+                    // --- RECONOCIMIENTO DE VOZ DEDICADO PARA SIMULADOR DE VENTAS IA (CLON INDEPENDIENTE) ---
                     let simMicBtn = document.getElementById("luxo-sim-mic-btn");
                     if (!simMicBtn) {
                         simMicBtn = document.createElement("div");
@@ -1241,6 +1228,19 @@ def configurar_rutas_fastapi(app):
                         simMicBtn.addEventListener("touchend", onSimMicPress);
                         document.body.appendChild(simMicBtn);
                     }
+
+                    // Detector automático de pestaña activa para mostrar/ocultar el micro del simulador
+                    setInterval(function() {
+                        const btn = document.getElementById("luxo-sim-mic-btn");
+                        if (!btn) return;
+                        const bodyTxt = document.body ? (document.body.innerText || '') : '';
+                        const isSimView = (window._luxoActiveView === 'simulador') || 
+                                          (window.location && (window.location.hash.includes('simulador') || window.location.pathname.includes('simulador'))) ||
+                                          bodyTxt.includes('Simulador de Ventas') || 
+                                          bodyTxt.includes('Roleplay de Ventas') ||
+                                          bodyTxt.includes('Cliente en Tienda');
+                        btn.style.display = isSimView ? "flex" : "none";
+                    }, 800);
 
                     window.showSimuladorMicBtn = function(visible, modo) {
                         window._simuladorModo = modo || 'chat';
