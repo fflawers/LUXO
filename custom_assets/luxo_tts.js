@@ -659,6 +659,28 @@
         );
     }
 
+    function isSimulatorViewActive() {
+        if (window._simuladorVisible === false) return false;
+        if (window._luxoActiveView === "simulador" || window._simuladorVisible === true) return true;
+        const p = (window.location.pathname || '') + (window.location.hash || '');
+        if (p.includes("simulador")) return true;
+        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
+        if (bodyText.includes("Simulador de Ventas con IA") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
+            return true;
+        }
+        return false;
+    }
+
+    function getActiveSimulatorMode() {
+        if (window._simCurrentMode === "voz" || window._simCurrentMode === "voice") return "voz";
+        if (window._simCurrentMode === "chat") return "chat";
+        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
+        if (bodyText.includes("Conversación por Voz") && (bodyText.includes("Modo 100% Voz") || bodyText.includes("Diálogo Continuo") || bodyText.includes("Hablar Ahora") || bodyText.includes("Cliente hablando por voz"))) {
+            return "voz";
+        }
+        return "chat";
+    }
+
     window.detenerDictadoSimulador = function() {
         try {
             if (_simMediaRecorder && _simMediaRecorder.state === 'recording') {
@@ -722,16 +744,27 @@
         ensureSimButtonsCreated();
     }
     
-    // Intervalo de seguridad para sincronizar visibilidad de ambos botones
+    // Intervalo continuo de sincronización automática y estado visual de los botones
     setInterval(function() {
+        ensureSimButtonsCreated();
         const btnChat = document.getElementById("luxo-sim-chat-mic-btn");
         const btnVoz = document.getElementById("luxo-sim-voz-mic-btn");
         const oldBtn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
         if (oldBtn) oldBtn.style.display = "none";
         
-        if (!window._simuladorVisible) {
+        const isSim = isSimulatorViewActive();
+        if (!isSim) {
             if (btnChat) btnChat.style.display = "none";
             if (btnVoz) btnVoz.style.display = "none";
+        } else {
+            const currentMode = getActiveSimulatorMode();
+            if (currentMode === 'voz') {
+                if (btnVoz) btnVoz.style.display = "flex";
+                if (btnChat) btnChat.style.display = "none";
+            } else {
+                if (btnChat) btnChat.style.display = "flex";
+                if (btnVoz) btnVoz.style.display = "none";
+            }
         }
-    }, 1000);
+    }, 600);
 })();

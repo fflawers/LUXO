@@ -1405,6 +1405,28 @@ def configurar_rutas_fastapi(app):
                         );
                     }
 
+                    function isSimActive() {
+                        if (window._simuladorVisible === false) return false;
+                        if (window._luxoActiveView === "simulador" || window._simuladorVisible === true) return true;
+                        const p = (window.location.pathname || '') + (window.location.hash || '');
+                        if (p.includes("simulador")) return true;
+                        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
+                        if (bodyText.includes("Simulador de Ventas con IA") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
+                            return true;
+                        }
+                        return false;
+                    }
+
+                    function getSimMode() {
+                        if (window._simCurrentMode === "voz" || window._simCurrentMode === "voice") return "voz";
+                        if (window._simCurrentMode === "chat") return "chat";
+                        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
+                        if (bodyText.includes("Conversación por Voz") && (bodyText.includes("Modo 100% Voz") || bodyText.includes("Diálogo Continuo") || bodyText.includes("Hablar Ahora") || bodyText.includes("Cliente hablando por voz"))) {
+                            return "voz";
+                        }
+                        return "chat";
+                    }
+
                     window.showSimuladorMicBtn = function(visible, modo) {
                         window._simCurrentMode = modo || window._simCurrentMode || 'chat';
                         window._simuladorVisible = (visible !== false);
@@ -1434,7 +1456,7 @@ def configurar_rutas_fastapi(app):
                         initButtons();
                     }
 
-                    // Asegurar que ambos botones siempre existan y respeten visibilidad
+                    // Sincronización continua de visibilidad
                     setInterval(function() {
                         const btnMain = document.getElementById("luxo-floating-main-mic");
                         const btnChat = document.getElementById("luxo-sim-chat-mic-btn");
@@ -1445,11 +1467,22 @@ def configurar_rutas_fastapi(app):
                         if (!btnMain && document.body) {
                             initButtons();
                         }
-                        if (!window._simuladorVisible) {
+                        
+                        const isSim = isSimActive();
+                        if (!isSim) {
                             if (btnChat) btnChat.style.display = "none";
                             if (btnVoz) btnVoz.style.display = "none";
+                        } else {
+                            const curMode = getSimMode();
+                            if (curMode === 'voz') {
+                                if (btnVoz) btnVoz.style.display = "flex";
+                                if (btnChat) btnChat.style.display = "none";
+                            } else {
+                                if (btnChat) btnChat.style.display = "flex";
+                                if (btnVoz) btnVoz.style.display = "none";
+                            }
                         }
-                    }, 1000);
+                    }, 600);
 
                     // Interceptor de toques y clics físicos directos para los botones del simulador en Flutter
                     let lastSimClickTime = 0;
