@@ -674,28 +674,61 @@
         } catch(e){}
     };
 
+    function evaluarVisibilidadSimulador() {
+        // 1. Detección por ruta de URL en navegador (Flet SPA routing)
+        const hash = (window.location.hash || '').toLowerCase();
+        const path = (window.location.pathname || '').toLowerCase();
+        const isUrlSim = hash.includes('simulador') || path.includes('simulador') || hash.includes('capacitacion') || path.includes('capacitacion');
+        
+        // 2. Detección por estado en memoria JS
+        const isStateSim = (window._simuladorVisible === true) || (window._luxoActiveView === 'simulador') || (window._luxoActiveView === 'capacitacion_ia');
+        
+        // 3. Detección por respuesta de polling backend
+        const isPollSim = (window._simPollVisible === true);
+        
+        const shouldBeVisible = (isUrlSim || isStateSim || isPollSim);
+        const btn = ensureSimMicBtnCreated();
+        if (btn) {
+            const currentDisplay = btn.style.display;
+            const targetDisplay = shouldBeVisible ? "flex" : "none";
+            if (currentDisplay !== targetDisplay) {
+                btn.style.display = targetDisplay;
+            }
+            if (shouldBeVisible) {
+                updateSimMicButtonMode(window._simCurrentMode || _simCurrentMode || 'chat');
+            }
+        }
+        return shouldBeVisible;
+    }
+
+    window.evaluarVisibilidadSimulador = evaluarVisibilidadSimulador;
+
     window.showSimuladorMicBtn = function(visible, modo) {
         _simCurrentMode = modo || _simCurrentMode || 'chat';
         window._simCurrentMode = _simCurrentMode;
         window._simuladorVisible = (visible !== false);
+        window._simPollVisible = (visible !== false);
         if (!visible) {
             window.detenerDictadoSimulador();
         } else {
             if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
             else window._simuladorActivo = true;
         }
-        const btn = ensureSimMicBtnCreated();
-        if (btn) {
-            btn.style.display = (visible !== false) ? "flex" : "none";
-            if (visible !== false) {
-                updateSimMicButtonMode(_simCurrentMode);
-            }
-        }
+        evaluarVisibilidadSimulador();
     };
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', ensureSimMicBtnCreated);
+        document.addEventListener('DOMContentLoaded', function() {
+            ensureSimMicBtnCreated();
+            evaluarVisibilidadSimulador();
+        });
     } else {
         ensureSimMicBtnCreated();
+        evaluarVisibilidadSimulador();
     }
+
+    // Reconciliación continua ultra-rápida (cada 400ms) para respuesta visual instantánea
+    setInterval(evaluarVisibilidadSimulador, 400);
+    window.addEventListener('hashchange', evaluarVisibilidadSimulador);
+    window.addEventListener('popstate', evaluarVisibilidadSimulador);
 })();

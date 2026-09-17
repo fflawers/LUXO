@@ -584,16 +584,27 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
         return
     tok = getattr(page, "_luxo_token", None)
     u_id = getattr(page, "user_id", None)
+    u_name = getattr(page, "username", None)
     dev_id = getattr(page, "device_id", None)
     
     st_val = {"visible": visible, "mode": modo}
     if tok: GLOBAL_SIM_VIEW_STATE[tok] = st_val
     if dev_id: GLOBAL_SIM_VIEW_STATE[dev_id] = st_val
+    if u_name: GLOBAL_SIM_VIEW_STATE[str(u_name).strip().lower()] = st_val
     if u_id: 
         GLOBAL_SIM_VIEW_STATE[str(u_id)] = st_val
         if str(u_id).isdigit():
             GLOBAL_SIM_VIEW_STATE[int(u_id)] = st_val
     GLOBAL_SIM_VIEW_STATE["global"] = st_val
+
+    # Actualizar en active_sessions
+    try:
+        for uid_k, sess in list(active_sessions.items()):
+            if sess.get("page") == page:
+                sess["active_view"] = "simulador" if visible else ""
+                sess["sim_modo_activo"] = modo if visible else None
+    except Exception:
+        pass
 
     vis_str = "true" if visible else "false"
     js_code = f"""
@@ -601,9 +612,12 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
         window._simuladorModo = '{modo}';
         window._simCurrentMode = '{modo}';
         window._simuladorVisible = {vis_str};
+        window._simPollVisible = {vis_str};
         window._luxoActiveView = {'"simulador"' if visible else '""'};
         if (window.showSimuladorMicBtn) {{
             window.showSimuladorMicBtn({vis_str}, '{modo}');
+        }} else if (window.evaluarVisibilidadSimulador) {{
+            window.evaluarVisibilidadSimulador();
         }}
     }})();
     """
@@ -1038,10 +1052,17 @@ def configurar_rutas_fastapi(app):
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
         
         sim_st = None
-        for k in [token, str(user_id).strip(), str(username).strip().lower(), "global"]:
+        for k in [token, str(user_id).strip(), str(username).strip().lower()]:
             if k and k in GLOBAL_SIM_VIEW_STATE:
                 sim_st = GLOBAL_SIM_VIEW_STATE[k]
                 break
+            if k and k in active_sessions:
+                sess_info = active_sessions[k]
+                if sess_info.get("active_view") == "simulador":
+                    sim_st = {"visible": True, "mode": sess_info.get("sim_modo_activo") or "chat"}
+                    break
+        if not sim_st and "global" in GLOBAL_SIM_VIEW_STATE:
+            sim_st = GLOBAL_SIM_VIEW_STATE["global"]
         if not sim_st:
             sim_st = {"visible": False, "mode": "chat"}
         
@@ -1442,25 +1463,48 @@ def configurar_rutas_fastapi(app):
                         return simMicBtn;
                     }
 
+                    function evaluarVisibilidadSimulador() {
+                        const hash = (window.location.hash || '').toLowerCase();
+                        const path = (window.location.pathname || '').toLowerCase();
+                        const isUrlSim = hash.includes('simulador') || path.includes('simulador') || hash.includes('capacitacion') || path.includes('capacitacion');
+                        const isStateSim = (window._simuladorVisible === true) || (window._luxoActiveView === 'simulador') || (window._luxoActiveView === 'capacitacion_ia');
+                        const isPollSim = (window._simPollVisible === true);
+                        
+                        const shouldBeVisible = (isUrlSim || isStateSim || isPollSim);
+                        const btn = ensureSimMicBtnCreated();
+                        if (btn) {
+                            const currentDisplay = btn.style.display;
+                            const targetDisplay = shouldBeVisible ? "flex" : "none";
+                            if (currentDisplay !== targetDisplay) {
+                                btn.style.display = targetDisplay;
+                            }
+                            if (shouldBeVisible) {
+                                updateSimMicButtonMode(window._simCurrentMode || 'chat');
+                            }
+                        }
+                        return shouldBeVisible;
+                    }
+
+                    window.evaluarVisibilidadSimulador = evaluarVisibilidadSimulador;
+
                     window.showSimuladorMicBtn = function(visible, modo) {
                         window._simCurrentMode = modo || window._simCurrentMode || 'chat';
                         window._simuladorVisible = (visible !== false);
+                        window._simPollVisible = (visible !== false);
                         if (!visible) {
                             if (window.detenerDictadoSimulador) window.detenerDictadoSimulador();
                         }
-                        const btn = ensureSimMicBtnCreated();
-                        if (btn) {
-                            btn.style.display = (visible !== false) ? "flex" : "none";
-                            if (visible !== false) {
-                                updateSimMicButtonMode(window._simCurrentMode);
-                            }
-                        }
+                        evaluarVisibilidadSimulador();
                     };
 
                     if (document.readyState === 'loading') {
-                        document.addEventListener("DOMContentLoaded", initButtons);
+                        document.addEventListener("DOMContentLoaded", function() {
+                            initButtons();
+                            evaluarVisibilidadSimulador();
+                        });
                     } else {
                         initButtons();
+                        evaluarVisibilidadSimulador();
                     }
 
                     // Sincronización continua de visibilidad
@@ -1469,7 +1513,11 @@ def configurar_rutas_fastapi(app):
                         if (!btnMain && document.body) {
                             initButtons();
                         }
-                    }, 1000);
+                        evaluarVisibilidadSimulador();
+                    }, 400);
+
+                    window.addEventListener('hashchange', evaluarVisibilidadSimulador);
+                    window.addEventListener('popstate', evaluarVisibilidadSimulador);
 
                     async function pollSimStateLive() {
                         try {
@@ -1481,7 +1529,9 @@ def configurar_rutas_fastapi(app):
                             if (res.ok) {
                                 const data = await res.json();
                                 if (typeof data.sim_visible !== 'undefined') {
-                                    window.showSimuladorMicBtn(data.sim_visible, data.sim_mode || 'chat');
+                                    window._simPollVisible = (data.sim_visible === true);
+                                    if (data.sim_mode) window._simCurrentMode = data.sim_mode;
+                                    evaluarVisibilidadSimulador();
                                 }
                             }
                         } catch(e){}
@@ -24596,6 +24646,9 @@ Ejemplo:
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
                     sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                    page.user_id = str(user_id_key)
+                    page._luxo_token = sess_token
+                    page.username = u_clean_login
                     sess_dict = {
                         "page": page,
                         "user_info": user_info,
@@ -24604,6 +24657,9 @@ Ejemplo:
                     }
                     active_sessions[sess_token] = sess_dict
                     active_sessions[user_id_key] = sess_dict
+                    active_sessions[str(user_id_key)] = sess_dict
+                    if page.username:
+                        active_sessions[page.username] = sess_dict
 
                     # --- REGISTRAR INICIO DE SESIÓN ---
                     ip_client = getattr(page, "client_ip", None) or "Desconocido"
@@ -25115,6 +25171,9 @@ Ejemplo:
                         user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
                         user_id_key = user_data["ID_Usuario"]
                         sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                        page.user_id = str(user_id_key)
+                        page._luxo_token = sess_token
+                        page.username = str(user_data.get("Usuario") or "").strip().lower()
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,
@@ -25123,6 +25182,9 @@ Ejemplo:
                         }
                         active_sessions[sess_token] = sess_dict
                         active_sessions[user_id_key] = sess_dict
+                        active_sessions[str(user_id_key)] = sess_dict
+                        if page.username:
+                            active_sessions[page.username] = sess_dict
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
                         cargar_chat(initial_view=last_view_saved)
                         return # Termina sin mostrar login
