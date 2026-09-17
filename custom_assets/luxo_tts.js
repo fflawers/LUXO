@@ -552,55 +552,7 @@
     };
 
     function updateSimMicUiState(isRecording) {
-        const btn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
-        if (btn) {
-            if (isRecording) {
-                btn.style.borderColor = "#FFFFFF";
-                btn.style.boxShadow = "0 0 25px #FF0055";
-                btn.style.background = "#FF0000";
-            } else {
-                btn.style.borderColor = "#00FFFF";
-                btn.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)";
-                btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
-            }
-        }
-    }
-
-    function ensureSimMicBtnCreated() {
-        let simMicBtn = document.getElementById("luxo-floating-sim-mic");
-        if (!simMicBtn && (document.body || document.documentElement)) {
-            simMicBtn = document.createElement("div");
-            simMicBtn.id = "luxo-floating-sim-mic";
-            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">SIM</span>`;
-            simMicBtn.setAttribute("title", "Micrófono Simulador de Ventas IA");
-            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 52px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
-            
-            function onSimMicPress(e) {
-                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                const currentModo = window._simCurrentMode || _simCurrentMode || 'chat';
-                console.log("[SIMULADOR MIC] Clic en #luxo-floating-sim-mic, modo:", currentModo);
-                simMicBtn.style.transform = "scale(0.9)";
-                setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
-                window.iniciarDictadoSimulador(currentModo);
-            }
-
-            simMicBtn.addEventListener('click', onSimMicPress);
-            simMicBtn.addEventListener('touchend', onSimMicPress);
-            (document.body || document.documentElement).appendChild(simMicBtn);
-        }
-        return simMicBtn;
-    }
-
-    function isSimulatorViewActive() {
-        if (window._simuladorVisible === false) return false;
-        if (window._luxoActiveView === "simulador" || window._simuladorVisible === true) return true;
-        const p = (window.location.pathname || '') + (window.location.hash || '');
-        if (p.includes("simulador")) return true;
-        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
-        if (bodyText.includes("Simulador de Ventas con IA") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
-            return true;
-        }
-        return false;
+        // Estado visual del micrófono si aplica
     }
 
     window.detenerDictadoSimulador = function() {
@@ -640,24 +592,5 @@
             if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
             else window._simuladorActivo = true;
         }
-        const btn = ensureSimMicBtnCreated();
-        if (btn) {
-            btn.style.display = (visible !== false) ? "flex" : "none";
-        }
     };
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', ensureSimMicBtnCreated);
-    } else {
-        ensureSimMicBtnCreated();
-    }
-    
-    // Intervalo para mantener el botón [🎙️ SIM] sincronizado (solo visible en simulador)
-    setInterval(function() {
-        const btn = ensureSimMicBtnCreated();
-        const isSim = isSimulatorViewActive();
-        if (btn) {
-            btn.style.display = isSim ? "flex" : "none";
-        }
-    }, 500);
 })();

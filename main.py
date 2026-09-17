@@ -1328,53 +1328,7 @@ def configurar_rutas_fastapi(app):
                             mobileMicBtn.onclick = onMainFloatingMicClick;
                             document.body.appendChild(mobileMicBtn);
                         }
-
-                        // 2. Botón flotante nativo [🎙️ SIM] morado exclusivo de Simulador IA
-                        let simMicBtn = document.getElementById("luxo-floating-sim-mic");
-                        if (!simMicBtn && document.body) {
-                            simMicBtn = document.createElement("div");
-                            simMicBtn.id = "luxo-floating-sim-mic";
-                            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">SIM</span>`;
-                            simMicBtn.setAttribute("title", "Micrófono Simulador de Ventas IA");
-                            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 52px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
-                            
-                            function onSimMicPress(e) {
-                                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                                const currentModo = window._simCurrentMode || window._simuladorModo || 'chat';
-                                console.log("[SIMULADOR MIC] Clic en #luxo-floating-sim-mic, modo:", currentModo);
-                                simMicBtn.style.transform = "scale(0.9)";
-                                setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
-                                if (window.iniciarDictadoSimulador) {
-                                    window.iniciarDictadoSimulador(currentModo);
-                                }
-                            }
-
-                            simMicBtn.onclick = onSimMicPress;
-                            document.body.appendChild(simMicBtn);
-                        }
                     }
-
-                    function isSimActive() {
-                        if (window._simuladorVisible === false) return false;
-                        if (window._luxoActiveView === "simulador" || window._simuladorVisible === true) return true;
-                        const p = (window.location.pathname || '') + (window.location.hash || '');
-                        if (p.includes("simulador")) return true;
-                        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
-                        if (bodyText.includes("Simulador de Ventas con IA") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
-                            return true;
-                        }
-                        return false;
-                    }
-
-                    window.showSimuladorMicBtn = function(visible, modo) {
-                        window._simCurrentMode = modo || window._simCurrentMode || 'chat';
-                        window._simuladorVisible = (visible !== false);
-                        initButtons();
-                        const btn = document.getElementById("luxo-floating-sim-mic");
-                        if (btn) {
-                            btn.style.display = (visible !== false) ? "flex" : "none";
-                        }
-                    };
 
                     if (document.readyState === 'loading') {
                         document.addEventListener("DOMContentLoaded", initButtons);
@@ -1382,21 +1336,15 @@ def configurar_rutas_fastapi(app):
                         initButtons();
                     }
 
-                    // Sincronización continua de visibilidad
+                    // Sincronización del micrófono principal LUXO
                     setInterval(function() {
                         const btnMain = document.getElementById("luxo-floating-main-mic");
-                        const btnSim = document.getElementById("luxo-floating-sim-mic");
                         if (!btnMain && document.body) {
                             initButtons();
                         }
-                        
-                        const isSim = isSimActive();
-                        if (btnSim) {
-                            btnSim.style.display = isSim ? "flex" : "none";
-                        }
-                    }, 500);
+                    }, 1000);
 
-                    // Interceptor de toques y clics físicos directos para los botones del simulador en Flutter
+                    // Interceptor de toques y clics físicos directos para los botones fijos del simulador
                     let lastSimClickTime = 0;
                     function handleSimDirectClick(e) {
                         try {
@@ -17570,7 +17518,7 @@ REGLAS OBLIGATORIAS:
 
             chat_area = ft.Column([
                 sim_chat_column,
-                ft.Row([user_input, btn_enviar], spacing=6, vertical_alignment="center"),
+                ft.Row([user_input, btn_mic_sim_container, btn_enviar], spacing=6, vertical_alignment="center"),
                 ft.Container(height=10),
                 ft.Row([btn_finalizar, btn_cancelar], spacing=10, wrap=True)
             ], visible=False, expand=True)
@@ -17954,7 +17902,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
                 ft.Container(height=5),
                 sim_voz_chat_column,
                 ft.Container(height=10),
-                ft.Row([btn_finalizar_voz, btn_cancelar_voz], spacing=10, wrap=True)
+                ft.Row([btn_hablar_voz, btn_finalizar_voz, btn_cancelar_voz], spacing=10, wrap=True)
             ], visible=False, expand=True)
 
             tab_voz = ft.Column([config_area_voz, chat_area_voz], expand=True)
