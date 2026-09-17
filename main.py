@@ -577,7 +577,7 @@ def ejecutar_js_flet(page: ft.Page, js_code: str):
 
 
 def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "chat"):
-    """Activa el botón flotante nativo HTML del Simulador IA con auto-inyección física garantizada."""
+    """Activa el botón nativo HTML del Simulador IA con auto-inyección física garantizada."""
     if not page:
         return
     vis_str = "true" if visible else "false"
@@ -589,74 +589,6 @@ def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "c
         window._luxoActiveView = {'"simulador"' if visible else '""'};
         if (window.showSimuladorMicBtn) {{
             window.showSimuladorMicBtn({vis_str}, '{modo}');
-            return;
-        }}
-        let btn = document.getElementById('luxo-floating-sim-mic') || document.getElementById('luxo-sim-mic-btn');
-        if (!btn && document.body) {{
-            btn = document.createElement('div');
-            btn.id = 'luxo-floating-sim-mic';
-            btn.innerHTML = '<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>';
-            btn.setAttribute('title', 'Micrófono Simulador de Ventas IA');
-            btn.style.cssText = 'position:fixed;bottom:12px;right:118px;z-index:9999999;font-size:18px;background:linear-gradient(135deg,#7928CA 0%,#B800FF 100%);border:1.8px solid #00FFFF;border-radius:23px;width:56px;height:46px;display:none;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(184,0,255,0.7);cursor:pointer;transition:background 0.3s ease,border-color 0.3s ease,box-shadow 0.3s ease;touch-action:manipulation;user-select:none;';
-            
-            let isDragging = false;
-            let startX, startY, initialX, initialY;
-            btn.addEventListener('touchstart', function(e) {{
-                isDragging = false;
-                let touch = e.touches[0];
-                startX = touch.clientX;
-                startY = touch.clientY;
-                let rect = btn.getBoundingClientRect();
-                initialX = rect.left;
-                initialY = rect.top;
-                btn.style.transition = 'none';
-            }});
-            btn.addEventListener('touchmove', function(e) {{
-                let touch = e.touches[0];
-                let dx = touch.clientX - startX;
-                let dy = touch.clientY - startY;
-                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {{
-                    isDragging = true;
-                    e.preventDefault();
-                    let newX = Math.max(0, Math.min(initialX + dx, window.innerWidth - 56));
-                    let newY = Math.max(0, Math.min(initialY + dy, window.innerHeight - 46));
-                    btn.style.left = newX + 'px';
-                    btn.style.top = newY + 'px';
-                    btn.style.right = 'auto';
-                    btn.style.bottom = 'auto';
-                }}
-            }}, {{ passive: false }});
-            btn.addEventListener('touchend', function(e) {{
-                btn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease';
-            }});
-            function onSimMicClick(e) {{
-                if (isDragging) return;
-                if (e) {{ try {{ e.preventDefault(); e.stopPropagation(); }} catch(err){{}} }}
-                const currentModo = window._simCurrentMode || window._simuladorModo || '{modo}';
-                if (window.iniciarDictadoSimulador) {{
-                    window.iniciarDictadoSimulador(currentModo);
-                }}
-            }}
-            btn.addEventListener('click', onSimMicClick);
-            document.body.appendChild(btn);
-        }}
-        if (btn) {{
-            btn.style.display = {vis_str} ? 'flex' : 'none';
-            if ({vis_str}) {{
-                if ('{modo}' === 'voz') {{
-                    btn.innerHTML = '<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFAA;margin-left:2px;">VOZ</span>';
-                    btn.style.background = 'linear-gradient(135deg, #0575E6 0%, #00F260 100%)';
-                    btn.style.borderColor = '#00FFAA';
-                    btn.style.boxShadow = '0 0 14px rgba(0, 255, 170, 0.7)';
-                    btn.setAttribute('title', 'Hablar al Cliente por Voz (Simulador IA)');
-                }} else {{
-                    btn.innerHTML = '<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>';
-                    btn.style.background = 'linear-gradient(135deg, #7928CA 0%, #B800FF 100%)';
-                    btn.style.borderColor = '#00FFFF';
-                    btn.style.boxShadow = '0 0 12px rgba(184, 0, 255, 0.7)';
-                    btn.setAttribute('title', 'Dictar Respuesta Roleplay Chat (Simulador IA)');
-                }}
-            }}
         }}
     }})();
     """
@@ -1397,90 +1329,101 @@ def configurar_rutas_fastapi(app):
                             document.body.appendChild(mobileMicBtn);
                         }
 
-                        // 2. Boton flotante nativo Simulador IA
-                        let simMicBtn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
-                        if (!simMicBtn) {
-                            simMicBtn = document.createElement("div");
-                            simMicBtn.id = "luxo-floating-sim-mic";
-                            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
-                            simMicBtn.setAttribute("title", "Micrófono Simulador de Ventas IA");
-                            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 56px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
-                            
-                            let isDraggingSim = false;
-                            let startXSim, startYSim, initialXSim, initialYSim;
-                            
-                            simMicBtn.addEventListener('touchstart', function(e) {
-                                isDraggingSim = false;
-                                let touch = e.touches[0];
-                                startXSim = touch.clientX;
-                                startYSim = touch.clientY;
-                                let rect = simMicBtn.getBoundingClientRect();
-                                initialXSim = rect.left;
-                                initialYSim = rect.top;
-                                simMicBtn.style.transition = 'none';
-                            });
-
-                            simMicBtn.addEventListener('touchmove', function(e) {
-                                let touch = e.touches[0];
-                                let dx = touch.clientX - startXSim;
-                                let dy = touch.clientY - startYSim;
+                        // 2. Botones nativos dedicados para Simulador IA (Chat y Voz)
+                        function createSimBtn(id, html, defaultBg, defaultBorder, defaultShadow, onClickFn) {
+                            let btn = document.getElementById(id);
+                            if (!btn && document.body) {
+                                btn = document.createElement("div");
+                                btn.id = id;
+                                btn.innerHTML = html;
+                                btn.style.cssText = `position: fixed; bottom: 76px; right: 16px; z-index: 9999999; height: 46px; padding: 0 18px; border-radius: 23px; background: ${defaultBg}; border: 1.8px solid ${defaultBorder}; box-shadow: ${defaultShadow}; display: none; align-items: center; justify-content: center; cursor: pointer; color: #FFFFFF; font-weight: bold; font-size: 13px; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none; letter-spacing: 0.3px;`;
                                 
-                                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-                                    isDraggingSim = true;
-                                    e.preventDefault();
-                                    let newX = Math.max(0, Math.min(initialXSim + dx, window.innerWidth - 56));
-                                    let newY = Math.max(0, Math.min(initialYSim + dy, window.innerHeight - 46));
-                                    
-                                    simMicBtn.style.left = newX + 'px';
-                                    simMicBtn.style.top = newY + 'px';
-                                    simMicBtn.style.right = 'auto';
-                                    simMicBtn.style.bottom = 'auto';
-                                }
-                            }, { passive: false });
+                                let isDragging = false;
+                                let startX, startY, initialX, initialY;
+                                
+                                btn.addEventListener('touchstart', function(e) {
+                                    isDragging = false;
+                                    let touch = e.touches[0];
+                                    startX = touch.clientX;
+                                    startY = touch.clientY;
+                                    let rect = btn.getBoundingClientRect();
+                                    initialX = rect.left;
+                                    initialY = rect.top;
+                                    btn.style.transition = 'none';
+                                });
 
-                            simMicBtn.addEventListener('touchend', function(e) {
-                                simMicBtn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease';
-                            });
-                            
-                            function onSimMicPress(e) {
-                                if (isDraggingSim) return;
-                                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                                const currentModo = window._simCurrentMode || window._simuladorModo || 'chat';
-                                console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-floating-sim-mic con modo:", currentModo);
-                                simMicBtn.style.transform = "scale(0.9)";
-                                setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
-                                if (window.iniciarDictadoSimulador) {
-                                    window.iniciarDictadoSimulador(currentModo);
+                                btn.addEventListener('touchmove', function(e) {
+                                    let touch = e.touches[0];
+                                    let dx = touch.clientX - startX;
+                                    let dy = touch.clientY - startY;
+                                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                                        isDragging = true;
+                                        e.preventDefault();
+                                        let newX = Math.max(0, Math.min(initialX + dx, window.innerWidth - btn.offsetWidth));
+                                        let newY = Math.max(0, Math.min(initialY + dy, window.innerHeight - btn.offsetHeight));
+                                        btn.style.left = newX + 'px';
+                                        btn.style.top = newY + 'px';
+                                        btn.style.right = 'auto';
+                                        btn.style.bottom = 'auto';
+                                    }
+                                }, { passive: false });
+
+                                btn.addEventListener('touchend', function(e) {
+                                    btn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease';
+                                });
+                                
+                                function onBtnPress(e) {
+                                    if (isDragging) return;
+                                    if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                                    btn.style.transform = "scale(0.92)";
+                                    setTimeout(function() { btn.style.transform = "scale(1)"; }, 150);
+                                    if (onClickFn) onClickFn();
                                 }
+
+                                btn.onclick = onBtnPress;
+                                document.body.appendChild(btn);
                             }
-
-                            simMicBtn.onclick = onSimMicPress;
-                            document.body.appendChild(simMicBtn);
+                            return btn;
                         }
+
+                        createSimBtn(
+                            "luxo-sim-chat-mic-btn",
+                            `<span style="font-size:18px;margin-right:6px;">🎙️</span><span>Dictar al Chat</span>`,
+                            "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)",
+                            "#00FFFF",
+                            "0 0 14px rgba(184, 0, 255, 0.7)",
+                            function() { if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat'); }
+                        );
+
+                        createSimBtn(
+                            "luxo-sim-voz-mic-btn",
+                            `<span style="font-size:20px;margin-right:6px;">🎙️</span><span>Hablar Ahora</span>`,
+                            "linear-gradient(135deg, #0575E6 0%, #00F260 100%)",
+                            "#00FFAA",
+                            "0 0 16px rgba(0, 255, 170, 0.8)",
+                            function() { if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz'); }
+                        );
                     }
 
                     window.showSimuladorMicBtn = function(visible, modo) {
-                        window._simuladorModo = modo || window._simuladorModo || 'chat';
-                        window._simCurrentMode = window._simuladorModo;
+                        window._simCurrentMode = modo || window._simCurrentMode || 'chat';
                         window._simuladorVisible = (visible !== false);
                         initButtons();
-                        const btn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
-                        if (btn) {
-                            btn.style.display = (visible !== false) ? "flex" : "none";
-                            if (visible !== false) {
-                                if (window._simuladorModo === 'voz') {
-                                    btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFAA;margin-left:2px;">VOZ</span>`;
-                                    btn.style.background = "linear-gradient(135deg, #0575E6 0%, #00F260 100%)";
-                                    btn.style.borderColor = "#00FFAA";
-                                    btn.style.boxShadow = "0 0 14px rgba(0, 255, 170, 0.7)";
-                                    btn.setAttribute("title", "Hablar al Cliente por Voz (Simulador IA)");
-                                } else {
-                                    btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
-                                    btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
-                                    btn.style.borderColor = "#00FFFF";
-                                    btn.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)";
-                                    btn.setAttribute("title", "Dictar Respuesta Roleplay Chat (Simulador IA)");
-                                }
+                        const btnChat = document.getElementById("luxo-sim-chat-mic-btn");
+                        const btnVoz = document.getElementById("luxo-sim-voz-mic-btn");
+                        const oldBtn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
+                        if (oldBtn) oldBtn.style.display = "none";
+
+                        if (visible === false) {
+                            if (btnChat) btnChat.style.display = "none";
+                            if (btnVoz) btnVoz.style.display = "none";
+                        } else {
+                            if (window._simCurrentMode === 'voz') {
+                                if (btnVoz) btnVoz.style.display = "flex";
+                                if (btnChat) btnChat.style.display = "none";
+                            } else {
+                                if (btnChat) btnChat.style.display = "flex";
+                                if (btnVoz) btnVoz.style.display = "none";
                             }
                         }
                     };
@@ -1493,13 +1436,18 @@ def configurar_rutas_fastapi(app):
 
                     // Asegurar que ambos botones siempre existan y respeten visibilidad
                     setInterval(function() {
-                        const btnSim = document.getElementById("luxo-floating-sim-mic");
                         const btnMain = document.getElementById("luxo-floating-main-mic");
+                        const btnChat = document.getElementById("luxo-sim-chat-mic-btn");
+                        const btnVoz = document.getElementById("luxo-sim-voz-mic-btn");
+                        const oldBtn = document.getElementById("luxo-floating-sim-mic") || document.getElementById("luxo-sim-mic-btn");
+                        if (oldBtn) oldBtn.style.display = "none";
+
                         if (!btnMain && document.body) {
                             initButtons();
                         }
-                        if (btnSim && !window._simuladorVisible) {
-                            btnSim.style.display = "none";
+                        if (!window._simuladorVisible) {
+                            if (btnChat) btnChat.style.display = "none";
+                            if (btnVoz) btnVoz.style.display = "none";
                         }
                     }, 1000);
 
