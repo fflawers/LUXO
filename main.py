@@ -576,10 +576,25 @@ def ejecutar_js_flet(page: ft.Page, js_code: str):
         print("Error al ejecutar JS en Flet:", ex_ej)
 
 
+GLOBAL_SIM_VIEW_STATE = {}
+
 def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "chat"):
     """Activa el botón nativo HTML del Simulador IA con auto-inyección física garantizada."""
     if not page:
         return
+    tok = getattr(page, "_luxo_token", None)
+    u_id = getattr(page, "user_id", None)
+    dev_id = getattr(page, "device_id", None)
+    
+    st_val = {"visible": visible, "mode": modo}
+    if tok: GLOBAL_SIM_VIEW_STATE[tok] = st_val
+    if dev_id: GLOBAL_SIM_VIEW_STATE[dev_id] = st_val
+    if u_id: 
+        GLOBAL_SIM_VIEW_STATE[str(u_id)] = st_val
+        if str(u_id).isdigit():
+            GLOBAL_SIM_VIEW_STATE[int(u_id)] = st_val
+    GLOBAL_SIM_VIEW_STATE["global"] = st_val
+
     vis_str = "true" if visible else "false"
     js_code = f"""
     (function() {{
@@ -1021,6 +1036,18 @@ def configurar_rutas_fastapi(app):
         if evt and evt.get("id") != last_id:
             response_data = evt
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
+        
+        sim_st = None
+        for k in [token, str(user_id).strip(), str(username).strip().lower(), "global"]:
+            if k and k in GLOBAL_SIM_VIEW_STATE:
+                sim_st = GLOBAL_SIM_VIEW_STATE[k]
+                break
+        if not sim_st:
+            sim_st = {"visible": False, "mode": "chat"}
+        
+        response_data["sim_visible"] = sim_st.get("visible", False)
+        response_data["sim_mode"] = sim_st.get("mode", "chat")
+
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content=response_data,
@@ -1489,6 +1516,24 @@ def configurar_rutas_fastapi(app):
                             }
                         } catch(err){}
                     }, { capture: true, passive: true });
+
+                    async function pollSimStateLive() {
+                        try {
+                            const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                            const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
+                            const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                            const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                            const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&device_id=' + encodeURIComponent(did) + '&_t=' + Date.now(), { cache: 'no-store' });
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (typeof data.sim_visible !== 'undefined') {
+                                    window.showSimuladorMicBtn(data.sim_visible, data.sim_mode || 'chat');
+                                }
+                            }
+                        } catch(e){}
+                        setTimeout(pollSimStateLive, 800);
+                    }
+                    setTimeout(pollSimStateLive, 1000);
                 })();
                 </script>
                 """

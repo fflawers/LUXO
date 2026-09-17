@@ -298,6 +298,9 @@
                     const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' });
                     if (res && res.ok) {
                         const data = await res.json();
+                        if (typeof data.sim_visible !== 'undefined') {
+                            window.showSimuladorMicBtn(data.sim_visible, data.sim_mode || 'chat');
+                        }
                         if (data && data.action && data.action !== 'none') {
                             if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
