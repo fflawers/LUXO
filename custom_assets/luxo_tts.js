@@ -608,12 +608,12 @@
     }
 
     function isSimulatorViewActive() {
-        if (window._simuladorVisible === false) return false;
-        if (window._luxoActiveView === "simulador" || window._simuladorVisible === true) return true;
+        if (window._simuladorVisible === true) return true;
+        if (window._luxoActiveView === "simulador") return true;
         const p = (window.location.pathname || '') + (window.location.hash || '');
         if (p.includes("simulador")) return true;
         const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
-        if (bodyText.includes("Simulador de Ventas con IA") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
+        if (bodyText.includes("Simulador de Ventas") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
             return true;
         }
         return false;
@@ -689,6 +689,42 @@
         createSimTabButtons();
     }
 
+    // Interceptor de navegación en DOM para detectar clics en opciones del menú
+    document.addEventListener('click', function(e) {
+        try {
+            const path = (e.composedPath && e.composedPath()) || [];
+            for (let i = 0; i < path.length; i++) {
+                const el = path[i];
+                if (!el || el === document || el === window) continue;
+                const txt = (el.innerText || el.textContent || el.innerHTML || '').trim().toLowerCase();
+                const title = (el.getAttribute && (el.getAttribute('title') || el.getAttribute('aria-label') || '')) || '';
+                const comb = (txt + ' ' + title).toLowerCase();
+                if (comb.includes('simulador de ventas') || comb.includes('simulador')) {
+                    window._simuladorVisible = true;
+                    setTimeout(function() {
+                        const isVoz = comb.includes('voz');
+                        window.showSimuladorMicBtn(true, isVoz ? 'voz' : 'chat');
+                    }, 100);
+                    break;
+                } else if (comb.includes('conversación por voz') || comb.includes('conversacion por voz')) {
+                    window._simCurrentMode = 'voz';
+                    window._simuladorVisible = true;
+                    if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'voz');
+                    break;
+                } else if (comb.includes('roleplay chat')) {
+                    window._simCurrentMode = 'chat';
+                    window._simuladorVisible = true;
+                    if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'chat');
+                    break;
+                } else if (comb.includes('dashboard') || comb.includes('reto del día') || comb.includes('reto del dia') || comb.includes('campañas') || comb.includes('crm') || comb.includes('garantías') || comb.includes('manuales') || comb.includes('checklists') || comb.includes('bitácora') || comb.includes('trivia') || comb.includes('presupuesto')) {
+                    window._simuladorVisible = false;
+                    if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);
+                    break;
+                }
+            }
+        } catch(err){}
+    }, { capture: true, passive: true });
+
     // Intervalo de sincronización de visibilidad exclusiva
     setInterval(function() {
         createSimTabButtons();
@@ -708,5 +744,5 @@
                 if (btnVoz) btnVoz.style.display = "none";
             }
         }
-    }, 500);
+    }, 400);
 })();
