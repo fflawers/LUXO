@@ -23036,6 +23036,11 @@ Ejemplo:
                     except Exception as ex_cu:
                         print("Notice content_area.update():", ex_cu)
 
+                    if vista == "simulador":
+                        activar_mic_simulador_js(page, True, "chat")
+                    else:
+                        activar_mic_simulador_js(page, False)
+
                     # Cerrar el menú lateral en móviles al cambiar de vista
                     if getattr(page, "width", None) and page.width < 800:
                         sidebar.visible = False
