@@ -554,82 +554,97 @@
         }
     };
 
-    function updateSimMicUiState(isRecording) {
-        const btnChat = document.getElementById("luxo-sim-chat-btn");
-        const btnVoz = document.getElementById("luxo-sim-voz-btn");
-        if (isRecording) {
-            if (btnChat) { btnChat.style.background = "#FF0000"; btnChat.style.boxShadow = "0 0 20px #FF0055"; }
-            if (btnVoz) { btnVoz.style.background = "#FF0000"; btnVoz.style.boxShadow = "0 0 20px #FF0055"; }
+    function updateSimMicButtonMode(modo) {
+        const btn = document.getElementById("luxo-floating-sim-mic");
+        if (!btn) return;
+        const m = modo || window._simCurrentMode || _simCurrentMode || 'chat';
+        if (m === 'voz') {
+            btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFAA;margin-left:2px;">VOZ</span>`;
+            btn.style.background = "linear-gradient(135deg, #0575E6 0%, #00F260 100%)";
+            btn.style.borderColor = "#00FFAA";
+            btn.style.boxShadow = "0 0 15px rgba(0, 255, 170, 0.8)";
+            btn.setAttribute("title", "Hablar por Voz (Simulador IA)");
         } else {
-            if (btnChat) { btnChat.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)"; btnChat.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)"; }
-            if (btnVoz) { btnVoz.style.background = "linear-gradient(135deg, #0575E6 0%, #00F260 100%)"; btnVoz.style.boxShadow = "0 0 15px rgba(0, 255, 170, 0.8)"; }
+            btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
+            btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+            btn.style.borderColor = "#00FFFF";
+            btn.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)";
+            btn.setAttribute("title", "Dictar al Chat (Simulador IA)");
         }
     }
 
-    function createSimTabButtons() {
-        if (!document.body && !document.documentElement) return;
-
-        // Botón 1: Pestaña Roleplay Chat
-        let btnChat = document.getElementById("luxo-sim-chat-btn");
-        if (!btnChat) {
-            btnChat = document.createElement("div");
-            btnChat.id = "luxo-sim-chat-btn";
-            btnChat.innerHTML = `<span style="font-size:16px;margin-right:6px;">🎙️</span><span>Dictar al Chat</span>`;
-            btnChat.setAttribute("title", "Dictar mensaje al Chat");
-            btnChat.style.cssText = "position: fixed; bottom: 70px; right: 18px; z-index: 9999998; font-size: 13px; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 20px; padding: 7px 15px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: transform 0.15s ease, background 0.3s ease; touch-action: manipulation; user-select: none;";
-            
-            function onChatMicClick(e) {
-                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                btnChat.style.transform = "scale(0.92)";
-                setTimeout(function() { btnChat.style.transform = "scale(1)"; }, 150);
-                window.iniciarDictadoSimulador('chat');
+    function updateSimMicUiState(isRecording) {
+        const btn = document.getElementById("luxo-floating-sim-mic");
+        if (btn) {
+            if (isRecording) {
+                btn.style.borderColor = "#FFFFFF";
+                btn.style.boxShadow = "0 0 25px #FF0055";
+                btn.style.background = "#FF0000";
+            } else {
+                updateSimMicButtonMode(window._simCurrentMode || _simCurrentMode || 'chat');
             }
-            btnChat.addEventListener('click', onChatMicClick);
-            btnChat.addEventListener('touchend', onChatMicClick);
-            (document.body || document.documentElement).appendChild(btnChat);
         }
+    }
 
-        // Botón 2: Pestaña Conversación por Voz
-        let btnVoz = document.getElementById("luxo-sim-voz-btn");
-        if (!btnVoz) {
-            btnVoz = document.createElement("div");
-            btnVoz.id = "luxo-sim-voz-btn";
-            btnVoz.innerHTML = `<span style="font-size:18px;margin-right:6px;">🎙️</span><span>Hablar Ahora</span>`;
-            btnVoz.setAttribute("title", "Hablar Ahora en Sesión de Voz");
-            btnVoz.style.cssText = "position: fixed; bottom: 70px; right: 18px; z-index: 9999998; font-size: 14px; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #0575E6 0%, #00F260 100%); border: 1.8px solid #00FFAA; border-radius: 20px; padding: 8px 18px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(0, 255, 170, 0.8); cursor: pointer; transition: transform 0.15s ease, background 0.3s ease; touch-action: manipulation; user-select: none;";
+    function ensureSimMicBtnCreated() {
+        let simMicBtn = document.getElementById("luxo-floating-sim-mic");
+        if (!simMicBtn && (document.body || document.documentElement)) {
+            simMicBtn = document.createElement("div");
+            simMicBtn.id = "luxo-floating-sim-mic";
+            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
+            simMicBtn.setAttribute("title", "Micrófono Simulador de Ventas IA");
+            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 56px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
             
-            function onVozMicClick(e) {
+            let isDraggingSim = false;
+            let startXSim, startYSim, initialXSim, initialYSim;
+            
+            simMicBtn.addEventListener('touchstart', function(e) {
+                isDraggingSim = false;
+                let touch = e.touches[0];
+                startXSim = touch.clientX;
+                startYSim = touch.clientY;
+                let rect = simMicBtn.getBoundingClientRect();
+                initialXSim = rect.left;
+                initialYSim = rect.top;
+                simMicBtn.style.transition = 'none';
+            });
+
+            simMicBtn.addEventListener('touchmove', function(e) {
+                let touch = e.touches[0];
+                let dx = touch.clientX - startXSim;
+                let dy = touch.clientY - startYSim;
+                
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    isDraggingSim = true;
+                    e.preventDefault();
+                    let newX = Math.max(0, Math.min(initialXSim + dx, window.innerWidth - 56));
+                    let newY = Math.max(0, Math.min(initialYSim + dy, window.innerHeight - 46));
+                    
+                    simMicBtn.style.left = newX + 'px';
+                    simMicBtn.style.top = newY + 'px';
+                    simMicBtn.style.right = 'auto';
+                    simMicBtn.style.bottom = 'auto';
+                }
+            }, { passive: false });
+
+            simMicBtn.addEventListener('touchend', function(e) {
+                simMicBtn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease';
+            });
+            
+            function onSimMicPress(e) {
+                if (isDraggingSim) return;
                 if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                btnVoz.style.transform = "scale(0.92)";
-                setTimeout(function() { btnVoz.style.transform = "scale(1)"; }, 150);
-                window.iniciarDictadoSimulador('voz');
+                const currentModo = window._simCurrentMode || _simCurrentMode || 'chat';
+                console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-floating-sim-mic con modo:", currentModo);
+                simMicBtn.style.transform = "scale(0.9)";
+                setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
+                window.iniciarDictadoSimulador(currentModo);
             }
-            btnVoz.addEventListener('click', onVozMicClick);
-            btnVoz.addEventListener('touchend', onVozMicClick);
-            (document.body || document.documentElement).appendChild(btnVoz);
-        }
-    }
 
-    function isSimulatorViewActive() {
-        if (window._simuladorVisible === true) return true;
-        if (window._luxoActiveView === "simulador") return true;
-        const p = (window.location.pathname || '') + (window.location.hash || '');
-        if (p.includes("simulador")) return true;
-        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
-        if (bodyText.includes("Simulador de Ventas") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
-            return true;
+            simMicBtn.onclick = onSimMicPress;
+            (document.body || document.documentElement).appendChild(simMicBtn);
         }
-        return false;
-    }
-
-    function getSimulatorActiveTab() {
-        if (window._simCurrentMode === "voz" || window._simCurrentMode === "voice") return "voz";
-        if (window._simCurrentMode === "chat") return "chat";
-        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
-        if (bodyText.includes("Conversación por Voz") && (bodyText.includes("Modo 100% Voz") || bodyText.includes("Cliente hablando por voz") || bodyText.includes("Listo para iniciar la conversación de voz") || bodyText.includes("Tu turno de hablar") || bodyText.includes("Finalizar y Evaluar"))) {
-            return "voz";
-        }
-        return "chat";
+        return simMicBtn;
     }
 
     window.detenerDictadoSimulador = function() {
@@ -669,83 +684,18 @@
             if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
             else window._simuladorActivo = true;
         }
-        createSimTabButtons();
-        const btnChat = document.getElementById("luxo-sim-chat-btn");
-        const btnVoz = document.getElementById("luxo-sim-voz-btn");
-        if (visible === false) {
-            if (btnChat) btnChat.style.display = "none";
-            if (btnVoz) btnVoz.style.display = "none";
-        } else {
-            if (_simCurrentMode === 'voz') {
-                if (btnVoz) btnVoz.style.display = "flex";
-                if (btnChat) btnChat.style.display = "none";
-            } else {
-                if (btnChat) btnChat.style.display = "flex";
-                if (btnVoz) btnVoz.style.display = "none";
+        const btn = ensureSimMicBtnCreated();
+        if (btn) {
+            btn.style.display = (visible !== false) ? "flex" : "none";
+            if (visible !== false) {
+                updateSimMicButtonMode(_simCurrentMode);
             }
         }
     };
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', createSimTabButtons);
+        document.addEventListener('DOMContentLoaded', ensureSimMicBtnCreated);
     } else {
-        createSimTabButtons();
+        ensureSimMicBtnCreated();
     }
-
-    // Interceptor de navegación en DOM para detectar clics en opciones del menú
-    document.addEventListener('click', function(e) {
-        try {
-            const path = (e.composedPath && e.composedPath()) || [];
-            for (let i = 0; i < path.length; i++) {
-                const el = path[i];
-                if (!el || el === document || el === window) continue;
-                const txt = (el.innerText || el.textContent || el.innerHTML || '').trim().toLowerCase();
-                const title = (el.getAttribute && (el.getAttribute('title') || el.getAttribute('aria-label') || '')) || '';
-                const comb = (txt + ' ' + title).toLowerCase();
-                if (comb.includes('simulador de ventas') || comb.includes('simulador')) {
-                    window._simuladorVisible = true;
-                    setTimeout(function() {
-                        const isVoz = comb.includes('voz');
-                        window.showSimuladorMicBtn(true, isVoz ? 'voz' : 'chat');
-                    }, 100);
-                    break;
-                } else if (comb.includes('conversación por voz') || comb.includes('conversacion por voz')) {
-                    window._simCurrentMode = 'voz';
-                    window._simuladorVisible = true;
-                    if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'voz');
-                    break;
-                } else if (comb.includes('roleplay chat')) {
-                    window._simCurrentMode = 'chat';
-                    window._simuladorVisible = true;
-                    if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'chat');
-                    break;
-                } else if (comb.includes('dashboard') || comb.includes('reto del día') || comb.includes('reto del dia') || comb.includes('campañas') || comb.includes('crm') || comb.includes('garantías') || comb.includes('manuales') || comb.includes('checklists') || comb.includes('bitácora') || comb.includes('trivia') || comb.includes('presupuesto')) {
-                    window._simuladorVisible = false;
-                    if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false);
-                    break;
-                }
-            }
-        } catch(err){}
-    }, { capture: true, passive: true });
-
-    // Intervalo de sincronización de visibilidad exclusiva
-    setInterval(function() {
-        createSimTabButtons();
-        const btnChat = document.getElementById("luxo-sim-chat-btn");
-        const btnVoz = document.getElementById("luxo-sim-voz-btn");
-        const isSim = isSimulatorViewActive();
-        if (!isSim) {
-            if (btnChat) btnChat.style.display = "none";
-            if (btnVoz) btnVoz.style.display = "none";
-        } else {
-            const tab = getSimulatorActiveTab();
-            if (tab === 'voz') {
-                if (btnVoz) btnVoz.style.display = "flex";
-                if (btnChat) btnChat.style.display = "none";
-            } else {
-                if (btnChat) btnChat.style.display = "flex";
-                if (btnVoz) btnVoz.style.display = "none";
-            }
-        }
-    }, 400);
 })();
