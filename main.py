@@ -1184,40 +1184,45 @@ def configurar_rutas_fastapi(app):
                         simMicBtn = document.createElement("div");
                         simMicBtn.id = "luxo-sim-mic-btn";
                         simMicBtn.innerHTML = `
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00FFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                                 <line x1="12" y1="19" x2="12" y2="23"></line>
                                 <line x1="8" y1="23" x2="16" y2="23"></line>
                             </svg>
+                            <span id="luxo-sim-mic-label" style="font-weight:700;font-size:13px;color:#FFFFFF;white-space:nowrap;">Hablar al Cliente</span>
                         `;
                         simMicBtn.setAttribute("title", "Hablar al Cliente (Simulador IA)");
                         simMicBtn.style.cssText = `
                             position: fixed;
-                            bottom: 12px;
-                            right: 120px;
-                            width: 46px;
-                            height: 46px;
-                            border-radius: 23px;
-                            background: linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%);
-                            border: 2px solid #9D50BB;
-                            box-shadow: 0 4px 18px rgba(157, 80, 187, 0.45);
+                            bottom: 74px;
+                            right: 16px;
+                            padding: 0 16px;
+                            height: 44px;
+                            border-radius: 22px;
+                            background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%);
+                            border: 2px solid #00FFFF;
+                            box-shadow: 0 4px 20px rgba(0, 255, 255, 0.45);
                             display: none;
                             align-items: center;
                             justify-content: center;
+                            gap: 8px;
                             cursor: pointer;
-                            z-index: 9999999;
+                            z-index: 99999999;
                             transition: all 0.2s ease;
                             touch-action: manipulation;
                             user-select: none;
+                            color: #FFFFFF;
+                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                            font-size: 13px;
+                            font-weight: 700;
+                            letter-spacing: 0.3px;
                         `;
                         
                         function onSimMicPress(e) {
                             if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
                             console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-sim-mic-btn");
-                            simMicBtn.style.transform = "scale(0.92)";
-                            simMicBtn.style.borderColor = "#FF0055";
-                            simMicBtn.style.boxShadow = "0 0 22px rgba(255, 0, 85, 0.8)";
+                            simMicBtn.style.transform = "scale(0.94)";
                             setTimeout(function() {
                                 simMicBtn.style.transform = "scale(1)";
                             }, 180);
@@ -1233,11 +1238,16 @@ def configurar_rutas_fastapi(app):
                     setInterval(function() {
                         const btn = document.getElementById("luxo-sim-mic-btn");
                         if (!btn) return;
+                        if (btn.dataset.forceHide === 'true') {
+                            btn.style.display = "none";
+                            return;
+                        }
                         const bodyTxt = document.body ? (document.body.innerText || '') : '';
                         const isSimView = (window._luxoActiveView === 'simulador') || 
                                           (window.location && (window.location.hash.includes('simulador') || window.location.pathname.includes('simulador'))) ||
                                           bodyTxt.includes('Simulador de Ventas') || 
                                           bodyTxt.includes('Roleplay de Ventas') ||
+                                          bodyTxt.includes('Cliente Simulado Sunglass Hut') ||
                                           bodyTxt.includes('Cliente en Tienda');
                         btn.style.display = isSimView ? "flex" : "none";
                     }, 800);
@@ -1246,10 +1256,14 @@ def configurar_rutas_fastapi(app):
                         window._simuladorModo = modo || 'chat';
                         const btn = document.getElementById("luxo-sim-mic-btn");
                         if (btn) {
+                            btn.dataset.forceHide = visible ? 'false' : 'true';
                             btn.style.display = visible ? "flex" : "none";
                             if (visible) {
-                                btn.style.borderColor = "#9D50BB";
-                                btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                                btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                                btn.style.borderColor = "#00FFFF";
+                                btn.style.boxShadow = "0 4px 20px rgba(0, 255, 255, 0.45)";
+                                const lbl = document.getElementById("luxo-sim-mic-label");
+                                if (lbl) lbl.innerText = "Hablar al Cliente";
                             }
                         }
                     };
@@ -1261,8 +1275,11 @@ def configurar_rutas_fastapi(app):
                         }
                         const btn = document.getElementById("luxo-sim-mic-btn");
                         if (btn) {
-                            btn.style.borderColor = "#9D50BB";
-                            btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                            btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                            btn.style.borderColor = "#00FFFF";
+                            btn.style.boxShadow = "0 4px 20px rgba(0, 255, 255, 0.45)";
+                            const lbl = document.getElementById("luxo-sim-mic-label");
+                            if (lbl) lbl.innerText = "Hablar al Cliente";
                         }
                     };
 
@@ -1315,8 +1332,11 @@ def configurar_rutas_fastapi(app):
                                 playToneSim(1);
                                 const btn = document.getElementById("luxo-sim-mic-btn");
                                 if (btn) {
+                                    btn.style.background = "linear-gradient(135deg, #FF0055 0%, #FF5500 100%)";
                                     btn.style.borderColor = "#FF0055";
-                                    btn.style.boxShadow = "0 0 22px rgba(255, 0, 85, 0.9)";
+                                    btn.style.boxShadow = "0 0 24px rgba(255, 0, 85, 0.9)";
+                                    const lbl = document.getElementById("luxo-sim-mic-label");
+                                    if (lbl) lbl.innerText = "🔴 Escuchando...";
                                 }
                             };
                             rSim.onresult = function(ev) {
@@ -1341,8 +1361,11 @@ def configurar_rutas_fastapi(app):
                                 window._simRecognitionActive = null;
                                 const btn = document.getElementById("luxo-sim-mic-btn");
                                 if (btn) {
-                                    btn.style.borderColor = "#9D50BB";
-                                    btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                                    btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                                    btn.style.borderColor = "#00FFFF";
+                                    btn.style.boxShadow = "0 4px 20px rgba(0, 255, 255, 0.45)";
+                                    const lbl = document.getElementById("luxo-sim-mic-label");
+                                    if (lbl) lbl.innerText = "Hablar al Cliente";
                                 }
                                 if (ev.error === 'not-allowed') {
                                     alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
@@ -1353,8 +1376,11 @@ def configurar_rutas_fastapi(app):
                                 window._simRecognitionActive = null;
                                 const btn = document.getElementById("luxo-sim-mic-btn");
                                 if (btn) {
-                                    btn.style.borderColor = "#9D50BB";
-                                    btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                                    btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                                    btn.style.borderColor = "#00FFFF";
+                                    btn.style.boxShadow = "0 4px 20px rgba(0, 255, 255, 0.45)";
+                                    const lbl = document.getElementById("luxo-sim-mic-label");
+                                    if (lbl) lbl.innerText = "Hablar al Cliente";
                                 }
                             };
                             
