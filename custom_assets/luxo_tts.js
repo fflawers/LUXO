@@ -552,7 +552,81 @@
     };
 
     function updateSimMicUiState(isRecording) {
-        // Estado visual del micrófono si aplica
+        const btnChat = document.getElementById("luxo-sim-chat-btn");
+        const btnVoz = document.getElementById("luxo-sim-voz-btn");
+        if (isRecording) {
+            if (btnChat) { btnChat.style.background = "#FF0000"; btnChat.style.boxShadow = "0 0 20px #FF0055"; }
+            if (btnVoz) { btnVoz.style.background = "#FF0000"; btnVoz.style.boxShadow = "0 0 20px #FF0055"; }
+        } else {
+            if (btnChat) { btnChat.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)"; btnChat.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)"; }
+            if (btnVoz) { btnVoz.style.background = "linear-gradient(135deg, #0575E6 0%, #00F260 100%)"; btnVoz.style.boxShadow = "0 0 15px rgba(0, 255, 170, 0.8)"; }
+        }
+    }
+
+    function createSimTabButtons() {
+        if (!document.body && !document.documentElement) return;
+
+        // Botón 1: Pestaña Roleplay Chat
+        let btnChat = document.getElementById("luxo-sim-chat-btn");
+        if (!btnChat) {
+            btnChat = document.createElement("div");
+            btnChat.id = "luxo-sim-chat-btn";
+            btnChat.innerHTML = `<span style="font-size:16px;margin-right:6px;">🎙️</span><span>Dictar al Chat</span>`;
+            btnChat.setAttribute("title", "Dictar mensaje al Chat");
+            btnChat.style.cssText = "position: fixed; bottom: 70px; right: 18px; z-index: 9999998; font-size: 13px; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 20px; padding: 7px 15px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: transform 0.15s ease, background 0.3s ease; touch-action: manipulation; user-select: none;";
+            
+            function onChatMicClick(e) {
+                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                btnChat.style.transform = "scale(0.92)";
+                setTimeout(function() { btnChat.style.transform = "scale(1)"; }, 150);
+                window.iniciarDictadoSimulador('chat');
+            }
+            btnChat.addEventListener('click', onChatMicClick);
+            btnChat.addEventListener('touchend', onChatMicClick);
+            (document.body || document.documentElement).appendChild(btnChat);
+        }
+
+        // Botón 2: Pestaña Conversación por Voz
+        let btnVoz = document.getElementById("luxo-sim-voz-btn");
+        if (!btnVoz) {
+            btnVoz = document.createElement("div");
+            btnVoz.id = "luxo-sim-voz-btn";
+            btnVoz.innerHTML = `<span style="font-size:18px;margin-right:6px;">🎙️</span><span>Hablar Ahora</span>`;
+            btnVoz.setAttribute("title", "Hablar Ahora en Sesión de Voz");
+            btnVoz.style.cssText = "position: fixed; bottom: 70px; right: 18px; z-index: 9999998; font-size: 14px; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #0575E6 0%, #00F260 100%); border: 1.8px solid #00FFAA; border-radius: 20px; padding: 8px 18px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(0, 255, 170, 0.8); cursor: pointer; transition: transform 0.15s ease, background 0.3s ease; touch-action: manipulation; user-select: none;";
+            
+            function onVozMicClick(e) {
+                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                btnVoz.style.transform = "scale(0.92)";
+                setTimeout(function() { btnVoz.style.transform = "scale(1)"; }, 150);
+                window.iniciarDictadoSimulador('voz');
+            }
+            btnVoz.addEventListener('click', onVozMicClick);
+            btnVoz.addEventListener('touchend', onVozMicClick);
+            (document.body || document.documentElement).appendChild(btnVoz);
+        }
+    }
+
+    function isSimulatorViewActive() {
+        if (window._simuladorVisible === false) return false;
+        if (window._luxoActiveView === "simulador" || window._simuladorVisible === true) return true;
+        const p = (window.location.pathname || '') + (window.location.hash || '');
+        if (p.includes("simulador")) return true;
+        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
+        if (bodyText.includes("Simulador de Ventas con IA") || bodyText.includes("Roleplay Chat") || bodyText.includes("Perfil de Cliente") || bodyText.includes("Objeción de Precio")) {
+            return true;
+        }
+        return false;
+    }
+
+    function getSimulatorActiveTab() {
+        if (window._simCurrentMode === "voz" || window._simCurrentMode === "voice") return "voz";
+        if (window._simCurrentMode === "chat") return "chat";
+        const bodyText = (document.body && (document.body.innerText || document.body.textContent)) || "";
+        if (bodyText.includes("Conversación por Voz") && (bodyText.includes("Modo 100% Voz") || bodyText.includes("Cliente hablando por voz") || bodyText.includes("Listo para iniciar la conversación de voz") || bodyText.includes("Tu turno de hablar") || bodyText.includes("Finalizar y Evaluar"))) {
+            return "voz";
+        }
+        return "chat";
     }
 
     window.detenerDictadoSimulador = function() {
@@ -592,5 +666,47 @@
             if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
             else window._simuladorActivo = true;
         }
+        createSimTabButtons();
+        const btnChat = document.getElementById("luxo-sim-chat-btn");
+        const btnVoz = document.getElementById("luxo-sim-voz-btn");
+        if (visible === false) {
+            if (btnChat) btnChat.style.display = "none";
+            if (btnVoz) btnVoz.style.display = "none";
+        } else {
+            if (_simCurrentMode === 'voz') {
+                if (btnVoz) btnVoz.style.display = "flex";
+                if (btnChat) btnChat.style.display = "none";
+            } else {
+                if (btnChat) btnChat.style.display = "flex";
+                if (btnVoz) btnVoz.style.display = "none";
+            }
+        }
     };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', createSimTabButtons);
+    } else {
+        createSimTabButtons();
+    }
+
+    // Intervalo de sincronización de visibilidad exclusiva
+    setInterval(function() {
+        createSimTabButtons();
+        const btnChat = document.getElementById("luxo-sim-chat-btn");
+        const btnVoz = document.getElementById("luxo-sim-voz-btn");
+        const isSim = isSimulatorViewActive();
+        if (!isSim) {
+            if (btnChat) btnChat.style.display = "none";
+            if (btnVoz) btnVoz.style.display = "none";
+        } else {
+            const tab = getSimulatorActiveTab();
+            if (tab === 'voz') {
+                if (btnVoz) btnVoz.style.display = "flex";
+                if (btnChat) btnChat.style.display = "none";
+            } else {
+                if (btnChat) btnChat.style.display = "flex";
+                if (btnVoz) btnVoz.style.display = "none";
+            }
+        }
+    }, 500);
 })();

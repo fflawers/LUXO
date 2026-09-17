@@ -1328,6 +1328,11 @@ def configurar_rutas_fastapi(app):
                             mobileMicBtn.onclick = onMainFloatingMicClick;
                             document.body.appendChild(mobileMicBtn);
                         }
+
+                        // Botones HTML dedicados para el Simulador IA
+                        if (window.createSimTabButtons) {
+                            window.createSimTabButtons();
+                        }
                     }
 
                     if (document.readyState === 'loading') {
@@ -1336,7 +1341,7 @@ def configurar_rutas_fastapi(app):
                         initButtons();
                     }
 
-                    // Sincronización del micrófono principal LUXO
+                    // Sincronización del micrófono principal LUXO y botones del simulador
                     setInterval(function() {
                         const btnMain = document.getElementById("luxo-floating-main-mic");
                         if (!btnMain && document.body) {
@@ -17518,7 +17523,7 @@ REGLAS OBLIGATORIAS:
 
             chat_area = ft.Column([
                 sim_chat_column,
-                ft.Row([user_input, btn_mic_sim_container, btn_enviar], spacing=6, vertical_alignment="center"),
+                ft.Row([user_input, btn_enviar], spacing=6, vertical_alignment="center"),
                 ft.Container(height=10),
                 ft.Row([btn_finalizar, btn_cancelar], spacing=10, wrap=True)
             ], visible=False, expand=True)
@@ -17902,7 +17907,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
                 ft.Container(height=5),
                 sim_voz_chat_column,
                 ft.Container(height=10),
-                ft.Row([btn_hablar_voz, btn_finalizar_voz, btn_cancelar_voz], spacing=10, wrap=True)
+                ft.Row([btn_finalizar_voz, btn_cancelar_voz], spacing=10, wrap=True)
             ], visible=False, expand=True)
 
             tab_voz = ft.Column([config_area_voz, chat_area_voz], expand=True)
