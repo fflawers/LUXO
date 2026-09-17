@@ -1199,11 +1199,11 @@ def configurar_rutas_fastapi(app):
                         simMicBtn.setAttribute("title", "Hablar al Cliente (Simulador IA)");
                         simMicBtn.style.cssText = `
                             position: fixed;
-                            bottom: 24px;
-                            right: 76px;
-                            width: 44px;
-                            height: 44px;
-                            border-radius: 22px;
+                            bottom: 12px;
+                            right: 120px;
+                            width: 46px;
+                            height: 46px;
+                            border-radius: 23px;
                             background: linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%);
                             border: 2px solid #9D50BB;
                             box-shadow: 0 4px 18px rgba(157, 80, 187, 0.45);
@@ -1211,7 +1211,7 @@ def configurar_rutas_fastapi(app):
                             align-items: center;
                             justify-content: center;
                             cursor: pointer;
-                            z-index: 999999;
+                            z-index: 9999999;
                             transition: all 0.2s ease;
                             touch-action: manipulation;
                             user-select: none;
@@ -1226,7 +1226,7 @@ def configurar_rutas_fastapi(app):
                             setTimeout(function() {
                                 simMicBtn.style.transform = "scale(1)";
                             }, 180);
-                            window.iniciarDictadoSimulador('chat');
+                            window.iniciarDictadoSimulador(window._simuladorModo || 'chat');
                         }
 
                         simMicBtn.addEventListener("click", onSimMicPress);
@@ -1234,7 +1234,8 @@ def configurar_rutas_fastapi(app):
                         document.body.appendChild(simMicBtn);
                     }
 
-                    window.showSimuladorMicBtn = function(visible) {
+                    window.showSimuladorMicBtn = function(visible, modo) {
+                        window._simuladorModo = modo || 'chat';
                         const btn = document.getElementById("luxo-sim-mic-btn");
                         if (btn) {
                             btn.style.display = visible ? "flex" : "none";
@@ -1245,11 +1246,24 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
+                    window.detenerDictadoSimulador = function() {
+                        if (window._simRecognitionActive) {
+                            try { window._simRecognitionActive.stop(); } catch(e){}
+                            window._simRecognitionActive = null;
+                        }
+                        const btn = document.getElementById("luxo-sim-mic-btn");
+                        if (btn) {
+                            btn.style.borderColor = "#9D50BB";
+                            btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                        }
+                    };
+
                     window.iniciarDictadoSimulador = function(modo) {
                         try {
+                            const m = modo || window._simuladorModo || 'chat';
                             const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                             if (!SR) { 
-                                alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome o Microsoft Edge.'); 
+                                alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome, Edge o Safari.'); 
                                 return; 
                             }
                             if (window._simRecognitionActive) {
@@ -1289,7 +1303,7 @@ def configurar_rutas_fastapi(app):
                             }
 
                             rSim.onstart = function() {
-                                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: modo, timestamp: Date.now() });
+                                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: m, timestamp: Date.now() });
                                 playToneSim(1);
                                 const btn = document.getElementById("luxo-sim-mic-btn");
                                 if (btn) {
@@ -1301,11 +1315,11 @@ def configurar_rutas_fastapi(app):
                                 const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
                                 if (txt) {
                                     playToneSim(2);
-                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
                                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
                                     const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                                    fetch('/simulador_text_input?session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&mode=' + encodeURIComponent(modo || 'chat') + '&text=' + encodeURIComponent(txt), { method: 'POST' })
+                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=' + encodeURIComponent(m) + '&session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&username=' + encodeURIComponent(uname) + '&text=' + encodeURIComponent(txt), { method: 'POST' })
                                     .then(function(r) { return r.json(); })
                                     .then(function(res) {
                                         console.log("[SIMULADOR MIC] Respuesta backend:", res);
@@ -2539,6 +2553,18 @@ def configurar_rutas_fastapi(app):
     async def post_simulador_text_input(request: Request = None, session_id: str = "", device_id: str = "", user_id: str = "", username: str = "", text: str = "", mode: str = "chat"):
         import traceback
         try:
+            if request:
+                try:
+                    qp = request.query_params
+                    session_id = session_id or qp.get("session_id", "")
+                    device_id = device_id or qp.get("device_id", "")
+                    user_id = user_id or qp.get("user_id", "")
+                    username = username or qp.get("username", "")
+                    text = text or qp.get("text", "")
+                    mode = mode or qp.get("mode", "chat")
+                except Exception:
+                    pass
+
             texto_final = text or ""
             modo_solicitado = mode or "chat"
 
@@ -2578,24 +2604,24 @@ def configurar_rutas_fastapi(app):
             print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido: session_id='{session_id}', device_id='{device_id}', user_id='{user_id}', username='{username}', mode='{modo_solicitado}', text='{texto_final}'")
             session = None
             
-            # 1. Búsqueda estricta por token de sesión
-            if session_id and session_id in active_sessions:
-                session = active_sessions[session_id]
-            # 2. Búsqueda por device_id
-            if not session and device_id and device_id in active_sessions:
-                session = active_sessions[device_id]
-            # 3. Búsqueda por user_id autenticado
-            if not session and user_id and str(user_id).strip() not in ["", "unknown", "None", "null", "undefined"]:
+            # 1. Búsqueda estricta por user_id autenticado
+            if user_id and str(user_id).strip() not in ["", "unknown", "None", "null", "undefined"]:
                 user_id_val = int(user_id) if str(user_id).isdigit() else user_id
                 session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
+            # 2. Búsqueda por token de sesión
+            if not session and session_id and session_id in active_sessions:
+                session = active_sessions[session_id]
+            # 3. Búsqueda por device_id
+            if not session and device_id and device_id in active_sessions:
+                session = active_sessions[device_id]
             # 4. Búsqueda por username autenticado
             if not session and username and str(username).strip().lower() not in ["", "unknown", "None", "null", "undefined"]:
                 session = active_sessions.get(str(username).strip().lower())
             
-            # 5. Fallback a cualquier sesión con simulador activo
+            # 5. Fallback a cualquier sesión con simulador activo o funciones del simulador
             if not session:
                 for s_key, s_val in list(active_sessions.items()):
-                    if isinstance(s_val, dict) and s_val.get("sim_modo_activo"):
+                    if isinstance(s_val, dict) and (s_val.get("sim_modo_activo") or s_val.get("sim_enviar_fn") or s_val.get("sim_voz_enviar_fn")):
                         session = s_val
                         print(f"🎙️ [SIMULADOR MIC] Encontrada sesión activa mediante fallback de simulador (key='{s_key}')")
                         break
@@ -2607,14 +2633,11 @@ def configurar_rutas_fastapi(app):
             
             # Si no se encuentra sesión, retornar error seguro
             if not session:
-                print(f"[SIMULADOR MIC] Sesión no encontrada para session_id='{session_id}', user_id='{user_id}', username='{username}'")
+                print(f"[SIMULADOR MIC] Sesión no encontrada para user_id='{user_id}', session_id='{session_id}'")
                 return {"status": "session_not_found"}
 
             if texto_final:
-                modo_activo = modo_solicitado or session.get("sim_modo_activo", "chat")
-                if not modo_activo:
-                    print(f"[SIMULADOR MIC] Ignorando audio '{texto_final}' porque la simulación no está activa en la sesión.")
-                    return {"status": "simulation_inactive"}
+                modo_activo = modo_solicitado or session.get("sim_modo_activo") or ("voz" if session.get("sim_voz_enviar_fn") else "chat")
                 page = session.get("page")
                 btn_mic_sim = session.get("btn_mic_simulador_container")
 
@@ -2631,25 +2654,26 @@ def configurar_rutas_fastapi(app):
                         if hasattr(page, "run_thread"):
                             page.run_thread(sim_voz_fn, texto_final)
                         else:
-                            sim_voz_fn(texto_final)
+                            threading.Thread(target=sim_voz_fn, args=(texto_final,), daemon=True).start()
                     except Exception as ex_v:
                         print(f"ERROR en sim_voz_enviar_fn: {ex_v}")
                     return {"status": "success", "mode": "voz"}
                 else:
                     sim_input = session.get("sim_user_input")
                     sim_enviar = session.get("sim_enviar_fn")
-                    if sim_enviar and page:
+                    if sim_enviar:
                         if sim_input:
-                            sim_input.value = ""
+                            sim_input.value = texto_final
                             try: sim_input.update()
                             except Exception: pass
-                        try: page.update()
-                        except Exception: pass
+                        if page:
+                            try: page.update()
+                            except Exception: pass
                         try:
                             if hasattr(page, "run_thread"):
                                 page.run_thread(sim_enviar, None, texto_final)
                             else:
-                                sim_enviar(None, texto_forzado=texto_final)
+                                threading.Thread(target=sim_enviar, args=(None, texto_final), daemon=True).start()
                         except Exception as ex:
                             print(f"ERROR en sim_enviar: {ex}")
                         return {"status": "success", "mode": "chat"}
@@ -16754,6 +16778,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 except: pass
                                 try: sim_voz_estado_texto.update()
                                 except: pass
+                                tiempo_inicio_turno[0] = time.time()
                                 if on_finish_callback and simulacion_activa[0] and not sim_stop_requested[0]:
                                     try: on_finish_callback()
                                     except Exception as ex_cb: print("Error en callback fin audio:", ex_cb)
@@ -16766,6 +16791,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             simulacion_activa = [False]
             sim_dictado_en_progreso = [False]
             sim_stop_requested = [False]
+            tiempo_inicio_turno = [time.time()]
+            tiempos_respuesta = []
 
             def play_sim_beep(tipo="start"):
                 def _beep_worker():
@@ -16886,35 +16913,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                     threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
 
-                # Enviar evento de dictado a la cola de polling HTTP del cliente web (compatible Firefox/Chrome/Safari)
-                tok = getattr(page, "_luxo_token", None)
-                u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
-                u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
-                dev_id_k = getattr(page, "device_id", None)
-                evt_dict = {
-                    "id": f"sim_mic_{int(time.time()*1000)}",
-                    "action": "dictate_simulador",
-                    "mode": "chat",
-                    "timestamp": time.time()
-                }
-                if tok: GLOBAL_WEB_TTS_EVENTS[tok] = evt_dict
-                if dev_id_k: GLOBAL_WEB_TTS_EVENTS[dev_id_k] = evt_dict
-                if u_id: GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_dict
-                if u_name: GLOBAL_WEB_TTS_EVENTS[u_name] = evt_dict
-
                 js_sim_dictate = """javascript:void((function(){
                     try {
-                        let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                        if (!SR && window.top) {
-                            try { SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition; } catch(e){}
+                        if (window.iniciarDictadoSimulador) {
+                            window.iniciarDictadoSimulador('chat');
+                            return;
                         }
-                        if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+                        const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                         if (!SR) {
-                            if (window.iniciarDictadoSimulador) {
-                                window.iniciarDictadoSimulador('chat');
-                                return;
-                            }
-                            alert('❌ API de voz no soportada. Usa Google Chrome o Microsoft Edge.');
+                            alert('❌ API de voz no soportada en este navegador.');
                             return;
                         }
                         const r = new SR();
@@ -16922,31 +16929,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         r.interimResults = false;
                         r.continuous = false;
                         r.maxAlternatives = 1;
-                        r.onstart = function() {
-                            console.log('[SIMULADOR MIC CHAT] Escuchando...');
-                        };
                         r.onresult = function(ev) {
                             const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
                             if (txt) {
-                                const uid = (window.getLuxoUserId ? window.getLuxoUserId() : '') || (window.luxoSessionToken || '');
+                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
                                 fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=chat&text=' + encodeURIComponent(txt), { method: 'POST' });
                             }
-                        };
-                        r.onerror = function(ev) {
-                            console.log('[SIMULADOR MIC CHAT] Error:', ev.error);
-                            if (ev.error === 'not-allowed') {
-                                alert('⚠️ Permiso de micrófono denegado. Permite el micrófono en tu navegador.');
-                            } else if (window.iniciarDictadoSimulador) {
-                                window.iniciarDictadoSimulador('chat');
-                            }
-                        };
-                        r.onend = function() {
-                            if (window.reanudarReconocimientoGlobal) window.reanudarReconocimientoGlobal();
                         };
                         r.start();
                     } catch(err) {
                         console.log('[SIMULADOR MIC] Error:', err);
-                        if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');
                     }
                 })());"""
 
@@ -17054,6 +17046,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 msg_txt = (texto_forzado if texto_forzado is not None else (user_input.value or "")).strip()
                 if not msg_txt:
                     return
+                
+                t_ahora = time.time()
+                if tiempo_inicio_turno[0] > 0:
+                    dt = round(t_ahora - tiempo_inicio_turno[0], 1)
+                    if 0.5 <= dt <= 300:
+                        tiempos_respuesta.append(dt)
+                
                 user_input.value = ""
                 try:
                     user_input.update()
@@ -17075,6 +17074,7 @@ REGLAS OBLIGATORIAS:
                 ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
                 if not simulacion_activa[0] or sim_stop_requested[0]:
                     return
+                tiempo_inicio_turno[0] = time.time()
                 if ok and respuesta:
                     chat_history.append({"role": "assistant", "content": respuesta})
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
@@ -17179,7 +17179,7 @@ REGLAS OBLIGATORIAS:
                 cargar_historial_evaluaciones()
                 page.update()
 
-            def mostrar_evaluacion_detalle(score, feedback, nombre_vendedor="Asesor de Ventas", perfil="", fecha=""):
+            def mostrar_evaluacion_detalle(score, feedback, nombre_vendedor="Asesor de Ventas", perfil="", fecha="", stats_tiempo=None):
                 eval_detail_card.controls.clear()
                 
                 score_num = int(score) if str(score).isdigit() else 70
@@ -17193,6 +17193,40 @@ REGLAS OBLIGATORIAS:
                     extension_set=ft.MarkdownExtensionSet.GITHUB_WEB
                 )
 
+                metricas_col = [
+                    ft.Row([
+                        ft.Text("AUDITORÍA DE VENTA Y NEUROVENTAS", color="#00FFFF", weight="bold", size=16),
+                        ft.Container(
+                            content=ft.Text(f"SCORE: {score_num}/100", color="white", weight="bold", size=15),
+                            bgcolor=badge_bg,
+                            padding=ft.Padding(left=12, top=6, right=12, bottom=6),
+                            border_radius=8,
+                            border=ft.Border.all(1.5, badge_color)
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center"),
+                    ft.Divider(color="#333355", height=15),
+                    ft.Row([
+                        ft.Text(f"👤 Asesor: {nombre_vendedor}", color="white", weight="bold", size=13),
+                        ft.Text(f"📅 Fecha: {fecha}", color="#AAAAAA", size=12),
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    ft.Text(f"🎯 Escenario / Perfil: {perfil}", color="#D8B4FE", size=12, italic=True),
+                ]
+
+                if stats_tiempo and isinstance(stats_tiempo, dict):
+                    metricas_col.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.TIMER_OUTLINED, color="#00FFFF", size=18),
+                                ft.Text(f"⏱️ Tiempo Promedio de Respuesta: {stats_tiempo.get('avg', 0)} seg", color="#00FFFF", weight="bold", size=13),
+                                ft.Text(f"(Más rápida: {stats_tiempo.get('min', 0)}s • Más pausada: {stats_tiempo.get('max', 0)}s • {stats_tiempo.get('count', 0)} turnos)", color="#AAAAAA", size=11),
+                            ], spacing=8, wrap=True, vertical_alignment="center"),
+                            bgcolor="#1C1C36",
+                            padding=ft.Padding(left=12, top=8, right=12, bottom=8),
+                            border_radius=8,
+                            border=ft.Border.all(1, "#00FFFF44")
+                        )
+                    )
+
                 eval_detail_card.controls.extend([
                     ft.Row([
                         ft.ElevatedButton(
@@ -17205,24 +17239,7 @@ REGLAS OBLIGATORIAS:
                         )
                     ]),
                     ft.Container(
-                        content=ft.Column([
-                            ft.Row([
-                                ft.Text("AUDITORÍA DE VENTA Y NEUROVENTAS", color="#00FFFF", weight="bold", size=16),
-                                ft.Container(
-                                    content=ft.Text(f"SCORE: {score_num}/100", color="white", weight="bold", size=15),
-                                    bgcolor=badge_bg,
-                                    padding=ft.Padding(left=12, top=6, right=12, bottom=6),
-                                    border_radius=8,
-                                    border=ft.Border.all(1.5, badge_color)
-                                )
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center"),
-                            ft.Divider(color="#333355", height=15),
-                            ft.Row([
-                                ft.Text(f"👤 Asesor: {nombre_vendedor}", color="white", weight="bold", size=13),
-                                ft.Text(f"📅 Fecha: {fecha}", color="#AAAAAA", size=12),
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                            ft.Text(f"🎯 Escenario / Perfil: {perfil}", color="#D8B4FE", size=12, italic=True),
-                        ], spacing=8),
+                        content=ft.Column(metricas_col, spacing=8),
                         bgcolor="#141424",
                         padding=15,
                         border_radius=10,
@@ -17325,6 +17342,14 @@ REGLAS OBLIGATORIAS:
                         ### 🎯 Plan de Acción y Consejos Clave para la Próxima Simulación
                         """
                     
+                    stats_tiempo = None
+                    if tiempos_respuesta:
+                        avg_t = round(sum(tiempos_respuesta) / len(tiempos_respuesta), 1)
+                        min_t = round(min(tiempos_respuesta), 1)
+                        max_t = round(max(tiempos_respuesta), 1)
+                        stats_tiempo = {"avg": avg_t, "min": min_t, "max": max_t, "count": len(tiempos_respuesta)}
+                        eval_prompt += f"\n\n⏱️ TIEMPO DE RESPUESTA DEL VENDEDOR:\n- Promedio por turno: {avg_t} segundos (Mínimo: {min_t}s, Máximo: {max_t}s en {len(tiempos_respuesta)} intervenciones).\n- Evalúa si la velocidad y dinamismo de respuesta fueron óptimos (ideal 2 a 6 segundos para mantener la conexión sin titubeos)."
+
                     for msg in chat_history:
                         rol_label = "VENDEDOR (ASESOR DE VENTAS)" if msg['role'] == 'user' else "CLIENTE (COMPRADOR SIMULADO)"
                         eval_prompt += f"\n{rol_label}: {msg['content']}"
@@ -17370,7 +17395,7 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                         
                         from datetime import datetime
                         fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, cliente_dropdown.value, fecha_ahora)
+                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, cliente_dropdown.value, fecha_ahora, stats_tiempo=stats_tiempo)
                     else:
                         btn_finalizar.disabled = False
                         try: page.update()
@@ -17389,6 +17414,7 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                 
                 simulacion_activa[0] = True
                 sim_stop_requested[0] = False
+                tiempos_respuesta.clear()
                 v_val = vendedor_dropdown.value
                 vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
                 perfil_cliente_txt[0] = cliente_dropdown.value
@@ -17446,6 +17472,7 @@ REGLAS OBLIGATORIAS:
                     btn_mic_sim_icon.disabled = False
                     btn_finalizar.disabled = False
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
+                    tiempo_inicio_turno[0] = time.time()
                     ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'chat');")
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
@@ -17557,35 +17584,15 @@ REGLAS OBLIGATORIAS:
                     if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                     
-                    # Enviar evento de dictado a la cola de polling HTTP del cliente web (compatible Firefox/Chrome/Safari)
-                    tok = getattr(page, "_luxo_token", None)
-                    u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
-                    u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
-                    dev_id_k = getattr(page, "device_id", None)
-                    evt_dict = {
-                        "id": f"sim_mic_{int(time.time()*1000)}",
-                        "action": "dictate_simulador",
-                        "mode": "voz",
-                        "timestamp": time.time()
-                    }
-                    if tok: GLOBAL_WEB_TTS_EVENTS[tok] = evt_dict
-                    if dev_id_k: GLOBAL_WEB_TTS_EVENTS[dev_id_k] = evt_dict
-                    if u_id: GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_dict
-                    if u_name: GLOBAL_WEB_TTS_EVENTS[u_name] = evt_dict
-                    
                     js_sim_voz = """javascript:void((function(){
                         try {
-                            let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                            if (!SR && window.top) {
-                                try { SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition; } catch(e){}
+                            if (window.iniciarDictadoSimulador) {
+                                window.iniciarDictadoSimulador('voz');
+                                return;
                             }
-                            if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                             if (!SR) {
-                                if (window.iniciarDictadoSimulador) {
-                                    window.iniciarDictadoSimulador('voz');
-                                    return;
-                                }
-                                alert('❌ API de voz no soportada. Usa Google Chrome o Microsoft Edge.');
+                                alert('❌ API de voz no soportada en este navegador.');
                                 return;
                             }
                             const r = new SR();
@@ -17593,31 +17600,16 @@ REGLAS OBLIGATORIAS:
                             r.interimResults = false;
                             r.continuous = false;
                             r.maxAlternatives = 1;
-                            r.onstart = function() {
-                                console.log('[SIMULADOR MIC VOZ] Escuchando...');
-                            };
                             r.onresult = function(ev) {
                                 const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
                                 if (txt) {
-                                    const uid = (window.getLuxoUserId ? window.getLuxoUserId() : '') || (window.luxoSessionToken || '');
-                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=voz&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=' + encodeURIComponent('voz') + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
-                            };
-                            r.onerror = function(ev) {
-                                console.log('[SIMULADOR MIC VOZ] Error:', ev.error);
-                                if (ev.error === 'not-allowed') {
-                                    alert('⚠️ Permiso de micrófono denegado. Permite el micrófono en tu navegador.');
-                                } else if (window.iniciarDictadoSimulador) {
-                                    window.iniciarDictadoSimulador('voz');
-                                }
-                            };
-                            r.onend = function() {
-                                if (window.reanudarReconocimientoGlobal) window.reanudarReconocimientoGlobal();
                             };
                             r.start();
                         } catch(err) {
                             console.log('[SIMULADOR MIC VOZ] Error:', err);
-                            if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');
                         }
                     })());"""
 
@@ -17658,7 +17650,7 @@ REGLAS OBLIGATORIAS:
                     sim_voz_chat_column.scroll_to(offset=-1, duration=300)
                 except Exception: pass
                 try: page.update()
-                except Exception: pass
+                except: pass
 
             def enviar_mensaje_simulacion_voz(msg_txt):
                 if not simulacion_activa[0] or sim_stop_requested[0]:
@@ -17666,6 +17658,13 @@ REGLAS OBLIGATORIAS:
                 if not msg_txt or not str(msg_txt).strip():
                     return
                 msg_txt = str(msg_txt).strip()
+                
+                t_ahora = time.time()
+                if tiempo_inicio_turno[0] > 0:
+                    dt = round(t_ahora - tiempo_inicio_turno[0], 1)
+                    if 0.5 <= dt <= 300:
+                        tiempos_respuesta.append(dt)
+                
                 voz_chat_history.append({"role": "user", "content": msg_txt})
                 agregar_mensaje_voz_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
                 
@@ -17714,6 +17713,7 @@ REGLAS OBLIGATORIAS:
                 
                 simulacion_activa[0] = True
                 sim_stop_requested[0] = False
+                tiempos_respuesta.clear()
                 v_val = vendedor_voz_dropdown.value
                 vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
                 perfil_cliente_txt[0] = cliente_voz_dropdown.value
@@ -17813,6 +17813,14 @@ REGLAS OBLIGATORIAS:
                     eval_prompt = f"""Analiza la siguiente conversación de roleplay 100% de voz entre un Asesor de Ventas Sunglass Hut y un Cliente ('{perfil_nombre}').
 Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de frases prohibidas de neuroventas (como 'sin compromiso' o 'ayudar en algo'):
 """
+                    stats_tiempo = None
+                    if tiempos_respuesta:
+                        avg_t = round(sum(tiempos_respuesta) / len(tiempos_respuesta), 1)
+                        min_t = round(min(tiempos_respuesta), 1)
+                        max_t = round(max(tiempos_respuesta), 1)
+                        stats_tiempo = {"avg": avg_t, "min": min_t, "max": max_t, "count": len(tiempos_respuesta)}
+                        eval_prompt += f"\n\n⏱️ TIEMPO DE RESPUESTA DEL VENDEDOR:\n- Promedio por turno: {avg_t} segundos (Mínimo: {min_t}s, Máximo: {max_t}s en {len(tiempos_respuesta)} intervenciones).\n- Evalúa si la velocidad y dinamismo de respuesta por voz fueron óptimos."
+
                     for msg in voz_chat_history:
                         rol_label = "VENDEDOR" if msg['role'] == 'user' else "CLIENTE"
                         eval_prompt += f"\n{rol_label}: {msg['content']}"
@@ -17852,7 +17860,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
 
                         from datetime import datetime
                         fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, f"🎙️ [Voz en Vivo] {cliente_voz_dropdown.value}", fecha_ahora)
+                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, f"🎙️ [Voz en Vivo] {cliente_voz_dropdown.value}", fecha_ahora, stats_tiempo=stats_tiempo)
                     else:
                         btn_finalizar_voz.disabled = False
                         try: page.update()
