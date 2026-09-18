@@ -362,7 +362,7 @@
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition();
         recognition.continuous = true;
-        recognition.interimResults = true;
+        recognition.interimResults = false;
         recognition.lang = 'es-MX';
 
         recognition.onstart = () => {
@@ -375,18 +375,18 @@
           const currentUserId = getUserId();
 
           for (let i = event.resultIndex; i < event.results.length; ++i) {
-            const item = event.results[i];
-            const rawTranscript = item[0].transcript;
-            const transcript = rawTranscript.toLowerCase().trim();
+            if (event.results[i].isFinal) {
+              const rawTranscript = event.results[i][0].transcript.trim();
+              const transcript = rawTranscript.toLowerCase().trim();
+              console.log("Texto escuchado:", rawTranscript);
 
-            const triggers = [
-              "oye luxo", "oye luxó", "oye lujo", "oye luso", 
-              "hoy el uso", "oye el uso", "oye luz o", "oye luco", 
-              "oye lucio", "oye luyo", "hola luxo", "hola lujo", 
-              "oye ruso", "hoy en luxo", "hoy luxo", "oí luxo"
-            ];
+              const triggers = [
+                "oye luxo", "oye luxó", "oye lujo", "oye luso", 
+                "hoy el uso", "oye el uso", "oye luz o", "oye luco", 
+                "oye lucio", "oye luyo", "hola luxo", "hola lujo", 
+                "oye ruso", "hoy en luxo", "hoy luxo", "oí luxo"
+              ];
 
-            if (!isAccumulating) {
               let matchedTrigger = null;
               let idx = -1;
               
@@ -410,8 +410,6 @@
                 }
                 
                 isAccumulating = true;
-                matchedResultIndex = i;
-                matchedTriggerPhrase = matchedTrigger;
                 questionBuffer = "";
                 
                 let question = rawTranscript.substring(idx + matchedTrigger.length).trim();
@@ -424,47 +422,28 @@
                 if (wakeTimeout) clearTimeout(wakeTimeout);
                 
                 if (questionBuffer) {
-                  sendTimeout = setTimeout(sendAccumulatedQuestion, 1200);
+                  sendTimeout = setTimeout(sendAccumulatedQuestion, 800);
                 } else {
                   wakeTimeout = setTimeout(() => {
                     isAccumulating = false;
-                    matchedResultIndex = -1;
                     console.log("Tiempo de espera para pregunta agotado (10s).");
                   }, 10000);
                 }
-                console.log("⚡ [WakeWord Detectado al instante!]:", matchedTrigger, "Buffer inicial:", questionBuffer);
-              }
-            } else {
-              // Reconstruir la pregunta acumulada completa desde matchedResultIndex hasta el final en tiempo real
-              let fullTextAfterTrigger = "";
-              for (let j = matchedResultIndex; j < event.results.length; ++j) {
-                const res = event.results[j][0].transcript;
-                if (j === matchedResultIndex) {
-                  const lowerRes = res.toLowerCase();
-                  const trigIdx = lowerRes.indexOf(matchedTriggerPhrase);
-                  if (trigIdx !== -1) {
-                    const after = res.substring(trigIdx + matchedTriggerPhrase.length).trim();
-                    if (after) fullTextAfterTrigger += after;
+                console.log("¡Palabra clave detectada!", matchedTrigger, "Buffer inicial:", questionBuffer);
+              } else if (isAccumulating) {
+                let segmentText = rawTranscript.replace(/^[,\?¿\.\s]+/, '').trim();
+                if (segmentText) {
+                  if (wakeTimeout) {
+                    clearTimeout(wakeTimeout);
+                    wakeTimeout = null;
                   }
-                } else {
-                  const after = res.trim();
-                  if (after) {
-                    fullTextAfterTrigger += (fullTextAfterTrigger ? " " : "") + after;
-                  }
+                  questionBuffer += (questionBuffer ? " " : "") + segmentText;
                 }
+                
+                if (sendTimeout) clearTimeout(sendTimeout);
+                sendTimeout = setTimeout(sendAccumulatedQuestion, 800);
+                console.log("¡Fragmento acumulado! Buffer actual:", questionBuffer);
               }
-              fullTextAfterTrigger = fullTextAfterTrigger.replace(/^[,\?¿\.\s]+/, '').trim();
-              if (fullTextAfterTrigger) {
-                questionBuffer = fullTextAfterTrigger;
-              }
-
-              if (wakeTimeout) {
-                clearTimeout(wakeTimeout);
-                wakeTimeout = null;
-              }
-              if (sendTimeout) clearTimeout(sendTimeout);
-              sendTimeout = setTimeout(sendAccumulatedQuestion, 1200);
-              console.log("🎙️ [Escuchando en vivo]:", questionBuffer || transcript);
             }
           }
         };
