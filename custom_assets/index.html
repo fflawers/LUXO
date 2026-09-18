@@ -435,23 +435,27 @@
                 console.log("⚡ [WakeWord Detectado al instante!]:", matchedTrigger, "Buffer inicial:", questionBuffer);
               }
             } else {
-              if (i === matchedResultIndex) {
-                const idx = transcript.indexOf(matchedTriggerPhrase);
-                if (idx !== -1) {
-                  let question = rawTranscript.substring(idx + matchedTriggerPhrase.length).trim();
-                  question = question.replace(/^[,\?¿\.\s]+/, '').trim();
-                  if (question) {
-                    questionBuffer = question;
+              // Reconstruir la pregunta acumulada completa desde matchedResultIndex hasta el final en tiempo real
+              let fullTextAfterTrigger = "";
+              for (let j = matchedResultIndex; j < event.results.length; ++j) {
+                const res = event.results[j][0].transcript;
+                if (j === matchedResultIndex) {
+                  const lowerRes = res.toLowerCase();
+                  const trigIdx = lowerRes.indexOf(matchedTriggerPhrase);
+                  if (trigIdx !== -1) {
+                    const after = res.substring(trigIdx + matchedTriggerPhrase.length).trim();
+                    if (after) fullTextAfterTrigger += after;
+                  }
+                } else {
+                  const after = res.trim();
+                  if (after) {
+                    fullTextAfterTrigger += (fullTextAfterTrigger ? " " : "") + after;
                   }
                 }
-              } else if (i > matchedResultIndex) {
-                let segmentText = rawTranscript.trim();
-                segmentText = segmentText.replace(/^[,\?¿\.\s]+/, '').trim();
-                if (segmentText) {
-                  if (item.isFinal) {
-                    questionBuffer += (questionBuffer ? " " : "") + segmentText;
-                  }
-                }
+              }
+              fullTextAfterTrigger = fullTextAfterTrigger.replace(/^[,\?¿\.\s]+/, '').trim();
+              if (fullTextAfterTrigger) {
+                questionBuffer = fullTextAfterTrigger;
               }
 
               if (wakeTimeout) {
