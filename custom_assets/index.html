@@ -193,6 +193,50 @@
       let sendTimeout = null;
       let wakeTimeout = null;
 
+      function injectTextIntoDomAndSend(text) {
+        if (!text) return false;
+        try {
+          const inputs = Array.from(document.querySelectorAll('textarea, input[type="text"]'));
+          let chatInput = null;
+          
+          for (const inp of inputs) {
+            const placeholder = (inp.getAttribute('placeholder') || '').toLowerCase();
+            const hint = (inp.getAttribute('aria-label') || '').toLowerCase();
+            if (placeholder.includes('consulta') || placeholder.includes('escribe') || hint.includes('consulta') || hint.includes('escribe')) {
+              chatInput = inp;
+              break;
+            }
+          }
+          
+          if (!chatInput) {
+            chatInput = inputs.find(inp => inp.tagName.toLowerCase() === 'textarea' || (inp.offsetParent !== null && inp.offsetHeight > 25));
+          }
+
+          if (chatInput) {
+            chatInput.focus();
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+            if (nativeInputValueSetter) {
+              nativeInputValueSetter.call(chatInput, text);
+            } else {
+              chatInput.value = text;
+            }
+            
+            chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+            chatInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+            const enterDown = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true });
+            const enterUp = new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true });
+            chatInput.dispatchEvent(enterDown);
+            chatInput.dispatchEvent(enterUp);
+
+            return true;
+          }
+        } catch(e) {
+          console.error("Error al inyectar texto en el DOM:", e);
+        }
+        return false;
+      }
+
       async function sendTextInput(userId, text) {
         try {
           const url = `${serverBaseUrl}/text_input?user_id=${userId}&text=${encodeURIComponent(text)}`;
@@ -213,7 +257,8 @@
           if (wakeTimeout) clearTimeout(wakeTimeout);
           if (currentUserId !== "unknown") {
             playBeep(2);
-            console.log("¡Enviando pregunta acumulada por silencio!", finalQuestion);
+            console.log("¡Enviando pregunta acumulada por silencio!", finalQuestion, "Usuario:", currentUserId);
+            injectTextIntoDomAndSend(finalQuestion);
             sendTextInput(currentUserId, finalQuestion);
           }
         }
