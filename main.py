@@ -9505,6 +9505,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         if getattr(page, "username", None):
             active_sessions[page.username] = sess_data
 
+        # Sincronizar ID de usuario y sesión en el navegador cliente
+        u_id_str = str(user_info.get("id") or "")
+        u_name_str = str(user_info.get("usuario") or "").lower().strip()
+        if u_id_str:
+            ejecutar_js_flet(page, f"window.luxoUserId = '{u_id_str}'; window.luxoUsername = '{u_name_str}'; try {{ localStorage.setItem('logged_user_id', '{u_id_str}'); localStorage.setItem('logged_username', '{u_name_str}'); }} catch(e){{}}")
+
 
         # =================================
         # VISTAS DEL PANEL DINÁMICO
@@ -10069,6 +10075,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 ),
                 ft.Row([
                     input_msg,
+                    user_id_field,
                     btn_mic_container,
                     btn_send_whatsapp
                 ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
@@ -25295,7 +25302,9 @@ Ejemplo:
                         sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
                         page.user_id = str(user_id_key)
                         page._luxo_token = sess_token
-                        page.username = str(user_data.get("Usuario") or "").strip().lower()
+                        u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
+                        page.username = u_clean_login
+                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,

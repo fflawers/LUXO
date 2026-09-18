@@ -220,6 +220,13 @@
       }
 
       function getUserId() {
+        try {
+          const domInput = document.querySelector('input[placeholder="USER_ID_HINT"]') || document.querySelector('textarea[placeholder="USER_ID_HINT"]');
+          if (domInput && domInput.value && !["unknown", "", "null", "undefined"].includes(String(domInput.value).toLowerCase())) {
+            window.luxoUserId = String(domInput.value);
+            return String(domInput.value);
+          }
+        } catch(e){}
         if (typeof window.getLuxoUserId === "function") {
           const uid = window.getLuxoUserId();
           if (uid && !["unknown", "", "null", "undefined"].includes(String(uid).toLowerCase())) {
@@ -231,18 +238,6 @@
         }
         if (window.currentUserId && !["unknown", "", "null", "undefined"].includes(String(window.currentUserId).toLowerCase())) {
           return String(window.currentUserId);
-        }
-        if (typeof window.getLuxoUsername === "function") {
-          const uname = window.getLuxoUsername();
-          if (uname && !["unknown", "", "null", "undefined"].includes(String(uname).toLowerCase())) {
-            return String(uname);
-          }
-        }
-        if (typeof window.getLuxoSessionId === "function") {
-          const sid = window.getLuxoSessionId();
-          if (sid && !["unknown", "", "null", "undefined"].includes(String(sid).toLowerCase())) {
-            return String(sid);
-          }
         }
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -261,6 +256,18 @@
                 return String(val).replace(/["']/g, "");
               }
             }
+          }
+        }
+        if (typeof window.getLuxoUsername === "function") {
+          const uname = window.getLuxoUsername();
+          if (uname && !["unknown", "", "null", "undefined"].includes(String(uname).toLowerCase())) {
+            return String(uname);
+          }
+        }
+        if (typeof window.getLuxoSessionId === "function") {
+          const sid = window.getLuxoSessionId();
+          if (sid && !["unknown", "", "null", "undefined"].includes(String(sid).toLowerCase())) {
+            return String(sid);
           }
         }
         return "unknown";
