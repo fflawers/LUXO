@@ -6839,7 +6839,9 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     if hasattr(page, "shared_preferences") and page.shared_preferences:
                         await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
                 except: pass
-            page.run_task(ping_actividad)
+            try:
+                page.run_task(ping_actividad)
+            except Exception: pass
 
             # Expandir abreviaturas informales antes de procesar el mensaje
             user_text_expandido = expandir_abreviaturas(user_text)
