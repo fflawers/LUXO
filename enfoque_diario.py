@@ -1072,8 +1072,8 @@ def generar_pdf_enfoque_file(d_name, user_id):
 
 def generar_html_impresion(d_name, user_id):
     """
-    Genera un documento HTML responsivo de alta fidelidad listo para imprimir
-    o guardar como PDF (Ctrl+P) compatible con cualquier navegador y servidor (Render/Linux/Windows).
+    Genera una réplica visual 100% exacta del formato oficial Excel SGH 2026.
+    Diseñado para impresión perfecta y exportación PDF idéntica a la hoja física de Excel.
     """
     user_id = str(user_id)
     if user_id not in user_states:
@@ -1089,11 +1089,9 @@ def generar_html_impresion(d_name, user_id):
     semana = g_meta.get("semana", 37)
     fecha = g_meta.get("fecha", "")
 
-    # Determinar si es Plan de Acción, Semanal o Día
     es_plan = "PLAN" in target_sheet.upper()
     es_semanal = target_sheet.upper() == "SEMANAL"
     
-    # Obtener el día base
     dia_base = "DOMINGO"
     if not es_semanal:
         for d in DIAS:
@@ -1101,235 +1099,274 @@ def generar_html_impresion(d_name, user_id):
                 dia_base = d
                 break
 
-    # Estilos CSS
     css = """
     <style>
-        :root {
-            --primary: #000;
-            --accent: #E5A93C;
-            --bg-card: #f8f9fa;
-            --border: #dee2e6;
-            --text: #212529;
-        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: #0f1117;
-            color: var(--text);
-            padding: 20px;
-        }
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            background: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            padding: 25px 30px;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #1a1c23;
+            color: #000;
+            padding: 15px;
+            font-size: 11px;
         }
         .action-bar {
+            max-width: 1200px;
+            margin: 0 auto 15px auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #1e222d;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            background: #0d1117;
+            padding: 10px 18px;
+            border-radius: 6px;
             color: #fff;
+            border: 1px solid #30363d;
         }
         .btn {
-            background: #E5A93C;
+            background: #d4a373;
             color: #000;
-            font-weight: 700;
+            font-weight: bold;
             border: none;
-            padding: 9px 18px;
-            border-radius: 6px;
+            padding: 7px 15px;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 13px;
+            font-size: 12px;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            transition: 0.2s;
         }
-        .btn:hover { background: #d4982a; }
+        .btn:hover { background: #b08968; }
         .btn-outline {
             background: transparent;
             color: #fff;
             border: 1px solid #4a5568;
         }
-        .btn-outline:hover { background: #2d3748; }
-        .header {
+        .excel-sheet {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border: 1px solid #999;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .excel-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+            font-size: 10px;
+        }
+        .excel-table td, .excel-table th {
+            border: 1px solid #000000;
+            padding: 3px 5px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .th-main {
+            background-color: #000000;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        .th-red {
+            background-color: #8b0000;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .th-gray {
+            background-color: #333333;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .th-light-gray {
+            background-color: #e6e6e6;
+            color: #000000;
+            font-weight: bold;
+        }
+        .th-yellow {
+            background-color: #fff2cc;
+            color: #000000;
+            font-weight: bold;
+        }
+        .td-lbl {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            text-align: left !important;
+            padding-left: 6px;
+        }
+        .td-val {
+            background-color: #ffffff;
+            font-weight: bold;
+            text-align: right !important;
+            padding-right: 6px;
+        }
+        .td-val-c {
+            background-color: #ffffff;
+            text-align: center;
+        }
+        .td-tot {
+            background-color: #d9d9d9;
+            font-weight: bold;
+        }
+        .top-banner {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 15px;
-            margin-bottom: 20px;
+            border: 2px solid #000;
+            padding: 6px 12px;
+            margin-bottom: 8px;
+            background: #fff;
         }
-        .header-title h1 {
-            font-size: 22px;
+        .top-banner-title {
+            font-size: 16px;
             font-weight: 900;
-            letter-spacing: -0.5px;
             text-transform: uppercase;
+            letter-spacing: -0.5px;
         }
-        .header-title p {
+        .top-banner-meta {
             font-size: 12px;
-            color: #666;
-            margin-top: 2px;
+            font-weight: bold;
         }
-        .badge-pill {
-            background: #000;
-            color: #fff;
-            font-weight: 800;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 13px;
+        .sec-title {
+            background: #000000;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 4px 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
             letter-spacing: 0.5px;
         }
-        .meta-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .meta-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            padding: 10px 12px;
-            border-radius: 6px;
-            text-align: center;
-        }
-        .meta-card .label {
-            font-size: 10px;
-            text-transform: uppercase;
-            color: #6c757d;
-            font-weight: 700;
-        }
-        .meta-card .val {
-            font-size: 16px;
-            font-weight: 800;
-            color: #000;
-            margin-top: 4px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        .sec-title-red {
+            background: #8b0000;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 4px 8px;
             font-size: 11px;
-            margin-bottom: 20px;
-        }
-        th, td {
-            border: 1px solid var(--border);
-            padding: 6px 8px;
-            text-align: center;
-        }
-        th {
-            background: #212529;
-            color: #fff;
-            font-weight: 700;
             text-transform: uppercase;
-            font-size: 10px;
-        }
-        tr:nth-child(even) { background-color: #f8f9fa; }
-        .text-left { text-align: left !important; }
-        .text-right { text-align: right !important; }
-        .font-bold { font-weight: 700; }
-        .bg-total { background: #e9ecef !important; font-weight: 800; }
-        .smart-section {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        .smart-card {
-            border-left: 4px solid #000;
-            background: #f8f9fa;
-            padding: 12px 14px;
-            border-radius: 4px;
-            border-top: 1px solid #eee;
-            border-right: 1px solid #eee;
-            border-bottom: 1px solid #eee;
-        }
-        .smart-card.s-card { border-left-color: #3b82f6; }
-        .smart-card.m-card { border-left-color: #10b981; }
-        .smart-card.a-card { border-left-color: #f59e0b; }
-        .smart-card.r-card { border-left-color: #ef4444; }
-        .smart-card.t-card { border-left-color: #8b5cf6; }
-        .smart-card h3 {
-            font-size: 12px;
-            font-weight: 800;
             margin-bottom: 6px;
-            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .smart-card p {
-            font-size: 11px;
-            color: #333;
-            line-height: 1.4;
-            white-space: pre-wrap;
+        .grid-3col {
+            display: grid;
+            grid-template-columns: 1fr 1.1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
         }
-        .footer-sign {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 30px;
-            padding-top: 15px;
-            border-top: 1px dashed #ccc;
-            font-size: 11px;
+        .grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .smart-box {
+            border: 1px solid #000;
+            margin-bottom: 6px;
+        }
+        .smart-box-h {
+            background: #222;
+            color: #fff;
+            font-weight: bold;
+            padding: 3px 6px;
+            font-size: 10px;
+        }
+        .smart-box-b {
+            padding: 6px 8px;
+            font-size: 10px;
+            min-height: 38px;
+            background: #fafafa;
+        }
+        .note-text {
+            font-size: 8px;
             color: #555;
+            font-style: italic;
+            padding: 2px 4px;
         }
         @media print {
             .no-print { display: none !important; }
-            body { background: #fff !important; color: #000 !important; padding: 0 !important; }
-            .container { box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }
-            @page { size: letter landscape; margin: 8mm; }
+            body { background: #ffffff !important; padding: 0 !important; font-size: 9px; }
+            .excel-sheet { border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }
+            .excel-table td, .excel-table th { padding: 2px 3px !important; }
+            @page { size: letter landscape; margin: 5mm; }
         }
     </style>
     """
 
-    # Generar contenido según la vista
-    content_html = ""
-    
+    body_html = ""
+
     if es_semanal:
-        # Resumen Semanal
-        meta_semanal = float(g_meta.get("meta_semanal_dinero", 0.0) or 0.0)
-        u_semanal = int(g_meta.get("meta_semanal_u", 0) or 0)
+        # === VISTA SEMANAL EXACTA DE EXCEL ===
+        meta_sem = float(g_meta.get("meta_semanal_dinero", 0.0) or 0.0)
+        u_sem = int(g_meta.get("meta_semanal_u", 0) or 0)
         aur_sem = float(g_meta.get("aur", 3620.0) or 3620.0)
         ly_sem = float(g_meta.get("ly_dinero", 0.0) or 0.0)
         
         tot_dias_meta = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) for d in DIAS)
-        if tot_dias_meta > 0 and meta_semanal == 0:
-            meta_semanal = tot_dias_meta
+        if tot_dias_meta > 0 and meta_sem == 0:
+            meta_sem = tot_dias_meta
 
-        content_html += f"""
-        <div class="meta-grid">
-            <div class="meta-card"><div class="label">Meta Semanal $</div><div class="val">${meta_semanal:,.2f}</div></div>
-            <div class="meta-card"><div class="label">Meta Unidades</div><div class="val">{u_semanal:,} u</div></div>
-            <div class="meta-card"><div class="label">AUR Esperado</div><div class="val">${aur_sem:,.2f}</div></div>
-            <div class="meta-card"><div class="label">Venta LY Semanal</div><div class="val">${ly_sem:,.2f}</div></div>
-            <div class="meta-card"><div class="label">Semana Fiscal</div><div class="val">Semana {semana}</div></div>
+        body_html += f"""
+        <div class="top-banner">
+            <div class="top-banner-title">ENFOQUE SEMANAL &bull; {tienda} (#{tienda_num})</div>
+            <div class="top-banner-meta">Semana: {semana} {f'&bull; {fecha}' if fecha else ''}</div>
         </div>
 
-        <h3 style="font-size:13px; text-transform:uppercase; margin-bottom:8px; font-weight:800;">📅 Desglose Semanal por Día</h3>
-        <table>
+        <div class="sec-title-red">¿QUÉ ESPERAMOS LOGRAR ESTA SEMANA?</div>
+
+        <div class="grid-3col">
+            <!-- COL 1 -->
+            <table class="excel-table">
+                <tr><th colspan="2" class="th-gray">SEMANAL</th></tr>
+                <tr><td class="td-lbl">META SEMANAL</td><td class="td-val">${meta_sem:,.2f}</td></tr>
+                <tr><td class="td-lbl">ANÁLOGOS (85%)</td><td class="td-val">${meta_sem*0.85:,.2f}</td></tr>
+                <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">${meta_sem*0.15:,.2f}</td></tr>
+                <tr><td class="td-lbl">TOTAL DE UNIDADES</td><td class="td-val">{u_sem:,} u</td></tr>
+            </table>
+
+            <!-- COL 2 -->
+            <table class="excel-table">
+                <tr><th colspan="2" class="th-gray">CONVERSIÓN SEMANAL</th></tr>
+                <tr><td class="td-lbl">TRÁFICO ESPERADO</td><td class="td-val">{sum(s_state[d].get('trafico_esperado', 0) for d in DIAS)}</td></tr>
+                <tr><td class="td-lbl">META DE CONVERSIÓN</td><td class="td-val">{g_meta.get('conversion_target', 0.15)*100:.1f}%</td></tr>
+                <tr><td class="td-lbl">META TRANSACCIONES</td><td class="td-val">{math.ceil(sum(s_state[d].get('trafico_esperado', 0) for d in DIAS)*g_meta.get('conversion_target', 0.15))}</td></tr>
+                <tr><td class="td-lbl">META IDEAL (NS)*</td><td class="td-val">${meta_sem*1.10:,.2f}</td></tr>
+            </table>
+
+            <!-- COL 3 -->
+            <table class="excel-table">
+                <tr><th colspan="2" class="th-gray">OTROS NO NEGOCIABLES / COMP LY</th></tr>
+                <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">{math.ceil(u_sem*0.15)} u</td></tr>
+                <tr><td class="td-lbl">KIDS (5%)</td><td class="td-val">{math.ceil(u_sem*0.05)} u</td></tr>
+                <tr><td class="td-lbl">CAREKITS (30%)</td><td class="td-val">{math.ceil(u_sem*0.30)} u</td></tr>
+                <tr><td class="td-lbl">VENTA NETA LY (NS)</td><td class="td-val">${ly_sem:,.2f}</td></tr>
+            </table>
+        </div>
+
+        <div class="sec-title">DESGLOSE DIARIO DE LA SEMANA</div>
+        <table class="excel-table">
             <thead>
                 <tr>
-                    <th>Día</th>
-                    <th>Meta Diaria $</th>
-                    <th>Venta LY</th>
-                    <th>Crecimiento</th>
-                    <th>AUR</th>
-                    <th>Unidades</th>
-                    <th>Tráfico</th>
-                    <th>Conversión</th>
-                    <th>Horas</th>
-                    <th>Prod $/h</th>
+                    <th class="th-gray">DÍA</th>
+                    <th class="th-gray">META DIARIA</th>
+                    <th class="th-gray">VENTA LY</th>
+                    <th class="th-gray">CRECIMIENTO %</th>
+                    <th class="th-gray">AUR</th>
+                    <th class="th-gray">UNIDADES</th>
+                    <th class="th-gray">TRÁFICO</th>
+                    <th class="th-gray">CONVERSIÓN</th>
+                    <th class="th-gray">HORAS PISO</th>
+                    <th class="th-gray">PROD $/H</th>
                 </tr>
             </thead>
             <tbody>
         """
-        tot_vta_ly = 0.0
-        tot_unids = 0
-        tot_traf = 0
-        tot_hrs = 0.0
-        
+        tot_ly = 0.0
+        tot_u = 0
+        tot_tr = 0
+        tot_h = 0.0
         for d in DIAS:
             c = calcular_dia(d, user_id)
             d_data = s_state[d]
@@ -1343,47 +1380,46 @@ def generar_html_impresion(d_name, user_id):
             prod = c.get("vta_neta_prod", 0.0)
             crec = ((m_dia - v_ly) / v_ly * 100.0) if v_ly > 0 else 0.0
 
-            tot_vta_ly += v_ly
-            tot_unids += u_dia
-            tot_traf += traf
-            tot_hrs += hrs
+            tot_ly += v_ly
+            tot_u += u_dia
+            tot_tr += traf
+            tot_h += hrs
 
-            content_html += f"""
+            body_html += f"""
                 <tr>
-                    <td class="font-bold">{d}</td>
-                    <td class="text-right font-bold">${m_dia:,.2f}</td>
-                    <td class="text-right">${v_ly:,.2f}</td>
-                    <td class="text-right">{crec:+.1f}%</td>
-                    <td class="text-right">${aur:,.2f}</td>
-                    <td class="text-right">{u_dia}</td>
-                    <td>{traf}</td>
-                    <td>{conv*100:.1f}%</td>
-                    <td>{hrs:.1f} hrs</td>
-                    <td class="text-right font-bold">${prod:,.2f}</td>
+                    <td class="td-lbl">{d}</td>
+                    <td class="td-val">${m_dia:,.2f}</td>
+                    <td class="td-val">${v_ly:,.2f}</td>
+                    <td class="td-val-c">{crec:+.1f}%</td>
+                    <td class="td-val">${aur:,.2f}</td>
+                    <td class="td-val-c">{u_dia}</td>
+                    <td class="td-val-c">{traf}</td>
+                    <td class="td-val-c">{conv*100:.1f}%</td>
+                    <td class="td-val-c">{hrs:.1f}</td>
+                    <td class="td-val">${prod:,.2f}</td>
                 </tr>
             """
-        
-        tot_crec = ((meta_semanal - tot_vta_ly) / tot_vta_ly * 100.0) if tot_vta_ly > 0 else 0.0
-        tot_prod = (meta_semanal / tot_hrs) if tot_hrs > 0 else 0.0
-        content_html += f"""
-                <tr class="bg-total">
+        tot_crec = ((meta_sem - tot_ly) / tot_ly * 100.0) if tot_ly > 0 else 0.0
+        tot_prod = (meta_sem / tot_h) if tot_h > 0 else 0.0
+        body_html += f"""
+                <tr class="td-tot">
                     <td>TOTAL SEMANAL</td>
-                    <td class="text-right">${meta_semanal:,.2f}</td>
-                    <td class="text-right">${tot_vta_ly:,.2f}</td>
-                    <td class="text-right">{tot_crec:+.1f}%</td>
-                    <td class="text-right">${aur_sem:,.2f}</td>
-                    <td class="text-right">{tot_unids}</td>
-                    <td>{tot_traf}</td>
-                    <td>-</td>
-                    <td>{tot_hrs:.1f} hrs</td>
-                    <td class="text-right">${tot_prod:,.2f}</td>
+                    <td class="td-val">${meta_sem:,.2f}</td>
+                    <td class="td-val">${tot_ly:,.2f}</td>
+                    <td class="td-val-c">{tot_crec:+.1f}%</td>
+                    <td class="td-val">${aur_sem:,.2f}</td>
+                    <td class="td-val-c">{tot_u}</td>
+                    <td class="td-val-c">{tot_tr}</td>
+                    <td class="td-val-c">-</td>
+                    <td class="td-val-c">{tot_h:.1f}</td>
+                    <td class="td-val">${tot_prod:,.2f}</td>
                 </tr>
             </tbody>
         </table>
         """
 
     elif es_plan:
-        # Plan de Acción S.M.A.R.T.
+        # === VISTA PLAN DE ACCIÓN EXACTA DE EXCEL ===
         c = calcular_dia(dia_base, user_id)
         d_data = s_state[dia_base]
         
@@ -1393,42 +1429,70 @@ def generar_html_impresion(d_name, user_id):
         ret = d_data.get("smart_reto", "Vender mínimo 1 par de Wearables y 1 CareKit por colaborador en cada turno.")
         tie = d_data.get("smart_tiempo", f"Jornada del día {dia_base} con revisiones de avance por cada bloque de tráfico.")
 
-        content_html += f"""
-        <div class="meta-grid">
-            <div class="meta-card"><div class="label">Meta del Día</div><div class="val">${c.get('meta_diaria', 0.0):,.2f}</div></div>
-            <div class="meta-card"><div class="label">Meta Unidades</div><div class="val">{c.get('total_unidades', 0)} u</div></div>
-            <div class="meta-card"><div class="label">Tráfico Esperado</div><div class="val">{c.get('trafico', 0)} pers</div></div>
-            <div class="meta-card"><div class="label">Conversión Objetivo</div><div class="val">{d_data.get('conversion_target', 0.15)*100:.1f}%</div></div>
-            <div class="meta-card"><div class="label">Horas Piso</div><div class="val">{c.get('tot_horas', 0.0):.1f} hrs</div></div>
+        body_html += f"""
+        <div class="top-banner">
+            <div class="top-banner-title">ENFOQUE DIARIO! - Nuestro plan de acción &bull; {tienda} (#{tienda_num})</div>
+            <div class="top-banner-meta">Semana: {semana} &bull; Día: {dia_base}</div>
         </div>
 
-        <h3 style="font-size:13px; text-transform:uppercase; margin-bottom:12px; font-weight:800;">🎯 Metodología S.M.A.R.T. - Plan de Acción</h3>
-        <div class="smart-section">
-            <div class="smart-card s-card">
-                <h3>🎯 S - Específico</h3>
-                <p>{esp}</p>
+        <div class="sec-title-red">¿QUÉ ESPERAMOS PARA EL DÍA DE HOY?</div>
+
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray">HORAS PROGRAMADAS</th>
+                    <th class="th-gray">META (NS)</th>
+                    <th class="th-gray">META PIEZAS</th>
+                    <th class="th-gray">META (NS) PRODUCTIVIDAD</th>
+                    <th class="th-gray">META UNIDADES PRODUCTIVIDAD</th>
+                    <th class="th-gray">¿Cuál debe ser nuestro ritmo de venta hoy?</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="td-val-c font-bold">{c.get('tot_horas', 0.0):.1f}</td>
+                    <td class="td-val font-bold">${c.get('meta_diaria', 0.0):,.2f}</td>
+                    <td class="td-val-c font-bold">{c.get('total_unidades', 0)}</td>
+                    <td class="td-val font-bold">${c.get('vta_neta_prod', 0.0):,.2f}</td>
+                    <td class="td-val-c font-bold">{c.get('u_prod', 0.0):.2f}</td>
+                    <td class="td-val font-bold">${(c.get('meta_diaria', 0.0)/max(c.get('tot_horas', 1.0),1.0)):,.2f} / hr</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="grid-2col">
+            <!-- ESTÁNDARES & NO NEGOCIABLES -->
+            <div>
+                <div class="sec-title">NUESTROS ESTÁNDARES</div>
+                <table class="excel-table">
+                    <tr><td class="td-lbl">1. LIMPIEZA DE LA TIENDA</td><td style="text-align:left; font-size:9px;">Barre, limpia y desinfecta. Tienda impecable, aparadores y espejos.</td></tr>
+                    <tr><td class="td-lbl">2. IMAGEN PERSONAL</td><td style="text-align:left; font-size:9px;">Embajadores de la marca, imagen alineada a valores Sunglass Hut.</td></tr>
+                    <tr><td class="td-lbl">3. REÚNETE CON EL EQUIPO</td><td style="text-align:left; font-size:9px;">Junta matutina: metas del día, avances y acciones clave.</td></tr>
+                </table>
             </div>
-            <div class="smart-card m-card">
-                <h3>📊 M - Medible</h3>
-                <p>{med}</p>
-            </div>
-            <div class="smart-card a-card">
-                <h3>🚀 A - Alcanzable</h3>
-                <p>{alc}</p>
-            </div>
-            <div class="smart-card r-card">
-                <h3>⚡ R - Reto / Relevante</h3>
-                <p>{ret}</p>
-            </div>
-            <div class="smart-card t-card">
-                <h3>⏱️ T - Tiempo</h3>
-                <p>{tie}</p>
+            <div>
+                <div class="sec-title">NUESTROS NO NEGOCIABLES</div>
+                <table class="excel-table">
+                    <tr><td class="td-lbl">1. ENTRADA Y SALIDA</td><td style="text-align:left; font-size:9px;">Registrar puntualidad exacta; impacta en la productividad.</td></tr>
+                    <tr><td class="td-lbl">2. SIN CELULARES</td><td style="text-align:left; font-size:9px;">Evitar uso de teléfono personal en piso de venta.</td></tr>
+                    <tr><td class="td-lbl">3. FUERA DE CAJA / ZONAS</td><td style="text-align:left; font-size:9px;">Mantente en piso atrayendo clientes y respetando tu zona.</td></tr>
+                    <tr><td class="td-lbl">4. SEGUIMIENTO CONTINUO</td><td style="text-align:left; font-size:9px;">Monitorear Store Dashboard y reaccionar oportunamente.</td></tr>
+                </table>
             </div>
         </div>
+
+        <div class="sec-title">TU ENFOQUE PARA HOY &bull; METODOLOGÍA S.M.A.R.T.</div>
+        <div style="border: 1px solid #000; padding: 8px; margin-bottom: 12px; background: #fff;">
+            <div class="smart-box"><div class="smart-box-h">S: ESPECÍFICO</div><div class="smart-box-b">{esp}</div></div>
+            <div class="smart-box"><div class="smart-box-h">M: MEDIBLE</div><div class="smart-box-b">{med}</div></div>
+            <div class="smart-box"><div class="smart-box-h">A: ALCANZABLE</div><div class="smart-box-b">{alc}</div></div>
+            <div class="smart-box"><div class="smart-box-h">R: RETO</div><div class="smart-box-b">{ret}</div></div>
+            <div class="smart-box"><div class="smart-box-h">T: TIEMPO</div><div class="smart-box-b">{tie}</div></div>
+        </div>
         """
-        
+
     else:
-        # Vista de Día Normal (DOMINGO, LUNES, etc.)
+        # === VISTA DÍA EXACTA DE EXCEL (DOMINGO, LUNES, ETC.) ===
         c = calcular_dia(dia_base, user_id)
         d_data = s_state[dia_base]
         
@@ -1441,153 +1505,257 @@ def generar_html_impresion(d_name, user_id):
         hrs = c.get("tot_horas", 0.0)
         prod_din = c.get("vta_neta_prod", 0.0)
         prod_u = c.get("u_prod", 0.0)
-        crec = ((m_dia - v_ly) / v_ly * 100.0) if v_ly > 0 else 0.0
 
-        content_html += f"""
-        <div class="meta-grid">
-            <div class="meta-card"><div class="label">Meta Diaria $</div><div class="val">${m_dia:,.2f}</div></div>
-            <div class="meta-card"><div class="label">Venta LY</div><div class="val">${v_ly:,.2f}</div></div>
-            <div class="meta-card"><div class="label">Crecimiento</div><div class="val">{crec:+.1f}%</div></div>
-            <div class="meta-card"><div class="label">AUR Esperado</div><div class="val">${aur:,.2f}</div></div>
-            <div class="meta-card"><div class="label">Meta Unidades</div><div class="val">{u_dia} u</div></div>
-            <div class="meta-card"><div class="label">Tráfico Esperado</div><div class="val">{traf}</div></div>
-            <div class="meta-card"><div class="label">Conv. Objetivo</div><div class="val">{conv*100:.1f}%</div></div>
-            <div class="meta-card"><div class="label">Prod. $/Hora</div><div class="val">${prod_din:,.2f}</div></div>
+        body_html += f"""
+        <div class="top-banner">
+            <div class="top-banner-title">ENFOQUE DIARIO! - Nuestra meta &bull; {tienda} (#{tienda_num})</div>
+            <div class="top-banner-meta">Semana: {semana} &bull; Día: {dia_base}</div>
         </div>
 
-        <h3 style="font-size:12px; text-transform:uppercase; margin-bottom:8px; font-weight:800;">⏰ Bloques de Tráfico y Metas Horarias</h3>
-        <table>
+        <div class="sec-title-red">¿QUÉ ESPERAMOS LOGRAR HOY?</div>
+
+        <!-- 3 COLUMNAS SUPERIORES DE EXCEL -->
+        <div class="grid-3col">
+            <!-- COL 1: META DEL DÍA & PRODUCTIVIDAD -->
+            <div>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">META DEL DÍA</th></tr>
+                    <tr><td class="td-lbl">META DIARIA</td><td class="td-val">${m_dia:,.2f}</td></tr>
+                    <tr><td class="td-lbl">ANÁLOGOS (85%)</td><td class="td-val">${m_dia*0.85:,.2f}</td></tr>
+                    <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">${m_dia*0.15:,.2f}</td></tr>
+                    <tr><td class="td-lbl">TOTAL DE UNIDADES</td><td class="td-val">{u_dia} u</td></tr>
+                </table>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">META DE PRODUCTIVIDAD</th></tr>
+                    <tr><td class="td-lbl">VENTA NETA (NS)</td><td class="td-val">${prod_din:,.2f}</td></tr>
+                    <tr><td class="td-lbl">UNIDADES</td><td class="td-val">{prod_u:.2f}</td></tr>
+                </table>
+            </div>
+
+            <!-- COL 2: CONVERSIÓN & COMP LY -->
+            <div>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">CONVERSIÓN (NO NEGOCIABLE)</th></tr>
+                    <tr><td class="td-lbl">TRÁFICO ESPERADO</td><td class="td-val">{traf}</td></tr>
+                    <tr><td class="td-lbl">META DE CONVERSIÓN (LY+1P.P)</td><td class="td-val">{conv*100:.1f}%</td></tr>
+                    <tr><td class="td-lbl">META TRANSACCIONES</td><td class="td-val">{c.get('transacciones', 0)}</td></tr>
+                    <tr><td class="td-lbl">META IDEAL (NS)*</td><td class="td-val">${c.get('meta_ideal', 0.0):,.2f}</td></tr>
+                </table>
+                <div class="note-text">*Si tienes adeudo en la semana puedes ajustar la meta ideal.</div>
+                <table class="excel-table" style="margin-top:4px;">
+                    <tr><th colspan="2" class="th-gray">COMP LY</th></tr>
+                    <tr><td class="td-lbl">VENTA NETA LY (NS)</td><td class="td-val">${v_ly:,.2f}</td></tr>
+                </table>
+            </div>
+
+            <!-- COL 3: OTROS NO NEGOCIABLES & MTD -->
+            <div>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">OTROS NO NEGOCIABLES</th></tr>
+                    <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">{c.get('wea_unid_meta', 1)} u</td></tr>
+                    <tr><td class="td-lbl">KIDS (5%)</td><td class="td-val">{c.get('kids_unid_meta', 1)} u</td></tr>
+                    <tr><td class="td-lbl">CAREKITS (30%)</td><td class="td-val">{c.get('ck_unid_meta', 1)} u</td></tr>
+                </table>
+                <div class="note-text">*Si unidades dan &lt;0, objetivo mínimo 1 unidad.</div>
+                <table class="excel-table" style="margin-top:4px;">
+                    <tr><th colspan="2" class="th-gray">VALORES ACUMULADOS MES (MTD)</th></tr>
+                    <tr><td class="td-lbl">AUR ESPERADO</td><td class="td-val">${aur:,.2f}</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- BLOQUE 2: TRÁFICO POR HORA -->
+        <table class="excel-table">
             <thead>
                 <tr>
-                    <th>Bloque Horario</th>
-                    <th>11:00 - 13:00</th>
-                    <th>13:00 - 15:00</th>
-                    <th>15:00 - 17:00</th>
-                    <th>17:00 - 19:00</th>
-                    <th>19:00 - 20:00</th>
-                    <th>20:00 - 21:00</th>
-                    <th>Total Día</th>
+                    <th class="th-gray" style="width:22%;">HORARIO</th>
+                    <th class="th-gray">APERTURA-12pm</th>
+                    <th class="th-gray">1pm - 2pm</th>
+                    <th class="th-gray">3pm - 4pm</th>
+                    <th class="th-gray">5pm - 6pm</th>
+                    <th class="th-gray">7pm - CIERRE</th>
+                    <th class="th-gray">TOTAL</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td class="font-bold">Tráfico Estimado</td>
+                    <td class="td-lbl">TRÁFICO POR HORA</td>
         """
         b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20, 10])
-        for bt in b_traf:
-            content_html += f"<td>{bt}</td>"
-        content_html += f"<td class=\"font-bold\">{sum(b_traf)}</td></tr><tr><td class=\"font-bold\">Meta de Venta $</td>"
-        
-        b_metas = c.get("b_metas", [0.0]*6)
-        for bm in b_metas:
-            content_html += f"<td>${bm:,.2f}</td>"
-        content_html += f"<td class=\"font-bold\">${m_dia:,.2f}</td></tr></tbody></table>"
+        # Asegurar 5 bloques para coincidir con la vista clásica de Excel si vienen 6
+        if len(b_traf) >= 5:
+            b_show = b_traf[:5]
+        else:
+            b_show = b_traf + [0]*(5-len(b_traf))
 
-        # Tabla de Colaboradores y Metas
-        content_html += f"""
-        <h3 style="font-size:12px; text-transform:uppercase; margin-bottom:8px; font-weight:800;">👥 Metas y Desglose por Colaborador</h3>
-        <table>
+        for bt in b_show:
+            body_html += f"<td class=\"td-val-c\">{bt}</td>"
+        body_html += f"<td class=\"td-val-c font-bold\">{sum(b_show)}</td></tr><tr><td class=\"td-lbl\">PESO DEL TRÁFICO (%)</td>"
+
+        tot_b = sum(b_show)
+        for bt in b_show:
+            p = (bt / tot_b * 100.0) if tot_b > 0 else 0.0
+            body_html += f"<td class=\"td-val-c\">{p:.1f}%</td>"
+        body_html += f"<td class=\"td-val-c font-bold\">100%</td></tr><tr><td class=\"td-lbl\">META (NS) X HORA</td>"
+
+        for bt in b_show:
+            p = (bt / tot_b) if tot_b > 0 else 0.0
+            body_html += f"<td class=\"td-val\">${(p*m_dia):,.2f}</td>"
+        body_html += f"<td class=\"td-val font-bold\">${m_dia:,.2f}</td></tr></tbody></table>"
+
+        # BLOQUE 3: TABLA DE COLABORADORES
+        body_html += f"""
+        <table class="excel-table">
             <thead>
                 <tr>
-                    <th class="text-left">Colaborador</th>
-                    <th>Horas</th>
-                    <th>Meta Venta $</th>
-                    <th>Análogos</th>
-                    <th>Wearables</th>
-                    <th>Kids</th>
-                    <th>CareKits</th>
+                    <th class="th-gray" style="width:25%;">COLABORADORES</th>
+                    <th class="th-gray">HORAS PROGRAMADAS</th>
+                    <th class="th-gray">META DE VENTA</th>
+                    <th class="th-gray">ANÁLOGOS POR VENDER</th>
+                    <th class="th-gray">WEARABLES POR VENDER</th>
+                    <th class="th-gray">KIDS POR VENDER</th>
+                    <th class="th-gray">CK POR VENDER</th>
                 </tr>
             </thead>
             <tbody>
         """
         colab_rows = c.get("colab_rows", [])
         active_colabs = [r for r in colab_rows if r.get("nombre", "").strip()]
-        if not active_colabs:
-            content_html += "<tr><td colspan='7'>No hay colaboradores registrados</td></tr>"
-        else:
-            for cr in active_colabs:
-                content_html += f"""
+        for i in range(8):
+            if i < len(active_colabs):
+                cr = active_colabs[i]
+                body_html += f"""
                 <tr>
-                    <td class="text-left font-bold">{cr.get('nombre')}</td>
-                    <td>{cr.get('horas', 0):.1f} hrs</td>
-                    <td class="text-right font-bold">${cr.get('meta_vta', 0.0):,.2f}</td>
-                    <td>{cr.get('meta_ana', 0)}</td>
-                    <td>{cr.get('meta_wea', 0)}</td>
-                    <td>{cr.get('meta_kid', 0)}</td>
-                    <td>{cr.get('meta_ck', 0)}</td>
+                    <td class="td-lbl" style="text-align:left;">{cr.get('nombre')}</td>
+                    <td class="td-val-c">{cr.get('horas', 0):.1f}</td>
+                    <td class="td-val">${cr.get('meta_vta', 0.0):,.2f}</td>
+                    <td class="td-val-c">{cr.get('meta_ana', 0)}</td>
+                    <td class="td-val-c">{cr.get('meta_wea', 0)}</td>
+                    <td class="td-val-c">{cr.get('meta_kid', 0)}</td>
+                    <td class="td-val-c">{cr.get('meta_ck', 0)}</td>
                 </tr>
                 """
-        content_html += f"""
-                <tr class="bg-total">
-                    <td class="text-left">TOTAL EQUIPO</td>
-                    <td>{hrs:.1f} hrs</td>
-                    <td class="text-right">${m_dia:,.2f}</td>
-                    <td>{sum(cr.get('meta_ana', 0) for cr in active_colabs)}</td>
-                    <td>{sum(cr.get('meta_wea', 0) for cr in active_colabs)}</td>
-                    <td>{sum(cr.get('meta_kid', 0) for cr in active_colabs)}</td>
-                    <td>{sum(cr.get('meta_ck', 0) for cr in active_colabs)}</td>
+            else:
+                body_html += "<tr><td class='td-lbl'>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+        
+        body_html += f"""
+                <tr class="td-tot">
+                    <td style="text-align:left;">TOTAL</td>
+                    <td class="td-val-c">{hrs:.1f}</td>
+                    <td class="td-val">${m_dia:,.2f}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_ana', 0) for cr in active_colabs)}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_wea', 0) for cr in active_colabs)}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_kid', 0) for cr in active_colabs)}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_ck', 0) for cr in active_colabs)}</td>
                 </tr>
             </tbody>
         </table>
         """
 
-        # Tabla de Cierre y Cómo Vamos
-        content_html += f"""
-        <h3 style="font-size:12px; text-transform:uppercase; margin-bottom:8px; font-weight:800;">🏁 Cierre de Resultados (Cómo Vamos)</h3>
-        <table>
+        # BLOQUE 4: ¿CÓMO VAMOS?
+        body_html += f"""
+        <div class="sec-title-red">¿CÓMO VAMOS?</div>
+
+        <!-- TOTAL DEL DÍA (RESUMEN) -->
+        <table class="excel-table">
             <thead>
                 <tr>
-                    <th class="text-left">Colaborador</th>
-                    <th>Interacciones</th>
-                    <th>Convertidos</th>
-                    <th>% Conv.</th>
-                    <th>Venta Cierre $</th>
-                    <th>Análogos</th>
-                    <th>Wearables (Demo/Cierre)</th>
-                    <th>Kids</th>
-                    <th>CareKits</th>
+                    <th class="th-gray">TOTAL DEL DÍA</th>
+                    <th class="th-gray">META</th>
+                    <th class="th-gray">VENTA NETA</th>
+                    <th class="th-gray">META UNIDADES</th>
+                    <th class="th-gray">VENTA UNIDADES</th>
+                    <th class="th-gray">CONVERSIÓN (%)</th>
+                    <th class="th-gray">CRECIMIENTO CONVERSIÓN (%)</th>
+                    <th class="th-gray">WEARABLES %</th>
+                    <th class="th-gray">KIDS %</th>
+                    <th class="th-gray">CAREKITS %</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="td-lbl">RESULTADOS</td>
+                    <td class="td-val">${m_dia:,.2f}</td>
+                    <td class="td-val">${c.get('tot_vta_cierre', 0.0):,.2f}</td>
+                    <td class="td-val-c">{u_dia}</td>
+                    <td class="td-val-c">{c.get('tot_ana_cierre', 0) + c.get('tot_wea_cierre', 0)}</td>
+                    <td class="td-val-c">{c.get('conversion_dia', 0.0)*100:.1f}%</td>
+                    <td class="td-val-c">{c.get('crecimiento_conversion', 0.0)*100:+.1f}%</td>
+                    <td class="td-val-c">{c.get('wearables_pct', 0.0)*100:.1f}%</td>
+                    <td class="td-val-c">{c.get('kids_pct', 0.0)*100:.1f}%</td>
+                    <td class="td-val-c">{c.get('carekits_pct', 0.0)*100:.1f}%</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- DETALLE COLABORADOR CIERRE -->
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray">COLABORADOR</th>
+                    <th class="th-gray">HORAS PROGRAMADAS</th>
+                    <th class="th-gray">INTERACCIONES DURANTE EL DÍA</th>
+                    <th class="th-gray">CLIENTES CONVERTIDOS</th>
+                    <th class="th-gray">CONVERSIÓN AL CIERRE</th>
+                    <th class="th-gray">VENTA NETA AL CIERRE</th>
+                    <th class="th-gray">UNIDADES ANÁLOGAS</th>
+                    <th class="th-gray">DEMOSTRACIONES WEARABLES</th>
+                    <th class="th-gray">UNIDADES WEARABLES</th>
+                    <th class="th-gray">CONVERSIÓN WEARABLE</th>
+                    <th class="th-gray">KIDS AL CIERRE</th>
+                    <th class="th-gray">CAREKITS AL CIERRE</th>
                 </tr>
             </thead>
             <tbody>
         """
-        if not active_colabs:
-            content_html += "<tr><td colspan='9'>Sin datos de cierre</td></tr>"
-        else:
-            for cr in active_colabs:
+        for i in range(8):
+            if i < len(active_colabs):
+                cr = active_colabs[i]
                 inter = cr.get("interacciones", 0)
                 conv_n = cr.get("convertidos", 0)
                 conv_p = (conv_n / inter * 100.0) if inter > 0 else 0.0
-                content_html += f"""
+                wea_d = cr.get("wea_demos", 0)
+                wea_c = cr.get("wea_cierre", 0)
+                conv_w = (wea_c / wea_d * 100.0) if wea_d > 0 else 0.0
+                body_html += f"""
                 <tr>
-                    <td class="text-left font-bold">{cr.get('nombre')}</td>
-                    <td>{inter}</td>
-                    <td>{conv_n}</td>
-                    <td>{conv_p:.1f}%</td>
-                    <td class="text-right font-bold">${cr.get('vta_cierre', 0.0):,.2f}</td>
-                    <td>{cr.get('ana_cierre', 0)}</td>
-                    <td>{cr.get('wea_demos', 0)} / {cr.get('wea_cierre', 0)}</td>
-                    <td>{cr.get('kid_cierre', 0)}</td>
-                    <td>{cr.get('ck_cierre', 0)}</td>
+                    <td class="td-lbl" style="text-align:left;">{cr.get('nombre')}</td>
+                    <td class="td-val-c">{cr.get('horas', 0):.1f}</td>
+                    <td class="td-val-c">{inter}</td>
+                    <td class="td-val-c">{conv_n}</td>
+                    <td class="td-val-c">{conv_p:.1f}%</td>
+                    <td class="td-val">${cr.get('vta_cierre', 0.0):,.2f}</td>
+                    <td class="td-val-c">{cr.get('ana_cierre', 0)}</td>
+                    <td class="td-val-c">{wea_d}</td>
+                    <td class="td-val-c">{wea_c}</td>
+                    <td class="td-val-c">{conv_w:.1f}%</td>
+                    <td class="td-val-c">{cr.get('kid_cierre', 0)}</td>
+                    <td class="td-val-c">{cr.get('ck_cierre', 0)}</td>
                 </tr>
                 """
-        content_html += f"""
-                <tr class="bg-total">
-                    <td class="text-left">TOTAL DÍA</td>
-                    <td>{c.get('tot_interacciones', 0)}</td>
-                    <td>{c.get('tot_convertidos', 0)}</td>
-                    <td>{c.get('conversion_dia', 0.0)*100:.1f}%</td>
-                    <td class="text-right">${c.get('tot_vta_cierre', 0.0):,.2f}</td>
-                    <td>{c.get('tot_ana_cierre', 0)}</td>
-                    <td>{c.get('tot_wea_demos', 0)} / {c.get('tot_wea_cierre', 0)}</td>
-                    <td>{c.get('tot_kid_cierre', 0)}</td>
-                    <td>{c.get('tot_ck_cierre', 0)}</td>
+            else:
+                body_html += "<tr><td class='td-lbl'>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+
+        body_html += f"""
+                <tr class="td-tot">
+                    <td style="text-align:left;">TOTAL</td>
+                    <td class="td-val-c">{hrs:.1f}</td>
+                    <td class="td-val-c">{c.get('tot_interacciones', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_convertidos', 0)}</td>
+                    <td class="td-val-c">{c.get('conversion_dia', 0.0)*100:.1f}%</td>
+                    <td class="td-val">${c.get('tot_vta_cierre', 0.0):,.2f}</td>
+                    <td class="td-val-c">{c.get('tot_ana_cierre', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_wea_demos', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_wea_cierre', 0)}</td>
+                    <td class="td-val-c">-</td>
+                    <td class="td-val-c">{c.get('tot_kid_cierre', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_ck_cierre', 0)}</td>
                 </tr>
             </tbody>
         </table>
         """
 
-    # Ensamblar HTML Completo
-    html_doc = f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -1598,7 +1766,7 @@ def generar_html_impresion(d_name, user_id):
 <body>
     <div class="action-bar no-print">
         <div>
-            <strong style="color:#E5A93C; font-size:14px;">LUXO 2026</strong> &bull; Vista de Impresión Oficial ({target_sheet})
+            <strong style="color:#d4a373; font-size:13px;">SUNGLASS HUT &bull; ENFOQUE DIARIO 2026</strong> &bull; Hoja Oficial ({target_sheet})
         </div>
         <div style="display:flex; gap:10px;">
             <button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
@@ -1606,28 +1774,12 @@ def generar_html_impresion(d_name, user_id):
         </div>
     </div>
 
-    <div class="container">
-        <div class="header">
-            <div class="header-title">
-                <h1>SUNGLASS HUT &bull; {target_sheet}</h1>
-                <p>Tienda: <strong>{tienda} (#{tienda_num})</strong> &bull; Semana Fiscal: <strong>{semana}</strong> {f'&bull; Fecha: <strong>{fecha}</strong>' if fecha else ''}</p>
-            </div>
-            <div>
-                <span class="badge-pill">ENFOQUE 2026</span>
-            </div>
-        </div>
-
-        {content_html}
-
-        <div class="footer-sign">
-            <div>Generado por LUXO Intelligence Platform &bull; Sistema Oficial SGH</div>
-            <div>Firma Store Manager / Coach: ___________________________</div>
-        </div>
+    <div class="excel-sheet">
+        {body_html}
     </div>
 </body>
 </html>
     """
-    return html_doc
 
 def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     """
