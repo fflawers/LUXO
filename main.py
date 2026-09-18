@@ -1256,14 +1256,43 @@ def configurar_rutas_fastapi(app):
                             return;
                         }
                         
-                        // 1. Boton flotante principal LUXO
+                        // Inyectar estilos de animación para el orbe Siri / Apple Intelligence
+                        if (!document.getElementById("siri-orb-button-style")) {
+                            const orbStyle = document.createElement("style");
+                            orbStyle.id = "siri-orb-button-style";
+                            orbStyle.innerHTML = `
+                                @keyframes siriGlowOrb {
+                                    0%, 100% {
+                                        box-shadow: 0 0 15px rgba(224, 64, 251, 0.8), 0 0 30px rgba(0, 240, 255, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.5);
+                                        transform: scale(1);
+                                    }
+                                    50% {
+                                        box-shadow: 0 0 25px rgba(0, 240, 255, 0.95), 0 0 45px rgba(224, 64, 251, 0.85), inset 0 0 18px rgba(255, 255, 255, 0.7);
+                                        transform: scale(1.05);
+                                    }
+                                }
+                                @keyframes siriActivePulse {
+                                    0%, 100% {
+                                        box-shadow: 0 0 25px #FF007F, 0 0 50px #00F0FF, 0 0 75px #7928CA, inset 0 0 15px rgba(255, 255, 255, 0.8);
+                                        transform: scale(1.08);
+                                    }
+                                    50% {
+                                        box-shadow: 0 0 40px #00F0FF, 0 0 70px #FF007F, 0 0 90px #00FFAA, inset 0 0 22px rgba(255, 255, 255, 0.95);
+                                        transform: scale(1.16);
+                                    }
+                                }
+                            `;
+                            document.head.appendChild(orbStyle);
+                        }
+                        
+                        // 1. Boton flotante principal LUXO (Orbe Siri / Apple Intelligence)
                         let mobileMicBtn = document.getElementById("luxo-floating-main-mic");
                         if (!mobileMicBtn) {
                             mobileMicBtn = document.createElement("div");
                             mobileMicBtn.id = "luxo-floating-main-mic";
-                            mobileMicBtn.innerHTML = "🎙️";
-                            mobileMicBtn.setAttribute("title", "Micrófono de Voz LUXO");
-                            mobileMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 64px; z-index: 9999999; font-size: 20px; background: #1E1E2E; border: 1.5px solid #00FFFF; border-radius: 23px; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
+                            mobileMicBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); pointer-events: none;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" x2="12" y1="19" y2="22"></line></svg>`;
+                            mobileMicBtn.setAttribute("title", "Asistente de Voz LUXO");
+                            mobileMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 64px; z-index: 9999999; background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95) 0%, rgba(224, 64, 251, 0.9) 25%, rgba(0, 240, 255, 0.85) 55%, rgba(121, 40, 202, 0.95) 85%, rgba(15, 15, 30, 0.98) 100%); border: 1.6px solid rgba(255, 255, 255, 0.7); border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(224, 64, 251, 0.8), 0 0 30px rgba(0, 240, 255, 0.5); cursor: pointer; animation: siriGlowOrb 3s infinite ease-in-out; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
                             
                             let isDragging = false;
                             let startX, startY, initialX, initialY;
@@ -1287,11 +1316,8 @@ def configurar_rutas_fastapi(app):
                                 if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
                                     isDragging = true;
                                     e.preventDefault();
-                                    let newX = initialX + dx;
-                                    let newY = initialY + dy;
-                                    
-                                    newX = Math.max(0, Math.min(newX, window.innerWidth - 46));
-                                    newY = Math.max(0, Math.min(newY, window.innerHeight - 46));
+                                    let newX = Math.max(0, Math.min(initialX + dx, window.innerWidth - 50));
+                                    let newY = Math.max(0, Math.min(initialY + dy, window.innerHeight - 50));
                                     
                                     mobileMicBtn.style.left = newX + 'px';
                                     mobileMicBtn.style.top = newY + 'px';
@@ -1346,9 +1372,9 @@ def configurar_rutas_fastapi(app):
                                 r.onstart = function() {
                                     console.log("[LUXO MIC] ACTIVANDO MICROFONO", { source: "floating_mic_button", timestamp: Date.now() });
                                     playBeep(1);
-                                    mobileMicBtn.style.background = "#FF0000";
-                                    mobileMicBtn.style.borderColor = "#FFFFFF";
-                                    mobileMicBtn.style.boxShadow = "0 0 25px #FF0000";
+                                    mobileMicBtn.style.animation = 'siriActivePulse 1.2s infinite ease-in-out';
+                                    mobileMicBtn.style.background = 'radial-gradient(circle at 35% 35%, #FFFFFF 0%, #FF0055 35%, #9900FF 70%, #00F0FF 100%)';
+                                    mobileMicBtn.style.borderColor = '#FFFFFF';
                                 };
                                 r.onresult = function(ev) {
                                     const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
@@ -1361,18 +1387,18 @@ def configurar_rutas_fastapi(app):
                                 };
                                 r.onerror = function(ev) { 
                                     console.log("Speech recognition error:", ev.error);
-                                    mobileMicBtn.style.background = "#1E1E2E";
-                                    mobileMicBtn.style.borderColor = "#00FFFF";
-                                    mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
+                                    mobileMicBtn.style.animation = 'siriGlowOrb 3s infinite ease-in-out';
+                                    mobileMicBtn.style.background = 'radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95) 0%, rgba(224, 64, 251, 0.9) 25%, rgba(0, 240, 255, 0.85) 55%, rgba(121, 40, 202, 0.95) 85%, rgba(15, 15, 30, 0.98) 100%)';
+                                    mobileMicBtn.style.borderColor = 'rgba(255, 255, 255, 0.7)';
                                     if (ev.error === 'not-allowed') {
                                         alert('⚠️ Permiso de micrófono denegado. Permítelo en tu navegador.');
                                     }
                                 };
                                 r.onend = function() { 
                                     console.log("[LUXO MIC] DETENIENDO MICROFONO", { source: "floating_mic_button", timestamp: Date.now() });
-                                    mobileMicBtn.style.background = "#1E1E2E";
-                                    mobileMicBtn.style.borderColor = "#00FFFF";
-                                    mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
+                                    mobileMicBtn.style.animation = 'siriGlowOrb 3s infinite ease-in-out';
+                                    mobileMicBtn.style.background = 'radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95) 0%, rgba(224, 64, 251, 0.9) 25%, rgba(0, 240, 255, 0.85) 55%, rgba(121, 40, 202, 0.95) 85%, rgba(15, 15, 30, 0.98) 100%)';
+                                    mobileMicBtn.style.borderColor = 'rgba(255, 255, 255, 0.7)';
                                 };
                                 
                                 try { 
