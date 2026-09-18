@@ -397,6 +397,7 @@ def default_store_state():
             "smart_reto": "Alcanzar 110% de la meta diaria en venta neta.",
             "smart_tiempo": "Monitorear avances cada 2 horas en el Store Dashboard.",
             "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "oportunidades_manana": "Impulsar demostraciones de Wearables y CareKits desde la apertura.",
             "ritmo_venta_hoy": "",
             "checks_estandares": {"limpieza": False, "imagen": False, "reunion": False},
             "checks_no_negociables": {"registro": False, "sin_celular": False, "fuera_caja": False, "seguimiento": False},
@@ -1024,6 +1025,7 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                     if d_data.get('smart_tiempo'): smart_text += f"T (Tiempo): {d_data.get('smart_tiempo')}\n"
                     if smart_text: _safe_set(ws_p, 'C29', smart_text.strip())
                     if d_data.get('logros_hoy'): _safe_set(ws_p, 'A35', d_data.get('logros_hoy'))
+                    if d_data.get('oportunidades_manana'): _safe_set(ws_p, 'A37', d_data.get('oportunidades_manana'))
             
             wb_pyxl.save(web_excel_path)
 
@@ -2999,7 +3001,27 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             ]
         ], spacing=2, vertical_alignment="center")
 
-        # Tarjeta 7: Logros de Hoy
+        def on_logros_change(e):
+            data["logros_hoy"] = e.control.value
+            guardar_estado_persistente(user_id)
+
+        def on_oportunidades_change(e):
+            data["oportunidades_manana"] = e.control.value
+            guardar_estado_persistente(user_id)
+
+        def on_check_change(section, key, val):
+            if section in data and isinstance(data[section], dict):
+                data[section][key] = val
+                guardar_estado_persistente(user_id)
+
+        # Cálculo de métricas del día para el encabezado del plan
+        horas_prog = sum(float(c.get("horas", 0.0) or 0.0) for c in data.get("colaboradores", []))
+        tot_u = c_data.get("total_unidades", 0)
+        vta_net = data.get("meta_diaria", 0.0)
+        vta_prod = (vta_net / horas_prog) if horas_prog > 0 else 0.0
+        u_prod = (tot_u / horas_prog) if horas_prog > 0 else 0.0
+
+        # Tarjeta 7: Logros de Hoy y Oportunidades para Mañana (2 Cuadros Oficiales)
         if is_mobile_w:
             header_logros_content = ft.Column([
                 ft.Row([
@@ -3017,13 +3039,16 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 star_row_logros
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
-        card_logros_texto = ft.Container(
+        txt_logros_box = ft.Container(
             content=ft.Column([
-                header_logros_content,
+                ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10B981", size=14),
+                    ft.Text("LOGROS DE HOY", color="#10B981", weight="bold", size=11),
+                ], spacing=4),
                 ft.TextField(
                     value=data.get("logros_hoy", ""),
                     on_change=on_logros_change,
-                    hint_text="Resumen del cierre del día, compromisos y áreas de oportunidad...",
+                    hint_text="Escribe aquí los logros, metas alcanzadas y éxitos del día...",
                     multiline=True,
                     min_lines=3,
                     max_lines=5,
@@ -3032,7 +3057,40 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     color="white",
                     text_size=11 if is_mobile_w else 12
                 )
-            ]),
+            ], spacing=6),
+            expand=True
+        )
+
+        txt_oportunidades_box = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#F59E0B", size=14),
+                    ft.Text("OPORTUNIDADES PARA MAÑANA", color="#F59E0B", weight="bold", size=11),
+                ], spacing=4),
+                ft.TextField(
+                    value=data.get("oportunidades_manana", ""),
+                    on_change=on_oportunidades_change,
+                    hint_text="Escribe aquí las áreas de oportunidad y enfoque para mañana...",
+                    multiline=True,
+                    min_lines=3,
+                    max_lines=5,
+                    bgcolor="#111827",
+                    border_color="#374151",
+                    color="white",
+                    text_size=11 if is_mobile_w else 12
+                )
+            ], spacing=6),
+            expand=True
+        )
+
+        boxes_row = ft.Column([txt_logros_box, txt_oportunidades_box], spacing=10) if is_mobile_w else ft.Row([txt_logros_box, txt_oportunidades_box], spacing=12)
+
+        card_logros_texto = ft.Container(
+            content=ft.Column([
+                header_logros_content,
+                ft.Divider(height=6, color="#374151"),
+                boxes_row
+            ], spacing=8),
             bgcolor="#0B0E17",
             padding=12 if is_mobile_w else 14,
             border_radius=12,
