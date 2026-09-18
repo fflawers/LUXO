@@ -2684,9 +2684,23 @@ def configurar_rutas_fastapi(app):
             print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
             session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
-            if not session and active_sessions:
-                session = list(active_sessions.values())[-1]
-                print(f"DEBUG: Session fallback activado en /text_input -> usando UID={session.get('user_info', {}).get('id')}")
+            
+            # Si no se encontró sesión o la entrada carece de controles UI listos, buscar la sesión activa correspondiente
+            if not (session and session.get("input_msg") and session.get("enviar_mensaje")):
+                for k, s in active_sessions.items():
+                    if isinstance(s, dict) and s.get("input_msg") and s.get("enviar_mensaje"):
+                        u_inf = s.get("user_info") or {}
+                        p = s.get("page")
+                        if str(u_inf.get("id")) == str(user_id) or str(k) == str(user_id) or (p and getattr(p, "user_id", None) == str(user_id)):
+                            session = s
+                            break
+
+            if not (session and session.get("input_msg") and session.get("enviar_mensaje")) and active_sessions:
+                for s in reversed(list(active_sessions.values())):
+                    if isinstance(s, dict) and s.get("input_msg") and s.get("enviar_mensaje") and s.get("page"):
+                        session = s
+                        print(f"DEBUG: Session fallback activado en /text_input -> usando UID={session.get('user_info', {}).get('id')}")
+                        break
 
             print(f"DEBUG: active_sessions keys={list(active_sessions.keys())}, session encontrada={'Sí' if session else 'No'}")
             if session and text:
@@ -9462,6 +9476,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         page_dev = getattr(page, "device_id", None)
         if page_dev:
             active_sessions[page_dev] = sess_data
+        page_token = getattr(page, "_luxo_token", None)
+        if page_token:
+            active_sessions[page_token] = sess_data
+        if getattr(page, "username", None):
+            active_sessions[page.username] = sess_data
 
 
         # =================================
