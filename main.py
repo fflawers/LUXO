@@ -919,7 +919,7 @@ def configurar_rutas_fastapi(app):
             day = urllib.parse.unquote(day)
             clean_d_name = enfoque_diario.sanitize_filename(day)
             pdf_path = enfoque_diario.generar_pdf_enfoque_file(day, user_id)
-            if pdf_path and os.path.exists(pdf_path):
+            if pdf_path and os.path.exists(pdf_path) and str(pdf_path).lower().endswith(".pdf"):
                 from fastapi.responses import FileResponse
                 filename = f"Enfoque_Diario_{clean_d_name}_SGH_2026.pdf"
                 return FileResponse(
@@ -931,9 +931,13 @@ def configurar_rutas_fastapi(app):
                         "Cache-Control": "no-cache, no-store, must-revalidate"
                     }
                 )
+            else:
+                from fastapi.responses import HTMLResponse
+                html_code = enfoque_diario.generar_html_impresion(day, user_id)
+                return HTMLResponse(content=html_code)
         except Exception as ex:
             print("Error en endpoint print_enfoque_pdf_route:", ex)
-        return {"error": "No se pudo generar el archivo PDF oficial"}
+        return {"error": "No se pudo generar el archivo de impresión oficial"}
 
     @app.get("/api/download_excel/{day}")
     def download_excel_route(day: str, user_id: str = "invitado"):
