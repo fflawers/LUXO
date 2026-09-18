@@ -163,25 +163,31 @@
           const AudioContext = window.AudioContext || window.webkitAudioContext;
           if (!AudioContext) return;
           const ctx = new AudioContext();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = "sine";
+
+          function emitTone(freq, duration, delay) {
+            setTimeout(() => {
+              try {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                gain.gain.setValueAtTime(0.18, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + duration);
+              } catch(e){}
+            }, delay);
+          }
+
           if (type === 2) {
-            osc.frequency.setValueAtTime(1500, ctx.currentTime);
-            gain.gain.setValueAtTime(0.15, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.12);
+            // EXACTAMENTE 2 BEEPS al terminar la frase (beep-beep de confirmación)
+            emitTone(1050, 0.08, 0);
+            emitTone(1400, 0.12, 100);
           } else {
-            osc.frequency.setValueAtTime(800, ctx.currentTime);
-            gain.gain.setValueAtTime(0.15, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.15);
+            // EXACTAMENTE 1 BEEP al decir "Oye LUXO" (tono único de atención)
+            emitTone(880, 0.13, 0);
           }
         } catch (e) {
           console.error("Error playing beep:", e);
@@ -375,7 +381,13 @@
               }
 
               if (idx !== -1 && matchedTrigger) {
-                playBeep();
+                playBeep(1);
+                if (typeof window.showLuxoSiriOrb === 'function') {
+                  window.showLuxoSiriOrb(8000);
+                }
+                if (currentUserId && currentUserId !== "unknown") {
+                  fetch(serverBaseUrl + '/luxo_listening_start?user_id=' + currentUserId, { method: 'POST' }).catch(() => {});
+                }
                 
                 isAccumulating = true;
                 questionBuffer = "";
@@ -393,7 +405,7 @@
                 if (wakeTimeout) clearTimeout(wakeTimeout);
                 
                 if (questionBuffer) {
-                  sendTimeout = setTimeout(sendAccumulatedQuestion, 4000);
+                  sendTimeout = setTimeout(sendAccumulatedQuestion, 1200);
                 } else {
                   wakeTimeout = setTimeout(() => {
                     isAccumulating = false;
@@ -416,7 +428,7 @@
                 }
                 
                 if (sendTimeout) clearTimeout(sendTimeout);
-                sendTimeout = setTimeout(sendAccumulatedQuestion, 4000);
+                sendTimeout = setTimeout(sendAccumulatedQuestion, 1200);
                 console.log("¡Fragmento acumulado! Buffer actual:", questionBuffer);
               }
             }
@@ -444,21 +456,20 @@
         };
 
         recognition.onerror = (e) => {
-          console.error("Error en reconocimiento de voz:", e.error);
+          if (e.error !== 'no-speech') {
+            console.log("Estado reconocimiento de voz:", e.error);
+          }
         };
 
         recognition.onend = () => {
-          console.log("El reconocimiento de voz se detuvo. Reiniciando...");
           isListeningWakeWord = false;
           setTimeout(() => {
             if (!isListeningWakeWord && !isRecording && !window._simuladorActivo) {
               try {
                 recognition.start();
-              } catch(err) {
-                console.error("Error al reiniciar reconocimiento:", err);
-              }
+              } catch(err) {}
             }
-          }, 1500);
+          }, 400);
         };
 
         try {
