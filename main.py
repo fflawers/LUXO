@@ -1313,9 +1313,17 @@ def configurar_rutas_fastapi(app):
                             document.head.appendChild(orbStyle);
                         }
                         
-                        // 1. Boton flotante principal LUXO (Onda Fluida Siri / Apple Intelligence)
+                        // 1. Boton flotante principal LUXO (Onda Fluida Siri / Apple Intelligence) - EXCLUSIVO CELULARES
+                        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+                        const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
+                        const isMobileDevice = isTouchDevice && !isDesktopOS;
+
                         let mobileMicBtn = document.getElementById("luxo-floating-main-mic");
-                        if (!mobileMicBtn) {
+                        if (!isMobileDevice) {
+                            if (mobileMicBtn && mobileMicBtn.parentNode) {
+                                mobileMicBtn.parentNode.removeChild(mobileMicBtn);
+                            }
+                        } else if (!mobileMicBtn) {
                             mobileMicBtn = document.createElement("div");
                             mobileMicBtn.id = "luxo-floating-main-mic";
                             mobileMicBtn.innerHTML = `
@@ -2678,9 +2686,24 @@ def configurar_rutas_fastapi(app):
         return {"status": "success"}
 
     @app.api_route("/text_input", methods=["GET", "POST"])
-    async def post_text_input(user_id: str = "1", text: str = ""):
+    async def post_text_input(request: Request = None, user_id: str = "", text: str = ""):
         import traceback
         try:
+            if request:
+                try:
+                    qp = request.query_params
+                    user_id = user_id or qp.get("user_id", "")
+                    text = text or qp.get("text", "")
+                    if not text:
+                        try:
+                            body_json = await request.json()
+                            user_id = user_id or body_json.get("user_id", "")
+                            text = text or body_json.get("text", "")
+                        except Exception: pass
+                except Exception: pass
+
+            user_id = str(user_id or "1")
+            text = str(text or "").strip()
             print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
             session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
