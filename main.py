@@ -2600,10 +2600,7 @@ def configurar_rutas_fastapi(app):
                         print(f"WARN page.update() falló: {ex}")
 
                     try:
-                        if hasattr(page, "run_thread"):
-                            page.run_thread(enviar_mensaje, None)
-                        else:
-                            enviar_mensaje(None)
+                        threading.Thread(target=enviar_mensaje, args=(None,), daemon=True).start()
                     except Exception as ex:
                         print(f"ERROR en enviar_mensaje: {ex}\n{traceback.format_exc()}")
                     return {"status": "success"}
