@@ -77,18 +77,28 @@ DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBAD
 COLOR_TABS = {
     "SEMANAL": "#A100F2",
     "DOMINGO": "#10B981",
+    "PLAN ACCION DOMINGO": "#F59E0B",
     "PLAN.ACCIÓN_D": "#F59E0B",
     "LUNES": "#EF4444",
+    "PLAN ACCION LUNES": "#F59E0B",
     "PLAN.ACCIÓN_L": "#F59E0B",
     "MARTES": "#EC4899",
+    "PLAN ACCION MARTES ": "#F59E0B",
+    "PLAN ACCION MARTES": "#F59E0B",
     "PLAN.ACCIÓN_MA": "#F59E0B",
     "MIÉRCOLES": "#8B5CF6",
+    "PLAN ACCION MIÉRCOLES": "#F59E0B",
     "PLAN.ACCIÓN_MI": "#F59E0B",
     "JUEVES": "#3B82F6",
+    "PLAN ACCION JUEVES ": "#F59E0B",
+    "PLAN ACCION JUEVES": "#F59E0B",
     "PLAN.ACCIÓN_J": "#F59E0B",
     "VIERNES": "#06B6D4",
+    "PLAN ACCION VIERNES": "#F59E0B",
     "PLAN.ACCIÓN_V": "#F59E0B",
     "SÁBADO": "#10B981",
+    "PLAN ACCION SÁBADO ": "#F59E0B",
+    "PLAN ACCION SÁBADO": "#F59E0B",
     "PLAN.ACCIÓN_S": "#F59E0B"
 }
 
@@ -373,7 +383,7 @@ def default_store_state():
             "estrellas_logro": 5,
             "trafico_bloques": [4, 2, 2, 0, 0],
             "colaboradores": [
-                {"nombre": "", "horas": 0.0, "interacciones": 0, "convertidos": 0, "vta_cierre": 0.0, "ana_cierre": 0, "wea_demos": 0, "wea_cierre": 0, "kid_cierre": 0}
+                {"nombre": "", "horas": 0.0, "interacciones": 0, "convertidos": 0, "vta_cierre": 0.0, "ana_cierre": 0, "wea_demos": 0, "wea_cierre": 0, "kid_cierre": 0, "ck_cierre": 0}
                 for _ in range(8)
             ],
             "venta_neta_dia": 0.0,
@@ -381,6 +391,11 @@ def default_store_state():
             "slp_dia": "",
             "onesight_dia": "",
             "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "smart_especifico": "Ofrecer solución limpiadora y probar al menos 3 modelos por cliente.",
+            "smart_medible": "Lograr mínimo 1 CareKit y 1 armazón Kids por colaborador.",
+            "smart_alcanzable": "Aprovechar promociones vigentes y cross-selling en caja.",
+            "smart_reto": "Alcanzar 110% de la meta diaria en venta neta.",
+            "smart_tiempo": "Monitorear avances cada 2 horas en el Store Dashboard.",
             "logros_hoy": "Excelente retención de clientes y venta cruzada.",
             "ritmo_venta_hoy": "",
             "checks_estandares": {"limpieza": False, "imagen": False, "reunion": False},
@@ -709,9 +724,10 @@ def calcular_dia(d_name, user_id):
     conv = data["conversion_target"]
     transacciones = math.ceil(trafico * conv) if trafico > 0 else 0
     meta_ideal = m_diaria * 1.10
-    total_unidades = max(transacciones, 1)
+    
+    aur_dia = float(data.get("aur_dia", 3620.0) or 3620.0)
+    total_unidades = max(1, round(m_diaria / aur_dia)) if aur_dia > 0 else max(transacciones, 1)
 
-    vta_neta_prod = (m_diaria / total_unidades) if total_unidades > 0 else 0.0
     vta_ly = data["vta_ly"]
 
     b_trafico = data["trafico_bloques"]
@@ -721,7 +737,12 @@ def calcular_dia(d_name, user_id):
 
     colabs = data["colaboradores"]
     tot_horas = sum(c["horas"] for c in colabs if c["nombre"].strip() and c["horas"] > 0)
+    vta_neta_prod = (m_diaria / tot_horas) if tot_horas > 0 else 0.0
     u_prod = round(total_unidades / tot_horas, 2) if tot_horas > 0 else 0.0
+
+    wea_unid_meta = max(1, math.ceil(wearables / 8100.0))
+    kids_unid_meta = max(1, math.ceil(total_unidades * data.get("kids_pct", 0.05)))
+    ck_unid_meta = max(1, math.ceil(total_unidades * data.get("carekits_pct", 0.30)))
 
     colab_rows = []
     for c in colabs:
@@ -730,14 +751,10 @@ def calcular_dia(d_name, user_id):
         if hrs > 0 and tot_horas > 0:
             m_vta = (m_diaria / tot_horas) * hrs
             
-            tot_wea_unid = total_unidades * data.get("wearables_pct", 0.15)
-            tot_kids_unid = total_unidades * data.get("kids_pct", 0.05)
-            tot_ck_unid = total_unidades * data.get("carekits_pct", 0.30)
-            
-            calc_kid = math.ceil(max((tot_kids_unid / tot_horas) * hrs, 1))
-            calc_ck = math.ceil(max((tot_ck_unid / tot_horas) * hrs, 1))
-            calc_ana = math.ceil(max(((total_unidades - tot_wea_unid) / tot_horas) * hrs, 1))
-            calc_wea = math.ceil(max((tot_wea_unid / tot_horas) * hrs, 1))
+            calc_kid = 1
+            calc_ck = 1
+            calc_ana = math.ceil(max(((total_unidades - wea_unid_meta) / tot_horas) * hrs, 1))
+            calc_wea = math.ceil(max((wea_unid_meta / tot_horas) * hrs, 1))
             
             def get_manual_or_calc(key, default_calc):
                 val = c.get(key, "")
@@ -788,10 +805,11 @@ def calcular_dia(d_name, user_id):
     tot_kid_cierre = sum(r["kid_cierre"] for r in colab_rows)
     tot_ck_cierre = sum(r["ck_cierre"] for r in colab_rows)
     
-    venta_neta_dia = data.get("venta_neta_dia", 0.0)
-    venta_unidades_dia = data.get("venta_unidades_dia", 0)
+    tot_unidades_cierre = tot_ana_cierre + tot_wea_cierre
+    venta_neta_dia = data.get("venta_neta_dia", 0.0) or tot_vta_cierre
+    venta_unidades_dia = data.get("venta_unidades_dia", 0) or tot_unidades_cierre
     
-    conversion_dia = (venta_unidades_dia / tot_interacciones) if tot_interacciones > 0 else 0.0
+    conversion_dia = (tot_convertidos / tot_interacciones) if tot_interacciones > 0 else 0.0
     crecimiento_conversion = conversion_dia - conv
     
     # User overrideable Wearables/Kids %
@@ -826,6 +844,9 @@ def calcular_dia(d_name, user_id):
         "b_metas": b_metas,
         "tot_horas": tot_horas,
         "colab_rows": colab_rows,
+        "wea_unid_meta": wea_unid_meta,
+        "kids_unid_meta": kids_unid_meta,
+        "ck_unid_meta": ck_unid_meta,
         # CÓMO VAMOS
         "tot_interacciones": tot_interacciones,
         "tot_convertidos": tot_convertidos,
@@ -845,13 +866,13 @@ def calcular_dia(d_name, user_id):
     }
 
 DAY_TO_PLAN_SHEET = {
-    "DOMINGO": "PLAN.ACCIÓN_D",
-    "LUNES": "PLAN.ACCIÓN_L",
-    "MARTES": "PLAN.ACCIÓN_MA",
-    "MIÉRCOLES": "PLAN.ACCIÓN_MI",
-    "JUEVES": "PLAN.ACCIÓN_J",
-    "VIERNES": "PLAN.ACCIÓN_V",
-    "SÁBADO": "PLAN.ACCIÓN_S"
+    "DOMINGO": "PLAN ACCION DOMINGO",
+    "LUNES": "PLAN ACCION LUNES",
+    "MARTES": "PLAN ACCION MARTES ",
+    "MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+    "JUEVES": "PLAN ACCION JUEVES ",
+    "VIERNES": "PLAN ACCION VIERNES",
+    "SÁBADO": "PLAN ACCION SÁBADO "
 }
 
 def map_to_excel_sheet(tab_name):
@@ -864,40 +885,50 @@ def map_to_excel_sheet(tab_name):
         return t
     
     plan_map = {
-        "PLAN DOMINGO": "PLAN.ACCIÓN_D",
-        "PLAN_DOMINGO": "PLAN.ACCIÓN_D",
-        "PLAN.ACCIÓN_D": "PLAN.ACCIÓN_D",
-        "PLAN_D": "PLAN.ACCIÓN_D",
-        "PLAN LUNES": "PLAN.ACCIÓN_L",
-        "PLAN_LUNES": "PLAN.ACCIÓN_L",
-        "PLAN.ACCIÓN_L": "PLAN.ACCIÓN_L",
-        "PLAN_L": "PLAN.ACCIÓN_L",
-        "PLAN MARTES": "PLAN.ACCIÓN_MA",
-        "PLAN_MARTES": "PLAN.ACCIÓN_MA",
-        "PLAN.ACCIÓN_MA": "PLAN.ACCIÓN_MA",
-        "PLAN_MA": "PLAN.ACCIÓN_MA",
-        "PLAN MIÉRCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN MIERCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN_MIÉRCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN_MIERCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN.ACCIÓN_MI": "PLAN.ACCIÓN_MI",
-        "PLAN_MI": "PLAN.ACCIÓN_MI",
-        "PLAN JUEVES": "PLAN.ACCIÓN_J",
-        "PLAN_JUEVES": "PLAN.ACCIÓN_J",
-        "PLAN.ACCIÓN_J": "PLAN.ACCIÓN_J",
-        "PLAN_J": "PLAN.ACCIÓN_J",
-        "PLAN VIERNES": "PLAN.ACCIÓN_V",
-        "PLAN_VIERNES": "PLAN.ACCIÓN_V",
-        "PLAN.ACCIÓN_V": "PLAN.ACCIÓN_V",
-        "PLAN_V": "PLAN.ACCIÓN_V",
-        "PLAN SÁBADO": "PLAN.ACCIÓN_S",
-        "PLAN SABADO": "PLAN.ACCIÓN_S",
-        "PLAN_SÁBADO": "PLAN.ACCIÓN_S",
-        "PLAN_SABADO": "PLAN.ACCIÓN_S",
-        "PLAN.ACCIÓN_S": "PLAN.ACCIÓN_S",
-        "PLAN_S": "PLAN.ACCIÓN_S",
+        "PLAN DOMINGO": "PLAN ACCION DOMINGO",
+        "PLAN_DOMINGO": "PLAN ACCION DOMINGO",
+        "PLAN ACCION DOMINGO": "PLAN ACCION DOMINGO",
+        "PLAN.ACCIÓN_D": "PLAN ACCION DOMINGO",
+        "PLAN_D": "PLAN ACCION DOMINGO",
+        "PLAN LUNES": "PLAN ACCION LUNES",
+        "PLAN_LUNES": "PLAN ACCION LUNES",
+        "PLAN ACCION LUNES": "PLAN ACCION LUNES",
+        "PLAN.ACCIÓN_L": "PLAN ACCION LUNES",
+        "PLAN_L": "PLAN ACCION LUNES",
+        "PLAN MARTES": "PLAN ACCION MARTES ",
+        "PLAN_MARTES": "PLAN ACCION MARTES ",
+        "PLAN ACCION MARTES": "PLAN ACCION MARTES ",
+        "PLAN ACCION MARTES ": "PLAN ACCION MARTES ",
+        "PLAN.ACCIÓN_MA": "PLAN ACCION MARTES ",
+        "PLAN_MA": "PLAN ACCION MARTES ",
+        "PLAN MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN MIERCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN_MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN_MIERCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN ACCION MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN.ACCIÓN_MI": "PLAN ACCION MIÉRCOLES",
+        "PLAN_MI": "PLAN ACCION MIÉRCOLES",
+        "PLAN JUEVES": "PLAN ACCION JUEVES ",
+        "PLAN_JUEVES": "PLAN ACCION JUEVES ",
+        "PLAN ACCION JUEVES": "PLAN ACCION JUEVES ",
+        "PLAN ACCION JUEVES ": "PLAN ACCION JUEVES ",
+        "PLAN.ACCIÓN_J": "PLAN ACCION JUEVES ",
+        "PLAN_J": "PLAN ACCION JUEVES ",
+        "PLAN VIERNES": "PLAN ACCION VIERNES",
+        "PLAN_VIERNES": "PLAN ACCION VIERNES",
+        "PLAN ACCION VIERNES": "PLAN ACCION VIERNES",
+        "PLAN.ACCIÓN_V": "PLAN ACCION VIERNES",
+        "PLAN_V": "PLAN ACCION VIERNES",
+        "PLAN SÁBADO": "PLAN ACCION SÁBADO ",
+        "PLAN SABADO": "PLAN ACCION SÁBADO ",
+        "PLAN_SÁBADO": "PLAN ACCION SÁBADO ",
+        "PLAN_SABADO": "PLAN ACCION SÁBADO ",
+        "PLAN ACCION SÁBADO": "PLAN ACCION SÁBADO ",
+        "PLAN ACCION SÁBADO ": "PLAN ACCION SÁBADO ",
+        "PLAN.ACCIÓN_S": "PLAN ACCION SÁBADO ",
+        "PLAN_S": "PLAN ACCION SÁBADO ",
     }
-    return plan_map.get(t, t if t in ["SEMANAL", "DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "PLAN.ACCIÓN_D", "PLAN.ACCIÓN_L", "PLAN.ACCIÓN_MA", "PLAN.ACCIÓN_MI", "PLAN.ACCIÓN_J", "PLAN.ACCIÓN_V", "PLAN.ACCIÓN_S"] else "DOMINGO")
+    return plan_map.get(t, t if t in ["SEMANAL", "DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "PLAN ACCION DOMINGO", "PLAN ACCION LUNES", "PLAN ACCION MARTES ", "PLAN ACCION MIÉRCOLES", "PLAN ACCION JUEVES ", "PLAN ACCION VIERNES", "PLAN ACCION SÁBADO "] else "DOMINGO")
 
 import unicodedata
 
@@ -937,170 +968,97 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                 print(f"Error: Plantilla base Excel no encontrada en {template_path}")
                 return None
 
-            import shutil
-            import uuid
-            import time
-            temp_excel_path = os.path.abspath(os.path.join(uploads_dir, f"_tmp_{uuid.uuid4().hex}.xlsx"))
-            shutil.copy(template_path, temp_excel_path)
+            # 1. Generación ultra-rápida y compatible con openpyxl
+            import openpyxl
+            wb_pyxl = openpyxl.load_workbook(template_path)
+            
+            def _safe_set(sheet, coord, val):
+                try:
+                    c = sheet[coord]
+                    if not isinstance(c, openpyxl.cell.cell.MergedCell):
+                        c.value = val
+                except Exception: pass
 
-            excel = None
-            wb = None
-            try:
-                import pythoncom
-                import win32com.client
-                pythoncom.CoInitialize()
-                excel = win32com.client.Dispatch("Excel.Application")
-                excel.Visible = False
-                excel.DisplayAlerts = False
-                excel.ScreenUpdating = False
-
-                wb = excel.Workbooks.Open(temp_excel_path)
-                ws_names = [ws.Name for ws in wb.Worksheets]
-
-                fechas_map_ex = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
-
-                # 1. Llenar los 7 días completos para que todas las fórmulas y cálculos del libro sean perfectos
-                for d in DIAS:
-                    if d in ws_names and d in s_state:
-                        ws = wb.Worksheets(d)
-                        d_data = s_state[d]
-
-                        ws.Range('I1').Value = int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30')
-                        ws.Range('M1').Value = g_meta.get('tienda', 'SGH')
-                        if d in fechas_map_ex:
-                            try: ws.Range('E1').Value = fechas_map_ex[d]['str_header']
+            for d in DIAS:
+                if d in wb_pyxl.sheetnames and d in s_state:
+                    ws = wb_pyxl[d]
+                    d_data = s_state[d]
+                    _safe_set(ws, 'I1', int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30'))
+                    _safe_set(ws, 'M1', g_meta.get('tienda', 'SGH'))
+                    _safe_set(ws, 'D5', d_data.get('meta_diaria', 0.0))
+                    _safe_set(ws, 'J5', d_data.get('trafico_esperado', 0))
+                    _safe_set(ws, 'J6', d_data.get('conversion_target', 0.0))
+                    _safe_set(ws, 'G12', d_data.get('vta_ly', 0.0))
+                    _safe_set(ws, 'N5', d_data.get('wearables_pct', 0.15))
+                    _safe_set(ws, 'N6', d_data.get('kids_pct', 0.05))
+                    _safe_set(ws, 'N7', d_data.get('carekits_pct', 0.30))
+                    if 'trafico_bloques' in d_data:
+                        for b_i, b_val in enumerate(d_data['trafico_bloques'][:5]):
+                            try: ws.cell(17, 3 + b_i).value = b_val
                             except Exception: pass
+                    _safe_set(ws, 'N11', d_data.get('atv_dia', 3620.0))
+                    _safe_set(ws, 'N13', d_data.get('aur_dia', 3620.0))
+                    _safe_set(ws, 'L11', d_data.get('atv_mtd', 7597.0))
+                    _safe_set(ws, 'L13', d_data.get('aur_mtd', 3362.0))
+                    for i, c in enumerate(d_data.get('colaboradores', [])[:8]):
+                        _safe_set(ws, f'B{23 + i}', c.get('nombre', ''))
+                        _safe_set(ws, f'D{23 + i}', c.get('horas', 0.0))
+                        _safe_set(ws, f'E{40 + i}', c.get('interacciones', 0))
+                        _safe_set(ws, f'F{40 + i}', c.get('convertidos', 0))
+                        _safe_set(ws, f'H{40 + i}', c.get('vta_cierre', 0.0))
+                        _safe_set(ws, f'I{40 + i}', c.get('ana_cierre', 0))
+                        _safe_set(ws, f'J{40 + i}', c.get('wea_demos', 0))
+                        _safe_set(ws, f'K{40 + i}', c.get('wea_cierre', 0))
+                        _safe_set(ws, f'M{40 + i}', c.get('kid_cierre', 0))
+                        _safe_set(ws, f'N{40 + i}', c.get('ck_cierre', 0))
+            for d, plan_sheet_name in DAY_TO_PLAN_SHEET.items():
+                if plan_sheet_name in wb_pyxl.sheetnames and d in s_state:
+                    ws_p = wb_pyxl[plan_sheet_name]
+                    d_data = s_state[d]
+                    _safe_set(ws_p, 'I1', int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30'))
+                    smart_text = ""
+                    if d_data.get('smart_especifico'): smart_text += f"S (Específico): {d_data.get('smart_especifico')}\n"
+                    if d_data.get('smart_medible'): smart_text += f"M (Medible): {d_data.get('smart_medible')}\n"
+                    if d_data.get('smart_alcanzable'): smart_text += f"A (Alcanzable): {d_data.get('smart_alcanzable')}\n"
+                    if d_data.get('smart_reto'): smart_text += f"R (Reto): {d_data.get('smart_reto')}\n"
+                    if d_data.get('smart_tiempo'): smart_text += f"T (Tiempo): {d_data.get('smart_tiempo')}\n"
+                    if smart_text: _safe_set(ws_p, 'C29', smart_text.strip())
+                    if d_data.get('logros_hoy'): _safe_set(ws_p, 'A35', d_data.get('logros_hoy'))
+            
+            wb_pyxl.save(web_excel_path)
 
-                        ws.Range('C5').Value = d_data.get('meta_diaria', 0.0)
-                        ws.Range('F5').Value = d_data.get('trafico_esperado', 0)
-                        ws.Range('F6').Value = d_data.get('conversion_target', 0.0)
-                        ws.Range('E9').Value = d_data.get('vta_ly', 0.0)
-                        ws.Range('I5').Value = d_data.get('wearables_pct', 0.0)
-                        ws.Range('I6').Value = d_data.get('kids_pct', 0.0)
-                        ws.Range('I7').Value = d_data.get('carekits_pct', 0.0)
-
-                        if 'trafico_bloques' in d_data:
-                            ws.Range('C12:G12').Value = [d_data['trafico_bloques']]
-
-                        ws.Range('P7').Value = d_data.get('atv_dia', 7500.0)
-                        ws.Range('P9').Value = d_data.get('aur_dia', 4617.0)
-                        ws.Range('P13').Value = d_data.get('atv_mtd', 6578.0)
-                        ws.Range('P15').Value = d_data.get('aur_mtd', 4312.0)
-
-                        for i, c in enumerate(d_data.get('colaboradores', [])[:8]):
-                            r_idx = 17 + i
-                            ws.Range(f'B{r_idx}').Value = c.get('nombre', '')
-                            ws.Range(f'D{r_idx}').Value = c.get('horas', 0.0)
-                            if c.get("meta_ana", "") != "": ws.Range(f'F{r_idx}').Value = int(c["meta_ana"])
-                            if c.get("meta_wea", "") != "": ws.Range(f'G{r_idx}').Value = int(c["meta_wea"])
-                            if c.get("meta_kid", "") != "": ws.Range(f'H{r_idx}').Value = int(c["meta_kid"])
-                            if c.get("meta_ck", "") != "": ws.Range(f'I{r_idx}').Value = int(c["meta_ck"])
-                                
-                            r_cv_idx = 33 + i
-                            ws.Range(f'E{r_cv_idx}').Value = c.get('interacciones', 0)
-                            ws.Range(f'G{r_cv_idx}').Value = c.get('convertidos', 0)
-                            ws.Range(f'J{r_cv_idx}').Value = c.get('vta_cierre', 0.0)
-                            ws.Range(f'K{r_cv_idx}').Value = c.get('ana_cierre', 0)
-                            ws.Range(f'L{r_cv_idx}').Value = c.get('wea_demos', 0)
-                            ws.Range(f'M{r_cv_idx}').Value = c.get('wea_cierre', 0)
-                            ws.Range(f'O{r_cv_idx}').Value = c.get('kid_cierre', 0)
-                            ws.Range(f'P{r_cv_idx}').Value = c.get('ck_cierre', 0)
-
-                        ws.Range('E30').Value = d_data.get('venta_neta_dia', 0.0)
-                        ws.Range('G30').Value = d_data.get('venta_unidades_dia', 0)
-
-                # 2. Llenar las 7 hojas de Plan de Acción si están en la plantilla
-                for d, plan_sheet_name in DAY_TO_PLAN_SHEET.items():
-                    if plan_sheet_name in ws_names and d in s_state:
-                        ws_p = wb.Worksheets(plan_sheet_name)
-                        d_data = s_state[d]
-                        ws_p.Range('I1').Value = int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30')
-                        
-                        r_txt = str(d_data.get('ritmo_venta_hoy', '') or '').strip()
-                        if r_txt:
-                            ws_p.Range('I4').Value = f"¿Cuál debe ser nuestro ritmo de venta hoy?\n{r_txt}"
-                        else:
-                            ws_p.Range('I4').Value = "¿Cuál debe ser nuestro ritmo de venta hoy?"
-                            
-                        ws_p.Range('A27').Value = str(d_data.get('enfoque_hoy', '') or '')
-                        ws_p.Range('A30').Value = str(d_data.get('logros_hoy', '') or '')
-                        
-                        # Checkmarks Estándares
-                        chk_e = d_data.get('checks_estandares', {})
-                        if chk_e.get('limpieza'): ws_p.Range('A9').Value = "✓"
-                        if chk_e.get('imagen'): ws_p.Range('A10').Value = "✓"
-                        if chk_e.get('reunion'): ws_p.Range('A11').Value = "✓"
-
-                        # Checkmarks No Negociables
-                        chk_nn = d_data.get('checks_no_negociables', {})
-                        if chk_nn.get('registro'): ws_p.Range('H9').Value = "✓"
-                        if chk_nn.get('sin_celular'): ws_p.Range('H10').Value = "✓"
-                        if chk_nn.get('fuera_caja'): ws_p.Range('H11').Value = "✓"
-                        if chk_nn.get('seguimiento'): ws_p.Range('H12').Value = "✓"
-
-                        # Checkmarks Secretos
-                        chk_s = d_data.get('checks_secretos', {})
-                        if chk_s.get('pulir'): ws_p.Range('A16').Value = "✓"
-                        if chk_s.get('pontelos'): ws_p.Range('A17').Value = "✓"
-                        if chk_s.get('diviertete'): ws_p.Range('A18').Value = "✓"
-                        if chk_s.get('cuidalos'): ws_p.Range('A19').Value = "✓"
-                        if chk_s.get('ajuste'): ws_p.Range('A20').Value = "✓"
-
-                        # Checkmarks Journey
-                        chk_j = d_data.get('checks_journey', {})
-                        if chk_j.get('relacion'): ws_p.Range('H18').Value = "✓"
-                        if chk_j.get('confianza'): ws_p.Range('K18').Value = "✓"
-                        if chk_j.get('ve_mas_alla'): ws_p.Range('N18').Value = "✓"
-
-                if export_pdf:
+            # 2. Exportación PDF si se solicita
+            if export_pdf:
+                pdf_generado = False
+                # Intentar win32com si estamos en Windows
+                try:
+                    import pythoncom
+                    import win32com.client
+                    pythoncom.CoInitialize()
+                    excel = win32com.client.Dispatch("Excel.Application")
+                    excel.Visible = False
+                    excel.DisplayAlerts = False
+                    excel.ScreenUpdating = False
+                    wb_com = excel.Workbooks.Open(web_excel_path)
+                    ws_names = [ws.Name for ws in wb_com.Worksheets]
                     sheet_name = target_sheet if target_sheet in ws_names else "DOMINGO"
-                    ws_export = wb.Worksheets(sheet_name)
+                    ws_export = wb_com.Worksheets(sheet_name)
                     try:
                         ws_export.PageSetup.Zoom = False
                         ws_export.PageSetup.FitToPagesWide = 1
                         ws_export.PageSetup.FitToPagesTall = 1
-                    except Exception:
-                        pass
+                    except Exception: pass
                     ws_export.ExportAsFixedFormat(0, web_pdf_path)
-                    print(f"✅ PDF exportado exitosamente vía win32com ({sheet_name}): {web_pdf_path}")
+                    wb_com.Close(False)
+                    excel.Quit()
+                    pythoncom.CoUninitialize()
+                    pdf_generado = os.path.exists(web_pdf_path)
+                except Exception as ex_pdf_com:
+                    print("Notice win32com PDF export:", ex_pdf_com)
 
-                wb.SaveCopyAs(web_excel_path)
-                wb.Close(False)
-                wb = None
-                
-                if excel:
-                    try: excel.Quit()
-                    except: pass
-                    excel = None
+                return web_pdf_path if (pdf_generado and os.path.exists(web_pdf_path)) else web_excel_path
 
-                try:
-                    if os.path.exists(temp_excel_path):
-                        os.remove(temp_excel_path)
-                except Exception:
-                    pass
-
-                if export_pdf:
-                    return web_pdf_path if os.path.exists(web_pdf_path) else None
-                return web_excel_path
-
-            except Exception as ex_com:
-                print("Notice win32com export error:", ex_com)
-                if excel:
-                    try: excel.Quit()
-                    except: pass
-                    excel = None
-                try:
-                    if os.path.exists(temp_excel_path):
-                        os.remove(temp_excel_path)
-                except Exception:
-                    pass
-                return web_pdf_path if (export_pdf and os.path.exists(web_pdf_path)) else web_excel_path
-            finally:
-                if excel:
-                    try: excel.Quit()
-                    except: pass
-                try: pythoncom.CoUninitialize()
-                except: pass
+            return web_excel_path
 
         except Exception as ex:
             print("Error en generar_excel_y_pdf_enfoque:", ex)
@@ -1390,6 +1348,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 elif e.control.data.startswith("colab_nom_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["colaboradores"][idx]["nombre"] = v_raw
+                    if d_name == "DOMINGO":
+                        for day_other in DIAS:
+                            if day_other != "DOMINGO" and day_other in s_state:
+                                if idx < len(s_state[day_other]["colaboradores"]):
+                                    s_state[day_other]["colaboradores"][idx]["nombre"] = v_raw
                 elif e.control.data.startswith("colab_hrs_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["colaboradores"][idx]["horas"] = float(v) if v else 0.0
@@ -2199,25 +2162,54 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             border=ft.Border.all(1.5, "#00FFFF")
         )
 
-        # Tarjeta 6: Tu Enfoque Para Hoy
+        # Tarjeta 6: Tu Enfoque Para Hoy (Metodología S.M.A.R.T.)
+        def make_smart_field(letter, label, key, color_hex, hint_txt):
+            def _on_txt_change(e):
+                data[key] = e.control.value
+                guardar_estado_persistente(user_id)
+            return ft.Container(
+                content=ft.Row([
+                    ft.Container(
+                        content=ft.Text(letter, weight="bold", color="black", size=11),
+                        width=22, height=22, border_radius=4, bgcolor=color_hex,
+                        alignment=ft.alignment.Alignment(0, 0)
+                    ),
+                    ft.Text(label, weight="bold", color=color_hex, size=11, width=85),
+                    ft.TextField(
+                        value=data.get(key, ""),
+                        on_change=_on_txt_change,
+                        hint_text=hint_txt,
+                        bgcolor="#111827",
+                        border_color="#374151",
+                        focused_border_color=color_hex,
+                        color="white",
+                        text_size=11,
+                        dense=True,
+                        expand=True
+                    )
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor="#0F172A",
+                padding=ft.Padding(8, 4, 8, 4),
+                border_radius=6,
+                border=ft.Border.all(1, "#1E293B")
+            )
+
+        smart_rows = [
+            make_smart_field("S", "ESPECÍFICO:", "smart_especifico", "#00FFFF", "Acción puntual del día (ej. ofrecer solución limpiadora y probar 3 modelos por cliente)..."),
+            make_smart_field("M", "MEDIBLE:", "smart_medible", "#10B981", "Cuota numérica mínima (ej. mínimo 1 CareKit y 1 armazón Kids por colaborador)..."),
+            make_smart_field("A", "ALCANZABLE:", "smart_alcanzable", "#FFD700", "Palancas comerciales (ej. promociones vigentes, cross-selling y bundles)..."),
+            make_smart_field("R", "RETO:", "smart_reto", "#EF4444", "Meta aspiracional (ej. superar el 110% de la cuota diaria en venta neta)..."),
+            make_smart_field("T", "TIEMPO:", "smart_tiempo", "#E040FB", "Cadencia horaria (ej. seguimiento cada 2 horas en Store Dashboard)..."),
+        ]
+
         card_enfoque_texto = ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text("📝 TU ENFOQUE PARA HOY", color="#00FFFF", weight="bold", size=12 if is_mobile_w else 13)
+                    ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#00FFFF", size=18),
+                    ft.Text("🎯 TU ENFOQUE PARA HOY (METODOLOGÍA S.M.A.R.T.)", color="#00FFFF", weight="bold", size=12 if is_mobile_w else 13)
                 ], spacing=6),
-                ft.TextField(
-                    value=data.get("enfoque_hoy", ""),
-                    on_change=on_enfoque_change,
-                    hint_text="Escribe aquí las acciones clave y estrategia del día...",
-                    multiline=True,
-                    min_lines=3,
-                    max_lines=5,
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    color="white",
-                    text_size=11 if is_mobile_w else 12
-                )
+                ft.Divider(height=6, color="#374151"),
+                ft.Column(smart_rows, spacing=6)
             ]),
             bgcolor="#0B0E17",
             padding=12 if is_mobile_w else 14,
