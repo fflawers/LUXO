@@ -2733,32 +2733,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             border=ft.Border.all(1, "#374151")
         )
 
-        plan_sheet_code = DAY_TO_PLAN_SHEET.get(d_name, "PLAN.ACCIÓN_D")
         top_header_title_row = ft.Row([
-            ft.Row([
-                ft.Icon(ft.Icons.ASSIGNMENT_TURNED_IN_ROUNDED, color="#FFD700", size=18),
-                ft.Text(f"PLAN DE ACCIÓN Y SEGUIMIENTO ({d_name}) - OFICIAL SGH", color="white", weight="bold", size=12 if is_mobile_w else 13),
-            ], spacing=6),
-            ft.Row([
-                ft.ElevatedButton(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="white", size=14),
-                        ft.Text(f"📊 Excel ({d_name})", color="white", weight="bold", size=10 if is_mobile_w else 11)
-                    ], spacing=4),
-                    style=ft.ButtonStyle(bgcolor="#059669", shape=ft.RoundedRectangleBorder(radius=6)),
-                    url=f"/api/download_excel/{plan_sheet_code}?user_id={user_id}"
-                ),
-                ft.Container(width=4),
-                ft.ElevatedButton(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.PRINT_ROUNDED, color="white", size=14),
-                        ft.Text(f"📄 PDF ({d_name})", color="white", weight="bold", size=10 if is_mobile_w else 11)
-                    ], spacing=4),
-                    style=ft.ButtonStyle(bgcolor="#10B981", shape=ft.RoundedRectangleBorder(radius=6)),
-                    on_click=lambda e, code=plan_sheet_code: generar_pdf_enfoque(code)
-                )
-            ], spacing=4)
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ft.Icon(ft.Icons.ASSIGNMENT_TURNED_IN_ROUNDED, color="#FFD700", size=18),
+            ft.Text(f"PLAN DE ACCIÓN Y SEGUIMIENTO ({d_name}) - OFICIAL SGH", color="white", weight="bold", size=12 if is_mobile_w else 13),
+        ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         top_header_content = ft.Column([
             top_header_title_row,
