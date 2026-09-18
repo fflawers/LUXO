@@ -3213,18 +3213,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             data["oportunidades_manana"] = e.control.value
             guardar_estado_persistente(user_id)
 
-        def on_check_change(section, key, val):
-            if section in data and isinstance(data[section], dict):
-                data[section][key] = val
-                guardar_estado_persistente(user_id)
-
-        # Cálculo de métricas del día para el encabezado del plan
-        horas_prog = sum(float(c.get("horas", 0.0) or 0.0) for c in data.get("colaboradores", []))
-        tot_u = c_data.get("total_unidades", 0)
-        vta_net = data.get("meta_diaria", 0.0)
-        vta_prod = (vta_net / horas_prog) if horas_prog > 0 else 0.0
-        u_prod = (tot_u / horas_prog) if horas_prog > 0 else 0.0
-
         # Tarjeta 7: Logros de Hoy y Oportunidades para Mañana (2 Cuadros Oficiales)
         if is_mobile_w:
             header_logros_content = ft.Column([
