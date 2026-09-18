@@ -1025,12 +1025,28 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                     if d_data.get('smart_tiempo'): smart_text += f"T (Tiempo): {d_data.get('smart_tiempo')}\n"
                     if smart_text: _safe_set(ws_p, 'C29', smart_text.strip())
                     if d_data.get('logros_hoy'): _safe_set(ws_p, 'A35', d_data.get('logros_hoy'))
-                    if d_data.get('oportunidades_manana'): _safe_set(ws_p, 'A37', d_data.get('oportunidades_manana'))
-            
-            wb_pyxl.save(web_excel_path)
-
-            # 2. Exportación PDF si se solicita
+            # 1. Exportación PDF directa si se solicita
             if export_pdf:
+                vec_pdf = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
+                if vec_pdf and os.path.exists(vec_pdf):
+                    return vec_pdf
+
+            # 2. Guardar archivo Excel (.xlsx) de manera segura
+            try:
+                wb_pyxl.save(web_excel_path)
+            except PermissionError:
+                # Si el archivo está abierto en Excel, intentar con un nombre temporal o ignorar
+                temp_alt = os.path.abspath(os.path.join(uploads_dir, f"Enfoque_Diario_{clean_sheet_name}_SGH_2026_temp.xlsx"))
+                try:
+                    wb_pyxl.save(temp_alt)
+                    web_excel_path = temp_alt
+                except Exception:
+                    pass
+            except Exception as ex_wb:
+                print("Notice al guardar workbook Excel:", ex_wb)
+
+            if export_pdf:
+                # Fallback secundario si fitz no estuviera disponible (Windows COM)
                 pdf_generado = False
                 excel = None
                 try:
@@ -1065,7 +1081,6 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                         temp_pdf_dia = os.path.abspath(os.path.join(uploads_dir, f"temp_{clean_sheet_name}_dia.pdf"))
                         temp_pdf_plan = os.path.abspath(os.path.join(uploads_dir, f"temp_{clean_sheet_name}_plan.pdf"))
 
-                        # 1. Exportar hoja del día
                         ws_dia = wb_com.Worksheets(dia_base if dia_base in ws_names else "DOMINGO")
                         try:
                             ws_dia.PageSetup.PrintArea = "$A$1:$R$48"
@@ -1076,7 +1091,6 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                         except Exception: pass
                         ws_dia.ExportAsFixedFormat(0, temp_pdf_dia)
 
-                        # 2. Exportar hoja de plan de acción
                         ws_plan = wb_com.Worksheets(plan_sheet_name if plan_sheet_name in ws_names else "PLAN ACCION DOMINGO")
                         try:
                             ws_plan.PageSetup.PrintArea = "$A$1:$O$36"
@@ -1092,16 +1106,15 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                         excel = None
                         pythoncom.CoUninitialize()
 
-                        # 3. Componer PDF 2-en-1 Horizontal (Landscape) con PyMuPDF
                         if os.path.exists(temp_pdf_dia) and os.path.exists(temp_pdf_plan):
                             doc_dia = fitz.open(temp_pdf_dia)
                             doc_plan = fitz.open(temp_pdf_plan)
 
                             doc_out = fitz.open()
-                            page_out = doc_out.new_page(width=792, height=612) # Carta Horizontal 11x8.5 in
+                            page_out = doc_out.new_page(width=792, height=612)
 
-                            margin = 12
-                            gap = 10
+                            margin = 10
+                            gap = 8
                             half_w = 792 / 2
 
                             rect_left = fitz.Rect(margin, margin, half_w - gap/2, 612 - margin)
@@ -1140,6 +1153,197 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
         except Exception as ex:
             print("Error en generar_excel_y_pdf_enfoque:", ex)
             return None
+
+def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
+    """
+    Genera el PDF oficial SGH 2026 de forma 100% vectorial nativa usando PyMuPDF.
+    Para días de la semana y planes de acción: genera el formato 2-en-1 Horizontal (Landscape)
+    con la hoja de Enfoque a la izquierda y el Plan de Acción a la derecha en 1 sola hoja Carta.
+    Funciona de manera ultra-rápida y compatible en Linux/Render y Windows.
+    """
+    try:
+        import fitz
+        user_id = str(user_id)
+        if user_id not in user_states:
+            init_user_state(user_id)
+            cargar_estado_persistente(user_id)
+
+        g_meta = user_states[user_id]["global_meta"]
+        s_state = user_states[user_id]["store_state"]
+
+        templates_dir = os.path.abspath(os.path.join(BASE_PATH, "custom_assets", "templates_pdf"))
+        target_sheet = map_to_excel_sheet(d_name)
+
+        def draw_text(page, rect, text, fontsize=7.5, align=fitz.TEXT_ALIGN_RIGHT, color=(0,0,0)):
+            if text is not None and str(text).strip():
+                page.insert_textbox(rect, str(text), fontsize=fontsize, fontname="helv", fontfile=None, align=align, color=color)
+
+        if target_sheet == "SEMANAL":
+            t_sem = os.path.join(templates_dir, "template_semanal.pdf")
+            if not os.path.exists(t_sem):
+                return None
+            doc_sem = fitz.open(t_sem)
+            p_sem = doc_sem[0]
+            semana_str = str(g_meta.get("semana", "30"))
+            tienda_str = f"{g_meta.get('tienda', 'SGH')} (#{g_meta.get('tienda_num', '3645')})"
+            draw_text(p_sem, fitz.Rect(380, 52, 420, 65), semana_str, fontsize=8, align=fitz.TEXT_ALIGN_CENTER)
+            draw_text(p_sem, fitz.Rect(440, 52, 530, 65), tienda_str, fontsize=8, align=fitz.TEXT_ALIGN_CENTER)
+            doc_sem.save(out_pdf_path)
+            doc_sem.close()
+            return out_pdf_path if os.path.exists(out_pdf_path) else None
+
+        dia_base = "DOMINGO"
+        for d in DIAS:
+            if d in target_sheet.upper():
+                dia_base = d
+                break
+
+        d_data = s_state.get(dia_base, {})
+        c = calcular_dia(dia_base, user_id)
+
+        t_dia = os.path.join(templates_dir, "template_dia.pdf")
+        t_plan = os.path.join(templates_dir, "template_plan.pdf")
+        if not os.path.exists(t_dia) or not os.path.exists(t_plan):
+            return None
+
+        doc_dia = fitz.open(t_dia)
+        doc_plan = fitz.open(t_plan)
+        p_dia = doc_dia[0]
+        p_plan = doc_plan[0]
+
+        C_WHITE = (1, 1, 1)
+
+        # 1. Limpiar placeholders de fórmula del template
+        for idx in range(8):
+            y_row = 373 + idx * 15
+            p_dia.draw_rect(fitz.Rect(49, y_row, 338, y_row+13), color=C_WHITE, fill=C_WHITE, overlay=True)
+        p_dia.draw_rect(fitz.Rect(49, 496, 338, 509), color=C_WHITE, fill=C_WHITE, overlay=True)
+        p_dia.draw_rect(fitz.Rect(81, 280, 255, 322), color=C_WHITE, fill=C_WHITE, overlay=True)
+        p_dia.draw_rect(fitz.Rect(280, 588, 305, 596), color=(0.89, 0.94, 0.88), fill=(0.89, 0.94, 0.88), overlay=True)
+
+        p_plan.draw_rect(fitz.Rect(80, 142, 280, 153), color=(0.89, 0.94, 0.88), fill=(0.89, 0.94, 0.88), overlay=True)
+        p_plan.draw_rect(fitz.Rect(45, 625, 555, 675), color=C_WHITE, fill=C_WHITE, overlay=True)
+        p_plan.draw_rect(fitz.Rect(45, 690, 555, 745), color=C_WHITE, fill=C_WHITE, overlay=True)
+
+        # 2. Estampar datos Día
+        semana_str = str(g_meta.get("semana", "30"))
+        tienda_str = f"{g_meta.get('tienda', 'SGH')} (#{g_meta.get('tienda_num', '3645')})"
+        draw_text(p_dia, fitz.Rect(230, 33, 260, 43), semana_str, fontsize=8, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(290, 33, 350, 43), dia_base, fontsize=8, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(380, 33, 460, 43), tienda_str, fontsize=8, align=fitz.TEXT_ALIGN_CENTER)
+
+        m_dia = c.get("meta_diaria", 0.0)
+        draw_text(p_dia, fitz.Rect(98, 97, 147, 107), f"${m_dia:,.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(98, 112, 147, 122), f"${m_dia*0.85:,.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(98, 127, 147, 137), f"${m_dia*0.15:,.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(98, 142, 147, 152), f"{c.get('total_unidades', 0)}", fontsize=7.5)
+
+        traf = c.get("trafico", 0)
+        conv = d_data.get("conversion_target", 0.15)
+        draw_text(p_dia, fitz.Rect(270, 97, 320, 107), f"{traf}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(270, 112, 320, 122), f"{conv*100:.1f}%", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(270, 127, 320, 137), f"{c.get('transacciones', 0)}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(270, 142, 320, 152), f"${c.get('meta_ideal', 0.0):,.2f}", fontsize=7.5)
+
+        draw_text(p_dia, fitz.Rect(365, 97, 390, 107), f"{c.get('wea_unid_meta', 1)}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(365, 112, 390, 122), f"{c.get('kids_unid_meta', 1)}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(365, 127, 390, 137), f"{c.get('ck_unid_meta', 1)}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+
+        draw_text(p_dia, fitz.Rect(102, 203, 147, 213), f"${c.get('vta_neta_prod', 0.0):,.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(102, 218, 147, 228), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(180, 203, 265, 213), f"${d_data.get('vta_ly', 0.0):,.2f}", fontsize=7.5)
+
+        draw_text(p_dia, fitz.Rect(290, 203, 335, 213), f"${d_data.get('atv_mtd', 7597.0):,.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(340, 203, 388, 213), f"${d_data.get('atv_dia', 3620.0):,.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(290, 233, 335, 243), f"${d_data.get('aur_mtd', 3362.0):,.2f}", fontsize=7.5)
+        draw_text(p_dia, fitz.Rect(340, 233, 388, 243), f"${d_data.get('aur_dia', 3620.0):,.2f}", fontsize=7.5)
+
+        b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20])[:5]
+        tot_b = sum(b_traf)
+        b_xs = [82, 117, 152, 187, 222]
+        for i, bt in enumerate(b_traf):
+            draw_text(p_dia, fitz.Rect(b_xs[i], 280, b_xs[i]+32, 292), f"{bt}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+            p = (bt / tot_b * 100.0) if tot_b > 0 else 0.0
+            draw_text(p_dia, fitz.Rect(b_xs[i], 295, b_xs[i]+32, 307), f"{p:.1f}%", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+            draw_text(p_dia, fitz.Rect(b_xs[i], 310, b_xs[i]+32, 322), f"${(bt/tot_b*m_dia if tot_b>0 else 0):,.0f}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+
+        draw_text(p_dia, fitz.Rect(256, 280, 290, 292), f"{tot_b}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(256, 295, 290, 307), "100%", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(256, 310, 290, 322), f"${m_dia:,.0f}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+
+        colab_rows = c.get("colab_rows", [])
+        active_colabs = [r for r in colab_rows if r.get("nombre", "").strip()]
+        for idx in range(8):
+            y_row = 373 + idx * 15
+            if idx < len(active_colabs):
+                cr = active_colabs[idx]
+                draw_text(p_dia, fitz.Rect(49, y_row, 114, y_row+13), cr.get('nombre', ''), fontsize=7, align=fitz.TEXT_ALIGN_LEFT)
+                draw_text(p_dia, fitz.Rect(116, y_row, 162, y_row+13), f"{cr.get('horas', 0):.1f}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+                draw_text(p_dia, fitz.Rect(164, y_row, 208, y_row+13), f"${cr.get('meta_vta', 0.0):,.2f}", fontsize=7, align=fitz.TEXT_ALIGN_RIGHT)
+                draw_text(p_dia, fitz.Rect(210, y_row, 248, y_row+13), f"{cr.get('meta_ana', 0)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+                draw_text(p_dia, fitz.Rect(250, y_row, 288, y_row+13), f"{cr.get('meta_wea', 0)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+                draw_text(p_dia, fitz.Rect(290, y_row, 313, y_row+13), f"{cr.get('meta_kid', 0)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+                draw_text(p_dia, fitz.Rect(315, y_row, 338, y_row+13), f"{cr.get('meta_ck', 0)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+
+        y_tot = 496
+        draw_text(p_dia, fitz.Rect(49, y_tot, 114, y_tot+13), "TOTAL", fontsize=7, align=fitz.TEXT_ALIGN_LEFT)
+        draw_text(p_dia, fitz.Rect(116, y_tot, 162, y_tot+13), f"{c.get('tot_horas', 0):.1f}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(164, y_tot, 208, y_tot+13), f"${m_dia:,.2f}", fontsize=7, align=fitz.TEXT_ALIGN_RIGHT)
+        draw_text(p_dia, fitz.Rect(210, y_tot, 248, y_tot+13), f"{sum(cr.get('meta_ana', 0) for cr in active_colabs)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(250, y_tot, 288, y_tot+13), f"{sum(cr.get('meta_wea', 0) for cr in active_colabs)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(290, y_tot, 313, y_tot+13), f"{sum(cr.get('meta_kid', 0) for cr in active_colabs)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_dia, fitz.Rect(315, y_tot, 338, y_tot+13), f"{sum(cr.get('meta_ck', 0) for cr in active_colabs)}", fontsize=7, align=fitz.TEXT_ALIGN_CENTER)
+
+        # 3. Estampar Plan de Acción
+        draw_text(p_plan, fitz.Rect(355, 65, 385, 75), semana_str, fontsize=7.5, align=fitz.TEXT_ALIGN_LEFT)
+        draw_text(p_plan, fitz.Rect(440, 65, 510, 75), dia_base, fontsize=7.5, align=fitz.TEXT_ALIGN_LEFT)
+
+        tot_h = max(c.get('tot_horas', 0.0), 0.1)
+        draw_text(p_plan, fitz.Rect(75, 143, 115, 153), f"{c.get('tot_horas', 0):.1f}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_plan, fitz.Rect(116, 143, 155, 153), f"${m_dia:,.0f}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_plan, fitz.Rect(156, 143, 195, 153), f"{c.get('total_unidades', 0)}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_plan, fitz.Rect(196, 143, 235, 153), f"${c.get('vta_neta_prod', 0.0):,.0f}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_plan, fitz.Rect(236, 143, 275, 153), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+        draw_text(p_plan, fitz.Rect(370, 137, 530, 152), f"${(m_dia/tot_h):,.2f} / hr", fontsize=7.5, align=fitz.TEXT_ALIGN_CENTER)
+
+        # SMART Fields
+        draw_text(p_plan, fitz.Rect(110, 568, 550, 577), d_data.get("smart_especifico", ""), fontsize=6.5, align=fitz.TEXT_ALIGN_LEFT)
+        draw_text(p_plan, fitz.Rect(110, 578, 550, 587), d_data.get("smart_medible", ""), fontsize=6.5, align=fitz.TEXT_ALIGN_LEFT)
+        draw_text(p_plan, fitz.Rect(110, 588, 550, 597), d_data.get("smart_alcanzable", ""), fontsize=6.5, align=fitz.TEXT_ALIGN_LEFT)
+        draw_text(p_plan, fitz.Rect(110, 598, 550, 607), d_data.get("smart_reto", ""), fontsize=6.5, align=fitz.TEXT_ALIGN_LEFT)
+        draw_text(p_plan, fitz.Rect(110, 608, 550, 617), d_data.get("smart_tiempo", ""), fontsize=6.5, align=fitz.TEXT_ALIGN_LEFT)
+
+        # Logros y Oportunidades
+        logros_txt = d_data.get('logros_hoy', '')
+        op_txt = d_data.get('oportunidades_manana', '')
+        if logros_txt:
+            draw_text(p_plan, fitz.Rect(48, 627, 550, 673), f"LOGROS DE HOY:\n{logros_txt}", fontsize=7, align=fitz.TEXT_ALIGN_LEFT)
+        if op_txt:
+            draw_text(p_plan, fitz.Rect(48, 692, 550, 743), f"OPORTUNIDADES PARA MAÑANA:\n{op_txt}", fontsize=7, align=fitz.TEXT_ALIGN_LEFT)
+
+        # 4. Componer en 1 sola hoja Carta Horizontal (Landscape)
+        doc_out = fitz.open()
+        page_out = doc_out.new_page(width=792, height=612)
+
+        margin = 10
+        gap = 8
+        half_w = 792 / 2
+
+        rect_left = fitz.Rect(margin, margin, half_w - gap/2, 612 - margin)
+        rect_right = fitz.Rect(half_w + gap/2, margin, 792 - margin, 612 - margin)
+
+        page_out.show_pdf_page(rect_left, doc_dia, 0, keep_proportion=True)
+        page_out.show_pdf_page(rect_right, doc_plan, 0, keep_proportion=True)
+
+        doc_out.save(out_pdf_path)
+        doc_dia.close()
+        doc_plan.close()
+        doc_out.close()
+
+        return out_pdf_path if os.path.exists(out_pdf_path) else None
+    except Exception as ex:
+        print("Error en generar_pdf_enfoque_vectorial:", ex)
+        return None
 
 def generar_excel_enfoque(d_name, user_id, page=None):
     return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False)
