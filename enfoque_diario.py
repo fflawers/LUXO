@@ -1111,17 +1111,8 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                             doc_plan = fitz.open(temp_pdf_plan)
 
                             doc_out = fitz.open()
-                            page_out = doc_out.new_page(width=792, height=612)
-
-                            margin = 10
-                            gap = 8
-                            half_w = 792 / 2
-
-                            rect_left = fitz.Rect(margin, margin, half_w - gap/2, 612 - margin)
-                            rect_right = fitz.Rect(half_w + gap/2, margin, 792 - margin, 612 - margin)
-
-                            page_out.show_pdf_page(rect_left, doc_dia, 0, keep_proportion=True)
-                            page_out.show_pdf_page(rect_right, doc_plan, 0, keep_proportion=True)
+                            doc_out.insert_pdf(doc_dia)
+                            doc_out.insert_pdf(doc_plan)
 
                             doc_out.save(web_pdf_path)
                             doc_dia.close()
@@ -1157,9 +1148,12 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
 def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
     """
     Genera el PDF oficial SGH 2026 de forma 100% vectorial nativa usando PyMuPDF.
-    Para días de la semana y planes de acción: genera el formato 2-en-1 Horizontal (Landscape)
-    con la hoja de Enfoque a la izquierda y el Plan de Acción a la derecha en 1 sola hoja Carta.
-    Funciona de manera ultra-rápida y compatible en Linux/Render y Windows.
+    Para días de la semana y planes de acción: genera el formato oficial Doble Cara (2 páginas
+    verticales tamaño Carta completas al 100% de escala):
+      - Página 1: Hoja del Día (Enfoque Diario)
+      - Página 2: Hoja del Plan de Acción
+    Para SEMANAL: genera 1 página tamaño Carta vertical completa.
+    Funciona de manera ultra-rápida y compatible tanto en Linux/Render como en Windows.
     """
     try:
         import fitz
@@ -1322,38 +1316,29 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         clear_and_write(p_plan, fitz.Rect(236, 142, 275, 154), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5, align_center=True)
         clear_and_write(p_plan, fitz.Rect(370, 136, 530, 152), f"${(m_dia/tot_h):,.2f} / hr", fontsize=7.5, fill=C_WHITE, align_center=True)
 
-        # SMART
-        clear_and_write(p_plan, fitz.Rect(105, 568, 550, 576), d_data.get("smart_especifico", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(105, 576, 550, 584), d_data.get("smart_medible", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(105, 584, 550, 592), d_data.get("smart_alcanzable", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(105, 592, 550, 600), d_data.get("smart_reto", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(105, 600, 550, 608), d_data.get("smart_tiempo", ""), fontsize=6.2, fill=None)
+        # SMART (Líneas perfectamente alineadas)
+        clear_and_write(p_plan, fitz.Rect(110, 568, 550, 576), d_data.get("smart_especifico", ""), fontsize=6.2, fill=None)
+        clear_and_write(p_plan, fitz.Rect(110, 575.5, 550, 583.5), d_data.get("smart_medible", ""), fontsize=6.2, fill=None)
+        clear_and_write(p_plan, fitz.Rect(110, 583, 550, 591), d_data.get("smart_alcanzable", ""), fontsize=6.2, fill=None)
+        clear_and_write(p_plan, fitz.Rect(110, 590.5, 550, 598.5), d_data.get("smart_reto", ""), fontsize=6.2, fill=None)
+        clear_and_write(p_plan, fitz.Rect(110, 598, 550, 606), d_data.get("smart_tiempo", ""), fontsize=6.2, fill=None)
 
-        # Logros y Oportunidades
+        # Logros y Oportunidades (2 cuadros independientes limpios)
         logros_txt = d_data.get('logros_hoy', '')
         op_txt = d_data.get('oportunidades_manana', '')
 
-        p_plan.draw_rect(fitz.Rect(45, 625, 555, 675), color=C_WHITE, fill=C_WHITE, overlay=True)
-        p_plan.draw_rect(fitz.Rect(45, 690, 555, 745), color=C_WHITE, fill=C_WHITE, overlay=True)
+        p_plan.draw_rect(fitz.Rect(52, 624, 552, 658), color=C_WHITE, fill=C_WHITE, overlay=True)
+        p_plan.draw_rect(fitz.Rect(52, 660, 552, 694), color=C_WHITE, fill=C_WHITE, overlay=True)
 
         if logros_txt:
-            p_plan.insert_textbox(fitz.Rect(48, 627, 550, 673), f"LOGROS DE HOY:\n{logros_txt}", fontsize=7, fontname="helv", color=(0,0,0))
+            p_plan.insert_textbox(fitz.Rect(54, 625, 550, 657), logros_txt, fontsize=7.5, fontname="helv", color=(0,0,0))
         if op_txt:
-            p_plan.insert_textbox(fitz.Rect(48, 692, 550, 743), f"OPORTUNIDADES PARA MAÑANA:\n{op_txt}", fontsize=7, fontname="helv", color=(0,0,0))
+            p_plan.insert_textbox(fitz.Rect(54, 661, 550, 693), op_txt, fontsize=7.5, fontname="helv", color=(0,0,0))
 
-        # 3. Componer en 1 sola hoja Carta Horizontal (Landscape)
+        # 3. Componer en 2 páginas tamaño Carta Vertical 100% escala (Doble Cara / 1:1 original)
         doc_out = fitz.open()
-        page_out = doc_out.new_page(width=792, height=612)
-
-        margin = 10
-        gap = 8
-        half_w = 792 / 2
-
-        rect_left = fitz.Rect(margin, margin, half_w - gap/2, 612 - margin)
-        rect_right = fitz.Rect(half_w + gap/2, margin, 792 - margin, 612 - margin)
-
-        page_out.show_pdf_page(rect_left, doc_dia, 0, keep_proportion=True)
-        page_out.show_pdf_page(rect_right, doc_plan, 0, keep_proportion=True)
+        doc_out.insert_pdf(doc_dia)
+        doc_out.insert_pdf(doc_plan)
 
         doc_out.save(out_pdf_path)
         doc_dia.close()
