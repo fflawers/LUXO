@@ -261,7 +261,8 @@
 
       async function sendTextInput(userId, text) {
         try {
-          const url = `${serverBaseUrl}/text_input?user_id=${userId}&text=${encodeURIComponent(text)}`;
+          const uid = (userId && userId !== "unknown") ? userId : "1";
+          const url = `${serverBaseUrl}/text_input?user_id=${encodeURIComponent(uid)}&text=${encodeURIComponent(text)}`;
           await fetch(url, { method: 'POST' });
         } catch (err) {
           console.error("Error al enviar comando de voz:", err);
@@ -279,13 +280,12 @@
           matchedTriggerPhrase = "";
           questionBuffer = "";
           if (wakeTimeout) clearTimeout(wakeTimeout);
-          if (currentUserId !== "unknown") {
-            playBeep(2);
-            if (typeof window.showLuxoSiriOrb === 'function') window.showLuxoSiriOrb(4000);
-            console.log("🚀 ¡Enviando pregunta final a LUXO!", finalQuestion, "Usuario:", currentUserId);
-            injectTextIntoDomAndSend(finalQuestion);
-            sendTextInput(currentUserId, finalQuestion);
-          }
+          
+          playBeep(2);
+          if (typeof window.showLuxoSiriOrb === 'function') window.showLuxoSiriOrb(4000);
+          console.log("🚀 ¡Enviando pregunta final a LUXO!", finalQuestion, "Usuario:", currentUserId);
+          injectTextIntoDomAndSend(finalQuestion);
+          sendTextInput(currentUserId, finalQuestion);
         }
       }
 
@@ -340,7 +340,7 @@
             return String(sid);
           }
         }
-        return "unknown";
+        return "1";
       }
 
       function startSpeechRecognition() {
@@ -371,8 +371,8 @@
         };
 
         recognition.onresult = async (event) => {
+          if (isRecording) return;
           const currentUserId = getUserId();
-          if (currentUserId === "unknown" || isRecording) return;
 
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             const item = event.results[i];

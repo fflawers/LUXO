@@ -2513,19 +2513,19 @@ def configurar_rutas_fastapi(app):
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
             session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
             
-            # Si no se encontró sesión o la entrada carece de controles UI listos, buscar la sesión activa correspondiente
-            if not (session and session.get("input_msg") and session.get("enviar_mensaje")):
+            # Si no se encontró sesión o faltan controles, buscar en active_sessions
+            if not (session and (session.get("input_msg") or session.get("page"))):
                 for k, s in active_sessions.items():
-                    if isinstance(s, dict) and s.get("input_msg") and s.get("enviar_mensaje"):
+                    if isinstance(s, dict) and s.get("page"):
                         u_inf = s.get("user_info") or {}
                         p = s.get("page")
                         if str(u_inf.get("id")) == str(user_id) or str(k) == str(user_id) or (p and getattr(p, "user_id", None) == str(user_id)):
                             session = s
                             break
 
-            if not (session and session.get("input_msg") and session.get("enviar_mensaje")) and active_sessions:
+            if not (session and session.get("page")) and active_sessions:
                 for s in reversed(list(active_sessions.values())):
-                    if isinstance(s, dict) and s.get("input_msg") and s.get("enviar_mensaje") and s.get("page"):
+                    if isinstance(s, dict) and s.get("page"):
                         session = s
                         print(f"DEBUG: Session fallback activado en /text_input -> usando UID={session.get('user_info', {}).get('id')}")
                         break
@@ -2541,14 +2541,18 @@ def configurar_rutas_fastapi(app):
                     except Exception as ex:
                         print("Error al cambiar a vista chat:", ex)
 
-                input_msg = session.get("input_msg")
-                enviar_mensaje = session.get("enviar_mensaje")
+                # Re-obtener componentes frescos tras el cambio de vista
+                user_info = session.get("user_info") or {}
+                u_id_fresh = user_info.get("id")
+                fresh_session = (active_sessions.get(u_id_fresh) or active_sessions.get(str(u_id_fresh)) or session) if u_id_fresh else session
+                
+                input_msg = fresh_session.get("input_msg") or session.get("input_msg")
+                enviar_mensaje = fresh_session.get("enviar_mensaje") or session.get("enviar_mensaje")
 
                 if input_msg and enviar_mensaje and page:
-                    btn_mic_cont = session.get("btn_mic_container")
-                    siri_orb = session.get("siri_orb")
+                    btn_mic_cont = fresh_session.get("btn_mic_container") or session.get("btn_mic_container")
+                    siri_orb = fresh_session.get("siri_orb") or session.get("siri_orb")
                     
-                    # Forzar el encendido visual del Orbe Javascript inyectado (mucho más robusto en Mac/Desktop)
                     try:
                         target_url = "javascript:if(typeof window.showLuxoSiriOrb === 'function'){ window.showLuxoSiriOrb(5000); } void(0);"
                         import urllib.parse
@@ -2566,20 +2570,22 @@ def configurar_rutas_fastapi(app):
                         
                     if btn_mic_cont:
                         try:
-                            btn_mic_cont.bgcolor = "#9D50BB" # Morado brilloso (Siri vibe)
-                            btn_mic_cont.border = ft.Border.all(3, "#00FFFF") # Cyan grueso
+                            btn_mic_cont.bgcolor = "#9D50BB"
+                            btn_mic_cont.border = ft.Border.all(3, "#00FFFF")
                             btn_mic_cont.update()
                             def revert_glow(bmc, orb):
                                 import time
                                 time.sleep(3)
-                                bmc.bgcolor = "#1E1E2E"
-                                bmc.border = ft.Border.all(1.5, "#00FFFF")
-                                try: bmc.update()
+                                try:
+                                    bmc.bgcolor = "#1E1E2E"
+                                    bmc.border = ft.Border.all(1.5, "#00FFFF")
+                                    bmc.update()
                                 except: pass
                                 if orb:
-                                    orb.opacity = 0
-                                    orb.scale = 0.1
-                                    try: orb.update()
+                                    try:
+                                        orb.opacity = 0
+                                        orb.scale = 0.1
+                                        orb.update()
                                     except: pass
                             threading.Thread(target=revert_glow, args=(btn_mic_cont, siri_orb), daemon=True).start()
                         except: pass
