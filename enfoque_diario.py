@@ -1030,10 +1030,11 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
             # 2. Exportación PDF si se solicita
             if export_pdf:
                 pdf_generado = False
-                # Intentar win32com si estamos en Windows
+                excel = None
                 try:
                     import pythoncom
                     import win32com.client
+                    import fitz
                     pythoncom.CoInitialize()
                     excel = win32com.client.Dispatch("Excel.Application")
                     excel.Visible = False
@@ -1041,20 +1042,94 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                     excel.ScreenUpdating = False
                     wb_com = excel.Workbooks.Open(web_excel_path)
                     ws_names = [ws.Name for ws in wb_com.Worksheets]
-                    sheet_name = target_sheet if target_sheet in ws_names else "DOMINGO"
-                    ws_export = wb_com.Worksheets(sheet_name)
-                    try:
-                        ws_export.PageSetup.Zoom = False
-                        ws_export.PageSetup.FitToPagesWide = 1
-                        ws_export.PageSetup.FitToPagesTall = 1
-                    except Exception: pass
-                    ws_export.ExportAsFixedFormat(0, web_pdf_path)
-                    wb_com.Close(False)
-                    excel.Quit()
-                    pythoncom.CoUninitialize()
-                    pdf_generado = os.path.exists(web_pdf_path)
+
+                    if target_sheet == "SEMANAL":
+                        ws_export = wb_com.Worksheets("SEMANAL")
+                        try:
+                            ws_export.PageSetup.Zoom = False
+                            ws_export.PageSetup.FitToPagesWide = 1
+                            ws_export.PageSetup.FitToPagesTall = 1
+                        except Exception: pass
+                        ws_export.ExportAsFixedFormat(0, web_pdf_path)
+                        pdf_generado = os.path.exists(web_pdf_path)
+                    else:
+                        dia_base = "DOMINGO"
+                        for d in DIAS:
+                            if d in target_sheet.upper():
+                                dia_base = d
+                                break
+                        plan_sheet_name = DAY_TO_PLAN_SHEET.get(dia_base, "PLAN ACCION DOMINGO")
+                        
+                        temp_pdf_dia = os.path.abspath(os.path.join(uploads_dir, f"temp_{clean_sheet_name}_dia.pdf"))
+                        temp_pdf_plan = os.path.abspath(os.path.join(uploads_dir, f"temp_{clean_sheet_name}_plan.pdf"))
+
+                        # 1. Exportar hoja del día
+                        ws_dia = wb_com.Worksheets(dia_base if dia_base in ws_names else "DOMINGO")
+                        try:
+                            ws_dia.PageSetup.PrintArea = "$A$1:$R$48"
+                            ws_dia.PageSetup.Zoom = False
+                            ws_dia.PageSetup.FitToPagesWide = 1
+                            ws_dia.PageSetup.FitToPagesTall = 1
+                            ws_dia.PageSetup.Orientation = 1
+                        except Exception: pass
+                        ws_dia.ExportAsFixedFormat(0, temp_pdf_dia)
+
+                        # 2. Exportar hoja de plan de acción
+                        ws_plan = wb_com.Worksheets(plan_sheet_name if plan_sheet_name in ws_names else "PLAN ACCION DOMINGO")
+                        try:
+                            ws_plan.PageSetup.PrintArea = "$A$1:$O$36"
+                            ws_plan.PageSetup.Zoom = False
+                            ws_plan.PageSetup.FitToPagesWide = 1
+                            ws_plan.PageSetup.FitToPagesTall = 1
+                            ws_plan.PageSetup.Orientation = 1
+                        except Exception: pass
+                        ws_plan.ExportAsFixedFormat(0, temp_pdf_plan)
+
+                        wb_com.Close(False)
+                        excel.Quit()
+                        excel = None
+                        pythoncom.CoUninitialize()
+
+                        # 3. Componer PDF 2-en-1 Horizontal (Landscape) con PyMuPDF
+                        if os.path.exists(temp_pdf_dia) and os.path.exists(temp_pdf_plan):
+                            doc_dia = fitz.open(temp_pdf_dia)
+                            doc_plan = fitz.open(temp_pdf_plan)
+
+                            doc_out = fitz.open()
+                            page_out = doc_out.new_page(width=792, height=612) # Carta Horizontal 11x8.5 in
+
+                            margin = 12
+                            gap = 10
+                            half_w = 792 / 2
+
+                            rect_left = fitz.Rect(margin, margin, half_w - gap/2, 612 - margin)
+                            rect_right = fitz.Rect(half_w + gap/2, margin, 792 - margin, 612 - margin)
+
+                            page_out.show_pdf_page(rect_left, doc_dia, 0, keep_proportion=True)
+                            page_out.show_pdf_page(rect_right, doc_plan, 0, keep_proportion=True)
+
+                            doc_out.save(web_pdf_path)
+                            doc_dia.close()
+                            doc_plan.close()
+                            doc_out.close()
+
+                            try: os.remove(temp_pdf_dia)
+                            except Exception: pass
+                            try: os.remove(temp_pdf_plan)
+                            except Exception: pass
+
+                            pdf_generado = os.path.exists(web_pdf_path)
+
                 except Exception as ex_pdf_com:
                     print("Notice win32com PDF export:", ex_pdf_com)
+                finally:
+                    if excel:
+                        try:
+                            wb_com.Close(False)
+                            excel.Quit()
+                        except Exception: pass
+                        try: pythoncom.CoUninitialize()
+                        except Exception: pass
 
                 return web_pdf_path if (pdf_generado and os.path.exists(web_pdf_path)) else None
 
