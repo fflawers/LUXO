@@ -23032,6 +23032,7 @@ Ejemplo:
                 btn_enfoque.content.controls[1].value = tr("Enfoque Diario 2026 ☀️", "Daily Focus 2026 ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️")
                 btn_enfoque_semanal.content.controls[1].value = tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅")
                 btn_parroquiales_minutas.content.controls[1].value = tr("Parroquiales y Minutas 📝", "Announcements & Minutes 📝", "Paroissiales & Procès-verbaux 📝", "Avvisi & Verbali 📝", "通告与会议纪要 📝")
+                btn_pendientes.content.controls[1].value = tr("Mis Pendientes 📌", "My Tasks 📌", "Mes Tâches 📌", "I Miei Compiti 📌", "我的待办 📌")
                 if 'btn_dashboard' in locals() and btn_dashboard:
                     btn_dashboard.content.controls[1].value = tr("Panel de Control 🎮", "Admin Panel 🎮", "Panneau de Contrôle 🎮", "Pannello di Controllo 🎮", "控制面板 🎮")
                 if 'btn_admin_trivia' in locals() and btn_admin_trivia:
@@ -23185,7 +23186,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_pendientes, btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
@@ -23271,6 +23272,7 @@ Ejemplo:
             btn_chat,
             btn_enfoque,
             btn_parroquiales_minutas,
+            btn_pendientes,
             ft.Divider(height=10, color="#333333"),
             tile_ventas,
             tile_clientes,
