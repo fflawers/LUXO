@@ -1356,10 +1356,286 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
                 return None
             doc_sem = fitz.open(t_sem)
             p_sem = doc_sem[0]
+
+            h_state = user_states[user_id].setdefault("historico_semanal", {})
+            h_state.setdefault("meta_conversion", 0.16)
+            h_state.setdefault("wea_pct", 0.15)
+            h_state.setdefault("kids_pct", 0.05)
+            h_state.setdefault("ck_pct", 0.30)
+            h_state.setdefault("aur_sem", 4617.0)
+
+            # Totales agregados de las pestañas diarias
+            tot_meta_sem = sum(s_state[d].get("meta_diaria", 0.0) for d in DIAS)
+            tot_ana_sem = sum(s_state[d].get("meta_diaria", 0.0) * 0.85 for d in DIAS)
+            tot_wea_sem = sum(s_state[d].get("meta_diaria", 0.0) * 0.15 for d in DIAS)
+
+            tot_trafico_sem = 0
+            tot_transac_sem = 0
+            tot_convertidos_sem = 0
+            tot_interacciones_sem = 0
+            tot_horas_sem = 0.0
+
+            dias_calc = {}
+            for d in DIAS:
+                c_d = calcular_dia(d, user_id)
+                dias_calc[d] = c_d
+                tot_trafico_sem += c_d.get("trafico", 0)
+                tot_transac_sem += c_d.get("transacciones", 0)
+                tot_convertidos_sem += c_d.get("tot_convertidos", 0)
+                tot_interacciones_sem += c_d.get("tot_interacciones", 0)
+                tot_horas_sem += c_d.get("tot_horas", 0.0)
+
+            clientes_totales = tot_interacciones_sem if tot_interacciones_sem > 0 else tot_trafico_sem
+            clientes_convertidos = tot_convertidos_sem if tot_convertidos_sem > 0 else tot_transac_sem
+            conversion_real_sem_pct = (clientes_convertidos * 100.0 / clientes_totales) if clientes_totales > 0 else 0.0
+
+            meta_conversion = float(h_state.get("meta_conversion", 0.16))
+            meta_transacciones_sem = int(tot_trafico_sem * meta_conversion)
+            meta_ideal_sem = tot_meta_sem * 1.10
+            total_unidades_sem = int(tot_meta_sem / h_state["aur_sem"]) if h_state.get("aur_sem", 4617.0) > 0 else (int(tot_meta_sem / 4617) if tot_meta_sem > 0 else 0)
+
+            wea_pct = float(h_state.get("wea_pct", 0.15))
+            unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 1
+
+            kids_pct = float(h_state.get("kids_pct", 0.05))
+            unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if total_unidades_sem > 0 else 1
+
+            ck_pct = float(h_state.get("ck_pct", 0.30))
+            unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
+
+            comply_sem = tot_meta_sem
+            atv_sem = sum(s_state[d].get("atv_dia", 3620.0) for d in DIAS) / 7.0
+            aur_sem = sum(s_state[d].get("aur_dia", 3620.0) for d in DIAS) / 7.0
+
             semana_str = str(g_meta.get("semana", "37"))
             tienda_str = f"{g_meta.get('tienda', 'SGH')} (#{g_meta.get('tienda_num', '3645')})"
+
+            # Header
             clear_and_write(p_sem, fitz.Rect(380, 52, 420, 65), semana_str, fontsize=8, fill=C_WHITE, align_center=True)
             clear_and_write(p_sem, fitz.Rect(440, 52, 530, 65), tienda_str, fontsize=8, fill=C_WHITE, align_center=True)
+
+            # Top Cards
+            # Col 1: Metas
+            clear_and_write(p_sem, fitz.Rect(104.2, 91.0, 134.5, 97.3), f"${tot_meta_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 97.3, 134.5, 110.9), f"${tot_ana_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 110.9, 134.5, 120.0), f"${tot_wea_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 120.0, 134.5, 129.1), f"{total_unidades_sem}", fontsize=4.5, fill=C_GREEN_CELL, align_right=True)
+
+            # Col 2: Conversión
+            clear_and_write(p_sem, fitz.Rect(209.1, 91.0, 252.8, 97.3), f"{tot_trafico_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 97.3, 252.8, 110.9), f"{meta_conversion*100:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 110.9, 252.8, 120.0), f"{meta_transacciones_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 120.0, 252.8, 129.1), f"${meta_ideal_sem:,.2f}", fontsize=4.8, fill=C_GREEN_CELL, align_right=True)
+
+            # Col 3: No Negociables
+            clear_and_write(p_sem, fitz.Rect(331.9, 91.0, 357.5, 97.3), f"{unidades_wea_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, 97.3, 357.5, 110.9), f"{unidades_kids_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, 110.9, 357.5, 120.0), f"{unidades_ck_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+
+            # Col 4: Valores de Semana
+            clear_and_write(p_sem, fitz.Rect(387.1, 91.0, 444.7, 97.3), f"${comply_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(387.1, 129.1, 444.7, 135.7), f"${atv_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(387.1, 142.8, 444.7, 159.4), f"${aur_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
+
+            # Metas por Colaborador
+            colabs_list = s_state.get("DOMINGO", {}).get("colaboradores", [])
+            tot_horas_plantilla = 0.0
+            horas_colab_map = {}
+            for colab in colabs_list:
+                if not isinstance(colab, dict):
+                    continue
+                c_name = colab.get("nombre", "")
+                if not c_name.strip():
+                    continue
+                h_acc = 0.0
+                for d in DIAS:
+                    c_day_list = s_state.get(d, {}).get("colaboradores", [])
+                    for p_item in c_day_list:
+                        if isinstance(p_item, dict) and p_item.get("nombre") == c_name:
+                            h_acc += float(p_item.get("horas", 0.0) or 0.0)
+                horas_colab_map[c_name] = h_acc
+                tot_horas_plantilla += h_acc
+
+            if tot_horas_plantilla <= 0:
+                tot_horas_plantilla = 1.0
+
+            tot_colab_meta_venta = 0.0
+            tot_colab_analogos = 0
+            tot_colab_wearables = 0
+            tot_colab_kids = 0
+            tot_colab_carekits = 0
+
+            active_colabs = [c for c in colabs_list if isinstance(c, dict) and c.get("nombre", "").strip()]
+
+            y_colab_starts = [159.6, 166.1, 172.6, 179.0, 185.5, 192.0, 198.5, 205.0]
+            y_colab_ends   = [166.1, 172.6, 179.0, 185.5, 192.0, 198.5, 205.0, 211.5]
+
+            for idx in range(8):
+                y1, y2 = y_colab_starts[idx], y_colab_ends[idx]
+                if idx < len(active_colabs):
+                    c_name = active_colabs[idx].get("nombre", "")
+                    h_p = horas_colab_map.get(c_name, 0.0)
+                    m_venta_colab = (tot_meta_sem / tot_horas_plantilla) * h_p
+                    ana_colab = max(1, int((total_unidades_sem / tot_horas_plantilla) * h_p)) if (tot_ana_sem > 0 and h_p > 0) else 0
+                    wea_colab = max(1, int((unidades_wea_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+                    kids_colab = max(1, int((unidades_kids_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+                    ck_colab = max(1, int((unidades_ck_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+
+                    tot_colab_meta_venta += m_venta_colab
+                    tot_colab_analogos += ana_colab
+                    tot_colab_wearables += wea_colab
+                    tot_colab_kids += kids_colab
+                    tot_colab_carekits += ck_colab
+
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 134.7, y2), c_name, fontsize=5.5, fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), f"{h_p:.1f}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), f"${m_venta_colab:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), f"{ana_colab}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), f"{wea_colab}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), f"{kids_colab}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), f"{ck_colab}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                else:
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 134.7, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), "", fill=C_WHITE)
+
+            # Total Metas Row
+            yt1, yt2 = 211.5, 218.0
+            clear_and_write(p_sem, fitz.Rect(51.0, yt1, 134.7, yt2), "TOTAL", fontsize=5.8, fill=C_WHITE)
+            clear_and_write(p_sem, fitz.Rect(134.7, yt1, 170.9, yt2), f"{tot_horas_plantilla:.1f}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(170.9, yt1, 209.1, yt2), f"${tot_colab_meta_venta:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, yt1, 252.8, yt2), f"{tot_colab_analogos}", fontsize=5.8, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(252.8, yt1, 279.5, yt2), f"{tot_colab_wearables}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(279.5, yt1, 305.4, yt2), f"{tot_colab_kids}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(305.4, yt1, 331.9, yt2), f"{tot_colab_carekits}", fontsize=5.8, fill=C_WHITE, align_center=True)
+
+            # Cierre Semanal Calculations
+            tot_cierre_hrs = 0.0
+            tot_cierre_inter = 0
+            tot_cierre_conv = 0
+            tot_cierre_vta = 0.0
+            tot_cierre_ana = 0
+            tot_cierre_demos = 0
+            tot_cierre_wea = 0
+            tot_cierre_kids = 0
+            tot_cierre_ck = 0
+
+            cierre_colabs_data = []
+            for colab in active_colabs:
+                c_name = colab.get("nombre", "")
+                h_p = horas_colab_map.get(c_name, 0.0)
+                inter = 0
+                conv = 0
+                vta_c = 0.0
+                ana_c = 0
+                wea_demos = 0
+                wea_c = 0
+                kid_c = 0
+                ck_c = 0
+
+                for d in DIAS:
+                    c_day_list = s_state.get(d, {}).get("colaboradores", [])
+                    for p_item in c_day_list:
+                        if isinstance(p_item, dict) and p_item.get("nombre") == c_name:
+                            inter += int(p_item.get("interacciones", 0) or 0)
+                            conv += int(p_item.get("convertidos", 0) or 0)
+                            vta_c += float(p_item.get("vta_cierre", 0.0) or 0.0)
+                            ana_c += int(p_item.get("ana_cierre", 0) or 0)
+                            wea_demos += int(p_item.get("wea_demos", 0) or 0)
+                            wea_c += int(p_item.get("wea_cierre", 0) or 0)
+                            kid_c += int(p_item.get("kid_cierre", 0) or 0)
+                            ck_c += int(p_item.get("ck_cierre", 0) or 0)
+
+                conv_pct = (conv / inter * 100.0) if inter > 0 else 0.0
+                wea_conv_pct = (wea_c / wea_demos * 100.0) if wea_demos > 0 else 0.0
+
+                tot_cierre_hrs += h_p
+                tot_cierre_inter += inter
+                tot_cierre_conv += conv
+                tot_cierre_vta += vta_c
+                tot_cierre_ana += ana_c
+                tot_cierre_demos += wea_demos
+                tot_cierre_wea += wea_c
+                tot_cierre_kids += kid_c
+                tot_cierre_ck += ck_c
+
+                cierre_colabs_data.append({
+                    "nombre": c_name, "horas": h_p, "inter": inter, "conv": conv, "conv_pct": conv_pct,
+                    "vta": vta_c, "ana": ana_c, "demos": wea_demos, "wea": wea_c, "wea_conv_pct": wea_conv_pct,
+                    "kids": kid_c, "ck": ck_c
+                })
+
+            tot_conv_pct_gen = (tot_cierre_conv / tot_cierre_inter * 100.0) if tot_cierre_inter > 0 else 0.0
+            tot_wea_conv_gen = (tot_cierre_wea / tot_cierre_demos * 100.0) if tot_cierre_demos > 0 else 0.0
+            crec_conv_gen = tot_conv_pct_gen - (meta_conversion * 100.0)
+            tot_unidades_cierre_sem = tot_cierre_ana + tot_cierre_wea + tot_cierre_kids + tot_cierre_ck
+            wea_pct_real = (tot_cierre_wea / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+            kids_pct_real = (tot_cierre_kids / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+            ck_pct_real = (tot_cierre_ck / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+
+            # Table 2: TOTAL DE SEMANA (y: 244.8 .. 251.6)
+            y_tot1, y_tot2 = 244.8, 251.6
+            clear_and_write(p_sem, fitz.Rect(104.0, y_tot1, 134.7, y_tot2), f"${tot_meta_sem:,.0f}", fontsize=5.2, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(134.7, y_tot1, 170.9, y_tot2), f"${tot_cierre_vta:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(170.9, y_tot1, 209.1, y_tot2), "SEMANAL", fontsize=5.2, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, y_tot1, 252.8, y_tot2), f"{tot_unidades_cierre_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(252.8, y_tot1, 279.5, y_tot2), f"{tot_conv_pct_gen:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(279.5, y_tot1, 331.9, y_tot2), f"{crec_conv_gen:+.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, y_tot1, 357.5, y_tot2), f"{wea_pct_real:.1f}%", fontsize=5.5, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(357.5, y_tot1, 386.7, y_tot2), f"{kids_pct_real:.1f}%", fontsize=5.5, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(386.7, y_tot1, 414.0, y_tot2), f"{ck_pct_real:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+
+            # Table 3: SEGUIMIENTO CIERRE POR COLABORADOR (8 rows + TOTAL)
+            for idx in range(8):
+                y1 = 285.3 + idx * 9.47
+                y2 = y1 + 9.0
+                if idx < len(cierre_colabs_data):
+                    cd = cierre_colabs_data[idx]
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 104.0, y2), cd["nombre"], fontsize=5.5, fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(104.0, y1, 134.7, y2), f"{cd['horas']:.1f}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), f"{cd['inter']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), f"{cd['conv']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), f"{cd['conv_pct']:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), f"${cd['vta']:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), f"{cd['ana']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), f"{cd['demos']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(331.9, y1, 357.5, y2), f"{cd['wea']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(357.5, y1, 386.7, y2), f"{cd['wea_conv_pct']:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(386.7, y1, 414.0, y2), f"{cd['kids']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(414.0, y1, 444.6, y2), f"{cd['ck']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                else:
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 104.0, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(104.0, y1, 134.7, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(331.9, y1, 357.5, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(357.5, y1, 386.7, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(386.7, y1, 414.0, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(414.0, y1, 444.6, y2), "", fill=C_WHITE)
+
+            # Table 3 Total
+            yt1, yt2 = 361.1, 367.8
+            clear_and_write(p_sem, fitz.Rect(51.0, yt1, 104.0, yt2), "TOTAL", fontsize=5.8, fill=C_WHITE)
+            clear_and_write(p_sem, fitz.Rect(104.0, yt1, 134.7, yt2), f"{tot_cierre_hrs:.1f}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(134.7, yt1, 170.9, yt2), f"{tot_cierre_inter}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(170.9, yt1, 209.1, yt2), f"{tot_cierre_conv}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, yt1, 252.8, yt2), f"{tot_conv_pct_gen:.1f}%", fontsize=5.8, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(252.8, yt1, 279.5, yt2), f"${tot_cierre_vta:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(279.5, yt1, 305.4, yt2), f"{tot_cierre_ana}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(305.4, yt1, 331.9, yt2), f"{tot_cierre_demos}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, yt1, 357.5, yt2), f"{tot_cierre_wea}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(357.5, yt1, 386.7, yt2), f"{tot_wea_conv_gen:.1f}%", fontsize=5.8, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(386.7, yt1, 414.0, yt2), f"{tot_cierre_kids}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(414.0, yt1, 444.6, yt2), f"{tot_cierre_ck}", fontsize=5.8, fill=C_WHITE, align_center=True)
+
             doc_sem.save(out_pdf_path)
             doc_sem.close()
             return out_pdf_path if os.path.exists(out_pdf_path) else None
@@ -1516,6 +1792,14 @@ def generar_excel_enfoque(d_name, user_id, page=None):
     return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False)
 
 def generar_pdf_enfoque_file(d_name, user_id):
+    uploads_dir = os.path.abspath(os.path.join(BASE_PATH, "uploads"))
+    os.makedirs(uploads_dir, exist_ok=True)
+    clean_sheet_name = sanitize_filename(map_to_excel_sheet(d_name))
+    web_pdf_path = os.path.abspath(os.path.join(uploads_dir, f"Enfoque_Diario_{clean_sheet_name}_SGH_2026.pdf"))
+
+    vec_res = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
+    if vec_res and os.path.exists(vec_res):
+        return vec_res
     return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=True)
 
 def generar_html_impresion(d_name, user_id):
