@@ -1671,7 +1671,7 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
 
         clear_and_write(p_dia, fitz.Rect(255, 33, 290, 44), semana_str, fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(338, 33, 372, 44), dia_base, fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(435, 33, 510, 44), tienda_str, fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(400, 33, 434, 44), tienda_str, fontsize=6.2, fill=None, align_center=True)
 
         m_dia = float(c.get("meta_diaria", 0.0) or 0.0)
         clear_and_write(p_dia, fitz.Rect(104, 94, 134, 107), f"${m_dia:,.2f}", fontsize=5.8, fill=None, align_right=True)
