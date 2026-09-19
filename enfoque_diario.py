@@ -1150,8 +1150,13 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                     if d_data.get('logros_hoy'): _safe_set(ws_p, 'A35', d_data.get('logros_hoy'))
                     if d_data.get('oportunidades_manana'): _safe_set(ws_p, 'A37', d_data.get('oportunidades_manana'))
 
-            # 2. Guardar archivo Excel (.xlsx) maestro con los datos inyectados
+            # 2. Configurar vista al 100% de zoom en todas las hojas y guardar
             try:
+                for ws_item in wb_pyxl.worksheets:
+                    try:
+                        ws_item.sheet_view.zoomScale = 100
+                    except Exception:
+                        pass
                 wb_pyxl.save(web_excel_path)
             except PermissionError:
                 temp_alt = os.path.abspath(os.path.join(uploads_dir, f"Enfoque_Diario_{clean_sheet_name}_SGH_2026_temp.xlsx"))
