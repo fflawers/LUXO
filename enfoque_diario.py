@@ -1338,9 +1338,10 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         C_GREEN_CELL = (0.89, 0.94, 0.88)
         C_WHITE = (1, 1, 1)
 
-        def clear_and_write(page, rect, text, fontsize=7.5, fill=C_GREEN_CELL, align_center=False, align_right=False):
+        def clear_and_write(page, rect, text, fontsize=7.5, fill=None, align_center=False, align_right=False):
             if fill:
-                page.draw_rect(rect, color=fill, fill=fill, overlay=True)
+                in_rect = fitz.Rect(rect.x0 + 0.5, rect.y0 + 0.5, rect.x1 - 0.5, rect.y1 - 0.5)
+                page.draw_rect(in_rect, color=fill, fill=fill, overlay=True)
             if text is not None:
                 text_str = str(text).strip()
                 if text_str:
@@ -1668,115 +1669,107 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         semana_str = str(g_meta.get("semana", "37"))
         tienda_str = f"{g_meta.get('tienda', 'SGH')} (#{g_meta.get('tienda_num', '3645')})"
 
-        clear_and_write(p_dia, fitz.Rect(230, 31, 265, 43), semana_str, fontsize=8, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(290, 31, 355, 43), dia_base, fontsize=8, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(380, 31, 460, 43), tienda_str, fontsize=8, fill=C_WHITE, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(255, 33, 290, 44), semana_str, fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(338, 33, 372, 44), dia_base, fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(435, 33, 510, 44), tienda_str, fontsize=7.5, fill=None, align_center=True)
 
         m_dia = float(c.get("meta_diaria", 0.0) or 0.0)
-        clear_and_write(p_dia, fitz.Rect(97, 95, 148, 108), f"${m_dia:,.2f}", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(97, 110, 148, 123), f"${m_dia*0.85:,.2f}", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(97, 125, 148, 138), f"${m_dia*0.15:,.2f}", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(97, 140, 148, 153), f"{c.get('total_unidades', 0)}", fontsize=7.5, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 94, 134, 107), f"${m_dia:,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 109, 134, 122), f"${m_dia*0.85:,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 123, 134, 136), f"${m_dia*0.15:,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 138, 134, 151), f"{c.get('total_unidades', 0)}", fontsize=6.5, fill=None, align_right=True)
 
         traf = c.get("trafico", 0)
         conv = d_data.get("conversion_target", 0.15)
-        clear_and_write(p_dia, fitz.Rect(268, 95, 325, 108), f"{traf}", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(268, 110, 325, 123), f"{conv*100:.1f}%", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(268, 125, 325, 138), f"{c.get('transacciones', 0)}", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(268, 140, 325, 153), f"${c.get('meta_ideal', 0.0):,.2f}", fontsize=7.5, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 94, 312, 107), f"{traf}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 109, 312, 122), f"{conv*100:.1f}%", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 123, 312, 136), f"{c.get('transacciones', 0)}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 138, 312, 151), f"${c.get('meta_ideal', 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
 
-        clear_and_write(p_dia, fitz.Rect(446.5, 95, 481.0, 108), f"{c.get('wea_unid_meta', 1)}", fontsize=7.5, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(446.5, 110, 481.0, 123), f"{c.get('kids_unid_meta', 1)}", fontsize=7.5, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(446.5, 125, 481.0, 138), f"{c.get('ck_unid_meta', 1)}", fontsize=7.5, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 94, 468, 107), f"{c.get('wea_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 109, 468, 122), f"{c.get('kids_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 123, 468, 136), f"{c.get('ck_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(98, 203, 148, 216), f"${c.get('vta_neta_prod', 0.0):,.2f}", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(98, 218, 148, 231), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(205, 203, 295, 216), f"${d_data.get('vta_ly', 0.0):,.2f}", fontsize=7.5, fill=C_WHITE, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(104, 195, 167, 209), f"${c.get('vta_neta_prod', 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 209, 167, 222), f"{c.get('u_prod', 0.0):.2f}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(250, 195, 312, 209), f"${d_data.get('vta_ly', 0.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(335, 203, 388, 216), f"${d_data.get('atv_mtd', 7597.0):,.2f}", fontsize=7.5, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(440, 203, 492, 216), f"${d_data.get('atv_dia', 3620.0):,.2f}", fontsize=7.5, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(335, 233, 388, 246), f"${d_data.get('aur_mtd', 3362.0):,.2f}", fontsize=7.5, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(440, 233, 492, 246), f"${d_data.get('aur_dia', 3620.0):,.2f}", fontsize=7.5, fill=C_WHITE, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(345, 195, 400, 209), f"${d_data.get('atv_mtd', 7597.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 195, 468, 209), f"${d_data.get('atv_dia', 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(345, 222, 400, 236), f"${d_data.get('aur_mtd', 3362.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 222, 468, 236), f"${d_data.get('aur_dia', 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
 
         b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20])[:5]
         tot_b = sum(b_traf)
-        b_xs = [80, 115, 150, 185, 220]
+        b_xs = [77, 107, 137, 167, 197]
         for i in range(5):
             bt = b_traf[i] if i < len(b_traf) else 0
             bx = b_xs[i]
-            clear_and_write(p_dia, fitz.Rect(bx, 280, bx+34, 292), f"{bt}", fontsize=7.5, fill=C_WHITE, align_center=True)
+            clear_and_write(p_dia, fitz.Rect(bx, 269, bx+28, 282), f"{bt}", fontsize=6.5, fill=None, align_center=True)
             p = (bt / tot_b * 100.0) if tot_b > 0 else 0.0
-            clear_and_write(p_dia, fitz.Rect(bx, 294, bx+34, 306), f"{p:.1f}%", fontsize=7, fill=C_WHITE, align_center=True)
-            clear_and_write(p_dia, fitz.Rect(bx, 308, bx+34, 320), f"${(bt/tot_b*m_dia if tot_b>0 else 0):,.0f}", fontsize=7, fill=C_WHITE, align_center=True)
+            clear_and_write(p_dia, fitz.Rect(bx, 284, bx+28, 297), f"{p:.1f}%", fontsize=6.0, fill=None, align_center=True)
+            clear_and_write(p_dia, fitz.Rect(bx, 299, bx+28, 312), f"${(bt/tot_b*m_dia if tot_b>0 else 0):,.0f}", fontsize=5.5, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(255, 280, 290, 292), f"{tot_b}", fontsize=7.5, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(255, 294, 290, 306), "100%", fontsize=7, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(255, 308, 290, 320), f"${m_dia:,.0f}", fontsize=7.5, fill=C_WHITE, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 269, 255, 282), f"{tot_b}", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 284, 255, 297), "100%", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 299, 255, 312), f"${m_dia:,.0f}", fontsize=5.5, fill=None, align_center=True)
 
         colab_rows = c.get("colab_rows", [])
         active_colabs = [r for r in colab_rows if r.get("nombre", "").strip()]
 
         for idx in range(8):
-            y_r = 373 + idx * 15
-            y_r2 = y_r + 14
+            y_r = 363.0 + idx * 14.5
+            y_r2 = y_r + 13.0
             if idx < len(active_colabs):
                 cr = active_colabs[idx]
-                clear_and_write(p_dia, fitz.Rect(49, y_r, 114, y_r2), cr.get('nombre', ''), fontsize=7, fill=C_WHITE)
-                clear_and_write(p_dia, fitz.Rect(116, y_r, 162, y_r2), f"{cr.get('horas', 0):.1f}", fontsize=7, fill=C_WHITE, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(164, y_r, 208, y_r2), f"${cr.get('meta_vta', 0.0):,.2f}", fontsize=7, fill=C_GREEN_CELL, align_right=True)
-                clear_and_write(p_dia, fitz.Rect(210, y_r, 248, y_r2), f"{cr.get('meta_ana', 0)}", fontsize=7, fill=C_GREEN_CELL, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(250, y_r, 288, y_r2), f"{cr.get('meta_wea', 0)}", fontsize=7, fill=C_WHITE, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(290, y_r, 313, y_r2), f"{cr.get('meta_kid', 0)}", fontsize=7, fill=C_WHITE, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(315, y_r, 338, y_r2), f"{cr.get('meta_ck', 0)}", fontsize=7, fill=C_WHITE, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), cr.get('nombre', ''), fontsize=6.0, fill=None)
+                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), f"{cr.get('horas', 0):.1f}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), f"${cr.get('meta_vta', 0.0):,.2f}", fontsize=5.0, fill=None, align_right=True)
+                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), f"{cr.get('meta_ana', 0)}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), f"{cr.get('meta_wea', 0)}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), f"{cr.get('meta_kid', 0)}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), f"{cr.get('meta_ck', 0)}", fontsize=6.0, fill=None, align_center=True)
             else:
-                clear_and_write(p_dia, fitz.Rect(49, y_r, 114, y_r2), "", fill=C_WHITE)
-                clear_and_write(p_dia, fitz.Rect(116, y_r, 162, y_r2), "", fill=C_WHITE)
-                clear_and_write(p_dia, fitz.Rect(164, y_r, 208, y_r2), "", fill=C_GREEN_CELL)
-                clear_and_write(p_dia, fitz.Rect(210, y_r, 248, y_r2), "", fill=C_GREEN_CELL)
-                clear_and_write(p_dia, fitz.Rect(250, y_r, 288, y_r2), "", fill=C_WHITE)
-                clear_and_write(p_dia, fitz.Rect(290, y_r, 313, y_r2), "", fill=C_WHITE)
-                clear_and_write(p_dia, fitz.Rect(315, y_r, 338, y_r2), "", fill=C_WHITE)
+                clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), "", fill=None)
 
-        y_t = 495
-        y_t2 = 509
-        clear_and_write(p_dia, fitz.Rect(49, y_t, 114, y_t2), "TOTAL", fontsize=7, fill=C_WHITE)
-        clear_and_write(p_dia, fitz.Rect(116, y_t, 162, y_t2), f"{c.get('tot_horas', 0):.1f}", fontsize=7, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(164, y_t, 208, y_t2), f"${m_dia:,.2f}", fontsize=7, fill=C_GREEN_CELL, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(210, y_t, 248, y_t2), f"{sum(cr.get('meta_ana', 0) for cr in active_colabs)}", fontsize=7, fill=C_GREEN_CELL, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(250, y_t, 288, y_t2), f"{sum(cr.get('meta_wea', 0) for cr in active_colabs)}", fontsize=7, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(290, y_t, 313, y_t2), f"{sum(cr.get('meta_kid', 0) for cr in active_colabs)}", fontsize=7, fill=C_WHITE, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(315, y_t, 338, y_t2), f"{sum(cr.get('meta_ck', 0) for cr in active_colabs)}", fontsize=7, fill=C_WHITE, align_center=True)
+        y_t = 480.0
+        y_t2 = 494.0
+        clear_and_write(p_dia, fitz.Rect(105, y_t, 163, y_t2), f"{c.get('tot_horas', 0):.1f}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(164, y_t, 201, y_t2), f"${m_dia:,.2f}", fontsize=5.0, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(202, y_t, 252, y_t2), f"{sum(cr.get('meta_ana', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(253, y_t, 314, y_t2), f"{sum(cr.get('meta_wea', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(315, y_t, 343, y_t2), f"{sum(cr.get('meta_kid', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(344, y_t, 372, y_t2), f"{sum(cr.get('meta_ck', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
 
         # 2. Estampar Plan de Acción
-        clear_and_write(p_plan, fitz.Rect(355, 63, 395, 75), semana_str, fontsize=7.5, fill=C_WHITE, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(440, 63, 510, 75), dia_base, fontsize=7.5, fill=C_WHITE, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(425, 68, 470, 80), semana_str, fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(508, 68, 560, 80), dia_base, fontsize=7.5, fill=None, align_center=True)
 
         tot_h = max(c.get('tot_horas', 0.0), 0.1)
-        clear_and_write(p_plan, fitz.Rect(75, 142, 115, 154), f"{c.get('tot_horas', 0):.1f}", fontsize=7.5, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(116, 142, 155, 154), f"${m_dia:,.0f}", fontsize=7.5, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(156, 142, 195, 154), f"{c.get('total_unidades', 0)}", fontsize=7.5, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(196, 142, 235, 154), f"${c.get('vta_neta_prod', 0.0):,.0f}", fontsize=7.5, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(236, 142, 275, 154), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(370, 136, 530, 152), f"${(m_dia/tot_h):,.2f} / hr", fontsize=7.5, fill=C_WHITE, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{c.get('tot_horas', 0):.1f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(136, 160, 175, 175), f"${m_dia:,.0f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(176, 160, 215, 175), f"{c.get('total_unidades', 0)}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${c.get('vta_neta_prod', 0.0):,.0f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_h):,.2f} / hr", fontsize=7.5, fill=None, align_center=True)
 
         # SMART (Líneas perfectamente alineadas)
-        clear_and_write(p_plan, fitz.Rect(110, 568, 550, 576), d_data.get("smart_especifico", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(110, 575.5, 550, 583.5), d_data.get("smart_medible", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(110, 583, 550, 591), d_data.get("smart_alcanzable", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(110, 590.5, 550, 598.5), d_data.get("smart_reto", ""), fontsize=6.2, fill=None)
-        clear_and_write(p_plan, fitz.Rect(110, 598, 550, 606), d_data.get("smart_tiempo", ""), fontsize=6.2, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), d_data.get("smart_especifico", ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 698, 315, 707), d_data.get("smart_medible", ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 707, 315, 716), d_data.get("smart_alcanzable", ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 716, 315, 725), d_data.get("smart_reto", ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 725, 315, 734), d_data.get("smart_tiempo", ""), fontsize=6.0, fill=None)
 
-        # Logros y Oportunidades (2 cuadros independientes limpios)
-        logros_txt = d_data.get('logros_hoy', '')
-        op_txt = d_data.get('oportunidades_manana', '')
-
-        p_plan.draw_rect(fitz.Rect(52, 624, 552, 658), color=C_WHITE, fill=C_WHITE, overlay=True)
-        p_plan.draw_rect(fitz.Rect(52, 660, 552, 694), color=C_WHITE, fill=C_WHITE, overlay=True)
-
-        if logros_txt:
-            p_plan.insert_textbox(fitz.Rect(54, 625, 550, 657), logros_txt, fontsize=7.5, fontname="helv", color=(0,0,0))
-        if op_txt:
-            p_plan.insert_textbox(fitz.Rect(54, 661, 550, 693), op_txt, fontsize=7.5, fontname="helv", color=(0,0,0))
+        # Tu enfoque para hoy
+        enf_hoy = d_data.get("enfoque_hoy", "")
+        if enf_hoy:
+            p_plan.insert_textbox(fitz.Rect(325, 688, 550, 734), enf_hoy, fontsize=6.8, fontname="helv", color=(0,0,0))
 
         # 3. Componer en 2 páginas tamaño Carta Vertical 100% escala (Doble Cara / 1:1 original)
         doc_out = fitz.open()
