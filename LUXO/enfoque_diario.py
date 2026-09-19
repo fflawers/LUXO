@@ -77,18 +77,28 @@ DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBAD
 COLOR_TABS = {
     "SEMANAL": "#A100F2",
     "DOMINGO": "#10B981",
+    "PLAN ACCION DOMINGO": "#F59E0B",
     "PLAN.ACCIÓN_D": "#F59E0B",
     "LUNES": "#EF4444",
+    "PLAN ACCION LUNES": "#F59E0B",
     "PLAN.ACCIÓN_L": "#F59E0B",
     "MARTES": "#EC4899",
+    "PLAN ACCION MARTES ": "#F59E0B",
+    "PLAN ACCION MARTES": "#F59E0B",
     "PLAN.ACCIÓN_MA": "#F59E0B",
     "MIÉRCOLES": "#8B5CF6",
+    "PLAN ACCION MIÉRCOLES": "#F59E0B",
     "PLAN.ACCIÓN_MI": "#F59E0B",
     "JUEVES": "#3B82F6",
+    "PLAN ACCION JUEVES ": "#F59E0B",
+    "PLAN ACCION JUEVES": "#F59E0B",
     "PLAN.ACCIÓN_J": "#F59E0B",
     "VIERNES": "#06B6D4",
+    "PLAN ACCION VIERNES": "#F59E0B",
     "PLAN.ACCIÓN_V": "#F59E0B",
     "SÁBADO": "#10B981",
+    "PLAN ACCION SÁBADO ": "#F59E0B",
+    "PLAN ACCION SÁBADO": "#F59E0B",
     "PLAN.ACCIÓN_S": "#F59E0B"
 }
 
@@ -157,6 +167,19 @@ def obtener_semana_sgh_de_fecha(d_date):
     if week_num < 1:
         week_num = 52
     return y, week_num
+
+def obtener_mes_de_semana(anio=2026, semana=30):
+    try:
+        fechas = obtener_fechas_semana(int(anio), int(semana))
+        d_mid = fechas.get("MIÉRCOLES", {}).get("date")
+        if d_mid:
+            return d_mid.year, d_mid.month
+    except Exception:
+        pass
+    try:
+        return int(anio), 1
+    except Exception:
+        return 2026, 1
 
 def crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_seleccionada):
     hoy = datetime.date.today()
@@ -373,7 +396,7 @@ def default_store_state():
             "estrellas_logro": 5,
             "trafico_bloques": [4, 2, 2, 0, 0],
             "colaboradores": [
-                {"nombre": "", "horas": 0.0, "interacciones": 0, "convertidos": 0, "vta_cierre": 0.0, "ana_cierre": 0, "wea_demos": 0, "wea_cierre": 0, "kid_cierre": 0}
+                {"nombre": "", "horas": 0.0, "interacciones": 0, "convertidos": 0, "vta_cierre": 0.0, "ana_cierre": 0, "wea_demos": 0, "wea_cierre": 0, "kid_cierre": 0, "ck_cierre": 0}
                 for _ in range(8)
             ],
             "venta_neta_dia": 0.0,
@@ -381,7 +404,13 @@ def default_store_state():
             "slp_dia": "",
             "onesight_dia": "",
             "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
+            "smart_especifico": "Ofrecer solución limpiadora y probar al menos 3 modelos por cliente.",
+            "smart_medible": "Lograr mínimo 1 CareKit y 1 armazón Kids por colaborador.",
+            "smart_alcanzable": "Aprovechar promociones vigentes y cross-selling en caja.",
+            "smart_reto": "Alcanzar 110% de la meta diaria en venta neta.",
+            "smart_tiempo": "Monitorear avances cada 2 horas en el Store Dashboard.",
             "logros_hoy": "Excelente retención de clientes y venta cruzada.",
+            "oportunidades_manana": "Impulsar demostraciones de Wearables y CareKits desde la apertura.",
             "ritmo_venta_hoy": "",
             "checks_estandares": {"limpieza": False, "imagen": False, "reunion": False},
             "checks_no_negociables": {"registro": False, "sin_celular": False, "fuera_caja": False, "seguimiento": False},
@@ -407,6 +436,7 @@ def init_user_state(user_id):
             "global_meta": default_global_meta(),
             "store_state": default_store_state(),
             "historico_semanal_state": {},
+            "monthly_targets": {},
             "active_tab": [day_now]
         }
         cargar_estado_persistente(user_id)
@@ -444,29 +474,54 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
     except Exception as ex:
         print(f"Error en _async_save_worker para {user_id}:", ex)
 
-def guardar_estado_persistente(user_id):
+_save_timers = {}
+_save_lock = threading.Lock()
+
+def guardar_estado_persistente(user_id, debounce_seconds=0.6):
     try:
         if user_id not in user_states: return
-        g_meta = user_states[user_id]["global_meta"]
-        s_state = user_states[user_id]["store_state"]
-        h_state = user_states[user_id]["historico_semanal_state"]
+        
+        with _save_lock:
+            if user_id in _save_timers and _save_timers[user_id] is not None:
+                try:
+                    _save_timers[user_id].cancel()
+                except Exception:
+                    pass
+            
+            def _debounced_save():
+                try:
+                    if user_id not in user_states: return
+                    g_meta = user_states[user_id]["global_meta"]
+                    s_state = user_states[user_id]["store_state"]
+                    h_state = user_states[user_id]["historico_semanal_state"]
 
-        sincronizar_baselines_domingo(s_state)
-        key = f"S{g_meta.get('semana', '30')}_{g_meta.get('num_tienda', '0')}_{g_meta.get('tienda', '')}"
-        import copy
-        h_state[key] = copy.deepcopy(s_state)
+                    sincronizar_baselines_domingo(s_state)
+                    key = f"S{g_meta.get('semana', '30')}_{g_meta.get('num_tienda', '0')}_{g_meta.get('tienda', '')}"
+                    import copy
+                    h_state[key] = copy.deepcopy(s_state)
 
-        payload = {
-            "global_meta": g_meta,
-            "store_state": s_state,
-            "historico_semanal_state": h_state,
-            "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
-        }
-        sem_str = str(g_meta.get("semana", "30"))
-        tienda_id = int(g_meta.get("num_tienda", 0))
+                    payload = {
+                        "global_meta": g_meta,
+                        "store_state": s_state,
+                        "historico_semanal_state": h_state,
+                        "monthly_targets": user_states[user_id].get("monthly_targets", {}),
+                        "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
+                    }
+                    sem_str = str(g_meta.get("semana", "30"))
+                    tienda_id = int(g_meta.get("num_tienda", 0))
 
-        t = threading.Thread(target=_async_save_worker, args=(user_id, payload, sem_str, tienda_id), daemon=True)
-        t.start()
+                    _async_save_worker(user_id, payload, sem_str, tienda_id)
+                except Exception as ex:
+                    print(f"Error en _debounced_save para {user_id}:", ex)
+
+            if debounce_seconds <= 0:
+                t = threading.Thread(target=_debounced_save, daemon=True)
+                t.start()
+            else:
+                t = threading.Timer(debounce_seconds, _debounced_save)
+                t.daemon = True
+                _save_timers[user_id] = t
+                t.start()
     except Exception as ex:
         print(f"Error al guardar estado de enfoque diario para {user_id}:", ex)
 
@@ -524,6 +579,8 @@ def cargar_estado_persistente(user_id):
                             g_meta[k] = v
                     if "historico_semanal_state" in payload:
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+                    if "monthly_targets" in payload:
+                        user_states[user_id]["monthly_targets"].update(payload["monthly_targets"])
                     if "active_tab" in payload:
                         user_states[user_id]["active_tab"] = payload["active_tab"]
                     loaded = True
@@ -554,6 +611,8 @@ def cargar_estado_persistente(user_id):
                                 g_meta[k] = v
                         if "historico_semanal_state" in payload:
                             user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+                        if "monthly_targets" in payload:
+                            user_states[user_id]["monthly_targets"].update(payload["monthly_targets"])
                         if "active_tab" in payload:
                             user_states[user_id]["active_tab"] = payload["active_tab"]
                         loaded = True
@@ -580,6 +639,28 @@ def guardar_semana_historico(user_id):
     import copy
     h_state[key] = copy.deepcopy(s_state)
     guardar_estado_persistente(user_id)
+
+def aplicar_metas_mensuales_a_semana(user_id, num_semana, s_state):
+    """Aplica automáticamente el ATV MTD y AUR MTD del mes a todos los días de la semana cargada si existen metas registradas para ese mes."""
+    try:
+        if user_id not in user_states: return
+        g_meta = user_states[user_id]["global_meta"]
+        cur_yr = int(g_meta.get("anio", 2026))
+        t_id = str(g_meta.get("num_tienda", "0"))
+        y_m, m_m = obtener_mes_de_semana(cur_yr, int(num_semana))
+        m_key = f"{y_m}_{m_m}_{t_id}"
+        m_targets = user_states[user_id].get("monthly_targets", {}).get(m_key, {})
+        if m_targets:
+            if "atv_mtd" in m_targets and m_targets["atv_mtd"] is not None:
+                for d in DIAS:
+                    if d in s_state:
+                        s_state[d]["atv_mtd"] = float(m_targets["atv_mtd"])
+            if "aur_mtd" in m_targets and m_targets["aur_mtd"] is not None:
+                for d in DIAS:
+                    if d in s_state:
+                        s_state[d]["aur_mtd"] = float(m_targets["aur_mtd"])
+    except Exception as ex:
+        print("Error al aplicar metas mensuales a semana:", ex)
 
 def cargar_semana_historico(user_id, num_semana):
     if user_id not in user_states: return
@@ -630,6 +711,8 @@ def cargar_semana_historico(user_id, num_semana):
             for d in DIAS:
                 s_state[d] = copy.deepcopy(def_s[d])
             h_state[key] = copy.deepcopy(s_state)
+
+    aplicar_metas_mensuales_a_semana(user_id, num_semana, s_state)
     sincronizar_baselines_domingo(s_state)
     guardar_estado_persistente(user_id)
 
@@ -709,9 +792,10 @@ def calcular_dia(d_name, user_id):
     conv = data["conversion_target"]
     transacciones = math.ceil(trafico * conv) if trafico > 0 else 0
     meta_ideal = m_diaria * 1.10
-    total_unidades = max(transacciones, 1)
+    
+    aur_dia = float(data.get("aur_dia", 3620.0) or 3620.0)
+    total_unidades = max(1, round(m_diaria / aur_dia)) if aur_dia > 0 else max(transacciones, 1)
 
-    vta_neta_prod = (m_diaria / total_unidades) if total_unidades > 0 else 0.0
     vta_ly = data["vta_ly"]
 
     b_trafico = data["trafico_bloques"]
@@ -721,7 +805,12 @@ def calcular_dia(d_name, user_id):
 
     colabs = data["colaboradores"]
     tot_horas = sum(c["horas"] for c in colabs if c["nombre"].strip() and c["horas"] > 0)
+    vta_neta_prod = (m_diaria / tot_horas) if tot_horas > 0 else 0.0
     u_prod = round(total_unidades / tot_horas, 2) if tot_horas > 0 else 0.0
+
+    wea_unid_meta = max(1, math.ceil(wearables / 8100.0))
+    kids_unid_meta = max(1, math.ceil(total_unidades * data.get("kids_pct", 0.05)))
+    ck_unid_meta = max(1, math.ceil(total_unidades * data.get("carekits_pct", 0.30)))
 
     colab_rows = []
     for c in colabs:
@@ -730,14 +819,10 @@ def calcular_dia(d_name, user_id):
         if hrs > 0 and tot_horas > 0:
             m_vta = (m_diaria / tot_horas) * hrs
             
-            tot_wea_unid = total_unidades * data.get("wearables_pct", 0.15)
-            tot_kids_unid = total_unidades * data.get("kids_pct", 0.05)
-            tot_ck_unid = total_unidades * data.get("carekits_pct", 0.30)
-            
-            calc_kid = math.ceil(max((tot_kids_unid / tot_horas) * hrs, 1))
-            calc_ck = math.ceil(max((tot_ck_unid / tot_horas) * hrs, 1))
-            calc_ana = math.ceil(max(((total_unidades - tot_wea_unid) / tot_horas) * hrs, 1))
-            calc_wea = math.ceil(max((tot_wea_unid / tot_horas) * hrs, 1))
+            calc_kid = 1
+            calc_ck = 1
+            calc_ana = math.ceil(max(((total_unidades - wea_unid_meta) / tot_horas) * hrs, 1))
+            calc_wea = math.ceil(max((wea_unid_meta / tot_horas) * hrs, 1))
             
             def get_manual_or_calc(key, default_calc):
                 val = c.get(key, "")
@@ -788,10 +873,11 @@ def calcular_dia(d_name, user_id):
     tot_kid_cierre = sum(r["kid_cierre"] for r in colab_rows)
     tot_ck_cierre = sum(r["ck_cierre"] for r in colab_rows)
     
-    venta_neta_dia = data.get("venta_neta_dia", 0.0)
-    venta_unidades_dia = data.get("venta_unidades_dia", 0)
+    tot_unidades_cierre = tot_ana_cierre + tot_wea_cierre
+    venta_neta_dia = data.get("venta_neta_dia", 0.0) or tot_vta_cierre
+    venta_unidades_dia = data.get("venta_unidades_dia", 0) or tot_unidades_cierre
     
-    conversion_dia = (venta_unidades_dia / tot_interacciones) if tot_interacciones > 0 else 0.0
+    conversion_dia = (tot_convertidos / tot_interacciones) if tot_interacciones > 0 else 0.0
     crecimiento_conversion = conversion_dia - conv
     
     # User overrideable Wearables/Kids %
@@ -826,6 +912,9 @@ def calcular_dia(d_name, user_id):
         "b_metas": b_metas,
         "tot_horas": tot_horas,
         "colab_rows": colab_rows,
+        "wea_unid_meta": wea_unid_meta,
+        "kids_unid_meta": kids_unid_meta,
+        "ck_unid_meta": ck_unid_meta,
         # CÓMO VAMOS
         "tot_interacciones": tot_interacciones,
         "tot_convertidos": tot_convertidos,
@@ -844,14 +933,67 @@ def calcular_dia(d_name, user_id):
         "carekits_pct": cv_carekits_pct
     }
 
+def generar_plan_smart_ia(dia_base, user_id=None):
+    """
+    Genera recomendaciones inteligentes y un plan de acción SMART
+    personalizado para el día, basado en los cálculos matemáticos,
+    cuotas de venta, tráfico horario y métricas de productividad.
+    """
+    if user_id and user_id not in user_states:
+        init_user_state(user_id)
+    s_state = user_states[user_id]["store_state"] if (user_id and user_id in user_states) else (user_states.get("default", {}).get("store_state", {}))
+    calc = calcular_dia(dia_base, user_id if user_id else "default")
+    data = s_state.get(dia_base, {})
+    
+    meta_ns = float(calc.get("meta_diaria", 0.0) or 0.0)
+    meta_ideal = float(calc.get("meta_ideal", 0.0) or (meta_ns * 1.10))
+    tot_horas = float(calc.get("tot_horas", 0.0) or 0.0)
+    vta_prod = float(calc.get("vta_neta_prod", 0.0) or 0.0)
+    u_prod = float(calc.get("u_prod", 0.0) or 0.0)
+    meta_conv = float(calc.get("conversion_target", 0.15) or 0.15) * 100.0
+    tot_pzas = int(calc.get("total_unidades", 0) or 0)
+    trafico_esp = int(data.get("trafico_esperado", 0) or 0)
+    atv_val = float(data.get("atv_dia", 0.0) or 3620.0)
+    aur_val = float(data.get("aur_dia", 0.0) or 3390.0)
+    
+    colabs_activos = [c for c in data.get("colaboradores", []) if (c.get("nombre") or "").strip() and float(c.get("horas", 0) or 0) > 0]
+    num_colabs = len(colabs_activos)
+    
+    colab_rows = calc.get("colab_rows", [])
+    tot_wea = sum(int(r.get("meta_wea", 0) or 0) for r in colab_rows)
+    tot_kid = sum(int(r.get("meta_kid", 0) or 0) for r in colab_rows)
+    tot_ck = sum(int(r.get("meta_ck", 0) or 0) for r in colab_rows)
+    
+    ritmo_hora_tienda = (meta_ns / tot_horas) if tot_horas > 0 else (meta_ns / 8.0)
+    
+    ritmo_str = f"Ritmo tienda: ${ritmo_hora_tienda:,.0f}/hr (${meta_ns:,.0f} en {tot_horas:.1f} hrs totales). Cada asesor debe colocar ${vta_prod:,.0f}/hr ({u_prod:.2f} pzs/hr). Horas pico clave: 3:00pm-4:00pm y 5:00pm-6:00pm."
+    especifico_str = f"Aplicar técnica 'Pulir es Poder' con los {trafico_esp} clientes esperados. Realizar al menos 2 demos de Smart Glasses (Wearables) por asesor y presentar 3 armazones en charola."
+    medible_str = f"Alcanzar venta de ${meta_ns:,.0f} ({tot_pzas} piezas) con {meta_conv:.1f}% de conversión. Cuotas no negociables: {tot_wea} Wearables, {tot_kid} Kids y {tot_ck} CareKits en equipo."
+    alcanzable_str = f"Concentrar energía en bloques de 3-4pm y 5-6pm (50% tráfico). Los {num_colabs if num_colabs > 0 else 'asesores en'} colaboradores en turno impulsarán venta cruzada (2do par + kit) fuera de caja."
+    reto_str = f"Superar la Meta Ideal de ${meta_ideal:,.0f} (+10%), elevando el ATV por encima de ${atv_val:,.0f} con modelos solares premium/wearables y cuidando un AUR de ${aur_val:,.0f}."
+    tiempo_str = f"Monitoreo en Store Dashboard cada 2 horas (12:00pm, 2:00pm, 4:00pm, 6:00pm y 8:00pm). Asignación de zonas y relevos 15 min antes de picos de tráfico."
+    logros_str = f"Excelente dinamismo en bloques pico de la tarde, cumplimiento de metas en demos de Wearables y apego riguroso a estándares de limpieza e imagen personal."
+    oportunidades_str = f"Reforzar el ofrecimiento proactivo de CareKits al cierre de cada venta y profundizar preguntas abiertas en el Customer Journey para maximizar el ticket promedio."
+    
+    return {
+        "ritmo_venta_hoy": ritmo_str,
+        "smart_especifico": especifico_str,
+        "smart_medible": medible_str,
+        "smart_alcanzable": alcanzable_str,
+        "smart_reto": reto_str,
+        "smart_tiempo": tiempo_str,
+        "logros_hoy": logros_str,
+        "oportunidades_manana": oportunidades_str
+    }
+
 DAY_TO_PLAN_SHEET = {
-    "DOMINGO": "PLAN.ACCIÓN_D",
-    "LUNES": "PLAN.ACCIÓN_L",
-    "MARTES": "PLAN.ACCIÓN_MA",
-    "MIÉRCOLES": "PLAN.ACCIÓN_MI",
-    "JUEVES": "PLAN.ACCIÓN_J",
-    "VIERNES": "PLAN.ACCIÓN_V",
-    "SÁBADO": "PLAN.ACCIÓN_S"
+    "DOMINGO": "PLAN ACCION DOMINGO",
+    "LUNES": "PLAN ACCION LUNES",
+    "MARTES": "PLAN ACCION MARTES ",
+    "MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+    "JUEVES": "PLAN ACCION JUEVES ",
+    "VIERNES": "PLAN ACCION VIERNES",
+    "SÁBADO": "PLAN ACCION SÁBADO "
 }
 
 def map_to_excel_sheet(tab_name):
@@ -864,40 +1006,50 @@ def map_to_excel_sheet(tab_name):
         return t
     
     plan_map = {
-        "PLAN DOMINGO": "PLAN.ACCIÓN_D",
-        "PLAN_DOMINGO": "PLAN.ACCIÓN_D",
-        "PLAN.ACCIÓN_D": "PLAN.ACCIÓN_D",
-        "PLAN_D": "PLAN.ACCIÓN_D",
-        "PLAN LUNES": "PLAN.ACCIÓN_L",
-        "PLAN_LUNES": "PLAN.ACCIÓN_L",
-        "PLAN.ACCIÓN_L": "PLAN.ACCIÓN_L",
-        "PLAN_L": "PLAN.ACCIÓN_L",
-        "PLAN MARTES": "PLAN.ACCIÓN_MA",
-        "PLAN_MARTES": "PLAN.ACCIÓN_MA",
-        "PLAN.ACCIÓN_MA": "PLAN.ACCIÓN_MA",
-        "PLAN_MA": "PLAN.ACCIÓN_MA",
-        "PLAN MIÉRCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN MIERCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN_MIÉRCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN_MIERCOLES": "PLAN.ACCIÓN_MI",
-        "PLAN.ACCIÓN_MI": "PLAN.ACCIÓN_MI",
-        "PLAN_MI": "PLAN.ACCIÓN_MI",
-        "PLAN JUEVES": "PLAN.ACCIÓN_J",
-        "PLAN_JUEVES": "PLAN.ACCIÓN_J",
-        "PLAN.ACCIÓN_J": "PLAN.ACCIÓN_J",
-        "PLAN_J": "PLAN.ACCIÓN_J",
-        "PLAN VIERNES": "PLAN.ACCIÓN_V",
-        "PLAN_VIERNES": "PLAN.ACCIÓN_V",
-        "PLAN.ACCIÓN_V": "PLAN.ACCIÓN_V",
-        "PLAN_V": "PLAN.ACCIÓN_V",
-        "PLAN SÁBADO": "PLAN.ACCIÓN_S",
-        "PLAN SABADO": "PLAN.ACCIÓN_S",
-        "PLAN_SÁBADO": "PLAN.ACCIÓN_S",
-        "PLAN_SABADO": "PLAN.ACCIÓN_S",
-        "PLAN.ACCIÓN_S": "PLAN.ACCIÓN_S",
-        "PLAN_S": "PLAN.ACCIÓN_S",
+        "PLAN DOMINGO": "PLAN ACCION DOMINGO",
+        "PLAN_DOMINGO": "PLAN ACCION DOMINGO",
+        "PLAN ACCION DOMINGO": "PLAN ACCION DOMINGO",
+        "PLAN.ACCIÓN_D": "PLAN ACCION DOMINGO",
+        "PLAN_D": "PLAN ACCION DOMINGO",
+        "PLAN LUNES": "PLAN ACCION LUNES",
+        "PLAN_LUNES": "PLAN ACCION LUNES",
+        "PLAN ACCION LUNES": "PLAN ACCION LUNES",
+        "PLAN.ACCIÓN_L": "PLAN ACCION LUNES",
+        "PLAN_L": "PLAN ACCION LUNES",
+        "PLAN MARTES": "PLAN ACCION MARTES ",
+        "PLAN_MARTES": "PLAN ACCION MARTES ",
+        "PLAN ACCION MARTES": "PLAN ACCION MARTES ",
+        "PLAN ACCION MARTES ": "PLAN ACCION MARTES ",
+        "PLAN.ACCIÓN_MA": "PLAN ACCION MARTES ",
+        "PLAN_MA": "PLAN ACCION MARTES ",
+        "PLAN MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN MIERCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN_MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN_MIERCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN ACCION MIÉRCOLES": "PLAN ACCION MIÉRCOLES",
+        "PLAN.ACCIÓN_MI": "PLAN ACCION MIÉRCOLES",
+        "PLAN_MI": "PLAN ACCION MIÉRCOLES",
+        "PLAN JUEVES": "PLAN ACCION JUEVES ",
+        "PLAN_JUEVES": "PLAN ACCION JUEVES ",
+        "PLAN ACCION JUEVES": "PLAN ACCION JUEVES ",
+        "PLAN ACCION JUEVES ": "PLAN ACCION JUEVES ",
+        "PLAN.ACCIÓN_J": "PLAN ACCION JUEVES ",
+        "PLAN_J": "PLAN ACCION JUEVES ",
+        "PLAN VIERNES": "PLAN ACCION VIERNES",
+        "PLAN_VIERNES": "PLAN ACCION VIERNES",
+        "PLAN ACCION VIERNES": "PLAN ACCION VIERNES",
+        "PLAN.ACCIÓN_V": "PLAN ACCION VIERNES",
+        "PLAN_V": "PLAN ACCION VIERNES",
+        "PLAN SÁBADO": "PLAN ACCION SÁBADO ",
+        "PLAN SABADO": "PLAN ACCION SÁBADO ",
+        "PLAN_SÁBADO": "PLAN ACCION SÁBADO ",
+        "PLAN_SABADO": "PLAN ACCION SÁBADO ",
+        "PLAN ACCION SÁBADO": "PLAN ACCION SÁBADO ",
+        "PLAN ACCION SÁBADO ": "PLAN ACCION SÁBADO ",
+        "PLAN.ACCIÓN_S": "PLAN ACCION SÁBADO ",
+        "PLAN_S": "PLAN ACCION SÁBADO ",
     }
-    return plan_map.get(t, t if t in ["SEMANAL", "DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "PLAN.ACCIÓN_D", "PLAN.ACCIÓN_L", "PLAN.ACCIÓN_MA", "PLAN.ACCIÓN_MI", "PLAN.ACCIÓN_J", "PLAN.ACCIÓN_V", "PLAN.ACCIÓN_S"] else "DOMINGO")
+    return plan_map.get(t, t if t in ["SEMANAL", "DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "PLAN ACCION DOMINGO", "PLAN ACCION LUNES", "PLAN ACCION MARTES ", "PLAN ACCION MIÉRCOLES", "PLAN ACCION JUEVES ", "PLAN ACCION VIERNES", "PLAN ACCION SÁBADO "] else "DOMINGO")
 
 import unicodedata
 
@@ -920,9 +1072,9 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
             g_meta = user_states[user_id]["global_meta"]
             s_state = user_states[user_id]["store_state"]
 
-            template_path = os.path.abspath(os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx"))
+            template_path = os.path.abspath(os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx"))
             if not os.path.exists(template_path):
-                template_path = os.path.abspath(os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx"))
+                template_path = os.path.abspath(os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx"))
 
             target_sheet = map_to_excel_sheet(d_name)
             clean_sheet_name = sanitize_filename(target_sheet)
@@ -937,180 +1089,1483 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                 print(f"Error: Plantilla base Excel no encontrada en {template_path}")
                 return None
 
-            import shutil
-            import uuid
-            import time
-            temp_excel_path = os.path.abspath(os.path.join(uploads_dir, f"_tmp_{uuid.uuid4().hex}.xlsx"))
-            shutil.copy(template_path, temp_excel_path)
+            # 1. Inyectar datos en la plantilla oficial con openpyxl preservando fórmulas y estilos
+            import openpyxl
+            wb_pyxl = openpyxl.load_workbook(template_path)
+            
+            def _safe_set(sheet, coord, val):
+                try:
+                    c = sheet[coord]
+                    if not isinstance(c, openpyxl.cell.cell.MergedCell):
+                        c.value = val
+                except Exception: pass
 
-            excel = None
-            wb = None
+            for d in DIAS:
+                if d in wb_pyxl.sheetnames and d in s_state:
+                    ws = wb_pyxl[d]
+                    d_data = s_state[d]
+                    _safe_set(ws, 'I1', int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30'))
+                    _safe_set(ws, 'L1', d)
+                    _safe_set(ws, 'N1', g_meta.get('tienda', 'SGH'))
+                    _safe_set(ws, 'D5', d_data.get('meta_diaria', 0.0))
+                    _safe_set(ws, 'J5', d_data.get('trafico_esperado', 0))
+                    _safe_set(ws, 'J6', d_data.get('conversion_target', 0.0))
+                    _safe_set(ws, 'I12', d_data.get('vta_ly', 0.0))
+                    _safe_set(ws, 'N5', d_data.get('wearables_pct', 0.15))
+                    _safe_set(ws, 'N6', d_data.get('kids_pct', 0.05))
+                    _safe_set(ws, 'N7', d_data.get('carekits_pct', 0.30))
+                    if 'trafico_bloques' in d_data:
+                        for b_i, b_val in enumerate(d_data['trafico_bloques'][:5]):
+                            col_letter = ['C', 'D', 'E', 'F', 'G'][b_i]
+                            _safe_set(ws, f'{col_letter}17', b_val)
+                    _safe_set(ws, 'L12', d_data.get('atv_mtd', 7597.0))
+                    _safe_set(ws, 'N12', d_data.get('atv_dia', 3620.0))
+                    _safe_set(ws, 'L14', d_data.get('aur_mtd', 3362.0))
+                    _safe_set(ws, 'N14', d_data.get('aur_dia', 3620.0))
+                    for i, c in enumerate(d_data.get('colaboradores', [])[:8]):
+                        _safe_set(ws, f'B{23 + i}', c.get('nombre', ''))
+                        _safe_set(ws, f'D{23 + i}', c.get('horas', 0.0))
+                        _safe_set(ws, f'I{23 + i}', c.get('meta_wea', 1))
+                        _safe_set(ws, f'K{23 + i}', c.get('meta_kid', 1))
+                        _safe_set(ws, f'M{23 + i}', c.get('meta_ck', 1))
+                        _safe_set(ws, f'E{40 + i}', c.get('interacciones', 0))
+                        _safe_set(ws, f'F{40 + i}', c.get('convertidos', 0))
+                        _safe_set(ws, f'H{40 + i}', c.get('vta_cierre', 0.0))
+                        _safe_set(ws, f'I{40 + i}', c.get('ana_cierre', 0))
+                        _safe_set(ws, f'J{40 + i}', c.get('wea_demos', 0))
+                        _safe_set(ws, f'K{40 + i}', c.get('wea_cierre', 0))
+                        _safe_set(ws, f'M{40 + i}', c.get('kid_cierre', 0))
+                        _safe_set(ws, f'N{40 + i}', c.get('ck_cierre', 0))
+            for d, plan_sheet_name in DAY_TO_PLAN_SHEET.items():
+                if plan_sheet_name in wb_pyxl.sheetnames and d in s_state:
+                    ws_p = wb_pyxl[plan_sheet_name]
+                    d_data = s_state[d]
+                    _safe_set(ws_p, 'I1', int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30'))
+                    _safe_set(ws_p, 'K1', d)
+                    if d_data.get('smart_especifico'): _safe_set(ws_p, 'C29', d_data.get('smart_especifico'))
+                    if d_data.get('smart_medible'): _safe_set(ws_p, 'C30', d_data.get('smart_medible'))
+                    if d_data.get('smart_alcanzable'): _safe_set(ws_p, 'C31', d_data.get('smart_alcanzable'))
+                    if d_data.get('smart_reto'): _safe_set(ws_p, 'C32', d_data.get('smart_reto'))
+                    if d_data.get('smart_tiempo'): _safe_set(ws_p, 'C33', d_data.get('smart_tiempo'))
+                    if d_data.get('logros_hoy'): _safe_set(ws_p, 'A35', d_data.get('logros_hoy'))
+                    if d_data.get('oportunidades_manana'): _safe_set(ws_p, 'A37', d_data.get('oportunidades_manana'))
+
+            # 2. Configurar vista al 100% de zoom en todas las hojas y guardar
             try:
-                import pythoncom
-                import win32com.client
-                pythoncom.CoInitialize()
-                excel = win32com.client.Dispatch("Excel.Application")
-                excel.Visible = False
-                excel.DisplayAlerts = False
-                excel.ScreenUpdating = False
-
-                wb = excel.Workbooks.Open(temp_excel_path)
-                ws_names = [ws.Name for ws in wb.Worksheets]
-
-                fechas_map_ex = obtener_fechas_semana(g_meta.get("anio", 2026), g_meta.get("semana", 30))
-
-                # 1. Llenar los 7 días completos para que todas las fórmulas y cálculos del libro sean perfectos
-                for d in DIAS:
-                    if d in ws_names and d in s_state:
-                        ws = wb.Worksheets(d)
-                        d_data = s_state[d]
-
-                        ws.Range('I1').Value = int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30')
-                        ws.Range('M1').Value = g_meta.get('tienda', 'SGH')
-                        if d in fechas_map_ex:
-                            try: ws.Range('E1').Value = fechas_map_ex[d]['str_header']
-                            except Exception: pass
-
-                        ws.Range('C5').Value = d_data.get('meta_diaria', 0.0)
-                        ws.Range('F5').Value = d_data.get('trafico_esperado', 0)
-                        ws.Range('F6').Value = d_data.get('conversion_target', 0.0)
-                        ws.Range('E9').Value = d_data.get('vta_ly', 0.0)
-                        ws.Range('I5').Value = d_data.get('wearables_pct', 0.0)
-                        ws.Range('I6').Value = d_data.get('kids_pct', 0.0)
-                        ws.Range('I7').Value = d_data.get('carekits_pct', 0.0)
-
-                        if 'trafico_bloques' in d_data:
-                            ws.Range('C12:G12').Value = [d_data['trafico_bloques']]
-
-                        ws.Range('P7').Value = d_data.get('atv_dia', 7500.0)
-                        ws.Range('P9').Value = d_data.get('aur_dia', 4617.0)
-                        ws.Range('P13').Value = d_data.get('atv_mtd', 6578.0)
-                        ws.Range('P15').Value = d_data.get('aur_mtd', 4312.0)
-
-                        for i, c in enumerate(d_data.get('colaboradores', [])[:8]):
-                            r_idx = 17 + i
-                            ws.Range(f'B{r_idx}').Value = c.get('nombre', '')
-                            ws.Range(f'D{r_idx}').Value = c.get('horas', 0.0)
-                            if c.get("meta_ana", "") != "": ws.Range(f'F{r_idx}').Value = int(c["meta_ana"])
-                            if c.get("meta_wea", "") != "": ws.Range(f'G{r_idx}').Value = int(c["meta_wea"])
-                            if c.get("meta_kid", "") != "": ws.Range(f'H{r_idx}').Value = int(c["meta_kid"])
-                            if c.get("meta_ck", "") != "": ws.Range(f'I{r_idx}').Value = int(c["meta_ck"])
-                                
-                            r_cv_idx = 33 + i
-                            ws.Range(f'E{r_cv_idx}').Value = c.get('interacciones', 0)
-                            ws.Range(f'G{r_cv_idx}').Value = c.get('convertidos', 0)
-                            ws.Range(f'J{r_cv_idx}').Value = c.get('vta_cierre', 0.0)
-                            ws.Range(f'K{r_cv_idx}').Value = c.get('ana_cierre', 0)
-                            ws.Range(f'L{r_cv_idx}').Value = c.get('wea_demos', 0)
-                            ws.Range(f'M{r_cv_idx}').Value = c.get('wea_cierre', 0)
-                            ws.Range(f'O{r_cv_idx}').Value = c.get('kid_cierre', 0)
-                            ws.Range(f'P{r_cv_idx}').Value = c.get('ck_cierre', 0)
-
-                        ws.Range('E30').Value = d_data.get('venta_neta_dia', 0.0)
-                        ws.Range('G30').Value = d_data.get('venta_unidades_dia', 0)
-
-                # 2. Llenar las 7 hojas de Plan de Acción si están en la plantilla
-                for d, plan_sheet_name in DAY_TO_PLAN_SHEET.items():
-                    if plan_sheet_name in ws_names and d in s_state:
-                        ws_p = wb.Worksheets(plan_sheet_name)
-                        d_data = s_state[d]
-                        ws_p.Range('I1').Value = int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30')
-                        
-                        r_txt = str(d_data.get('ritmo_venta_hoy', '') or '').strip()
-                        if r_txt:
-                            ws_p.Range('I4').Value = f"¿Cuál debe ser nuestro ritmo de venta hoy?\n{r_txt}"
-                        else:
-                            ws_p.Range('I4').Value = "¿Cuál debe ser nuestro ritmo de venta hoy?"
-                            
-                        ws_p.Range('A27').Value = str(d_data.get('enfoque_hoy', '') or '')
-                        ws_p.Range('A30').Value = str(d_data.get('logros_hoy', '') or '')
-                        
-                        # Checkmarks Estándares
-                        chk_e = d_data.get('checks_estandares', {})
-                        if chk_e.get('limpieza'): ws_p.Range('A9').Value = "✓"
-                        if chk_e.get('imagen'): ws_p.Range('A10').Value = "✓"
-                        if chk_e.get('reunion'): ws_p.Range('A11').Value = "✓"
-
-                        # Checkmarks No Negociables
-                        chk_nn = d_data.get('checks_no_negociables', {})
-                        if chk_nn.get('registro'): ws_p.Range('H9').Value = "✓"
-                        if chk_nn.get('sin_celular'): ws_p.Range('H10').Value = "✓"
-                        if chk_nn.get('fuera_caja'): ws_p.Range('H11').Value = "✓"
-                        if chk_nn.get('seguimiento'): ws_p.Range('H12').Value = "✓"
-
-                        # Checkmarks Secretos
-                        chk_s = d_data.get('checks_secretos', {})
-                        if chk_s.get('pulir'): ws_p.Range('A16').Value = "✓"
-                        if chk_s.get('pontelos'): ws_p.Range('A17').Value = "✓"
-                        if chk_s.get('diviertete'): ws_p.Range('A18').Value = "✓"
-                        if chk_s.get('cuidalos'): ws_p.Range('A19').Value = "✓"
-                        if chk_s.get('ajuste'): ws_p.Range('A20').Value = "✓"
-
-                        # Checkmarks Journey
-                        chk_j = d_data.get('checks_journey', {})
-                        if chk_j.get('relacion'): ws_p.Range('H18').Value = "✓"
-                        if chk_j.get('confianza'): ws_p.Range('K18').Value = "✓"
-                        if chk_j.get('ve_mas_alla'): ws_p.Range('N18').Value = "✓"
-
-                if export_pdf:
-                    sheet_name = target_sheet if target_sheet in ws_names else "DOMINGO"
-                    ws_export = wb.Worksheets(sheet_name)
+                for ws_item in wb_pyxl.worksheets:
                     try:
-                        ws_export.PageSetup.Zoom = False
-                        ws_export.PageSetup.FitToPagesWide = 1
-                        ws_export.PageSetup.FitToPagesTall = 1
+                        ws_item.sheet_view.zoomScale = 100
                     except Exception:
                         pass
-                    ws_export.ExportAsFixedFormat(0, web_pdf_path)
-                    print(f"✅ PDF exportado exitosamente vía win32com ({sheet_name}): {web_pdf_path}")
-
-                wb.SaveCopyAs(web_excel_path)
-                wb.Close(False)
-                wb = None
-                
-                if excel:
-                    try: excel.Quit()
-                    except: pass
-                    excel = None
-
+                wb_pyxl.save(web_excel_path)
+            except PermissionError:
+                temp_alt = os.path.abspath(os.path.join(uploads_dir, f"Enfoque_Diario_{clean_sheet_name}_SGH_2026_temp.xlsx"))
                 try:
-                    if os.path.exists(temp_excel_path):
-                        os.remove(temp_excel_path)
-                except Exception:
-                    pass
+                    wb_pyxl.save(temp_alt)
+                    web_excel_path = temp_alt
+                except Exception: pass
+            except Exception as ex_wb:
+                print("Notice al guardar workbook Excel:", ex_wb)
 
-                if export_pdf:
-                    return web_pdf_path if os.path.exists(web_pdf_path) else None
-                return web_excel_path
+            # 3. Si se solicita PDF: conversión fiel de Excel a PDF
+            if export_pdf:
+                # Intento A: LibreOffice Headless (Linux / Render Docker / Servidores)
+                import subprocess, shutil
+                soffice_bin = shutil.which("libreoffice") or shutil.which("soffice")
+                if soffice_bin:
+                    try:
+                        temp_lo_xlsx = os.path.abspath(os.path.join(uploads_dir, f"temp_lo_{clean_sheet_name}.xlsx"))
+                        wb_lo = openpyxl.load_workbook(web_excel_path)
+                        dia_base = "DOMINGO"
+                        for d in DIAS:
+                            if d in target_sheet.upper():
+                                dia_base = d
+                                break
+                        plan_sheet_name = DAY_TO_PLAN_SHEET.get(dia_base, "PLAN ACCION DOMINGO")
+                        keep_sheets = [target_sheet] if target_sheet == "SEMANAL" else [dia_base, plan_sheet_name]
+                        for s_name in wb_lo.sheetnames:
+                            if s_name in keep_sheets:
+                                wb_lo[s_name].sheet_state = 'visible'
+                            else:
+                                wb_lo[s_name].sheet_state = 'hidden'
+                        wb_lo.save(temp_lo_xlsx)
 
-            except Exception as ex_com:
-                print("Notice win32com export error:", ex_com)
-                if excel:
-                    try: excel.Quit()
-                    except: pass
-                    excel = None
+                        cmd = [soffice_bin, "--headless", "--convert-to", "pdf", "--outdir", uploads_dir, temp_lo_xlsx]
+                        subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                        temp_lo_pdf = os.path.abspath(os.path.join(uploads_dir, f"temp_lo_{clean_sheet_name}.pdf"))
+                        if os.path.exists(temp_lo_pdf):
+                            if os.path.exists(web_pdf_path):
+                                try: os.remove(web_pdf_path)
+                                except Exception: pass
+                            shutil.move(temp_lo_pdf, web_pdf_path)
+                            try: os.remove(temp_lo_xlsx)
+                            except Exception: pass
+                            if os.path.exists(web_pdf_path):
+                                return web_pdf_path
+                    except Exception as ex_lo:
+                        print("Notice LibreOffice PDF conversion:", ex_lo)
+
+                # Intento B: Microsoft Excel COM (Windows nativo si está disponible)
+                pdf_generado = False
+                excel = None
                 try:
-                    if os.path.exists(temp_excel_path):
-                        os.remove(temp_excel_path)
-                except Exception:
-                    pass
-                return web_pdf_path if (export_pdf and os.path.exists(web_pdf_path)) else web_excel_path
-            finally:
-                if excel:
-                    try: excel.Quit()
-                    except: pass
-                try: pythoncom.CoUninitialize()
-                except: pass
+                    import pythoncom
+                    import win32com.client
+                    import fitz
+                    pythoncom.CoInitialize()
+                    excel = win32com.client.Dispatch("Excel.Application")
+                    excel.Visible = False
+                    excel.DisplayAlerts = False
+                    excel.ScreenUpdating = False
+                    wb_com = excel.Workbooks.Open(web_excel_path)
+                    ws_names = [ws.Name for ws in wb_com.Worksheets]
+
+                    if target_sheet == "SEMANAL":
+                        ws_export = wb_com.Worksheets("SEMANAL")
+                        try:
+                            ws_export.PageSetup.Zoom = False
+                            ws_export.PageSetup.FitToPagesWide = 1
+                            ws_export.PageSetup.FitToPagesTall = 1
+                        except Exception: pass
+                        ws_export.ExportAsFixedFormat(0, web_pdf_path)
+                        pdf_generado = os.path.exists(web_pdf_path)
+                    else:
+                        dia_base = "DOMINGO"
+                        for d in DIAS:
+                            if d in target_sheet.upper():
+                                dia_base = d
+                                break
+                        plan_sheet_name = DAY_TO_PLAN_SHEET.get(dia_base, "PLAN ACCION DOMINGO")
+                        
+                        temp_pdf_dia = os.path.abspath(os.path.join(uploads_dir, f"temp_{clean_sheet_name}_dia.pdf"))
+                        temp_pdf_plan = os.path.abspath(os.path.join(uploads_dir, f"temp_{clean_sheet_name}_plan.pdf"))
+
+                        ws_dia = wb_com.Worksheets(dia_base if dia_base in ws_names else "DOMINGO")
+                        try:
+                            ws_dia.PageSetup.PrintArea = "$A$1:$R$48"
+                            ws_dia.PageSetup.Zoom = False
+                            ws_dia.PageSetup.FitToPagesWide = 1
+                            ws_dia.PageSetup.FitToPagesTall = 1
+                            ws_dia.PageSetup.Orientation = 1
+                        except Exception: pass
+                        ws_dia.ExportAsFixedFormat(0, temp_pdf_dia)
+
+                        ws_plan = wb_com.Worksheets(plan_sheet_name if plan_sheet_name in ws_names else "PLAN ACCION DOMINGO")
+                        try:
+                            ws_plan.PageSetup.PrintArea = "$A$1:$O$36"
+                            ws_plan.PageSetup.Zoom = False
+                            ws_plan.PageSetup.FitToPagesWide = 1
+                            ws_plan.PageSetup.FitToPagesTall = 1
+                            ws_plan.PageSetup.Orientation = 1
+                        except Exception: pass
+                        ws_plan.ExportAsFixedFormat(0, temp_pdf_plan)
+
+                        wb_com.Close(False)
+                        excel.Quit()
+                        excel = None
+                        pythoncom.CoUninitialize()
+
+                        if os.path.exists(temp_pdf_dia) and os.path.exists(temp_pdf_plan):
+                            doc_dia = fitz.open(temp_pdf_dia)
+                            doc_plan = fitz.open(temp_pdf_plan)
+
+                            doc_out = fitz.open()
+                            doc_out.insert_pdf(doc_dia)
+                            doc_out.insert_pdf(doc_plan)
+
+                            doc_out.save(web_pdf_path)
+                            doc_dia.close()
+                            doc_plan.close()
+                            doc_out.close()
+
+                            try: os.remove(temp_pdf_dia)
+                            except Exception: pass
+                            try: os.remove(temp_pdf_plan)
+                            except Exception: pass
+
+                            pdf_generado = os.path.exists(web_pdf_path)
+
+                except Exception as ex_pdf_com:
+                    print("Notice win32com PDF export:", ex_pdf_com)
+                finally:
+                    if excel:
+                        try:
+                            wb_com.Close(False)
+                            excel.Quit()
+                        except Exception: pass
+                        try: pythoncom.CoUninitialize()
+                        except Exception: pass
+
+                if pdf_generado and os.path.exists(web_pdf_path):
+                    return web_pdf_path
+
+                # Intento C: Motor Nativo Vectorial (PyMuPDF - Calibración 1:1)
+                vec_pdf = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
+                if vec_pdf and os.path.exists(vec_pdf):
+                    return vec_pdf
+
+                return web_pdf_path if os.path.exists(web_pdf_path) else None
+
+            return web_excel_path
 
         except Exception as ex:
             print("Error en generar_excel_y_pdf_enfoque:", ex)
             return None
 
+def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
+    """
+    Genera el PDF oficial SGH 2026 de forma 100% vectorial nativa usando PyMuPDF.
+    Para días de la semana y planes de acción: genera el formato oficial Doble Cara (2 páginas
+    verticales tamaño Carta completas al 100% de escala):
+      - Página 1: Hoja del Día (Enfoque Diario)
+      - Página 2: Hoja del Plan de Acción
+    Para SEMANAL: genera 1 página tamaño Carta vertical completa.
+    Funciona de manera ultra-rápida y compatible tanto en Linux/Render como en Windows.
+    """
+    try:
+        import fitz
+        user_id = str(user_id)
+        if user_id not in user_states:
+            init_user_state(user_id)
+            cargar_estado_persistente(user_id)
+
+        g_meta = user_states.get(user_id, {}).get("global_meta", {})
+        s_state = user_states.get(user_id, {}).get("store_state", {})
+
+        templates_dir_candidates = [
+            os.path.abspath(os.path.join(BASE_PATH, "custom_assets", "templates_pdf")),
+            os.path.abspath(os.path.join(os.getcwd(), "custom_assets", "templates_pdf")),
+            os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_assets", "templates_pdf")),
+            os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "custom_assets", "templates_pdf")),
+        ]
+        templates_dir = None
+        for td in templates_dir_candidates:
+            if os.path.exists(td) and os.path.isdir(td):
+                templates_dir = td
+                break
+        if not templates_dir:
+            templates_dir = os.path.abspath(os.path.join(BASE_PATH, "custom_assets", "templates_pdf"))
+
+        target_sheet = map_to_excel_sheet(d_name)
+
+        C_GREEN_CELL = (0.89, 0.94, 0.88)
+        C_WHITE = (1, 1, 1)
+
+        def clear_and_write(page, rect, text, fontsize=7.5, fill=None, align_center=False, align_right=False):
+            if fill:
+                in_rect = fitz.Rect(rect.x0 + 0.5, rect.y0 + 0.5, rect.x1 - 0.5, rect.y1 - 0.5)
+                page.draw_rect(in_rect, color=fill, fill=fill, overlay=True)
+            if text is not None:
+                text_str = str(text).strip()
+                if text_str:
+                    if align_center:
+                        w = fitz.get_text_length(text_str, fontname="helv", fontsize=fontsize)
+                        x = rect.x0 + (rect.width - w) / 2
+                    elif align_right:
+                        w = fitz.get_text_length(text_str, fontname="helv", fontsize=fontsize)
+                        x = rect.x1 - w - 2
+                    else:
+                        x = rect.x0 + 2
+                    y = rect.y1 - (rect.height - fontsize) / 2 - 1
+                    page.insert_text(fitz.Point(x, y), text_str, fontsize=fontsize, fontname="helv", color=(0,0,0))
+
+        if target_sheet == "SEMANAL":
+            t_sem = os.path.join(templates_dir, "template_semanal.pdf")
+            if not os.path.exists(t_sem):
+                return None
+            doc_sem = fitz.open(t_sem)
+            p_sem = doc_sem[0]
+
+            h_state = user_states[user_id].setdefault("historico_semanal", {})
+            h_state.setdefault("meta_conversion", 0.16)
+            h_state.setdefault("wea_pct", 0.15)
+            h_state.setdefault("kids_pct", 0.05)
+            h_state.setdefault("ck_pct", 0.30)
+            h_state.setdefault("aur_sem", 4617.0)
+
+            # Totales agregados de las pestañas diarias
+            tot_meta_sem = sum(s_state[d].get("meta_diaria", 0.0) for d in DIAS)
+            tot_ana_sem = sum(s_state[d].get("meta_diaria", 0.0) * 0.85 for d in DIAS)
+            tot_wea_sem = sum(s_state[d].get("meta_diaria", 0.0) * 0.15 for d in DIAS)
+
+            tot_trafico_sem = 0
+            tot_transac_sem = 0
+            tot_convertidos_sem = 0
+            tot_interacciones_sem = 0
+            tot_horas_sem = 0.0
+
+            dias_calc = {}
+            for d in DIAS:
+                c_d = calcular_dia(d, user_id)
+                dias_calc[d] = c_d
+                tot_trafico_sem += c_d.get("trafico", 0)
+                tot_transac_sem += c_d.get("transacciones", 0)
+                tot_convertidos_sem += c_d.get("tot_convertidos", 0)
+                tot_interacciones_sem += c_d.get("tot_interacciones", 0)
+                tot_horas_sem += c_d.get("tot_horas", 0.0)
+
+            clientes_totales = tot_interacciones_sem if tot_interacciones_sem > 0 else tot_trafico_sem
+            clientes_convertidos = tot_convertidos_sem if tot_convertidos_sem > 0 else tot_transac_sem
+            conversion_real_sem_pct = (clientes_convertidos * 100.0 / clientes_totales) if clientes_totales > 0 else 0.0
+
+            meta_conversion = float(h_state.get("meta_conversion", 0.16))
+            meta_transacciones_sem = int(tot_trafico_sem * meta_conversion)
+            meta_ideal_sem = tot_meta_sem * 1.10
+            total_unidades_sem = int(tot_meta_sem / h_state["aur_sem"]) if h_state.get("aur_sem", 4617.0) > 0 else (int(tot_meta_sem / 4617) if tot_meta_sem > 0 else 0)
+
+            wea_pct = float(h_state.get("wea_pct", 0.15))
+            unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 1
+
+            kids_pct = float(h_state.get("kids_pct", 0.05))
+            unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if total_unidades_sem > 0 else 1
+
+            ck_pct = float(h_state.get("ck_pct", 0.30))
+            unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
+
+            comply_sem = tot_meta_sem
+            atv_sem = sum(s_state[d].get("atv_dia", 3620.0) for d in DIAS) / 7.0
+            aur_sem = sum(s_state[d].get("aur_dia", 3620.0) for d in DIAS) / 7.0
+
+            semana_str = str(g_meta.get("semana", "37"))
+            tienda_str = f"{g_meta.get('tienda', 'SGH')} (#{g_meta.get('tienda_num', '3645')})"
+
+            # Header
+            clear_and_write(p_sem, fitz.Rect(380, 52, 420, 65), semana_str, fontsize=8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(440, 52, 530, 65), tienda_str, fontsize=8, fill=C_WHITE, align_center=True)
+
+            # Top Cards
+            # Col 1: Metas
+            clear_and_write(p_sem, fitz.Rect(104.2, 91.0, 134.5, 97.3), f"${tot_meta_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 97.3, 134.5, 110.9), f"${tot_ana_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 110.9, 134.5, 120.0), f"${tot_wea_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 120.0, 134.5, 129.1), f"{total_unidades_sem}", fontsize=4.5, fill=C_GREEN_CELL, align_right=True)
+
+            # Col 2: Conversión
+            clear_and_write(p_sem, fitz.Rect(209.1, 91.0, 252.8, 97.3), f"{tot_trafico_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 97.3, 252.8, 110.9), f"{meta_conversion*100:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 110.9, 252.8, 120.0), f"{meta_transacciones_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 120.0, 252.8, 129.1), f"${meta_ideal_sem:,.2f}", fontsize=4.8, fill=C_GREEN_CELL, align_right=True)
+
+            # Col 3: No Negociables
+            clear_and_write(p_sem, fitz.Rect(331.9, 91.0, 357.5, 97.3), f"{unidades_wea_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, 97.3, 357.5, 110.9), f"{unidades_kids_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, 110.9, 357.5, 120.0), f"{unidades_ck_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+
+            # Col 4: Valores de Semana
+            clear_and_write(p_sem, fitz.Rect(387.1, 91.0, 444.7, 97.3), f"${comply_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(387.1, 129.1, 444.7, 135.7), f"${atv_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(387.1, 142.8, 444.7, 159.4), f"${aur_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
+
+            # Metas por Colaborador
+            colabs_list = s_state.get("DOMINGO", {}).get("colaboradores", [])
+            tot_horas_plantilla = 0.0
+            horas_colab_map = {}
+            for colab in colabs_list:
+                if not isinstance(colab, dict):
+                    continue
+                c_name = colab.get("nombre", "")
+                if not c_name.strip():
+                    continue
+                h_acc = 0.0
+                for d in DIAS:
+                    c_day_list = s_state.get(d, {}).get("colaboradores", [])
+                    for p_item in c_day_list:
+                        if isinstance(p_item, dict) and p_item.get("nombre") == c_name:
+                            h_acc += float(p_item.get("horas", 0.0) or 0.0)
+                horas_colab_map[c_name] = h_acc
+                tot_horas_plantilla += h_acc
+
+            if tot_horas_plantilla <= 0:
+                tot_horas_plantilla = 1.0
+
+            tot_colab_meta_venta = 0.0
+            tot_colab_analogos = 0
+            tot_colab_wearables = 0
+            tot_colab_kids = 0
+            tot_colab_carekits = 0
+
+            active_colabs = [c for c in colabs_list if isinstance(c, dict) and c.get("nombre", "").strip()]
+
+            y_colab_starts = [159.6, 166.1, 172.6, 179.0, 185.5, 192.0, 198.5, 205.0]
+            y_colab_ends   = [166.1, 172.6, 179.0, 185.5, 192.0, 198.5, 205.0, 211.5]
+
+            for idx in range(8):
+                y1, y2 = y_colab_starts[idx], y_colab_ends[idx]
+                if idx < len(active_colabs):
+                    c_name = active_colabs[idx].get("nombre", "")
+                    h_p = horas_colab_map.get(c_name, 0.0)
+                    m_venta_colab = (tot_meta_sem / tot_horas_plantilla) * h_p
+                    ana_colab = max(1, int((total_unidades_sem / tot_horas_plantilla) * h_p)) if (tot_ana_sem > 0 and h_p > 0) else 0
+                    wea_colab = max(1, int((unidades_wea_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+                    kids_colab = max(1, int((unidades_kids_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+                    ck_colab = max(1, int((unidades_ck_sem / tot_horas_plantilla) * h_p)) if h_p > 0 else 0
+
+                    tot_colab_meta_venta += m_venta_colab
+                    tot_colab_analogos += ana_colab
+                    tot_colab_wearables += wea_colab
+                    tot_colab_kids += kids_colab
+                    tot_colab_carekits += ck_colab
+
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 134.7, y2), c_name, fontsize=5.5, fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), f"{h_p:.1f}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), f"${m_venta_colab:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), f"{ana_colab}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), f"{wea_colab}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), f"{kids_colab}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), f"{ck_colab}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                else:
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 134.7, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), "", fill=C_WHITE)
+
+            # Total Metas Row
+            yt1, yt2 = 211.5, 218.0
+            clear_and_write(p_sem, fitz.Rect(51.0, yt1, 134.7, yt2), "TOTAL", fontsize=5.8, fill=C_WHITE)
+            clear_and_write(p_sem, fitz.Rect(134.7, yt1, 170.9, yt2), f"{tot_horas_plantilla:.1f}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(170.9, yt1, 209.1, yt2), f"${tot_colab_meta_venta:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, yt1, 252.8, yt2), f"{tot_colab_analogos}", fontsize=5.8, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(252.8, yt1, 279.5, yt2), f"{tot_colab_wearables}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(279.5, yt1, 305.4, yt2), f"{tot_colab_kids}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(305.4, yt1, 331.9, yt2), f"{tot_colab_carekits}", fontsize=5.8, fill=C_WHITE, align_center=True)
+
+            # Cierre Semanal Calculations
+            tot_cierre_hrs = 0.0
+            tot_cierre_inter = 0
+            tot_cierre_conv = 0
+            tot_cierre_vta = 0.0
+            tot_cierre_ana = 0
+            tot_cierre_demos = 0
+            tot_cierre_wea = 0
+            tot_cierre_kids = 0
+            tot_cierre_ck = 0
+
+            cierre_colabs_data = []
+            for colab in active_colabs:
+                c_name = colab.get("nombre", "")
+                h_p = horas_colab_map.get(c_name, 0.0)
+                inter = 0
+                conv = 0
+                vta_c = 0.0
+                ana_c = 0
+                wea_demos = 0
+                wea_c = 0
+                kid_c = 0
+                ck_c = 0
+
+                for d in DIAS:
+                    c_day_list = s_state.get(d, {}).get("colaboradores", [])
+                    for p_item in c_day_list:
+                        if isinstance(p_item, dict) and p_item.get("nombre") == c_name:
+                            inter += int(p_item.get("interacciones", 0) or 0)
+                            conv += int(p_item.get("convertidos", 0) or 0)
+                            vta_c += float(p_item.get("vta_cierre", 0.0) or 0.0)
+                            ana_c += int(p_item.get("ana_cierre", 0) or 0)
+                            wea_demos += int(p_item.get("wea_demos", 0) or 0)
+                            wea_c += int(p_item.get("wea_cierre", 0) or 0)
+                            kid_c += int(p_item.get("kid_cierre", 0) or 0)
+                            ck_c += int(p_item.get("ck_cierre", 0) or 0)
+
+                conv_pct = (conv / inter * 100.0) if inter > 0 else 0.0
+                wea_conv_pct = (wea_c / wea_demos * 100.0) if wea_demos > 0 else 0.0
+
+                tot_cierre_hrs += h_p
+                tot_cierre_inter += inter
+                tot_cierre_conv += conv
+                tot_cierre_vta += vta_c
+                tot_cierre_ana += ana_c
+                tot_cierre_demos += wea_demos
+                tot_cierre_wea += wea_c
+                tot_cierre_kids += kid_c
+                tot_cierre_ck += ck_c
+
+                cierre_colabs_data.append({
+                    "nombre": c_name, "horas": h_p, "inter": inter, "conv": conv, "conv_pct": conv_pct,
+                    "vta": vta_c, "ana": ana_c, "demos": wea_demos, "wea": wea_c, "wea_conv_pct": wea_conv_pct,
+                    "kids": kid_c, "ck": ck_c
+                })
+
+            tot_conv_pct_gen = (tot_cierre_conv / tot_cierre_inter * 100.0) if tot_cierre_inter > 0 else 0.0
+            tot_wea_conv_gen = (tot_cierre_wea / tot_cierre_demos * 100.0) if tot_cierre_demos > 0 else 0.0
+            crec_conv_gen = tot_conv_pct_gen - (meta_conversion * 100.0)
+            tot_unidades_cierre_sem = tot_cierre_ana + tot_cierre_wea + tot_cierre_kids + tot_cierre_ck
+            wea_pct_real = (tot_cierre_wea / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+            kids_pct_real = (tot_cierre_kids / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+            ck_pct_real = (tot_cierre_ck / tot_unidades_cierre_sem * 100.0) if tot_unidades_cierre_sem > 0 else 0.0
+
+            # Table 2: TOTAL DE SEMANA (y: 244.8 .. 251.6)
+            y_tot1, y_tot2 = 244.8, 251.6
+            clear_and_write(p_sem, fitz.Rect(104.0, y_tot1, 134.7, y_tot2), f"${tot_meta_sem:,.0f}", fontsize=5.2, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(134.7, y_tot1, 170.9, y_tot2), f"${tot_cierre_vta:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(170.9, y_tot1, 209.1, y_tot2), "SEMANAL", fontsize=5.2, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, y_tot1, 252.8, y_tot2), f"{tot_unidades_cierre_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(252.8, y_tot1, 279.5, y_tot2), f"{tot_conv_pct_gen:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(279.5, y_tot1, 331.9, y_tot2), f"{crec_conv_gen:+.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, y_tot1, 357.5, y_tot2), f"{wea_pct_real:.1f}%", fontsize=5.5, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(357.5, y_tot1, 386.7, y_tot2), f"{kids_pct_real:.1f}%", fontsize=5.5, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(386.7, y_tot1, 414.0, y_tot2), f"{ck_pct_real:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+
+            # Table 3: SEGUIMIENTO CIERRE POR COLABORADOR (8 rows + TOTAL)
+            for idx in range(8):
+                y1 = 285.3 + idx * 9.47
+                y2 = y1 + 9.0
+                if idx < len(cierre_colabs_data):
+                    cd = cierre_colabs_data[idx]
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 104.0, y2), cd["nombre"], fontsize=5.5, fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(104.0, y1, 134.7, y2), f"{cd['horas']:.1f}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), f"{cd['inter']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), f"{cd['conv']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), f"{cd['conv_pct']:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), f"${cd['vta']:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), f"{cd['ana']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), f"{cd['demos']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(331.9, y1, 357.5, y2), f"{cd['wea']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(357.5, y1, 386.7, y2), f"{cd['wea_conv_pct']:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(386.7, y1, 414.0, y2), f"{cd['kids']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                    clear_and_write(p_sem, fitz.Rect(414.0, y1, 444.6, y2), f"{cd['ck']}", fontsize=5.5, fill=C_WHITE, align_center=True)
+                else:
+                    clear_and_write(p_sem, fitz.Rect(51.0, y1, 104.0, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(104.0, y1, 134.7, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(134.7, y1, 170.9, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(170.9, y1, 209.1, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(209.1, y1, 252.8, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(252.8, y1, 279.5, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(279.5, y1, 305.4, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(305.4, y1, 331.9, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(331.9, y1, 357.5, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(357.5, y1, 386.7, y2), "", fill=C_GREEN_CELL)
+                    clear_and_write(p_sem, fitz.Rect(386.7, y1, 414.0, y2), "", fill=C_WHITE)
+                    clear_and_write(p_sem, fitz.Rect(414.0, y1, 444.6, y2), "", fill=C_WHITE)
+
+            # Table 3 Total
+            yt1, yt2 = 361.1, 367.8
+            clear_and_write(p_sem, fitz.Rect(51.0, yt1, 104.0, yt2), "TOTAL", fontsize=5.8, fill=C_WHITE)
+            clear_and_write(p_sem, fitz.Rect(104.0, yt1, 134.7, yt2), f"{tot_cierre_hrs:.1f}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(134.7, yt1, 170.9, yt2), f"{tot_cierre_inter}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(170.9, yt1, 209.1, yt2), f"{tot_cierre_conv}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, yt1, 252.8, yt2), f"{tot_conv_pct_gen:.1f}%", fontsize=5.8, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(252.8, yt1, 279.5, yt2), f"${tot_cierre_vta:,.2f}", fontsize=5.0, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(279.5, yt1, 305.4, yt2), f"{tot_cierre_ana}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(305.4, yt1, 331.9, yt2), f"{tot_cierre_demos}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, yt1, 357.5, yt2), f"{tot_cierre_wea}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(357.5, yt1, 386.7, yt2), f"{tot_wea_conv_gen:.1f}%", fontsize=5.8, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(386.7, yt1, 414.0, yt2), f"{tot_cierre_kids}", fontsize=5.8, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(414.0, yt1, 444.6, yt2), f"{tot_cierre_ck}", fontsize=5.8, fill=C_WHITE, align_center=True)
+
+            doc_sem.save(out_pdf_path)
+            doc_sem.close()
+            return out_pdf_path if os.path.exists(out_pdf_path) else None
+
+        dia_base = "DOMINGO"
+        for d in DIAS:
+            if d in target_sheet.upper():
+                dia_base = d
+                break
+
+        d_data = s_state.get(dia_base, {}) if isinstance(s_state.get(dia_base), dict) else {}
+        c = calcular_dia(dia_base, user_id)
+        if not isinstance(c, dict):
+            c = {}
+
+        t_dia = os.path.join(templates_dir, "template_dia.pdf")
+        t_plan = os.path.join(templates_dir, "template_plan.pdf")
+        if not os.path.exists(t_dia) or not os.path.exists(t_plan):
+            print(f"Error: no se encontraron las plantillas en {templates_dir}")
+            return None
+
+        doc_dia = fitz.open(t_dia)
+        doc_plan = fitz.open(t_plan)
+        p_dia = doc_dia[0]
+        p_plan = doc_plan[0]
+
+        # 1. Estampar datos Día
+        semana_str = str(g_meta.get("semana", "37"))
+        t_nombre = str(g_meta.get("tienda", "SGH")).strip()
+        t_num = str(g_meta.get("tienda_num", "3645")).strip()
+        tienda_str = f"{t_nombre} (#{t_num})" if t_num else t_nombre
+
+        clear_and_write(p_dia, fitz.Rect(255, 33, 290, 44), semana_str, fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(338, 33, 372, 44), dia_base, fontsize=7.5, fill=None, align_center=True)
+        
+        # Ajuste dinámico de fuente para que la tienda quede exactamente en el espacio x=400..433 sin tocar la caja verde
+        fs_t = 5.8
+        w_t = fitz.get_text_length(tienda_str, fontname="helv", fontsize=fs_t)
+        while w_t > 33.0 and fs_t > 3.5:
+            fs_t -= 0.3
+            w_t = fitz.get_text_length(tienda_str, fontname="helv", fontsize=fs_t)
+        x_tienda = 400.0 + max(0.0, (33.0 - w_t) / 2.0)
+        p_dia.insert_text(fitz.Point(x_tienda, 41.5), tienda_str, fontsize=fs_t, fontname="helv", color=(0,0,0))
+
+        m_dia = float(c.get("meta_diaria", 0.0) or 0.0)
+        clear_and_write(p_dia, fitz.Rect(104, 94, 134, 107), f"${m_dia:,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 109, 134, 122), f"${m_dia*0.85:,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 123, 134, 136), f"${m_dia*0.15:,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 138, 134, 151), f"{c.get('total_unidades', 0)}", fontsize=6.5, fill=None, align_right=True)
+
+        traf = c.get("trafico", 0)
+        conv = float(d_data.get("conversion_target", 0.15) or 0.15)
+        clear_and_write(p_dia, fitz.Rect(277, 94, 312, 107), f"{traf}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 109, 312, 122), f"{conv*100:.1f}%", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 123, 312, 136), f"{c.get('transacciones', 0)}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 138, 312, 151), f"${float(c.get('meta_ideal', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
+
+        clear_and_write(p_dia, fitz.Rect(445, 94, 468, 107), f"{c.get('wea_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 109, 468, 122), f"{c.get('kids_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 123, 468, 136), f"{c.get('ck_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
+
+        clear_and_write(p_dia, fitz.Rect(104, 195, 167, 209), f"${float(c.get('vta_neta_prod', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 209, 167, 222), f"{float(c.get('u_prod', 0.0) or 0.0):.2f}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(250, 195, 312, 209), f"${float(d_data.get('vta_ly', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+
+        clear_and_write(p_dia, fitz.Rect(345, 195, 400, 209), f"${float(d_data.get('atv_mtd', 7597.0) or 7597.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 195, 468, 209), f"${float(d_data.get('atv_dia', 3620.0) or 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(345, 222, 400, 236), f"${float(d_data.get('aur_mtd', 3362.0) or 3362.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 222, 468, 236), f"${float(d_data.get('aur_dia', 3620.0) or 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+
+        raw_b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20])
+        if not isinstance(raw_b_traf, list):
+            raw_b_traf = [10, 15, 20, 25, 20]
+        b_traf = [int(x or 0) for x in raw_b_traf[:5]]
+        tot_b = sum(b_traf)
+        b_xs = [77, 107, 137, 167, 197]
+        for i in range(5):
+            bt = b_traf[i] if i < len(b_traf) else 0
+            bx = b_xs[i]
+            clear_and_write(p_dia, fitz.Rect(bx, 269, bx+28, 282), f"{bt}", fontsize=6.5, fill=None, align_center=True)
+            p = (bt / tot_b * 100.0) if tot_b > 0 else 0.0
+            clear_and_write(p_dia, fitz.Rect(bx, 284, bx+28, 297), f"{p:.1f}%", fontsize=6.0, fill=None, align_center=True)
+            clear_and_write(p_dia, fitz.Rect(bx, 299, bx+28, 312), f"${(bt/tot_b*m_dia if tot_b>0 else 0):,.0f}", fontsize=5.5, fill=None, align_center=True)
+
+        clear_and_write(p_dia, fitz.Rect(228, 269, 255, 282), f"{tot_b}", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 284, 255, 297), "100%", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 299, 255, 312), f"${m_dia:,.0f}", fontsize=5.5, fill=None, align_center=True)
+
+        colab_rows = c.get("colab_rows", [])
+        active_colabs = [r for r in colab_rows if r.get("nombre", "").strip()]
+
+        for idx in range(8):
+            y_r = 363.0 + idx * 14.5
+            y_r2 = y_r + 13.0
+            if idx < len(active_colabs):
+                cr = active_colabs[idx]
+                c_nom = str(cr.get('nombre', '') or '')
+                c_hrs = float(cr.get('horas', 0.0) or 0.0)
+                c_vta = float(cr.get('meta_vta', 0.0) or 0.0)
+                c_ana = int(cr.get('meta_ana', 0) or 0)
+                c_wea = int(cr.get('meta_wea', 0) or 0)
+                c_kid = int(cr.get('meta_kid', 0) or 0)
+                c_ck = int(cr.get('meta_ck', 0) or 0)
+                clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), c_nom, fontsize=6.0, fill=None)
+                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), f"{c_hrs:.1f}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), f"${c_vta:,.2f}", fontsize=5.0, fill=None, align_right=True)
+                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), f"{c_ana}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), f"{c_wea}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), f"{c_kid}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), f"{c_ck}", fontsize=6.0, fill=None, align_center=True)
+            else:
+                clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), "", fill=None)
+                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), "", fill=None)
+
+        y_t = 480.0
+        y_t2 = 494.0
+        tot_hrs_val = float(c.get('tot_horas', 0.0) or 0.0)
+        tot_ana_val = sum(int(cr.get('meta_ana', 0) or 0) for cr in active_colabs)
+        tot_wea_val = sum(int(cr.get('meta_wea', 0) or 0) for cr in active_colabs)
+        tot_kid_val = sum(int(cr.get('meta_kid', 0) or 0) for cr in active_colabs)
+        tot_ck_val = sum(int(cr.get('meta_ck', 0) or 0) for cr in active_colabs)
+
+        clear_and_write(p_dia, fitz.Rect(105, y_t, 163, y_t2), f"{tot_hrs_val:.1f}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(164, y_t, 201, y_t2), f"${m_dia:,.2f}", fontsize=5.0, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(202, y_t, 252, y_t2), f"{tot_ana_val}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(253, y_t, 314, y_t2), f"{tot_wea_val}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(315, y_t, 343, y_t2), f"{tot_kid_val}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(344, y_t, 372, y_t2), f"{tot_ck_val}", fontsize=6.0, fill=None, align_center=True)
+
+        # 2. Estampar Plan de Acción
+        clear_and_write(p_plan, fitz.Rect(425, 68, 470, 80), semana_str, fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(508, 68, 560, 80), dia_base, fontsize=7.5, fill=None, align_center=True)
+
+        tot_h = max(tot_hrs_val, 0.1)
+        tot_unids = int(c.get('total_unidades', 0) or 0)
+        vta_prod = float(c.get('vta_neta_prod', 0.0) or 0.0)
+        u_prod_val = float(c.get('u_prod', 0.0) or 0.0)
+
+        clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{tot_hrs_val:.1f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(136, 160, 175, 175), f"${m_dia:,.0f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(176, 160, 215, 175), f"{tot_unids}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${vta_prod:,.0f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{u_prod_val:.2f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_h):,.2f} / hr", fontsize=7.5, fill=None, align_center=True)
+
+        # SMART (Líneas perfectamente alineadas)
+        clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), str(d_data.get("smart_especifico") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 698, 315, 707), str(d_data.get("smart_medible") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 707, 315, 716), str(d_data.get("smart_alcanzable") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 716, 315, 725), str(d_data.get("smart_reto") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 725, 315, 734), str(d_data.get("smart_tiempo") or ""), fontsize=6.0, fill=None)
+
+        # Tu enfoque para hoy
+        enf_hoy = str(d_data.get("enfoque_hoy") or "").strip()
+        if enf_hoy:
+            p_plan.insert_textbox(fitz.Rect(325, 688, 550, 734), enf_hoy, fontsize=6.8, fontname="helv", color=(0,0,0))
+
+        # 3. Componer en 2 páginas tamaño Carta Vertical 100% escala (Doble Cara / 1:1 original)
+        doc_out = fitz.open()
+        doc_out.insert_pdf(doc_dia)
+        doc_out.insert_pdf(doc_plan)
+
+        doc_out.save(out_pdf_path)
+        doc_dia.close()
+        doc_plan.close()
+        doc_out.close()
+
+        return out_pdf_path if os.path.exists(out_pdf_path) else None
+    except Exception as ex:
+        print("Error en generar_pdf_enfoque_vectorial:", ex)
+        import traceback
+        traceback.print_exc()
+        return None
+
 def generar_excel_enfoque(d_name, user_id, page=None):
     return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False)
 
 def generar_pdf_enfoque_file(d_name, user_id):
-    return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=True)
+    uploads_dir = os.path.abspath(os.path.join(BASE_PATH, "uploads"))
+    os.makedirs(uploads_dir, exist_ok=True)
+    clean_sheet_name = sanitize_filename(map_to_excel_sheet(d_name))
+    web_pdf_path = os.path.abspath(os.path.join(uploads_dir, f"Enfoque_Diario_{clean_sheet_name}_SGH_2026.pdf"))
+
+    # Generación vectorial nativa 100% de alta velocidad con PyMuPDF (Calibración exacta 1:1)
+    try:
+        if os.path.exists(web_pdf_path):
+            try: os.remove(web_pdf_path)
+            except Exception: pass
+        vec_res = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
+        if vec_res and os.path.exists(vec_res):
+            return vec_res
+    except Exception as ex_v:
+        print("Error en generar_pdf_enfoque_file:", ex_v)
+
+    return web_pdf_path if os.path.exists(web_pdf_path) else None
+
+def generar_html_impresion(d_name, user_id):
+    """
+    Genera una réplica visual 100% exacta del formato oficial Excel SGH 2026.
+    Diseñado para impresión perfecta y exportación PDF idéntica a la hoja física de Excel.
+    """
+    user_id = str(user_id)
+    if user_id not in user_states:
+        init_user_state(user_id)
+        cargar_estado_persistente(user_id)
+        
+    g_meta = user_states[user_id]["global_meta"]
+    s_state = user_states[user_id]["store_state"]
+    target_sheet = map_to_excel_sheet(d_name)
+    
+    tienda = g_meta.get("tienda", "LUXO SGH")
+    tienda_num = g_meta.get("tienda_num", "3645")
+    semana = g_meta.get("semana", 37)
+    fecha = g_meta.get("fecha", "")
+
+    es_plan = "PLAN" in target_sheet.upper()
+    es_semanal = target_sheet.upper() == "SEMANAL"
+    
+    dia_base = "DOMINGO"
+    if not es_semanal:
+        for d in DIAS:
+            if d in target_sheet.upper():
+                dia_base = d
+                break
+
+    css = """
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #1a1c23;
+            color: #000;
+            padding: 15px;
+            font-size: 11px;
+        }
+        .action-bar {
+            max-width: 1200px;
+            margin: 0 auto 15px auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0d1117;
+            padding: 10px 18px;
+            border-radius: 6px;
+            color: #fff;
+            border: 1px solid #30363d;
+        }
+        .btn {
+            background: #d4a373;
+            color: #000;
+            font-weight: bold;
+            border: none;
+            padding: 7px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { background: #b08968; }
+        .btn-outline {
+            background: transparent;
+            color: #fff;
+            border: 1px solid #4a5568;
+        }
+        .excel-sheet {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border: 1px solid #999;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .excel-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+            font-size: 10px;
+        }
+        .excel-table td, .excel-table th {
+            border: 1px solid #000000;
+            padding: 3px 5px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .th-main {
+            background-color: #000000;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        .th-red {
+            background-color: #8b0000;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .th-gray {
+            background-color: #333333;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .th-light-gray {
+            background-color: #e6e6e6;
+            color: #000000;
+            font-weight: bold;
+        }
+        .th-yellow {
+            background-color: #fff2cc;
+            color: #000000;
+            font-weight: bold;
+        }
+        .td-lbl {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            text-align: left !important;
+            padding-left: 6px;
+        }
+        .td-val {
+            background-color: #ffffff;
+            font-weight: bold;
+            text-align: right !important;
+            padding-right: 6px;
+        }
+        .td-val-c {
+            background-color: #ffffff;
+            text-align: center;
+        }
+        .td-tot {
+            background-color: #d9d9d9;
+            font-weight: bold;
+        }
+        .top-banner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 2px solid #000;
+            padding: 6px 12px;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+        .top-banner-title {
+            font-size: 16px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+        }
+        .top-banner-meta {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .sec-title {
+            background: #000000;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 4px 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+        .sec-title-red {
+            background: #8b0000;
+            color: #ffffff;
+            font-weight: bold;
+            padding: 4px 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+        .grid-3col {
+            display: grid;
+            grid-template-columns: 1fr 1.1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .smart-box {
+            border: 1px solid #000;
+            margin-bottom: 6px;
+        }
+        .smart-box-h {
+            background: #222;
+            color: #fff;
+            font-weight: bold;
+            padding: 3px 6px;
+            font-size: 10px;
+        }
+        .smart-box-b {
+            padding: 6px 8px;
+            font-size: 10px;
+            min-height: 38px;
+            background: #fafafa;
+        }
+        .note-text {
+            font-size: 8px;
+            color: #555;
+            font-style: italic;
+            padding: 2px 4px;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #ffffff !important; padding: 0 !important; font-size: 9px; }
+            .excel-sheet { border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }
+            .excel-table td, .excel-table th { padding: 2px 3px !important; }
+            @page { size: letter landscape; margin: 5mm; }
+        }
+    </style>
+    """
+
+    body_html = ""
+
+    if es_semanal:
+        # === VISTA SEMANAL EXACTA DE EXCEL ===
+        meta_sem = float(g_meta.get("meta_semanal_dinero", 0.0) or 0.0)
+        u_sem = int(g_meta.get("meta_semanal_u", 0) or 0)
+        aur_sem = float(g_meta.get("aur", 3620.0) or 3620.0)
+        ly_sem = float(g_meta.get("ly_dinero", 0.0) or 0.0)
+        
+        tot_dias_meta = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) for d in DIAS)
+        if tot_dias_meta > 0 and meta_sem == 0:
+            meta_sem = tot_dias_meta
+
+        body_html += f"""
+        <div class="top-banner">
+            <div class="top-banner-title">ENFOQUE SEMANAL &bull; {tienda} (#{tienda_num})</div>
+            <div class="top-banner-meta">Semana: {semana} {f'&bull; {fecha}' if fecha else ''}</div>
+        </div>
+
+        <div class="sec-title-red">¿QUÉ ESPERAMOS LOGRAR ESTA SEMANA?</div>
+
+        <div class="grid-3col">
+            <!-- COL 1 -->
+            <table class="excel-table">
+                <tr><th colspan="2" class="th-gray">SEMANAL</th></tr>
+                <tr><td class="td-lbl">META SEMANAL</td><td class="td-val">${meta_sem:,.2f}</td></tr>
+                <tr><td class="td-lbl">ANÁLOGOS (85%)</td><td class="td-val">${meta_sem*0.85:,.2f}</td></tr>
+                <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">${meta_sem*0.15:,.2f}</td></tr>
+                <tr><td class="td-lbl">TOTAL DE UNIDADES</td><td class="td-val">{u_sem:,} u</td></tr>
+            </table>
+
+            <!-- COL 2 -->
+            <table class="excel-table">
+                <tr><th colspan="2" class="th-gray">CONVERSIÓN SEMANAL</th></tr>
+                <tr><td class="td-lbl">TRÁFICO ESPERADO</td><td class="td-val">{sum(s_state[d].get('trafico_esperado', 0) for d in DIAS)}</td></tr>
+                <tr><td class="td-lbl">META DE CONVERSIÓN</td><td class="td-val">{g_meta.get('conversion_target', 0.15)*100:.1f}%</td></tr>
+                <tr><td class="td-lbl">META TRANSACCIONES</td><td class="td-val">{math.ceil(sum(s_state[d].get('trafico_esperado', 0) for d in DIAS)*g_meta.get('conversion_target', 0.15))}</td></tr>
+                <tr><td class="td-lbl">META IDEAL (NS)*</td><td class="td-val">${meta_sem*1.10:,.2f}</td></tr>
+            </table>
+
+            <!-- COL 3 -->
+            <table class="excel-table">
+                <tr><th colspan="2" class="th-gray">OTROS NO NEGOCIABLES / COMP LY</th></tr>
+                <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">{math.ceil(u_sem*0.15)} u</td></tr>
+                <tr><td class="td-lbl">KIDS (5%)</td><td class="td-val">{math.ceil(u_sem*0.05)} u</td></tr>
+                <tr><td class="td-lbl">CAREKITS (30%)</td><td class="td-val">{math.ceil(u_sem*0.30)} u</td></tr>
+                <tr><td class="td-lbl">VENTA NETA LY (NS)</td><td class="td-val">${ly_sem:,.2f}</td></tr>
+            </table>
+        </div>
+
+        <div class="sec-title">DESGLOSE DIARIO DE LA SEMANA</div>
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray">DÍA</th>
+                    <th class="th-gray">META DIARIA</th>
+                    <th class="th-gray">VENTA LY</th>
+                    <th class="th-gray">CRECIMIENTO %</th>
+                    <th class="th-gray">AUR</th>
+                    <th class="th-gray">UNIDADES</th>
+                    <th class="th-gray">TRÁFICO</th>
+                    <th class="th-gray">CONVERSIÓN</th>
+                    <th class="th-gray">HORAS PISO</th>
+                    <th class="th-gray">PROD $/H</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        tot_ly = 0.0
+        tot_u = 0
+        tot_tr = 0
+        tot_h = 0.0
+        for d in DIAS:
+            c = calcular_dia(d, user_id)
+            d_data = s_state[d]
+            m_dia = c.get("meta_diaria", 0.0)
+            v_ly = d_data.get("vta_ly", 0.0)
+            aur = float(d_data.get("aur_dia", aur_sem) or aur_sem)
+            u_dia = c.get("total_unidades", 0)
+            traf = c.get("trafico", 0)
+            conv = d_data.get("conversion_target", 0.15)
+            hrs = c.get("tot_horas", 0.0)
+            prod = c.get("vta_neta_prod", 0.0)
+            crec = ((m_dia - v_ly) / v_ly * 100.0) if v_ly > 0 else 0.0
+
+            tot_ly += v_ly
+            tot_u += u_dia
+            tot_tr += traf
+            tot_h += hrs
+
+            body_html += f"""
+                <tr>
+                    <td class="td-lbl">{d}</td>
+                    <td class="td-val">${m_dia:,.2f}</td>
+                    <td class="td-val">${v_ly:,.2f}</td>
+                    <td class="td-val-c">{crec:+.1f}%</td>
+                    <td class="td-val">${aur:,.2f}</td>
+                    <td class="td-val-c">{u_dia}</td>
+                    <td class="td-val-c">{traf}</td>
+                    <td class="td-val-c">{conv*100:.1f}%</td>
+                    <td class="td-val-c">{hrs:.1f}</td>
+                    <td class="td-val">${prod:,.2f}</td>
+                </tr>
+            """
+        tot_crec = ((meta_sem - tot_ly) / tot_ly * 100.0) if tot_ly > 0 else 0.0
+        tot_prod = (meta_sem / tot_h) if tot_h > 0 else 0.0
+        body_html += f"""
+                <tr class="td-tot">
+                    <td>TOTAL SEMANAL</td>
+                    <td class="td-val">${meta_sem:,.2f}</td>
+                    <td class="td-val">${tot_ly:,.2f}</td>
+                    <td class="td-val-c">{tot_crec:+.1f}%</td>
+                    <td class="td-val">${aur_sem:,.2f}</td>
+                    <td class="td-val-c">{tot_u}</td>
+                    <td class="td-val-c">{tot_tr}</td>
+                    <td class="td-val-c">-</td>
+                    <td class="td-val-c">{tot_h:.1f}</td>
+                    <td class="td-val">${tot_prod:,.2f}</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+
+    elif es_plan:
+        # === VISTA PLAN DE ACCIÓN EXACTA DE EXCEL ===
+        c = calcular_dia(dia_base, user_id)
+        d_data = s_state[dia_base]
+        
+        esp = d_data.get("smart_especifico", "Cumplir y superar la meta diaria asignada maximizando la tasa de conversión y el ticket promedio.")
+        med = d_data.get("smart_medible", f"Alcanzar ${c.get('meta_diaria', 0.0):,.2f} y {c.get('total_unidades', 0)} unidades vendidas.")
+        alc = d_data.get("smart_alcanzable", f"Equipo de {len([x for x in d_data.get('colaboradores', []) if x.get('nombre', '').strip()])} asesores cubriendo {c.get('tot_horas', 0.0):.1f} horas de piso de venta.")
+        ret = d_data.get("smart_reto", "Vender mínimo 1 par de Wearables y 1 CareKit por colaborador en cada turno.")
+        tie = d_data.get("smart_tiempo", f"Jornada del día {dia_base} con revisiones de avance por cada bloque de tráfico.")
+
+        body_html += f"""
+        <div class="top-banner">
+            <div class="top-banner-title">ENFOQUE DIARIO! - Nuestro plan de acción &bull; {tienda} (#{tienda_num})</div>
+            <div class="top-banner-meta">Semana: {semana} &bull; Día: {dia_base}</div>
+        </div>
+
+        <div class="sec-title-red">¿QUÉ ESPERAMOS PARA EL DÍA DE HOY?</div>
+
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray">HORAS PROGRAMADAS</th>
+                    <th class="th-gray">META (NS)</th>
+                    <th class="th-gray">META PIEZAS</th>
+                    <th class="th-gray">META (NS) PRODUCTIVIDAD</th>
+                    <th class="th-gray">META UNIDADES PRODUCTIVIDAD</th>
+                    <th class="th-gray">¿Cuál debe ser nuestro ritmo de venta hoy?</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="td-val-c font-bold">{c.get('tot_horas', 0.0):.1f}</td>
+                    <td class="td-val font-bold">${c.get('meta_diaria', 0.0):,.2f}</td>
+                    <td class="td-val-c font-bold">{c.get('total_unidades', 0)}</td>
+                    <td class="td-val font-bold">${c.get('vta_neta_prod', 0.0):,.2f}</td>
+                    <td class="td-val-c font-bold">{c.get('u_prod', 0.0):.2f}</td>
+                    <td class="td-val font-bold">${(c.get('meta_diaria', 0.0)/max(c.get('tot_horas', 1.0),1.0)):,.2f} / hr</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="grid-2col">
+            <!-- ESTÁNDARES & NO NEGOCIABLES -->
+            <div>
+                <div class="sec-title">NUESTROS ESTÁNDARES</div>
+                <table class="excel-table">
+                    <tr><td class="td-lbl">1. LIMPIEZA DE LA TIENDA</td><td style="text-align:left; font-size:9px;">Barre, limpia y desinfecta. Tienda impecable, aparadores y espejos.</td></tr>
+                    <tr><td class="td-lbl">2. IMAGEN PERSONAL</td><td style="text-align:left; font-size:9px;">Embajadores de la marca, imagen alineada a valores Sunglass Hut.</td></tr>
+                    <tr><td class="td-lbl">3. REÚNETE CON EL EQUIPO</td><td style="text-align:left; font-size:9px;">Junta matutina: metas del día, avances y acciones clave.</td></tr>
+                </table>
+            </div>
+            <div>
+                <div class="sec-title">NUESTROS NO NEGOCIABLES</div>
+                <table class="excel-table">
+                    <tr><td class="td-lbl">1. ENTRADA Y SALIDA</td><td style="text-align:left; font-size:9px;">Registrar puntualidad exacta; impacta en la productividad.</td></tr>
+                    <tr><td class="td-lbl">2. SIN CELULARES</td><td style="text-align:left; font-size:9px;">Evitar uso de teléfono personal en piso de venta.</td></tr>
+                    <tr><td class="td-lbl">3. FUERA DE CAJA / ZONAS</td><td style="text-align:left; font-size:9px;">Mantente en piso atrayendo clientes y respetando tu zona.</td></tr>
+                    <tr><td class="td-lbl">4. SEGUIMIENTO CONTINUO</td><td style="text-align:left; font-size:9px;">Monitorear Store Dashboard y reaccionar oportunamente.</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="sec-title">TU ENFOQUE PARA HOY &bull; METODOLOGÍA S.M.A.R.T.</div>
+        <div style="border: 1px solid #000; padding: 8px; margin-bottom: 12px; background: #fff;">
+            <div class="smart-box"><div class="smart-box-h">S: ESPECÍFICO</div><div class="smart-box-b">{esp}</div></div>
+            <div class="smart-box"><div class="smart-box-h">M: MEDIBLE</div><div class="smart-box-b">{med}</div></div>
+            <div class="smart-box"><div class="smart-box-h">A: ALCANZABLE</div><div class="smart-box-b">{alc}</div></div>
+            <div class="smart-box"><div class="smart-box-h">R: RETO</div><div class="smart-box-b">{ret}</div></div>
+            <div class="smart-box"><div class="smart-box-h">T: TIEMPO</div><div class="smart-box-b">{tie}</div></div>
+        </div>
+        """
+
+    else:
+        # === VISTA DÍA EXACTA DE EXCEL (DOMINGO, LUNES, ETC.) ===
+        c = calcular_dia(dia_base, user_id)
+        d_data = s_state[dia_base]
+        
+        m_dia = c.get("meta_diaria", 0.0)
+        v_ly = d_data.get("vta_ly", 0.0)
+        aur = float(d_data.get("aur_dia", 3620.0) or 3620.0)
+        u_dia = c.get("total_unidades", 0)
+        traf = c.get("trafico", 0)
+        conv = d_data.get("conversion_target", 0.15)
+        hrs = c.get("tot_horas", 0.0)
+        prod_din = c.get("vta_neta_prod", 0.0)
+        prod_u = c.get("u_prod", 0.0)
+
+        body_html += f"""
+        <div class="top-banner">
+            <div class="top-banner-title">ENFOQUE DIARIO! - Nuestra meta &bull; {tienda} (#{tienda_num})</div>
+            <div class="top-banner-meta">Semana: {semana} &bull; Día: {dia_base}</div>
+        </div>
+
+        <div class="sec-title-red">¿QUÉ ESPERAMOS LOGRAR HOY?</div>
+
+        <!-- 3 COLUMNAS SUPERIORES DE EXCEL -->
+        <div class="grid-3col">
+            <!-- COL 1: META DEL DÍA & PRODUCTIVIDAD -->
+            <div>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">META DEL DÍA</th></tr>
+                    <tr><td class="td-lbl">META DIARIA</td><td class="td-val">${m_dia:,.2f}</td></tr>
+                    <tr><td class="td-lbl">ANÁLOGOS (85%)</td><td class="td-val">${m_dia*0.85:,.2f}</td></tr>
+                    <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">${m_dia*0.15:,.2f}</td></tr>
+                    <tr><td class="td-lbl">TOTAL DE UNIDADES</td><td class="td-val">{u_dia} u</td></tr>
+                </table>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">META DE PRODUCTIVIDAD</th></tr>
+                    <tr><td class="td-lbl">VENTA NETA (NS)</td><td class="td-val">${prod_din:,.2f}</td></tr>
+                    <tr><td class="td-lbl">UNIDADES</td><td class="td-val">{prod_u:.2f}</td></tr>
+                </table>
+            </div>
+
+            <!-- COL 2: CONVERSIÓN & COMP LY -->
+            <div>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">CONVERSIÓN (NO NEGOCIABLE)</th></tr>
+                    <tr><td class="td-lbl">TRÁFICO ESPERADO</td><td class="td-val">{traf}</td></tr>
+                    <tr><td class="td-lbl">META DE CONVERSIÓN (LY+1P.P)</td><td class="td-val">{conv*100:.1f}%</td></tr>
+                    <tr><td class="td-lbl">META TRANSACCIONES</td><td class="td-val">{c.get('transacciones', 0)}</td></tr>
+                    <tr><td class="td-lbl">META IDEAL (NS)*</td><td class="td-val">${c.get('meta_ideal', 0.0):,.2f}</td></tr>
+                </table>
+                <div class="note-text">*Si tienes adeudo en la semana puedes ajustar la meta ideal.</div>
+                <table class="excel-table" style="margin-top:4px;">
+                    <tr><th colspan="2" class="th-gray">COMP LY</th></tr>
+                    <tr><td class="td-lbl">VENTA NETA LY (NS)</td><td class="td-val">${v_ly:,.2f}</td></tr>
+                </table>
+            </div>
+
+            <!-- COL 3: OTROS NO NEGOCIABLES & MTD -->
+            <div>
+                <table class="excel-table">
+                    <tr><th colspan="2" class="th-gray">OTROS NO NEGOCIABLES</th></tr>
+                    <tr><td class="td-lbl">WEARABLES (15%)</td><td class="td-val">{c.get('wea_unid_meta', 1)} u</td></tr>
+                    <tr><td class="td-lbl">KIDS (5%)</td><td class="td-val">{c.get('kids_unid_meta', 1)} u</td></tr>
+                    <tr><td class="td-lbl">CAREKITS (30%)</td><td class="td-val">{c.get('ck_unid_meta', 1)} u</td></tr>
+                </table>
+                <div class="note-text">*Si unidades dan &lt;0, objetivo mínimo 1 unidad.</div>
+                <table class="excel-table" style="margin-top:4px;">
+                    <tr><th colspan="2" class="th-gray">VALORES ACUMULADOS MES (MTD)</th></tr>
+                    <tr><td class="td-lbl">AUR ESPERADO</td><td class="td-val">${aur:,.2f}</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- BLOQUE 2: TRÁFICO POR HORA -->
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray" style="width:22%;">HORARIO</th>
+                    <th class="th-gray">APERTURA-12pm</th>
+                    <th class="th-gray">1pm - 2pm</th>
+                    <th class="th-gray">3pm - 4pm</th>
+                    <th class="th-gray">5pm - 6pm</th>
+                    <th class="th-gray">7pm - CIERRE</th>
+                    <th class="th-gray">TOTAL</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="td-lbl">TRÁFICO POR HORA</td>
+        """
+        b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20, 10])
+        # Asegurar 5 bloques para coincidir con la vista clásica de Excel si vienen 6
+        if len(b_traf) >= 5:
+            b_show = b_traf[:5]
+        else:
+            b_show = b_traf + [0]*(5-len(b_traf))
+
+        for bt in b_show:
+            body_html += f"<td class=\"td-val-c\">{bt}</td>"
+        body_html += f"<td class=\"td-val-c font-bold\">{sum(b_show)}</td></tr><tr><td class=\"td-lbl\">PESO DEL TRÁFICO (%)</td>"
+
+        tot_b = sum(b_show)
+        for bt in b_show:
+            p = (bt / tot_b * 100.0) if tot_b > 0 else 0.0
+            body_html += f"<td class=\"td-val-c\">{p:.1f}%</td>"
+        body_html += f"<td class=\"td-val-c font-bold\">100%</td></tr><tr><td class=\"td-lbl\">META (NS) X HORA</td>"
+
+        for bt in b_show:
+            p = (bt / tot_b) if tot_b > 0 else 0.0
+            body_html += f"<td class=\"td-val\">${(p*m_dia):,.2f}</td>"
+        body_html += f"<td class=\"td-val font-bold\">${m_dia:,.2f}</td></tr></tbody></table>"
+
+        # BLOQUE 3: TABLA DE COLABORADORES
+        body_html += f"""
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray" style="width:25%;">COLABORADORES</th>
+                    <th class="th-gray">HORAS PROGRAMADAS</th>
+                    <th class="th-gray">META DE VENTA</th>
+                    <th class="th-gray">ANÁLOGOS POR VENDER</th>
+                    <th class="th-gray">WEARABLES POR VENDER</th>
+                    <th class="th-gray">KIDS POR VENDER</th>
+                    <th class="th-gray">CK POR VENDER</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        colab_rows = c.get("colab_rows", [])
+        active_colabs = [r for r in colab_rows if r.get("nombre", "").strip()]
+        for i in range(8):
+            if i < len(active_colabs):
+                cr = active_colabs[i]
+                body_html += f"""
+                <tr>
+                    <td class="td-lbl" style="text-align:left;">{cr.get('nombre')}</td>
+                    <td class="td-val-c">{cr.get('horas', 0):.1f}</td>
+                    <td class="td-val">${cr.get('meta_vta', 0.0):,.2f}</td>
+                    <td class="td-val-c">{cr.get('meta_ana', 0)}</td>
+                    <td class="td-val-c">{cr.get('meta_wea', 0)}</td>
+                    <td class="td-val-c">{cr.get('meta_kid', 0)}</td>
+                    <td class="td-val-c">{cr.get('meta_ck', 0)}</td>
+                </tr>
+                """
+            else:
+                body_html += "<tr><td class='td-lbl'>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+        
+        body_html += f"""
+                <tr class="td-tot">
+                    <td style="text-align:left;">TOTAL</td>
+                    <td class="td-val-c">{hrs:.1f}</td>
+                    <td class="td-val">${m_dia:,.2f}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_ana', 0) for cr in active_colabs)}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_wea', 0) for cr in active_colabs)}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_kid', 0) for cr in active_colabs)}</td>
+                    <td class="td-val-c">{sum(cr.get('meta_ck', 0) for cr in active_colabs)}</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+
+        # BLOQUE 4: ¿CÓMO VAMOS?
+        body_html += f"""
+        <div class="sec-title-red">¿CÓMO VAMOS?</div>
+
+        <!-- TOTAL DEL DÍA (RESUMEN) -->
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray">TOTAL DEL DÍA</th>
+                    <th class="th-gray">META</th>
+                    <th class="th-gray">VENTA NETA</th>
+                    <th class="th-gray">META UNIDADES</th>
+                    <th class="th-gray">VENTA UNIDADES</th>
+                    <th class="th-gray">CONVERSIÓN (%)</th>
+                    <th class="th-gray">CRECIMIENTO CONVERSIÓN (%)</th>
+                    <th class="th-gray">WEARABLES %</th>
+                    <th class="th-gray">KIDS %</th>
+                    <th class="th-gray">CAREKITS %</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="td-lbl">RESULTADOS</td>
+                    <td class="td-val">${m_dia:,.2f}</td>
+                    <td class="td-val">${c.get('tot_vta_cierre', 0.0):,.2f}</td>
+                    <td class="td-val-c">{u_dia}</td>
+                    <td class="td-val-c">{c.get('tot_ana_cierre', 0) + c.get('tot_wea_cierre', 0)}</td>
+                    <td class="td-val-c">{c.get('conversion_dia', 0.0)*100:.1f}%</td>
+                    <td class="td-val-c">{c.get('crecimiento_conversion', 0.0)*100:+.1f}%</td>
+                    <td class="td-val-c">{c.get('wearables_pct', 0.0)*100:.1f}%</td>
+                    <td class="td-val-c">{c.get('kids_pct', 0.0)*100:.1f}%</td>
+                    <td class="td-val-c">{c.get('carekits_pct', 0.0)*100:.1f}%</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- DETALLE COLABORADOR CIERRE -->
+        <table class="excel-table">
+            <thead>
+                <tr>
+                    <th class="th-gray">COLABORADOR</th>
+                    <th class="th-gray">HORAS PROGRAMADAS</th>
+                    <th class="th-gray">INTERACCIONES DURANTE EL DÍA</th>
+                    <th class="th-gray">CLIENTES CONVERTIDOS</th>
+                    <th class="th-gray">CONVERSIÓN AL CIERRE</th>
+                    <th class="th-gray">VENTA NETA AL CIERRE</th>
+                    <th class="th-gray">UNIDADES ANÁLOGAS</th>
+                    <th class="th-gray">DEMOSTRACIONES WEARABLES</th>
+                    <th class="th-gray">UNIDADES WEARABLES</th>
+                    <th class="th-gray">CONVERSIÓN WEARABLE</th>
+                    <th class="th-gray">KIDS AL CIERRE</th>
+                    <th class="th-gray">CAREKITS AL CIERRE</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        for i in range(8):
+            if i < len(active_colabs):
+                cr = active_colabs[i]
+                inter = cr.get("interacciones", 0)
+                conv_n = cr.get("convertidos", 0)
+                conv_p = (conv_n / inter * 100.0) if inter > 0 else 0.0
+                wea_d = cr.get("wea_demos", 0)
+                wea_c = cr.get("wea_cierre", 0)
+                conv_w = (wea_c / wea_d * 100.0) if wea_d > 0 else 0.0
+                body_html += f"""
+                <tr>
+                    <td class="td-lbl" style="text-align:left;">{cr.get('nombre')}</td>
+                    <td class="td-val-c">{cr.get('horas', 0):.1f}</td>
+                    <td class="td-val-c">{inter}</td>
+                    <td class="td-val-c">{conv_n}</td>
+                    <td class="td-val-c">{conv_p:.1f}%</td>
+                    <td class="td-val">${cr.get('vta_cierre', 0.0):,.2f}</td>
+                    <td class="td-val-c">{cr.get('ana_cierre', 0)}</td>
+                    <td class="td-val-c">{wea_d}</td>
+                    <td class="td-val-c">{wea_c}</td>
+                    <td class="td-val-c">{conv_w:.1f}%</td>
+                    <td class="td-val-c">{cr.get('kid_cierre', 0)}</td>
+                    <td class="td-val-c">{cr.get('ck_cierre', 0)}</td>
+                </tr>
+                """
+            else:
+                body_html += "<tr><td class='td-lbl'>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"
+
+        body_html += f"""
+                <tr class="td-tot">
+                    <td style="text-align:left;">TOTAL</td>
+                    <td class="td-val-c">{hrs:.1f}</td>
+                    <td class="td-val-c">{c.get('tot_interacciones', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_convertidos', 0)}</td>
+                    <td class="td-val-c">{c.get('conversion_dia', 0.0)*100:.1f}%</td>
+                    <td class="td-val">${c.get('tot_vta_cierre', 0.0):,.2f}</td>
+                    <td class="td-val-c">{c.get('tot_ana_cierre', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_wea_demos', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_wea_cierre', 0)}</td>
+                    <td class="td-val-c">-</td>
+                    <td class="td-val-c">{c.get('tot_kid_cierre', 0)}</td>
+                    <td class="td-val-c">{c.get('tot_ck_cierre', 0)}</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enfoque Diario - {target_sheet} - {tienda}</title>
+    {css}
+</head>
+<body>
+    <div class="action-bar no-print">
+        <div>
+            <strong style="color:#d4a373; font-size:13px;">SUNGLASS HUT &bull; ENFOQUE DIARIO 2026</strong> &bull; Hoja Oficial ({target_sheet})
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+            <a class="btn btn-outline" href="/api/download_excel/{target_sheet}?user_id={user_id}">📥 Descargar Excel (.xlsx)</a>
+        </div>
+    </div>
+
+    <div class="excel-sheet">
+        {body_html}
+    </div>
+</body>
+</html>
+    """
 
 def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     """
@@ -1243,7 +2698,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         except Exception:
             pass
             
-        page.update()
+        try:
+            tab_content_container.update()
+        except Exception:
+            try: page.update()
+            except Exception: pass
 
     # Callback al modificar celdas globales de Semana/Tienda
     def on_global_header_change(e):
@@ -1258,6 +2717,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         calc = calcular_dia(d_name, user_id)
         data = s_state[d_name]
         green_txts = {}
+        white_input_fields = {}
         is_mobile = (page.width < 800) if (page and getattr(page, "width", None)) else False
         cell_font_size = 10 if is_mobile else 11
         cell_height = 28 if is_mobile else 32
@@ -1280,56 +2740,66 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         def sync_green_cells():
             c = calcular_dia(d_name, user_id)
-            if "analogos" in green_txts: green_txts["analogos"].value = f"${c['analogos']:,.2f}"
-            if "wearables" in green_txts: green_txts["wearables"].value = f"${c['wearables']:,.2f}"
-            if "total_unidades" in green_txts: green_txts["total_unidades"].value = f"{c['total_unidades']} Pza"
-            if "transacciones" in green_txts: green_txts["transacciones"].value = f"{c['transacciones']} Transac."
-            if "meta_ideal" in green_txts: green_txts["meta_ideal"].value = f"${c['meta_ideal']:,.2f}"
-            if "vta_neta_prod" in green_txts: green_txts["vta_neta_prod"].value = f"${c['vta_neta_prod']:,.2f}"
-            if "u_prod" in green_txts: green_txts["u_prod"].value = f"{c['u_prod']}"
-            if "tot_trafico_b" in green_txts: green_txts["tot_trafico_b"].value = str(c["tot_trafico_b"])
+            updated_controls = []
+            def _set_txt(k, v_str):
+                if k in green_txts and green_txts[k].value != v_str:
+                    green_txts[k].value = v_str
+                    updated_controls.append(green_txts[k])
+
+            _set_txt("analogos", f"${c['analogos']:,.2f}")
+            _set_txt("wearables", f"${c['wearables']:,.2f}")
+            _set_txt("total_unidades", f"{c['total_unidades']} Pza")
+            _set_txt("transacciones", f"{c['transacciones']} Transac.")
+            _set_txt("meta_ideal", f"${c['meta_ideal']:,.2f}")
+            _set_txt("vta_neta_prod", f"${c['vta_neta_prod']:,.2f}")
+            _set_txt("u_prod", f"{c['u_prod']}")
+            _set_txt("tot_trafico_b", str(c["tot_trafico_b"]))
             
             for idx, p in enumerate(c["b_pesos"]):
-                if f"b_peso_{idx}" in green_txts: green_txts[f"b_peso_{idx}"].value = f"{p*100:.1f}%"
+                _set_txt(f"b_peso_{idx}", f"{p*100:.1f}%")
             for idx, m in enumerate(c["b_metas"]):
-                if f"b_meta_{idx}" in green_txts: green_txts[f"b_meta_{idx}"].value = f"${m:,.0f}"
-            if "b_meta_tot" in green_txts: green_txts["b_meta_tot"].value = f"${c['meta_diaria']:,.0f}"
+                _set_txt(f"b_meta_{idx}", f"${m:,.0f}")
+            _set_txt("b_meta_tot", f"${c['meta_diaria']:,.0f}")
 
             for idx, r in enumerate(c["colab_rows"]):
-                if f"colab_vta_{idx}" in green_txts: green_txts[f"colab_vta_{idx}"].value = f"${r['meta_vta']:,.2f}"
-                if f"colab_ana_{idx}" in green_txts: green_txts[f"colab_ana_{idx}"].value = str(r['meta_ana'])
-                if f"colab_wea_{idx}" in green_txts: green_txts[f"colab_wea_{idx}"].value = str(r['meta_wea'])
-                if f"colab_kid_{idx}" in green_txts: green_txts[f"colab_kid_{idx}"].value = str(r['meta_kid'])
-                if f"colab_ck_{idx}" in green_txts: green_txts[f"colab_ck_{idx}"].value = str(r['meta_ck'])
+                _set_txt(f"colab_vta_{idx}", f"${r['meta_vta']:,.2f}")
+                _set_txt(f"colab_ana_{idx}", str(r['meta_ana']))
+                _set_txt(f"colab_wea_{idx}", str(r['meta_wea']))
+                _set_txt(f"colab_kid_{idx}", str(r['meta_kid']))
+                _set_txt(f"colab_ck_{idx}", str(r['meta_ck']))
                 
                 # CÓMO VAMOS green cells
-                if f"colab_cv_hrs_{idx}" in green_txts: green_txts[f"colab_cv_hrs_{idx}"].value = f"{r['horas']:.1f}"
-                if f"colab_conv_cierre_{idx}" in green_txts: green_txts[f"colab_conv_cierre_{idx}"].value = f"{r['conversion_cierre']*100:.1f}%"
-                if f"colab_conv_wea_{idx}" in green_txts: green_txts[f"colab_conv_wea_{idx}"].value = f"{r['conversion_wea']*100:.1f}%"
+                _set_txt(f"colab_cv_hrs_{idx}", f"{r['horas']:.1f}")
+                _set_txt(f"colab_conv_cierre_{idx}", f"{r['conversion_cierre']*100:.1f}%")
+                _set_txt(f"colab_conv_wea_{idx}", f"{r['conversion_wea']*100:.1f}%")
 
-            if "tot_colab_hrs" in green_txts: green_txts["tot_colab_hrs"].value = f"{c['tot_horas']:.1f} hrs"
-            if "tot_colab_vta" in green_txts: green_txts["tot_colab_vta"].value = f"${c['meta_diaria']:,.2f}"
-            if "tot_colab_ana" in green_txts: green_txts["tot_colab_ana"].value = str(sum(r["meta_ana"] for r in c["colab_rows"]))
-            if "tot_colab_wea" in green_txts: green_txts["tot_colab_wea"].value = str(sum(r["meta_wea"] for r in c["colab_rows"]))
-            if "tot_colab_kid" in green_txts: green_txts["tot_colab_kid"].value = str(sum(r["meta_kid"] for r in c["colab_rows"]))
-            if "tot_colab_ck" in green_txts: green_txts["tot_colab_ck"].value = str(sum(r["meta_ck"] for r in c["colab_rows"]))
+            _set_txt("tot_colab_hrs", f"{c['tot_horas']:.1f} hrs")
+            _set_txt("tot_colab_vta", f"${c['meta_diaria']:,.2f}")
+            _set_txt("tot_colab_ana", str(sum(r["meta_ana"] for r in c["colab_rows"])))
+            _set_txt("tot_colab_wea", str(sum(r["meta_wea"] for r in c["colab_rows"])))
+            _set_txt("tot_colab_kid", str(sum(r["meta_kid"] for r in c["colab_rows"])))
+            _set_txt("tot_colab_ck", str(sum(r["meta_ck"] for r in c["colab_rows"])))
 
             # Global CÓMO VAMOS
-            if "tot_cv_meta" in green_txts: green_txts["tot_cv_meta"].value = f"${c['meta_diaria']:,.2f}"
-            if "tot_cv_meta_unidades" in green_txts: green_txts["tot_cv_meta_unidades"].value = str(c["total_unidades"])
-            if "tot_cv_conversion" in green_txts: green_txts["tot_cv_conversion"].value = f"{c['conversion_dia']*100:.1f}%"
-            if "tot_cv_crecimiento" in green_txts: green_txts["tot_cv_crecimiento"].value = f"{c['crecimiento_conversion']*100:.1f}%"
-            if "tot_cv_wearables_pct" in green_txts: green_txts["tot_cv_wearables_pct"].value = f"{c['wearables_pct']*100:.1f}%"
-            if "tot_cv_kids_pct" in green_txts: green_txts["tot_cv_kids_pct"].value = f"{c['kids_pct']*100:.1f}%"
+            _set_txt("tot_cv_meta", f"${c['meta_diaria']:,.2f}")
+            _set_txt("tot_cv_meta_unidades", str(c["total_unidades"]))
+            _set_txt("tot_cv_conversion", f"{c['conversion_dia']*100:.1f}%")
+            _set_txt("tot_cv_crecimiento", f"{c['crecimiento_conversion']*100:.1f}%")
+            _set_txt("tot_cv_wearables_pct", f"{c['wearables_pct']*100:.1f}%")
+            _set_txt("tot_cv_kids_pct", f"{c['kids_pct']*100:.1f}%")
 
             # Sumas columna CÓMO VAMOS
-            if "sum_cv_interacciones" in green_txts: green_txts["sum_cv_interacciones"].value = str(c["tot_interacciones"])
-            if "sum_cv_convertidos" in green_txts: green_txts["sum_cv_convertidos"].value = str(c["tot_convertidos"])
-            if "sum_cv_vta_cierre" in green_txts: green_txts["sum_cv_vta_cierre"].value = f"${c['tot_vta_cierre']:,.2f}"
-            if "sum_cv_ana_cierre" in green_txts: green_txts["sum_cv_ana_cierre"].value = str(c["tot_ana_cierre"])
-            if "sum_cv_wea_demos" in green_txts: green_txts["sum_cv_wea_demos"].value = str(c["tot_wea_demos"])
-            if "sum_cv_wea_cierre" in green_txts: green_txts["sum_cv_wea_cierre"].value = str(c["tot_wea_cierre"])
-            if "sum_cv_kid_cierre" in green_txts: green_txts["sum_cv_kid_cierre"].value = str(c["tot_kid_cierre"])
+            _set_txt("sum_cv_interacciones", str(c["tot_interacciones"]))
+            _set_txt("sum_cv_convertidos", str(c["tot_convertidos"]))
+            _set_txt("sum_cv_vta_cierre", f"${c['tot_vta_cierre']:,.2f}")
+            _set_txt("sum_cv_ana_cierre", str(c["tot_ana_cierre"]))
+            _set_txt("sum_cv_wea_demos", str(c["tot_wea_demos"]))
+            _set_txt("sum_cv_wea_cierre", str(c["tot_wea_cierre"]))
+            _set_txt("sum_cv_kid_cierre", str(c["tot_kid_cierre"]))
+
+            for ctrl in updated_controls:
+                try: ctrl.update()
+                except Exception: pass
 
         def on_white_cell_change(e):
             try:
@@ -1338,7 +2808,21 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 if e.control.data == "meta_diaria":
                     data["meta_diaria"] = float(v) if v else 0.0
                 elif e.control.data == "trafico_esperado":
-                    data["trafico_esperado"] = int(v) if v else 0
+                    t_val = int(v) if v else 0
+                    data["trafico_esperado"] = t_val
+                    if t_val > 0:
+                        b0 = round(t_val * 0.15)
+                        b1 = round(t_val * 0.20)
+                        b2 = round(t_val * 0.25)
+                        b3 = round(t_val * 0.25)
+                        b4 = max(0, t_val - (b0 + b1 + b2 + b3))
+                        data["trafico_bloques"] = [b0, b1, b2, b3, b4]
+                        for b_idx, b_val in enumerate([b0, b1, b2, b3, b4]):
+                            b_field = white_input_fields.get(f"trafico_b_{b_idx}")
+                            if b_field:
+                                b_field.value = str(b_val)
+                                try: b_field.update()
+                                except Exception: pass
                 elif e.control.data == "conversion_target":
                     data["conversion_target"] = (float(v) / 100.0) if v else 0.0
                 elif e.control.data == "vta_ly":
@@ -1365,17 +2849,63 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 elif e.control.data == "atv_mtd":
                     val_num = float(v) if v else 0.0
                     data["atv_mtd"] = val_num
-                    if d_name == "DOMINGO":
-                        for day_other in DIAS:
-                            if day_other in s_state:
-                                s_state[day_other]["atv_mtd"] = val_num
+                    for day_other in DIAS:
+                        if day_other in s_state:
+                            s_state[day_other]["atv_mtd"] = val_num
+                    try:
+                        cur_sem = int(g_meta.get("semana", 30))
+                        cur_yr = int(g_meta.get("anio", 2026))
+                        t_id = str(g_meta.get("num_tienda", "0"))
+                        y_m, m_m = obtener_mes_de_semana(cur_yr, cur_sem)
+                        m_key = f"{y_m}_{m_m}_{t_id}"
+                        if "monthly_targets" not in user_states[user_id]:
+                            user_states[user_id]["monthly_targets"] = {}
+                        user_states[user_id]["monthly_targets"].setdefault(m_key, {})["atv_mtd"] = val_num
+                        
+                        h_state = user_states[user_id].get("historico_semanal_state", {})
+                        for h_k, h_s in h_state.items():
+                            if h_k.startswith("S"):
+                                try:
+                                    h_sem = int(h_k.split("_")[0].replace("S", ""))
+                                    h_y, h_m = obtener_mes_de_semana(cur_yr, h_sem)
+                                    if h_y == y_m and h_m == m_m:
+                                        for d_k in DIAS:
+                                            if d_k in h_s:
+                                                h_s[d_k]["atv_mtd"] = val_num
+                                except Exception:
+                                    pass
+                    except Exception as ex_m:
+                        print("Error sync monthly atv_mtd:", ex_m)
                 elif e.control.data == "aur_mtd":
                     val_num = float(v) if v else 0.0
                     data["aur_mtd"] = val_num
-                    if d_name == "DOMINGO":
-                        for day_other in DIAS:
-                            if day_other in s_state:
-                                s_state[day_other]["aur_mtd"] = val_num
+                    for day_other in DIAS:
+                        if day_other in s_state:
+                            s_state[day_other]["aur_mtd"] = val_num
+                    try:
+                        cur_sem = int(g_meta.get("semana", 30))
+                        cur_yr = int(g_meta.get("anio", 2026))
+                        t_id = str(g_meta.get("num_tienda", "0"))
+                        y_m, m_m = obtener_mes_de_semana(cur_yr, cur_sem)
+                        m_key = f"{y_m}_{m_m}_{t_id}"
+                        if "monthly_targets" not in user_states[user_id]:
+                            user_states[user_id]["monthly_targets"] = {}
+                        user_states[user_id]["monthly_targets"].setdefault(m_key, {})["aur_mtd"] = val_num
+                        
+                        h_state = user_states[user_id].get("historico_semanal_state", {})
+                        for h_k, h_s in h_state.items():
+                            if h_k.startswith("S"):
+                                try:
+                                    h_sem = int(h_k.split("_")[0].replace("S", ""))
+                                    h_y, h_m = obtener_mes_de_semana(cur_yr, h_sem)
+                                    if h_y == y_m and h_m == m_m:
+                                        for d_k in DIAS:
+                                            if d_k in h_s:
+                                                h_s[d_k]["aur_mtd"] = val_num
+                                except Exception:
+                                    pass
+                    except Exception as ex_m:
+                        print("Error sync monthly aur_mtd:", ex_m)
                 elif e.control.data == "venta_neta_dia":
                     data["venta_neta_dia"] = float(v) if v else 0.0
                 elif e.control.data == "venta_unidades_dia":
@@ -1390,6 +2920,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 elif e.control.data.startswith("colab_nom_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["colaboradores"][idx]["nombre"] = v_raw
+                    if d_name == "DOMINGO":
+                        for day_other in DIAS:
+                            if day_other != "DOMINGO" and day_other in s_state:
+                                if idx < len(s_state[day_other]["colaboradores"]):
+                                    s_state[day_other]["colaboradores"][idx]["nombre"] = v_raw
                 elif e.control.data.startswith("colab_hrs_"):
                     idx = int(e.control.data.split("_")[-1])
                     data["colaboradores"][idx]["horas"] = float(v) if v else 0.0
@@ -1432,8 +2967,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             
             sync_green_cells()
             guardar_estado_persistente(user_id)
-            try: page.update()
-            except Exception: pass
 
         # Componente Celda Blanca (Entrada editable ⚪)
         def make_white_input(val, data_id, width=None, suffix="", expand=None):
@@ -1460,21 +2993,23 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                         e.control.update()
                 except Exception: pass
 
+            tf_obj = ft.TextField(
+                value=val_formatted,
+                data=data_id,
+                on_change=on_white_cell_change,
+                on_blur=on_blur_format_commas,
+                text_size=cell_font_size,
+                text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
+                bgcolor="#1F2937",
+                border_color="#374151",
+                focused_border_color="#00FFFF",
+                content_padding=cell_padding,
+                suffix=ft.Text(suffix, color="#AAAAAA", size=9 if is_mobile else 10) if suffix else None,
+                dense=True
+            )
+            white_input_fields[data_id] = tf_obj
             return ft.Container(
-                content=ft.TextField(
-                    value=val_formatted,
-                    data=data_id,
-                    on_change=on_white_cell_change,
-                    on_blur=on_blur_format_commas,
-                    text_size=cell_font_size,
-                    text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
-                    bgcolor="#1F2937",
-                    border_color="#374151",
-                    focused_border_color="#00FFFF",
-                    content_padding=cell_padding,
-                    suffix=ft.Text(suffix, color="#AAAAAA", size=9 if is_mobile else 10) if suffix else None,
-                    dense=True
-                ),
+                content=tf_obj,
                 width=width,
                 expand=expand,
                 height=cell_height
@@ -1908,6 +3443,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     def build_plan_accion_ui(d_name):
         data = s_state[d_name]
         is_mobile_w = (page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False
+        smart_text_fields = {}
 
         data.setdefault("ritmo_venta_hoy", "")
         data.setdefault("checks_estandares", {"limpieza": False, "imagen": False, "reunion": False})
@@ -1927,10 +3463,35 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             data["logros_hoy"] = e.control.value
             guardar_estado_persistente(user_id)
 
+        def on_oportunidades_change(e):
+            data["oportunidades_manana"] = e.control.value
+            guardar_estado_persistente(user_id)
+
         def on_check_change(section, key, val):
             if section in data and isinstance(data[section], dict):
                 data[section][key] = val
                 guardar_estado_persistente(user_id)
+
+        def on_generar_smart_ia_click(e):
+            plan_res = generar_plan_smart_ia(d_name, user_id)
+            for k, val in plan_res.items():
+                data[k] = val
+                if k in smart_text_fields:
+                    smart_text_fields[k].value = val
+                    try:
+                        smart_text_fields[k].update()
+                    except Exception:
+                        pass
+            guardar_estado_persistente(user_id)
+            if page:
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"⚡ Plan SMART generado con IA para {d_name} basado en métricas reales.", color="black", weight="bold"),
+                    bgcolor="#00FFFF",
+                    duration=3000
+                )
+                page.snack_bar.open = True
+                try: page.update()
+                except Exception: pass
 
         # Cálculo de métricas del día para el encabezado del plan
         horas_prog = sum(float(c.get("horas", 0.0) or 0.0) for c in data.get("colaboradores", []))
@@ -1961,22 +3522,25 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             make_mini_metric("PROD. (PZS/H)", f"{meta_prod_pzs:.2f}", "#00FFFF"),
         ], wrap=True, spacing=6)
 
+        tf_ritmo = ft.TextField(
+            value=data.get("ritmo_venta_hoy", ""),
+            on_change=on_ritmo_change,
+            hint_text="Escribe aquí el ritmo de venta proyectado o presiona Generar con IA...",
+            bgcolor="#111827",
+            border_color="#374151",
+            color="white",
+            text_size=11 if is_mobile_w else 12,
+            dense=True
+        )
+        smart_text_fields["ritmo_venta_hoy"] = tf_ritmo
+
         question_box = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.HELP_OUTLINE_ROUNDED, color="#FFD700", size=16),
                     ft.Text("¿Cuál debe ser nuestro ritmo de venta hoy?", color="#FFD700", weight="bold", size=11 if is_mobile_w else 12)
                 ], spacing=4),
-                ft.TextField(
-                    value=data.get("ritmo_venta_hoy", ""),
-                    on_change=on_ritmo_change,
-                    hint_text="Escribe aquí el ritmo de venta proyectado o estrategia horaria...",
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    color="white",
-                    text_size=11 if is_mobile_w else 12,
-                    dense=True
-                )
+                tf_ritmo
             ], spacing=4),
             bgcolor="#0B0E17",
             padding=8,
@@ -1984,32 +3548,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             border=ft.Border.all(1, "#374151")
         )
 
-        plan_sheet_code = DAY_TO_PLAN_SHEET.get(d_name, "PLAN.ACCIÓN_D")
         top_header_title_row = ft.Row([
-            ft.Row([
-                ft.Icon(ft.Icons.ASSIGNMENT_TURNED_IN_ROUNDED, color="#FFD700", size=18),
-                ft.Text(f"PLAN DE ACCIÓN Y SEGUIMIENTO ({d_name}) - OFICIAL SGH", color="white", weight="bold", size=12 if is_mobile_w else 13),
-            ], spacing=6),
-            ft.Row([
-                ft.ElevatedButton(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.TABLE_CHART_ROUNDED, color="white", size=14),
-                        ft.Text(f"📊 Excel ({d_name})", color="white", weight="bold", size=10 if is_mobile_w else 11)
-                    ], spacing=4),
-                    style=ft.ButtonStyle(bgcolor="#059669", shape=ft.RoundedRectangleBorder(radius=6)),
-                    url=f"/api/download_excel/{plan_sheet_code}?user_id={user_id}"
-                ),
-                ft.Container(width=4),
-                ft.ElevatedButton(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.PRINT_ROUNDED, color="white", size=14),
-                        ft.Text(f"📄 PDF ({d_name})", color="white", weight="bold", size=10 if is_mobile_w else 11)
-                    ], spacing=4),
-                    style=ft.ButtonStyle(bgcolor="#10B981", shape=ft.RoundedRectangleBorder(radius=6)),
-                    on_click=lambda e, code=plan_sheet_code: generar_pdf_enfoque(code)
-                )
-            ], spacing=4)
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ft.Icon(ft.Icons.ASSIGNMENT_TURNED_IN_ROUNDED, color="#FFD700", size=18),
+            ft.Text(f"PLAN DE ACCIÓN Y SEGUIMIENTO ({d_name}) - OFICIAL SGH", color="white", weight="bold", size=12 if is_mobile_w else 13),
+        ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         top_header_content = ft.Column([
             top_header_title_row,
@@ -2199,25 +3741,79 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             border=ft.Border.all(1.5, "#00FFFF")
         )
 
-        # Tarjeta 6: Tu Enfoque Para Hoy
+        # Tarjeta 6: Tu Enfoque Para Hoy (Metodología S.M.A.R.T.)
+        def make_smart_field(letter, label, key, color_hex, hint_txt):
+            def _on_txt_change(e):
+                data[key] = e.control.value
+                guardar_estado_persistente(user_id)
+            tf_smart = ft.TextField(
+                value=data.get(key, ""),
+                on_change=_on_txt_change,
+                hint_text=hint_txt,
+                bgcolor="#111827",
+                border_color="#374151",
+                focused_border_color=color_hex,
+                color="white",
+                text_size=11,
+                dense=True,
+                expand=True
+            )
+            smart_text_fields[key] = tf_smart
+            return ft.Container(
+                content=ft.Row([
+                    ft.Container(
+                        content=ft.Text(letter, weight="bold", color="black", size=11),
+                        width=22, height=22, border_radius=4, bgcolor=color_hex,
+                        alignment=ft.alignment.Alignment(0, 0)
+                    ),
+                    ft.Text(label, weight="bold", color=color_hex, size=11, width=85),
+                    tf_smart
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor="#0F172A",
+                padding=ft.Padding(8, 4, 8, 4),
+                border_radius=6,
+                border=ft.Border.all(1, "#1E293B")
+            )
+
+        smart_rows = [
+            make_smart_field("S", "ESPECÍFICO:", "smart_especifico", "#00FFFF", "Acción puntual del día (ej. ofrecer solución limpiadora y probar 3 modelos por cliente)..."),
+            make_smart_field("M", "MEDIBLE:", "smart_medible", "#10B981", "Cuota numérica mínima (ej. mínimo 1 CareKit y 1 armazón Kids por colaborador)..."),
+            make_smart_field("A", "ALCANZABLE:", "smart_alcanzable", "#FFD700", "Palancas comerciales (ej. promociones vigentes, cross-selling y bundles)..."),
+            make_smart_field("R", "RETO:", "smart_reto", "#EF4444", "Meta aspiracional (ej. superar el 110% de la cuota diaria en venta neta)..."),
+            make_smart_field("T", "TIEMPO:", "smart_tiempo", "#E040FB", "Cadencia horaria (ej. seguimiento cada 2 horas en Store Dashboard)..."),
+        ]
+
+        btn_ia_smart = ft.ElevatedButton(
+            "⚡ Generar Plan SMART con IA",
+            icon=ft.Icons.AUTO_AWESOME,
+            bgcolor="#00FFFF",
+            color="#000000",
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                text_style=ft.TextStyle(weight="bold", size=11)
+            ),
+            on_click=on_generar_smart_ia_click
+        )
+
+        header_smart_content = ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#00FFFF", size=18),
+                ft.Text("🎯 TU ENFOQUE PARA HOY (S.M.A.R.T.)", color="#00FFFF", weight="bold", size=11.5),
+            ], spacing=6),
+            btn_ia_smart
+        ], spacing=6) if is_mobile_w else ft.Row([
+            ft.Row([
+                ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#00FFFF", size=18),
+                ft.Text("🎯 TU ENFOQUE PARA HOY (METODOLOGÍA S.M.A.R.T.)", color="#00FFFF", weight="bold", size=13),
+            ], spacing=6),
+            btn_ia_smart
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
         card_enfoque_texto = ft.Container(
             content=ft.Column([
-                ft.Row([
-                    ft.Icon(ft.Icons.EDIT_NOTE_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text("📝 TU ENFOQUE PARA HOY", color="#00FFFF", weight="bold", size=12 if is_mobile_w else 13)
-                ], spacing=6),
-                ft.TextField(
-                    value=data.get("enfoque_hoy", ""),
-                    on_change=on_enfoque_change,
-                    hint_text="Escribe aquí las acciones clave y estrategia del día...",
-                    multiline=True,
-                    min_lines=3,
-                    max_lines=5,
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    color="white",
-                    text_size=11 if is_mobile_w else 12
-                )
+                header_smart_content,
+                ft.Divider(height=6, color="#374151"),
+                ft.Column(smart_rows, spacing=6)
             ]),
             bgcolor="#0B0E17",
             padding=12 if is_mobile_w else 14,
@@ -2243,7 +3839,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             ]
         ], spacing=2, vertical_alignment="center")
 
-        # Tarjeta 7: Logros de Hoy
+        # Tarjeta 7: Logros de Hoy y Oportunidades para Mañana (2 Cuadros Oficiales)
         if is_mobile_w:
             header_logros_content = ft.Column([
                 ft.Row([
@@ -2261,22 +3857,64 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 star_row_logros
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
+        tf_logros = ft.TextField(
+            value=data.get("logros_hoy", ""),
+            on_change=on_logros_change,
+            hint_text="Escribe aquí los logros, metas alcanzadas y éxitos del día...",
+            multiline=True,
+            min_lines=3,
+            max_lines=5,
+            bgcolor="#111827",
+            border_color="#374151",
+            color="white",
+            text_size=11 if is_mobile_w else 12
+        )
+        smart_text_fields["logros_hoy"] = tf_logros
+
+        txt_logros_box = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10B981", size=14),
+                    ft.Text("LOGROS DE HOY", color="#10B981", weight="bold", size=11),
+                ], spacing=4),
+                tf_logros
+            ], spacing=6),
+            expand=True
+        )
+
+        tf_oportunidades = ft.TextField(
+            value=data.get("oportunidades_manana", ""),
+            on_change=on_oportunidades_change,
+            hint_text="Escribe aquí las áreas de oportunidad y enfoque para mañana...",
+            multiline=True,
+            min_lines=3,
+            max_lines=5,
+            bgcolor="#111827",
+            border_color="#374151",
+            color="white",
+            text_size=11 if is_mobile_w else 12
+        )
+        smart_text_fields["oportunidades_manana"] = tf_oportunidades
+
+        txt_oportunidades_box = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#F59E0B", size=14),
+                    ft.Text("OPORTUNIDADES PARA MAÑANA", color="#F59E0B", weight="bold", size=11),
+                ], spacing=4),
+                tf_oportunidades
+            ], spacing=6),
+            expand=True
+        )
+
+        boxes_row = ft.Column([txt_logros_box, txt_oportunidades_box], spacing=10) if is_mobile_w else ft.Row([txt_logros_box, txt_oportunidades_box], spacing=12)
+
         card_logros_texto = ft.Container(
             content=ft.Column([
                 header_logros_content,
-                ft.TextField(
-                    value=data.get("logros_hoy", ""),
-                    on_change=on_logros_change,
-                    hint_text="Resumen del cierre del día, compromisos y áreas de oportunidad...",
-                    multiline=True,
-                    min_lines=3,
-                    max_lines=5,
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    color="white",
-                    text_size=11 if is_mobile_w else 12
-                )
-            ]),
+                ft.Divider(height=6, color="#374151"),
+                boxes_row
+            ], spacing=8),
             bgcolor="#0B0E17",
             padding=12 if is_mobile_w else 14,
             border_radius=12,
