@@ -1329,10 +1329,23 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             init_user_state(user_id)
             cargar_estado_persistente(user_id)
 
-        g_meta = user_states[user_id]["global_meta"]
-        s_state = user_states[user_id]["store_state"]
+        g_meta = user_states.get(user_id, {}).get("global_meta", {})
+        s_state = user_states.get(user_id, {}).get("store_state", {})
 
-        templates_dir = os.path.abspath(os.path.join(BASE_PATH, "custom_assets", "templates_pdf"))
+        templates_dir_candidates = [
+            os.path.abspath(os.path.join(BASE_PATH, "custom_assets", "templates_pdf")),
+            os.path.abspath(os.path.join(os.getcwd(), "custom_assets", "templates_pdf")),
+            os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_assets", "templates_pdf")),
+            os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "custom_assets", "templates_pdf")),
+        ]
+        templates_dir = None
+        for td in templates_dir_candidates:
+            if os.path.exists(td) and os.path.isdir(td):
+                templates_dir = td
+                break
+        if not templates_dir:
+            templates_dir = os.path.abspath(os.path.join(BASE_PATH, "custom_assets", "templates_pdf"))
+
         target_sheet = map_to_excel_sheet(d_name)
 
         C_GREEN_CELL = (0.89, 0.94, 0.88)
@@ -1652,12 +1665,15 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
                 dia_base = d
                 break
 
-        d_data = s_state.get(dia_base, {})
+        d_data = s_state.get(dia_base, {}) if isinstance(s_state.get(dia_base), dict) else {}
         c = calcular_dia(dia_base, user_id)
+        if not isinstance(c, dict):
+            c = {}
 
         t_dia = os.path.join(templates_dir, "template_dia.pdf")
         t_plan = os.path.join(templates_dir, "template_plan.pdf")
         if not os.path.exists(t_dia) or not os.path.exists(t_plan):
+            print(f"Error: no se encontraron las plantillas en {templates_dir}")
             return None
 
         doc_dia = fitz.open(t_dia)
@@ -1690,26 +1706,29 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         clear_and_write(p_dia, fitz.Rect(104, 138, 134, 151), f"{c.get('total_unidades', 0)}", fontsize=6.5, fill=None, align_right=True)
 
         traf = c.get("trafico", 0)
-        conv = d_data.get("conversion_target", 0.15)
+        conv = float(d_data.get("conversion_target", 0.15) or 0.15)
         clear_and_write(p_dia, fitz.Rect(277, 94, 312, 107), f"{traf}", fontsize=6.5, fill=None, align_right=True)
         clear_and_write(p_dia, fitz.Rect(277, 109, 312, 122), f"{conv*100:.1f}%", fontsize=6.5, fill=None, align_right=True)
         clear_and_write(p_dia, fitz.Rect(277, 123, 312, 136), f"{c.get('transacciones', 0)}", fontsize=6.5, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(277, 138, 312, 151), f"${c.get('meta_ideal', 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 138, 312, 151), f"${float(c.get('meta_ideal', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
 
         clear_and_write(p_dia, fitz.Rect(445, 94, 468, 107), f"{c.get('wea_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(445, 109, 468, 122), f"{c.get('kids_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(445, 123, 468, 136), f"{c.get('ck_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(104, 195, 167, 209), f"${c.get('vta_neta_prod', 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(104, 209, 167, 222), f"{c.get('u_prod', 0.0):.2f}", fontsize=6.5, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(250, 195, 312, 209), f"${d_data.get('vta_ly', 0.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(104, 195, 167, 209), f"${float(c.get('vta_neta_prod', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 209, 167, 222), f"{float(c.get('u_prod', 0.0) or 0.0):.2f}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(250, 195, 312, 209), f"${float(d_data.get('vta_ly', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(345, 195, 400, 209), f"${d_data.get('atv_mtd', 7597.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(405, 195, 468, 209), f"${d_data.get('atv_dia', 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(345, 222, 400, 236), f"${d_data.get('aur_mtd', 3362.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(405, 222, 468, 236), f"${d_data.get('aur_dia', 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(345, 195, 400, 209), f"${float(d_data.get('atv_mtd', 7597.0) or 7597.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 195, 468, 209), f"${float(d_data.get('atv_dia', 3620.0) or 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(345, 222, 400, 236), f"${float(d_data.get('aur_mtd', 3362.0) or 3362.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 222, 468, 236), f"${float(d_data.get('aur_dia', 3620.0) or 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
 
-        b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20])[:5]
+        raw_b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20])
+        if not isinstance(raw_b_traf, list):
+            raw_b_traf = [10, 15, 20, 25, 20]
+        b_traf = [int(x or 0) for x in raw_b_traf[:5]]
         tot_b = sum(b_traf)
         b_xs = [77, 107, 137, 167, 197]
         for i in range(5):
@@ -1805,10 +1824,15 @@ def generar_pdf_enfoque_file(d_name, user_id):
     clean_sheet_name = sanitize_filename(map_to_excel_sheet(d_name))
     web_pdf_path = os.path.abspath(os.path.join(uploads_dir, f"Enfoque_Diario_{clean_sheet_name}_SGH_2026.pdf"))
 
-    vec_res = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
-    if vec_res and os.path.exists(vec_res):
-        return vec_res
-    return generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=True)
+    # Generación vectorial nativa 100% de alta velocidad con PyMuPDF (Calibración exacta 1:1)
+    try:
+        vec_res = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
+        if vec_res and os.path.exists(vec_res):
+            return vec_res
+    except Exception as ex_v:
+        print("Error en generar_pdf_enfoque_file:", ex_v)
+
+    return web_pdf_path if os.path.exists(web_pdf_path) else None
 
 def generar_html_impresion(d_name, user_id):
     """
