@@ -952,9 +952,9 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
             g_meta = user_states[user_id]["global_meta"]
             s_state = user_states[user_id]["store_state"]
 
-            template_path = os.path.abspath(os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx"))
+            template_path = os.path.abspath(os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx"))
             if not os.path.exists(template_path):
-                template_path = os.path.abspath(os.path.join(BASE_PATH, "2026 SGH ENFOQUE DIARIO- Nuestra meta y plan de accion FINAL.xlsx"))
+                template_path = os.path.abspath(os.path.join(BASE_PATH, "plantilla_sgh_2026.xlsx"))
 
             target_sheet = map_to_excel_sheet(d_name)
             clean_sheet_name = sanitize_filename(target_sheet)
@@ -969,7 +969,7 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                 print(f"Error: Plantilla base Excel no encontrada en {template_path}")
                 return None
 
-            # 1. Generación ultra-rápida y compatible con openpyxl
+            # 1. Inyectar datos en la plantilla oficial con openpyxl preservando fórmulas y estilos
             import openpyxl
             wb_pyxl = openpyxl.load_workbook(template_path)
             
@@ -1025,28 +1025,58 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                     if d_data.get('smart_tiempo'): smart_text += f"T (Tiempo): {d_data.get('smart_tiempo')}\n"
                     if smart_text: _safe_set(ws_p, 'C29', smart_text.strip())
                     if d_data.get('logros_hoy'): _safe_set(ws_p, 'A35', d_data.get('logros_hoy'))
-            # 1. Exportación PDF directa si se solicita
-            if export_pdf:
-                vec_pdf = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
-                if vec_pdf and os.path.exists(vec_pdf):
-                    return vec_pdf
 
-            # 2. Guardar archivo Excel (.xlsx) de manera segura
+            # 2. Guardar archivo Excel (.xlsx) maestro con los datos inyectados
             try:
                 wb_pyxl.save(web_excel_path)
             except PermissionError:
-                # Si el archivo está abierto en Excel, intentar con un nombre temporal o ignorar
                 temp_alt = os.path.abspath(os.path.join(uploads_dir, f"Enfoque_Diario_{clean_sheet_name}_SGH_2026_temp.xlsx"))
                 try:
                     wb_pyxl.save(temp_alt)
                     web_excel_path = temp_alt
-                except Exception:
-                    pass
+                except Exception: pass
             except Exception as ex_wb:
                 print("Notice al guardar workbook Excel:", ex_wb)
 
+            # 3. Si se solicita PDF: conversión fiel de Excel a PDF
             if export_pdf:
-                # Fallback secundario si fitz no estuviera disponible (Windows COM)
+                # Intento A: LibreOffice Headless (Linux / Render Docker / Servidores)
+                import subprocess, shutil
+                soffice_bin = shutil.which("libreoffice") or shutil.which("soffice")
+                if soffice_bin:
+                    try:
+                        temp_lo_xlsx = os.path.abspath(os.path.join(uploads_dir, f"temp_lo_{clean_sheet_name}.xlsx"))
+                        wb_lo = openpyxl.load_workbook(web_excel_path)
+                        dia_base = "DOMINGO"
+                        for d in DIAS:
+                            if d in target_sheet.upper():
+                                dia_base = d
+                                break
+                        plan_sheet_name = DAY_TO_PLAN_SHEET.get(dia_base, "PLAN ACCION DOMINGO")
+                        keep_sheets = [target_sheet] if target_sheet == "SEMANAL" else [dia_base, plan_sheet_name]
+                        for s_name in wb_lo.sheetnames:
+                            if s_name in keep_sheets:
+                                wb_lo[s_name].sheet_state = 'visible'
+                            else:
+                                wb_lo[s_name].sheet_state = 'hidden'
+                        wb_lo.save(temp_lo_xlsx)
+
+                        cmd = [soffice_bin, "--headless", "--convert-to", "pdf", "--outdir", uploads_dir, temp_lo_xlsx]
+                        subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                        temp_lo_pdf = os.path.abspath(os.path.join(uploads_dir, f"temp_lo_{clean_sheet_name}.pdf"))
+                        if os.path.exists(temp_lo_pdf):
+                            if os.path.exists(web_pdf_path):
+                                try: os.remove(web_pdf_path)
+                                except Exception: pass
+                            shutil.move(temp_lo_pdf, web_pdf_path)
+                            try: os.remove(temp_lo_xlsx)
+                            except Exception: pass
+                            if os.path.exists(web_pdf_path):
+                                return web_pdf_path
+                    except Exception as ex_lo:
+                        print("Notice LibreOffice PDF conversion:", ex_lo)
+
+                # Intento B: Microsoft Excel COM (Windows nativo si está disponible)
                 pdf_generado = False
                 excel = None
                 try:
@@ -1137,7 +1167,15 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                         try: pythoncom.CoUninitialize()
                         except Exception: pass
 
-                return web_pdf_path if (pdf_generado and os.path.exists(web_pdf_path)) else None
+                if pdf_generado and os.path.exists(web_pdf_path):
+                    return web_pdf_path
+
+                # Intento C: Motor Nativo Vectorial (PyMuPDF - Calibración 1:1)
+                vec_pdf = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
+                if vec_pdf and os.path.exists(vec_pdf):
+                    return vec_pdf
+
+                return web_pdf_path if os.path.exists(web_pdf_path) else None
 
             return web_excel_path
 

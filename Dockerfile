@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Configurar entorno para evitar bloqueos interactivos en la instalación
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Instalar dependencias del sistema operativo (Audio, OpenCV, etc)
+# Instalar dependencias del sistema operativo (Audio, OpenCV, LibreOffice para Excel->PDF, etc)
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
     python3-tk \
+    libreoffice-calc-nogui \
+    fonts-liberation \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Directorio de trabajo en el contenedor
