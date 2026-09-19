@@ -374,27 +374,27 @@ def default_global_meta():
     return {
         "semana": str(sem),
         "anio": str(yr),
-        "tienda": "Vallejo",
-        "num_tienda": "3645"
+        "tienda": "",
+        "num_tienda": ""
     }
 
 def default_store_state():
     state = {}
     for d in DIAS:
         state[d] = {
-            "meta_diaria": 4758.0,
-            "trafico_esperado": 8,
-            "conversion_target": 0.13,
-            "vta_ly": 4758.0,
-            "wearables_pct": 0.15,
-            "kids_pct": 0.05,
-            "carekits_pct": 0.30,
-            "atv_dia": 3620.0,
-            "aur_dia": 3620.0,
-            "atv_mtd": 7597.0,
-            "aur_mtd": 3362.0,
-            "estrellas_logro": 5,
-            "trafico_bloques": [4, 2, 2, 0, 0],
+            "meta_diaria": 0.0,
+            "trafico_esperado": 0,
+            "conversion_target": 0.0,
+            "vta_ly": 0.0,
+            "wearables_pct": 0.0,
+            "kids_pct": 0.0,
+            "carekits_pct": 0.0,
+            "atv_dia": 0.0,
+            "aur_dia": 0.0,
+            "atv_mtd": 0.0,
+            "aur_mtd": 0.0,
+            "estrellas_logro": 0,
+            "trafico_bloques": [0, 0, 0, 0, 0],
             "colaboradores": [
                 {"nombre": "", "horas": 0.0, "interacciones": 0, "convertidos": 0, "vta_cierre": 0.0, "ana_cierre": 0, "wea_demos": 0, "wea_cierre": 0, "kid_cierre": 0, "ck_cierre": 0}
                 for _ in range(8)
@@ -403,14 +403,14 @@ def default_store_state():
             "venta_unidades_dia": 0,
             "slp_dia": "",
             "onesight_dia": "",
-            "enfoque_hoy": "Enfocar el 100% del equipo en ofrecer la solución limpiadora y bandeja de opciones para maximizar venta múltiple.",
-            "smart_especifico": "Ofrecer solución limpiadora y probar al menos 3 modelos por cliente.",
-            "smart_medible": "Lograr mínimo 1 CareKit y 1 armazón Kids por colaborador.",
-            "smart_alcanzable": "Aprovechar promociones vigentes y cross-selling en caja.",
-            "smart_reto": "Alcanzar 110% de la meta diaria en venta neta.",
-            "smart_tiempo": "Monitorear avances cada 2 horas en el Store Dashboard.",
-            "logros_hoy": "Excelente retención de clientes y venta cruzada.",
-            "oportunidades_manana": "Impulsar demostraciones de Wearables y CareKits desde la apertura.",
+            "enfoque_hoy": "",
+            "smart_especifico": "",
+            "smart_medible": "",
+            "smart_alcanzable": "",
+            "smart_reto": "",
+            "smart_tiempo": "",
+            "logros_hoy": "",
+            "oportunidades_manana": "",
             "ritmo_venta_hoy": "",
             "checks_estandares": {"limpieza": False, "imagen": False, "reunion": False},
             "checks_no_negociables": {"registro": False, "sin_celular": False, "fuera_caja": False, "seguimiento": False},
@@ -451,8 +451,13 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
         with open(sf_user, "w", encoding="utf-8") as f:
             f.write(json_str)
 
-        if tienda_id and int(tienda_id) > 0:
-            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{tienda_id}.json")
+        try:
+            t_int = int(tienda_id) if tienda_id else 0
+        except Exception:
+            t_int = 0
+
+        if t_int > 0:
+            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{t_int}.json")
             with open(sf_tienda, "w", encoding="utf-8") as f:
                 f.write(json_str)
 
@@ -460,11 +465,38 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
         if db:
             try:
                 cursor = db.cursor()
-                cursor.execute("""
-                INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json)
-                VALUES (%s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE estado_json=VALUES(estado_json), user_id=VALUES(user_id), fecha_actualizacion=NOW()
-                """, (str(user_id), int(tienda_id), str(sem_str), json_str))
+                if t_int > 0:
+                    cursor.execute(
+                        "SELECT id FROM enfoque_diario_guardado WHERE tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                        (t_int, str(sem_str))
+                    )
+                    existing = cursor.fetchone()
+                    if existing:
+                        cursor.execute(
+                            "UPDATE enfoque_diario_guardado SET estado_json=%s, user_id=%s, fecha_actualizacion=NOW() WHERE id=%s",
+                            (json_str, str(user_id), existing[0])
+                        )
+                    else:
+                        cursor.execute(
+                            "INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json, fecha_actualizacion) VALUES (%s, %s, %s, %s, NOW())",
+                            (str(user_id), t_int, str(sem_str), json_str)
+                        )
+                else:
+                    cursor.execute(
+                        "SELECT id FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
+                        (str(user_id), str(sem_str))
+                    )
+                    existing = cursor.fetchone()
+                    if existing:
+                        cursor.execute(
+                            "UPDATE enfoque_diario_guardado SET estado_json=%s, fecha_actualizacion=NOW() WHERE id=%s",
+                            (json_str, existing[0])
+                        )
+                    else:
+                        cursor.execute(
+                            "INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json, fecha_actualizacion) VALUES (%s, %s, %s, %s, NOW())",
+                            (str(user_id), 0, str(sem_str), json_str)
+                        )
                 db.commit()
             except Exception as ex_db:
                 print(f"Notice DB save enfoque_diario for user {user_id}:", ex_db)
@@ -496,7 +528,8 @@ def guardar_estado_persistente(user_id, debounce_seconds=0.6):
                     h_state = user_states[user_id]["historico_semanal_state"]
 
                     sincronizar_baselines_domingo(s_state)
-                    key = f"S{g_meta.get('semana', '30')}_{g_meta.get('num_tienda', '0')}_{g_meta.get('tienda', '')}"
+                    sem_str = str(g_meta.get("semana") or get_current_sgh_week_str())
+                    key = f"S{sem_str}_{g_meta.get('num_tienda', '0')}_{g_meta.get('tienda', '')}"
                     import copy
                     h_state[key] = copy.deepcopy(s_state)
 
@@ -507,16 +540,15 @@ def guardar_estado_persistente(user_id, debounce_seconds=0.6):
                         "monthly_targets": user_states[user_id].get("monthly_targets", {}),
                         "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
                     }
-                    sem_str = str(g_meta.get("semana", "30"))
-                    tienda_id = int(g_meta.get("num_tienda", 0))
+                    try: tienda_id = int(g_meta.get("num_tienda", 0))
+                    except Exception: tienda_id = 0
 
                     _async_save_worker(user_id, payload, sem_str, tienda_id)
                 except Exception as ex:
                     print(f"Error en _debounced_save para {user_id}:", ex)
 
             if debounce_seconds <= 0:
-                t = threading.Thread(target=_debounced_save, daemon=True)
-                t.start()
+                _debounced_save()
             else:
                 t = threading.Timer(debounce_seconds, _debounced_save)
                 t.daemon = True
@@ -775,8 +807,6 @@ def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None)
                     curr_n = s_state[d]["colaboradores"][i].get("nombre", "").strip()
                     if not curr_n:
                         s_state[d]["colaboradores"][i]["nombre"] = db_names[i]
-                    if s_state[d]["colaboradores"][i]["horas"] <= 0:
-                        s_state[d]["colaboradores"][i]["horas"] = 10.0 if i == 0 else 8.0
         guardar_estado_persistente(user_id)
 
 # --- FUNCIONES MATEMÁTICAS EXPORTADAS AL MÓDULO ---
@@ -784,45 +814,46 @@ def calcular_dia(d_name, user_id):
     if user_id not in user_states: init_user_state(user_id)
     s_state = user_states[user_id]["store_state"]
     data = s_state[d_name]
-    m_diaria = data["meta_diaria"]
+    m_diaria = float(data.get("meta_diaria", 0.0) or 0.0)
     analogos = m_diaria * 0.85
     wearables = m_diaria * 0.15
     
-    trafico = data["trafico_esperado"]
-    conv = data["conversion_target"]
+    trafico = int(data.get("trafico_esperado", 0) or 0)
+    conv = float(data.get("conversion_target", 0.0) or 0.0)
     transacciones = math.ceil(trafico * conv) if trafico > 0 else 0
     meta_ideal = m_diaria * 1.10
     
-    aur_dia = float(data.get("aur_dia", 3620.0) or 3620.0)
-    total_unidades = max(1, round(m_diaria / aur_dia)) if aur_dia > 0 else max(transacciones, 1)
+    aur_dia = float(data.get("aur_dia", 0.0) or 0.0)
+    total_unidades = round(m_diaria / aur_dia) if (aur_dia > 0 and m_diaria > 0) else (transacciones if transacciones > 0 else 0)
 
-    vta_ly = data["vta_ly"]
+    vta_ly = float(data.get("vta_ly", 0.0) or 0.0)
 
-    b_trafico = data["trafico_bloques"]
+    raw_b = data.get("trafico_bloques", [0, 0, 0, 0, 0])
+    b_trafico = [int(x or 0) for x in (raw_b if isinstance(raw_b, list) else [0, 0, 0, 0, 0])[:5]]
     tot_trafico_b = sum(b_trafico)
     b_pesos = [(t / tot_trafico_b) if tot_trafico_b > 0 else 0.0 for t in b_trafico]
     b_metas = [p * m_diaria for p in b_pesos]
 
-    colabs = data["colaboradores"]
-    tot_horas = sum(c["horas"] for c in colabs if c["nombre"].strip() and c["horas"] > 0)
+    colabs = data.get("colaboradores", [])
+    tot_horas = sum(float(c.get("horas", 0.0) or 0.0) for c in colabs if c.get("nombre", "").strip() and float(c.get("horas", 0.0) or 0.0) > 0)
     vta_neta_prod = (m_diaria / tot_horas) if tot_horas > 0 else 0.0
     u_prod = round(total_unidades / tot_horas, 2) if tot_horas > 0 else 0.0
 
-    wea_unid_meta = max(1, math.ceil(wearables / 8100.0))
-    kids_unid_meta = max(1, math.ceil(total_unidades * data.get("kids_pct", 0.05)))
-    ck_unid_meta = max(1, math.ceil(total_unidades * data.get("carekits_pct", 0.30)))
+    wea_unid_meta = math.ceil(wearables / 8100.0) if wearables > 0 else 0
+    kids_unid_meta = math.ceil(total_unidades * float(data.get("kids_pct", 0.05) or 0.05)) if total_unidades > 0 else 0
+    ck_unid_meta = math.ceil(total_unidades * float(data.get("carekits_pct", 0.30) or 0.30)) if total_unidades > 0 else 0
 
     colab_rows = []
     for c in colabs:
-        nom = c["nombre"].strip()
-        hrs = c["horas"]
-        if hrs > 0 and tot_horas > 0:
+        nom = c.get("nombre", "").strip()
+        hrs = float(c.get("horas", 0.0) or 0.0)
+        if hrs > 0 and tot_horas > 0 and m_diaria > 0:
             m_vta = (m_diaria / tot_horas) * hrs
             
-            calc_kid = 1
-            calc_ck = 1
-            calc_ana = math.ceil(max(((total_unidades - wea_unid_meta) / tot_horas) * hrs, 1))
-            calc_wea = math.ceil(max((wea_unid_meta / tot_horas) * hrs, 1))
+            calc_kid = math.ceil(max((kids_unid_meta / tot_horas) * hrs, 1)) if kids_unid_meta > 0 else 0
+            calc_ck = math.ceil(max((ck_unid_meta / tot_horas) * hrs, 1)) if ck_unid_meta > 0 else 0
+            calc_ana = math.ceil(max(((total_unidades - wea_unid_meta) / tot_horas) * hrs, 1)) if total_unidades > 0 else 0
+            calc_wea = math.ceil(max((wea_unid_meta / tot_horas) * hrs, 1)) if wea_unid_meta > 0 else 0
             
             def get_manual_or_calc(key, default_calc):
                 val = c.get(key, "")
@@ -953,8 +984,8 @@ def generar_plan_smart_ia(dia_base, user_id=None):
     meta_conv = float(calc.get("conversion_target", 0.15) or 0.15) * 100.0
     tot_pzas = int(calc.get("total_unidades", 0) or 0)
     trafico_esp = int(data.get("trafico_esperado", 0) or 0)
-    atv_val = float(data.get("atv_dia", 0.0) or 3620.0)
-    aur_val = float(data.get("aur_dia", 0.0) or 3390.0)
+    atv_val = float(data.get("atv_dia", 0.0) or 0.0)
+    aur_val = float(data.get("aur_dia", 0.0) or 0.0)
     
     colabs_activos = [c for c in data.get("colaboradores", []) if (c.get("nombre") or "").strip() and float(c.get("horas", 0) or 0) > 0]
     num_colabs = len(colabs_activos)
@@ -1118,10 +1149,10 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                         for b_i, b_val in enumerate(d_data['trafico_bloques'][:5]):
                             col_letter = ['C', 'D', 'E', 'F', 'G'][b_i]
                             _safe_set(ws, f'{col_letter}17', b_val)
-                    _safe_set(ws, 'L12', d_data.get('atv_mtd', 7597.0))
-                    _safe_set(ws, 'N12', d_data.get('atv_dia', 3620.0))
-                    _safe_set(ws, 'L14', d_data.get('aur_mtd', 3362.0))
-                    _safe_set(ws, 'N14', d_data.get('aur_dia', 3620.0))
+                    _safe_set(ws, 'L12', d_data.get('atv_mtd', 0.0))
+                    _safe_set(ws, 'N12', d_data.get('atv_dia', 0.0))
+                    _safe_set(ws, 'L14', d_data.get('aur_mtd', 0.0))
+                    _safe_set(ws, 'N14', d_data.get('aur_dia', 0.0))
                     for i, c in enumerate(d_data.get('colaboradores', [])[:8]):
                         _safe_set(ws, f'B{23 + i}', c.get('nombre', ''))
                         _safe_set(ws, f'D{23 + i}', c.get('horas', 0.0))
@@ -1377,16 +1408,16 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             p_sem = doc_sem[0]
 
             h_state = user_states[user_id].setdefault("historico_semanal", {})
-            h_state.setdefault("meta_conversion", 0.16)
+            h_state.setdefault("meta_conversion", 0.0)
             h_state.setdefault("wea_pct", 0.15)
             h_state.setdefault("kids_pct", 0.05)
             h_state.setdefault("ck_pct", 0.30)
-            h_state.setdefault("aur_sem", 4617.0)
+            h_state.setdefault("aur_sem", 0.0)
 
             # Totales agregados de las pestañas diarias
-            tot_meta_sem = sum(s_state[d].get("meta_diaria", 0.0) for d in DIAS)
-            tot_ana_sem = sum(s_state[d].get("meta_diaria", 0.0) * 0.85 for d in DIAS)
-            tot_wea_sem = sum(s_state[d].get("meta_diaria", 0.0) * 0.15 for d in DIAS)
+            tot_meta_sem = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) for d in DIAS)
+            tot_ana_sem = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) * 0.85 for d in DIAS)
+            tot_wea_sem = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) * 0.15 for d in DIAS)
 
             tot_trafico_sem = 0
             tot_transac_sem = 0
@@ -1408,26 +1439,29 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             clientes_convertidos = tot_convertidos_sem if tot_convertidos_sem > 0 else tot_transac_sem
             conversion_real_sem_pct = (clientes_convertidos * 100.0 / clientes_totales) if clientes_totales > 0 else 0.0
 
-            meta_conversion = float(h_state.get("meta_conversion", 0.16))
-            meta_transacciones_sem = int(tot_trafico_sem * meta_conversion)
+            meta_conversion = float(h_state.get("meta_conversion", 0.0) or 0.0)
+            meta_transacciones_sem = int(tot_trafico_sem * meta_conversion) if (tot_trafico_sem > 0 and meta_conversion > 0) else 0
             meta_ideal_sem = tot_meta_sem * 1.10
-            total_unidades_sem = int(tot_meta_sem / h_state["aur_sem"]) if h_state.get("aur_sem", 4617.0) > 0 else (int(tot_meta_sem / 4617) if tot_meta_sem > 0 else 0)
 
-            wea_pct = float(h_state.get("wea_pct", 0.15))
-            unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 1
+            atvs = [float(s_state[d].get("atv_dia", 0.0) or 0.0) for d in DIAS if float(s_state[d].get("atv_dia", 0.0) or 0.0) > 0]
+            atv_sem = (sum(atvs) / len(atvs)) if atvs else 0.0
+            aurs = [float(s_state[d].get("aur_dia", 0.0) or 0.0) for d in DIAS if float(s_state[d].get("aur_dia", 0.0) or 0.0) > 0]
+            aur_sem = (sum(aurs) / len(aurs)) if aurs else float(h_state.get("aur_sem", 0.0) or 0.0)
 
-            kids_pct = float(h_state.get("kids_pct", 0.05))
-            unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if total_unidades_sem > 0 else 1
+            total_unidades_sem = int(tot_meta_sem / aur_sem) if (aur_sem > 0 and tot_meta_sem > 0) else 0
 
-            ck_pct = float(h_state.get("ck_pct", 0.30))
-            unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
+            wea_pct = float(h_state.get("wea_pct", 0.15) or 0.15)
+            unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 0
+
+            kids_pct = float(h_state.get("kids_pct", 0.05) or 0.05)
+            unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if (total_unidades_sem > 0 and kids_pct > 0) else 0
+
+            ck_pct = float(h_state.get("ck_pct", 0.30) or 0.30)
+            unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if (total_unidades_sem > 0 and ck_pct > 0) else 0
 
             comply_sem = tot_meta_sem
-            atv_sem = sum(s_state[d].get("atv_dia", 3620.0) for d in DIAS) / 7.0
-            aur_sem = sum(s_state[d].get("aur_dia", 3620.0) for d in DIAS) / 7.0
-
-            semana_str = str(g_meta.get("semana", "37"))
-            tienda_str = f"{g_meta.get('tienda', 'SGH')} (#{g_meta.get('tienda_num', '3645')})"
+            semana_str = str(g_meta.get("semana", "30"))
+            tienda_str = f"{g_meta.get('tienda', '')} (#{g_meta.get('num_tienda', '')})".strip() if g_meta.get('tienda') else "SGH"
 
             # Header
             clear_and_write(p_sem, fitz.Rect(380, 52, 420, 65), semana_str, fontsize=8, fill=C_WHITE, align_center=True)
@@ -1435,26 +1469,26 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
 
             # Top Cards
             # Col 1: Metas
-            clear_and_write(p_sem, fitz.Rect(104.2, 91.0, 134.5, 97.3), f"${tot_meta_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
-            clear_and_write(p_sem, fitz.Rect(104.2, 97.3, 134.5, 110.9), f"${tot_ana_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
-            clear_and_write(p_sem, fitz.Rect(104.2, 110.9, 134.5, 120.0), f"${tot_wea_sem:,.2f}", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
-            clear_and_write(p_sem, fitz.Rect(104.2, 120.0, 134.5, 129.1), f"{total_unidades_sem}", fontsize=4.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 91.0, 134.5, 97.3), f"${tot_meta_sem:,.2f}" if tot_meta_sem > 0 else "", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 97.3, 134.5, 110.9), f"${tot_ana_sem:,.2f}" if tot_ana_sem > 0 else "", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 110.9, 134.5, 120.0), f"${tot_wea_sem:,.2f}" if tot_wea_sem > 0 else "", fontsize=4.2, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(104.2, 120.0, 134.5, 129.1), f"{total_unidades_sem}" if total_unidades_sem > 0 else "", fontsize=4.5, fill=C_GREEN_CELL, align_right=True)
 
             # Col 2: Conversión
-            clear_and_write(p_sem, fitz.Rect(209.1, 91.0, 252.8, 97.3), f"{tot_trafico_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
-            clear_and_write(p_sem, fitz.Rect(209.1, 97.3, 252.8, 110.9), f"{meta_conversion*100:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
-            clear_and_write(p_sem, fitz.Rect(209.1, 110.9, 252.8, 120.0), f"{meta_transacciones_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
-            clear_and_write(p_sem, fitz.Rect(209.1, 120.0, 252.8, 129.1), f"${meta_ideal_sem:,.2f}", fontsize=4.8, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 91.0, 252.8, 97.3), f"{tot_trafico_sem}" if tot_trafico_sem > 0 else "", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 97.3, 252.8, 110.9), f"{meta_conversion*100:.1f}%" if meta_conversion > 0 else "", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 110.9, 252.8, 120.0), f"{meta_transacciones_sem}" if meta_transacciones_sem > 0 else "", fontsize=5.5, fill=C_GREEN_CELL, align_right=True)
+            clear_and_write(p_sem, fitz.Rect(209.1, 120.0, 252.8, 129.1), f"${meta_ideal_sem:,.2f}" if tot_meta_sem > 0 else "", fontsize=4.8, fill=C_GREEN_CELL, align_right=True)
 
             # Col 3: No Negociables
-            clear_and_write(p_sem, fitz.Rect(331.9, 91.0, 357.5, 97.3), f"{unidades_wea_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
-            clear_and_write(p_sem, fitz.Rect(331.9, 97.3, 357.5, 110.9), f"{unidades_kids_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
-            clear_and_write(p_sem, fitz.Rect(331.9, 110.9, 357.5, 120.0), f"{unidades_ck_sem}", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, 91.0, 357.5, 97.3), f"{unidades_wea_sem}" if unidades_wea_sem > 0 else "", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, 97.3, 357.5, 110.9), f"{unidades_kids_sem}" if unidades_kids_sem > 0 else "", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(331.9, 110.9, 357.5, 120.0), f"{unidades_ck_sem}" if unidades_ck_sem > 0 else "", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
 
             # Col 4: Valores de Semana
-            clear_and_write(p_sem, fitz.Rect(387.1, 91.0, 444.7, 97.3), f"${comply_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
-            clear_and_write(p_sem, fitz.Rect(387.1, 129.1, 444.7, 135.7), f"${atv_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
-            clear_and_write(p_sem, fitz.Rect(387.1, 142.8, 444.7, 159.4), f"${aur_sem:,.2f}", fontsize=5.2, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(387.1, 91.0, 444.7, 97.3), f"${comply_sem:,.2f}" if comply_sem > 0 else "", fontsize=5.2, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(387.1, 129.1, 444.7, 135.7), f"${atv_sem:,.2f}" if atv_sem > 0 else "", fontsize=5.2, fill=C_WHITE, align_center=True)
+            clear_and_write(p_sem, fitz.Rect(387.1, 142.8, 444.7, 159.4), f"${aur_sem:,.2f}" if aur_sem > 0 else "", fontsize=5.2, fill=C_WHITE, align_center=True)
 
             # Metas por Colaborador
             colabs_list = s_state.get("DOMINGO", {}).get("colaboradores", [])
@@ -1700,48 +1734,55 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         p_dia.insert_text(fitz.Point(x_tienda, 41.5), tienda_str, fontsize=fs_t, fontname="helv", color=(0,0,0))
 
         m_dia = float(c.get("meta_diaria", 0.0) or 0.0)
-        clear_and_write(p_dia, fitz.Rect(104, 94, 134, 107), f"${m_dia:,.2f}", fontsize=5.8, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(104, 109, 134, 122), f"${m_dia*0.85:,.2f}", fontsize=5.8, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(104, 123, 134, 136), f"${m_dia*0.15:,.2f}", fontsize=5.8, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(104, 138, 134, 151), f"{c.get('total_unidades', 0)}", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 94, 134, 107), f"${m_dia:,.2f}" if m_dia > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 109, 134, 122), f"${m_dia*0.85:,.2f}" if m_dia > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 123, 134, 136), f"${m_dia*0.15:,.2f}" if m_dia > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 138, 134, 151), f"{c.get('total_unidades', 0)}" if c.get('total_unidades', 0) > 0 else "", fontsize=6.5, fill=None, align_right=True)
 
         traf = c.get("trafico", 0)
-        conv = float(d_data.get("conversion_target", 0.15) or 0.15)
-        clear_and_write(p_dia, fitz.Rect(277, 94, 312, 107), f"{traf}", fontsize=6.5, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(277, 109, 312, 122), f"{conv*100:.1f}%", fontsize=6.5, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(277, 123, 312, 136), f"{c.get('transacciones', 0)}", fontsize=6.5, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(277, 138, 312, 151), f"${float(c.get('meta_ideal', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
+        conv = float(d_data.get("conversion_target", 0.0) or 0.0)
+        clear_and_write(p_dia, fitz.Rect(277, 94, 312, 107), f"{traf}" if traf > 0 else "", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 109, 312, 122), f"{conv*100:.1f}%" if conv > 0 else "", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 123, 312, 136), f"{c.get('transacciones', 0)}" if c.get('transacciones', 0) > 0 else "", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(277, 138, 312, 151), f"${float(c.get('meta_ideal', 0.0) or 0.0):,.2f}" if m_dia > 0 else "", fontsize=5.8, fill=None, align_right=True)
 
-        clear_and_write(p_dia, fitz.Rect(445, 94, 468, 107), f"{c.get('wea_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(445, 109, 468, 122), f"{c.get('kids_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(445, 123, 468, 136), f"{c.get('ck_unid_meta', 1)}", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 94, 468, 107), f"{c.get('wea_unid_meta', 0)}" if c.get('wea_unid_meta', 0) > 0 else "", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 109, 468, 122), f"{c.get('kids_unid_meta', 0)}" if c.get('kids_unid_meta', 0) > 0 else "", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(445, 123, 468, 136), f"{c.get('ck_unid_meta', 0)}" if c.get('ck_unid_meta', 0) > 0 else "", fontsize=6.5, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(104, 195, 167, 209), f"${float(c.get('vta_neta_prod', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(104, 209, 167, 222), f"{float(c.get('u_prod', 0.0) or 0.0):.2f}", fontsize=6.5, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(250, 195, 312, 209), f"${float(d_data.get('vta_ly', 0.0) or 0.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        vta_prod = float(c.get('vta_neta_prod', 0.0) or 0.0)
+        u_prod = float(c.get('u_prod', 0.0) or 0.0)
+        vta_ly_val = float(d_data.get('vta_ly', 0.0) or 0.0)
+        clear_and_write(p_dia, fitz.Rect(104, 195, 167, 209), f"${vta_prod:,.2f}" if vta_prod > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(104, 209, 167, 222), f"{u_prod:.2f}" if u_prod > 0 else "", fontsize=6.5, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(250, 195, 312, 209), f"${vta_ly_val:,.2f}" if vta_ly_val > 0 else "", fontsize=5.8, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(345, 195, 400, 209), f"${float(d_data.get('atv_mtd', 7597.0) or 7597.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(405, 195, 468, 209), f"${float(d_data.get('atv_dia', 3620.0) or 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(345, 222, 400, 236), f"${float(d_data.get('aur_mtd', 3362.0) or 3362.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(405, 222, 468, 236), f"${float(d_data.get('aur_dia', 3620.0) or 3620.0):,.2f}", fontsize=5.8, fill=None, align_center=True)
+        atv_mtd_v = float(d_data.get('atv_mtd', 0.0) or 0.0)
+        atv_dia_v = float(d_data.get('atv_dia', 0.0) or 0.0)
+        aur_mtd_v = float(d_data.get('aur_mtd', 0.0) or 0.0)
+        aur_dia_v = float(d_data.get('aur_dia', 0.0) or 0.0)
+        clear_and_write(p_dia, fitz.Rect(345, 195, 400, 209), f"${atv_mtd_v:,.2f}" if atv_mtd_v > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 195, 468, 209), f"${atv_dia_v:,.2f}" if atv_dia_v > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(345, 222, 400, 236), f"${aur_mtd_v:,.2f}" if aur_mtd_v > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, 222, 468, 236), f"${aur_dia_v:,.2f}" if aur_dia_v > 0 else "", fontsize=5.8, fill=None, align_center=True)
 
-        raw_b_traf = d_data.get("trafico_bloques", [10, 15, 20, 25, 20])
+        raw_b_traf = d_data.get("trafico_bloques", [0, 0, 0, 0, 0])
         if not isinstance(raw_b_traf, list):
-            raw_b_traf = [10, 15, 20, 25, 20]
+            raw_b_traf = [0, 0, 0, 0, 0]
         b_traf = [int(x or 0) for x in raw_b_traf[:5]]
         tot_b = sum(b_traf)
         b_xs = [77, 107, 137, 167, 197]
         for i in range(5):
             bt = b_traf[i] if i < len(b_traf) else 0
             bx = b_xs[i]
-            clear_and_write(p_dia, fitz.Rect(bx, 269, bx+28, 282), f"{bt}", fontsize=6.5, fill=None, align_center=True)
+            clear_and_write(p_dia, fitz.Rect(bx, 269, bx+28, 282), f"{bt}" if bt > 0 else "", fontsize=6.5, fill=None, align_center=True)
             p = (bt / tot_b * 100.0) if tot_b > 0 else 0.0
-            clear_and_write(p_dia, fitz.Rect(bx, 284, bx+28, 297), f"{p:.1f}%", fontsize=6.0, fill=None, align_center=True)
-            clear_and_write(p_dia, fitz.Rect(bx, 299, bx+28, 312), f"${(bt/tot_b*m_dia if tot_b>0 else 0):,.0f}", fontsize=5.5, fill=None, align_center=True)
+            clear_and_write(p_dia, fitz.Rect(bx, 284, bx+28, 297), f"{p:.1f}%" if tot_b > 0 else "", fontsize=6.0, fill=None, align_center=True)
+            clear_and_write(p_dia, fitz.Rect(bx, 299, bx+28, 312), f"${(bt/tot_b*m_dia):,.0f}" if (tot_b > 0 and m_dia > 0) else "", fontsize=5.5, fill=None, align_center=True)
 
-        clear_and_write(p_dia, fitz.Rect(228, 269, 255, 282), f"{tot_b}", fontsize=6.5, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(228, 284, 255, 297), "100%", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(228, 299, 255, 312), f"${m_dia:,.0f}", fontsize=5.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 269, 255, 282), f"{tot_b}" if tot_b > 0 else "", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 284, 255, 297), "100%" if tot_b > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, 299, 255, 312), f"${m_dia:,.0f}" if m_dia > 0 else "", fontsize=5.5, fill=None, align_center=True)
 
         colab_rows = c.get("colab_rows", [])
         active_colabs = [r for r in colab_rows if r.get("nombre", "").strip()]
@@ -1759,12 +1800,12 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
                 c_kid = int(cr.get('meta_kid', 0) or 0)
                 c_ck = int(cr.get('meta_ck', 0) or 0)
                 clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), c_nom, fontsize=6.0, fill=None)
-                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), f"{c_hrs:.1f}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), f"${c_vta:,.2f}", fontsize=5.0, fill=None, align_right=True)
-                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), f"{c_ana}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), f"{c_wea}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), f"{c_kid}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), f"{c_ck}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), f"{c_hrs:.1f}" if c_hrs > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), f"${c_vta:,.2f}" if c_vta > 0 else "", fontsize=5.0, fill=None, align_right=True)
+                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), f"{c_ana}" if c_ana > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), f"{c_wea}" if c_wea > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), f"{c_kid}" if c_kid > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), f"{c_ck}" if c_ck > 0 else "", fontsize=6.0, fill=None, align_center=True)
             else:
                 clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), "", fill=None)
                 clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), "", fill=None)
@@ -1782,28 +1823,26 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         tot_kid_val = sum(int(cr.get('meta_kid', 0) or 0) for cr in active_colabs)
         tot_ck_val = sum(int(cr.get('meta_ck', 0) or 0) for cr in active_colabs)
 
-        clear_and_write(p_dia, fitz.Rect(105, y_t, 163, y_t2), f"{tot_hrs_val:.1f}", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(164, y_t, 201, y_t2), f"${m_dia:,.2f}", fontsize=5.0, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(202, y_t, 252, y_t2), f"{tot_ana_val}", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(253, y_t, 314, y_t2), f"{tot_wea_val}", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(315, y_t, 343, y_t2), f"{tot_kid_val}", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(344, y_t, 372, y_t2), f"{tot_ck_val}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(105, y_t, 163, y_t2), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(164, y_t, 201, y_t2), f"${m_dia:,.2f}" if m_dia > 0 else "", fontsize=5.0, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(202, y_t, 252, y_t2), f"{tot_ana_val}" if tot_ana_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(253, y_t, 314, y_t2), f"{tot_wea_val}" if tot_wea_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(315, y_t, 343, y_t2), f"{tot_kid_val}" if tot_kid_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(344, y_t, 372, y_t2), f"{tot_ck_val}" if tot_ck_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
 
         # 2. Estampar Plan de Acción
         clear_and_write(p_plan, fitz.Rect(425, 68, 470, 80), semana_str, fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_plan, fitz.Rect(508, 68, 560, 80), dia_base, fontsize=7.5, fill=None, align_center=True)
 
-        tot_h = max(tot_hrs_val, 0.1)
         tot_unids = int(c.get('total_unidades', 0) or 0)
-        vta_prod = float(c.get('vta_neta_prod', 0.0) or 0.0)
         u_prod_val = float(c.get('u_prod', 0.0) or 0.0)
 
-        clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{tot_hrs_val:.1f}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(136, 160, 175, 175), f"${m_dia:,.0f}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(176, 160, 215, 175), f"{tot_unids}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${vta_prod:,.0f}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{u_prod_val:.2f}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_h):,.2f} / hr", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(136, 160, 175, 175), f"${m_dia:,.0f}" if m_dia > 0 else "", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(176, 160, 215, 175), f"{tot_unids}" if tot_unids > 0 else "", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${vta_prod:,.0f}" if vta_prod > 0 else "", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{u_prod_val:.2f}" if u_prod_val > 0 else "", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_hrs_val):,.2f} / hr" if (tot_hrs_val > 0 and m_dia > 0) else "", fontsize=7.5, fill=None, align_center=True)
 
         # SMART (Líneas perfectamente alineadas)
         clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), str(d_data.get("smart_especifico") or ""), fontsize=6.0, fill=None)
@@ -2087,7 +2126,7 @@ def generar_html_impresion(d_name, user_id):
         # === VISTA SEMANAL EXACTA DE EXCEL ===
         meta_sem = float(g_meta.get("meta_semanal_dinero", 0.0) or 0.0)
         u_sem = int(g_meta.get("meta_semanal_u", 0) or 0)
-        aur_sem = float(g_meta.get("aur", 3620.0) or 3620.0)
+        aur_sem = float(g_meta.get("aur", 0.0) or 0.0)
         ly_sem = float(g_meta.get("ly_dinero", 0.0) or 0.0)
         
         tot_dias_meta = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) for d in DIAS)
@@ -2284,7 +2323,7 @@ def generar_html_impresion(d_name, user_id):
         
         m_dia = c.get("meta_diaria", 0.0)
         v_ly = d_data.get("vta_ly", 0.0)
-        aur = float(d_data.get("aur_dia", 3620.0) or 3620.0)
+        aur = float(d_data.get("aur_dia", 0.0) or 0.0)
         u_dia = c.get("total_unidades", 0)
         traf = c.get("trafico", 0)
         conv = d_data.get("conversion_target", 0.15)
@@ -2970,26 +3009,34 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         # Componente Celda Blanca (Entrada editable ⚪)
         def make_white_input(val, data_id, width=None, suffix="", expand=None):
-            val_formatted = str(val)
+            val_formatted = ""
             try:
-                if isinstance(val, (int, float)) and val != 0:
-                    f_val = float(val)
-                    if f_val.is_integer():
-                        val_formatted = f"{int(f_val):,}"
-                    else:
-                        val_formatted = f"{f_val:,.2f}"
-            except Exception: pass
+                if val is not None and val != "":
+                    f_val = float(str(val).replace(",", "").strip())
+                    if f_val != 0.0:
+                        if f_val.is_integer():
+                            val_formatted = f"{int(f_val):,}"
+                        else:
+                            val_formatted = f"{f_val:,.2f}"
+            except Exception:
+                val_formatted = str(val or "") if not isinstance(val, (int, float)) else ""
 
             def on_blur_format_commas(e):
                 try:
                     raw_txt = (e.control.value or "").replace(",", "").strip()
                     if raw_txt:
                         num = float(raw_txt)
-                        if num.is_integer():
-                            fmt = f"{int(num):,}"
+                        if num != 0.0:
+                            if num.is_integer():
+                                fmt = f"{int(num):,}"
+                            else:
+                                fmt = f"{num:,.2f}"
+                            e.control.value = fmt
                         else:
-                            fmt = f"{num:,.2f}"
-                        e.control.value = fmt
+                            e.control.value = ""
+                        e.control.update()
+                    else:
+                        e.control.value = ""
                         e.control.update()
                 except Exception: pass
 
@@ -3053,7 +3100,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                             ft.Row([
                                 ft.Column([
                                     ft.Text("Meta Diaria (Manual)", color="#AAAAAA", size=9),
-                                    make_white_input(data["meta_diaria"], "meta_diaria", suffix="$", expand=True),
+                                    make_white_input(data.get("meta_diaria", 0.0), "meta_diaria", suffix="$", expand=True),
                                 ], spacing=1, expand=1),
                                 ft.Column([
                                     ft.Text("Total U. (Auto)", color="#AAAAAA", size=9),
@@ -3080,11 +3127,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                             ft.Row([
                                 ft.Column([
                                     ft.Text("Tráfico Esp. (Manual)", color="#AAAAAA", size=9),
-                                    make_white_input(data["trafico_esperado"], "trafico_esperado", expand=True),
+                                    make_white_input(data.get("trafico_esperado", 0), "trafico_esperado", expand=True),
                                 ], spacing=1, expand=1),
                                 ft.Column([
                                     ft.Text("Conv. LY+1 (Manual)", color="#AAAAAA", size=9),
-                                    make_white_input(int(data["conversion_target"]*100), "conversion_target", suffix="%", expand=True),
+                                    make_white_input(int(data.get("conversion_target", 0.0)*100), "conversion_target", suffix="%", expand=True),
                                 ], spacing=1, expand=1),
                             ], spacing=4),
                             ft.Row([
@@ -3138,7 +3185,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                             ft.Row([
                                 ft.Column([
                                     ft.Text("COMP LY - Vta LY (Manual)", color="#AAAAAA", size=9),
-                                    make_white_input(data["vta_ly"], "vta_ly", suffix="$", expand=True),
+                                    make_white_input(data.get("vta_ly", 0.0), "vta_ly", suffix="$", expand=True),
                                 ], spacing=1, expand=1),
                             ], spacing=4),
                         ], spacing=3),
@@ -3151,21 +3198,21 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                             ft.Row([
                                 ft.Column([
                                     ft.Text("ATV Día Comp", color="#AAAAAA", size=9),
-                                    make_white_input(data.get("atv_dia", 3620.0), "atv_dia", suffix="$", expand=True),
+                                    make_white_input(data.get("atv_dia", 0.0), "atv_dia", suffix="$", expand=True),
                                 ], spacing=1, expand=1),
                                 ft.Column([
                                     ft.Text("AUR Día Comp", color="#AAAAAA", size=9),
-                                    make_white_input(data.get("aur_dia", 3620.0), "aur_dia", suffix="$", expand=True),
+                                    make_white_input(data.get("aur_dia", 0.0), "aur_dia", suffix="$", expand=True),
                                 ], spacing=1, expand=1),
                             ], spacing=4),
                             ft.Row([
                                 ft.Column([
                                     ft.Text("ATV MTD", color="#AAAAAA", size=9),
-                                    make_white_input(data.get("atv_mtd", 7597.0), "atv_mtd", suffix="$", expand=True),
+                                    make_white_input(data.get("atv_mtd", 0.0), "atv_mtd", suffix="$", expand=True),
                                 ], spacing=1, expand=1),
                                 ft.Column([
                                     ft.Text("AUR MTD", color="#AAAAAA", size=9),
-                                    make_white_input(data.get("aur_mtd", 3362.0), "aur_mtd", suffix="$", expand=True),
+                                    make_white_input(data.get("aur_mtd", 0.0), "aur_mtd", suffix="$", expand=True),
                                 ], spacing=1, expand=1),
                             ], spacing=4),
                         ], spacing=3),
@@ -3495,8 +3542,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         # Cálculo de métricas del día para el encabezado del plan
         horas_prog = sum(float(c.get("horas", 0.0) or 0.0) for c in data.get("colaboradores", []))
-        meta_ns = float(data.get("meta_diaria", 4758.0) or 0.0)
-        atv_val = float(data.get("atv_dia", 3620.0) or 3620.0)
+        meta_ns = float(data.get("meta_diaria", 0.0) or 0.0)
+        atv_val = float(data.get("atv_dia", 0.0) or 0.0)
         meta_pzs = (meta_ns / atv_val) if atv_val > 0 else 0.0
         meta_prod_ns = (meta_ns / horas_prog) if horas_prog > 0 else 0.0
         meta_prod_pzs = (meta_pzs / horas_prog) if horas_prog > 0 else 0.0
@@ -3940,22 +3987,22 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         is_mobile_w = (page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False
 
         # Valores por defecto en h_state (semanal)
-        h_state.setdefault("meta_conversion", 0.16)
+        h_state.setdefault("meta_conversion", 0.0)
         h_state.setdefault("wea_pct", 0.15)
         h_state.setdefault("kids_pct", 0.05)
         h_state.setdefault("ck_pct", 0.30)
-        h_state.setdefault("comply_sem", 22519.0)
-        h_state.setdefault("atv_sem", 7500.0)
-        h_state.setdefault("aur_sem", 4617.0)
+        h_state.setdefault("comply_sem", 0.0)
+        h_state.setdefault("atv_sem", 0.0)
+        h_state.setdefault("aur_sem", 0.0)
         h_state.setdefault("horas_colab", {})
         h_state.setdefault("cierre_semanal", {})
         h_state.setdefault("vta_neta_sem", 0.0)
         h_state.setdefault("vta_unid_sem", 0)
 
         # Totales agregados de las pestañas diarias
-        tot_meta_sem = sum(s_state[d]["meta_diaria"] for d in DIAS)
-        tot_ana_sem = sum(s_state[d]["meta_diaria"] * 0.85 for d in DIAS)
-        tot_wea_sem = sum(s_state[d]["meta_diaria"] * 0.15 for d in DIAS)
+        tot_meta_sem = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) for d in DIAS)
+        tot_ana_sem = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) * 0.85 for d in DIAS)
+        tot_wea_sem = sum(float(s_state[d].get("meta_diaria", 0.0) or 0.0) * 0.15 for d in DIAS)
         
         tot_trafico_sem = 0
         tot_transac_sem = 0
@@ -3977,32 +4024,27 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         clientes_convertidos = tot_convertidos_sem if tot_convertidos_sem > 0 else tot_transac_sem
         conversion_real_sem_pct = (clientes_convertidos * 100.0 / clientes_totales) if clientes_totales > 0 else 0.0
 
-        meta_conversion = float(h_state.get("meta_conversion", 0.16))
-        meta_transacciones_sem = int(tot_trafico_sem * meta_conversion)
+        meta_conversion = float(h_state.get("meta_conversion", 0.0) or 0.0)
+        meta_transacciones_sem = int(tot_trafico_sem * meta_conversion) if (tot_trafico_sem > 0 and meta_conversion > 0) else 0
         meta_ideal_sem = tot_meta_sem * 1.10
-        total_unidades_sem = int(tot_meta_sem / h_state["aur_sem"]) if h_state.get("aur_sem", 4617.0) > 0 else (int(tot_meta_sem / 4617) if tot_meta_sem > 0 else 0)
 
-        wea_pct = float(h_state.get("wea_pct", 0.15))
-        unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 1
+        atvs = [float(s_state[d].get("atv_dia", 0.0) or 0.0) for d in DIAS if float(s_state[d].get("atv_dia", 0.0) or 0.0) > 0]
+        atv_sem = (sum(atvs) / len(atvs)) if atvs else 0.0
+        aurs = [float(s_state[d].get("aur_dia", 0.0) or 0.0) for d in DIAS if float(s_state[d].get("aur_dia", 0.0) or 0.0) > 0]
+        aur_sem = (sum(aurs) / len(aurs)) if aurs else float(h_state.get("aur_sem", 0.0) or 0.0)
 
-        kids_pct = float(h_state.get("kids_pct", 0.05))
-        unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if total_unidades_sem > 0 else 1
+        total_unidades_sem = int(tot_meta_sem / aur_sem) if (aur_sem > 0 and tot_meta_sem > 0) else 0
 
-        ck_pct = float(h_state.get("ck_pct", 0.30))
-        unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
+        wea_pct = float(h_state.get("wea_pct", 0.15) or 0.15)
+        unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 0
+
+        kids_pct = float(h_state.get("kids_pct", 0.05) or 0.05)
+        unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if (total_unidades_sem > 0 and kids_pct > 0) else 0
+
+        ck_pct = float(h_state.get("ck_pct", 0.30) or 0.30)
+        unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if (total_unidades_sem > 0 and ck_pct > 0) else 0
 
         comply_sem = tot_meta_sem
-        atv_sem = sum(s_state[d].get("atv_dia", 3620.0) for d in DIAS) / 7.0
-        aur_sem = sum(s_state[d].get("aur_dia", 3620.0) for d in DIAS) / 7.0
-
-        wea_pct = float(h_state.get("wea_pct", 0.15))
-        unidades_wea_sem = max(1, int(tot_wea_sem / 8100)) if tot_wea_sem > 0 else 1
-
-        kids_pct = float(h_state.get("kids_pct", 0.05))
-        unidades_kids_sem = max(1, int(total_unidades_sem * kids_pct)) if total_unidades_sem > 0 else 1
-
-        ck_pct = float(h_state.get("ck_pct", 0.30))
-        unidades_ck_sem = max(1, int(total_unidades_sem * ck_pct)) if total_unidades_sem > 0 else 1
 
         # Callbacks para guardar cambios al editar cuadros blancos de entrada
         def on_param_change(field_key, val_str, is_pct=False):
@@ -4394,7 +4436,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     tab_content_container = ft.Container()
 
     def select_tab(tab_name):
-        guardar_estado_persistente(user_id)
+        guardar_estado_persistente(user_id, debounce_seconds=0)
         user_states[user_id]['active_tab'][0] = tab_name
         for btn, t_id in tab_buttons:
             is_sel = (t_id == tab_name)
