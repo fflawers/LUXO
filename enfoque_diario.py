@@ -1667,11 +1667,21 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
 
         # 1. Estampar datos Día
         semana_str = str(g_meta.get("semana", "37"))
-        tienda_str = f"{g_meta.get('tienda', 'SGH')} (#{g_meta.get('tienda_num', '3645')})"
+        t_nombre = str(g_meta.get("tienda", "SGH")).strip()
+        t_num = str(g_meta.get("tienda_num", "3645")).strip()
+        tienda_str = f"{t_nombre} (#{t_num})" if t_num else t_nombre
 
         clear_and_write(p_dia, fitz.Rect(255, 33, 290, 44), semana_str, fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(338, 33, 372, 44), dia_base, fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(400, 33, 434, 44), tienda_str, fontsize=6.2, fill=None, align_center=True)
+        
+        # Ajuste dinámico de fuente para que la tienda quede exactamente en el espacio x=400..433 sin tocar la caja verde
+        fs_t = 5.8
+        w_t = fitz.get_text_length(tienda_str, fontname="helv", fontsize=fs_t)
+        while w_t > 33.0 and fs_t > 3.5:
+            fs_t -= 0.3
+            w_t = fitz.get_text_length(tienda_str, fontname="helv", fontsize=fs_t)
+        x_tienda = 400.0 + max(0.0, (33.0 - w_t) / 2.0)
+        p_dia.insert_text(fitz.Point(x_tienda, 41.5), tienda_str, fontsize=fs_t, fontname="helv", color=(0,0,0))
 
         m_dia = float(c.get("meta_diaria", 0.0) or 0.0)
         clear_and_write(p_dia, fitz.Rect(104, 94, 134, 107), f"${m_dia:,.2f}", fontsize=5.8, fill=None, align_right=True)
