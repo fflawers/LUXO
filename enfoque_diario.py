@@ -985,25 +985,29 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                     ws = wb_pyxl[d]
                     d_data = s_state[d]
                     _safe_set(ws, 'I1', int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30'))
-                    _safe_set(ws, 'M1', g_meta.get('tienda', 'SGH'))
+                    _safe_set(ws, 'L1', d)
+                    _safe_set(ws, 'N1', g_meta.get('tienda', 'SGH'))
                     _safe_set(ws, 'D5', d_data.get('meta_diaria', 0.0))
                     _safe_set(ws, 'J5', d_data.get('trafico_esperado', 0))
                     _safe_set(ws, 'J6', d_data.get('conversion_target', 0.0))
-                    _safe_set(ws, 'G12', d_data.get('vta_ly', 0.0))
+                    _safe_set(ws, 'I12', d_data.get('vta_ly', 0.0))
                     _safe_set(ws, 'N5', d_data.get('wearables_pct', 0.15))
                     _safe_set(ws, 'N6', d_data.get('kids_pct', 0.05))
                     _safe_set(ws, 'N7', d_data.get('carekits_pct', 0.30))
                     if 'trafico_bloques' in d_data:
                         for b_i, b_val in enumerate(d_data['trafico_bloques'][:5]):
-                            try: ws.cell(17, 3 + b_i).value = b_val
-                            except Exception: pass
-                    _safe_set(ws, 'N11', d_data.get('atv_dia', 3620.0))
-                    _safe_set(ws, 'N13', d_data.get('aur_dia', 3620.0))
-                    _safe_set(ws, 'L11', d_data.get('atv_mtd', 7597.0))
-                    _safe_set(ws, 'L13', d_data.get('aur_mtd', 3362.0))
+                            col_letter = ['C', 'D', 'E', 'F', 'G'][b_i]
+                            _safe_set(ws, f'{col_letter}17', b_val)
+                    _safe_set(ws, 'L12', d_data.get('atv_mtd', 7597.0))
+                    _safe_set(ws, 'N12', d_data.get('atv_dia', 3620.0))
+                    _safe_set(ws, 'L14', d_data.get('aur_mtd', 3362.0))
+                    _safe_set(ws, 'N14', d_data.get('aur_dia', 3620.0))
                     for i, c in enumerate(d_data.get('colaboradores', [])[:8]):
                         _safe_set(ws, f'B{23 + i}', c.get('nombre', ''))
                         _safe_set(ws, f'D{23 + i}', c.get('horas', 0.0))
+                        _safe_set(ws, f'I{23 + i}', c.get('meta_wea', 1))
+                        _safe_set(ws, f'K{23 + i}', c.get('meta_kid', 1))
+                        _safe_set(ws, f'M{23 + i}', c.get('meta_ck', 1))
                         _safe_set(ws, f'E{40 + i}', c.get('interacciones', 0))
                         _safe_set(ws, f'F{40 + i}', c.get('convertidos', 0))
                         _safe_set(ws, f'H{40 + i}', c.get('vta_cierre', 0.0))
@@ -1017,14 +1021,14 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
                     ws_p = wb_pyxl[plan_sheet_name]
                     d_data = s_state[d]
                     _safe_set(ws_p, 'I1', int(g_meta['semana']) if str(g_meta.get('semana', '')).isdigit() else g_meta.get('semana', '30'))
-                    smart_text = ""
-                    if d_data.get('smart_especifico'): smart_text += f"S (Específico): {d_data.get('smart_especifico')}\n"
-                    if d_data.get('smart_medible'): smart_text += f"M (Medible): {d_data.get('smart_medible')}\n"
-                    if d_data.get('smart_alcanzable'): smart_text += f"A (Alcanzable): {d_data.get('smart_alcanzable')}\n"
-                    if d_data.get('smart_reto'): smart_text += f"R (Reto): {d_data.get('smart_reto')}\n"
-                    if d_data.get('smart_tiempo'): smart_text += f"T (Tiempo): {d_data.get('smart_tiempo')}\n"
-                    if smart_text: _safe_set(ws_p, 'C29', smart_text.strip())
+                    _safe_set(ws_p, 'K1', d)
+                    if d_data.get('smart_especifico'): _safe_set(ws_p, 'C29', d_data.get('smart_especifico'))
+                    if d_data.get('smart_medible'): _safe_set(ws_p, 'C30', d_data.get('smart_medible'))
+                    if d_data.get('smart_alcanzable'): _safe_set(ws_p, 'C31', d_data.get('smart_alcanzable'))
+                    if d_data.get('smart_reto'): _safe_set(ws_p, 'C32', d_data.get('smart_reto'))
+                    if d_data.get('smart_tiempo'): _safe_set(ws_p, 'C33', d_data.get('smart_tiempo'))
                     if d_data.get('logros_hoy'): _safe_set(ws_p, 'A35', d_data.get('logros_hoy'))
+                    if d_data.get('oportunidades_manana'): _safe_set(ws_p, 'A37', d_data.get('oportunidades_manana'))
 
             # 2. Guardar archivo Excel (.xlsx) maestro con los datos inyectados
             try:
