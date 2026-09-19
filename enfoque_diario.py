@@ -1680,9 +1680,9 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         clear_and_write(p_dia, fitz.Rect(268, 125, 325, 138), f"{c.get('transacciones', 0)}", fontsize=7.5, align_right=True)
         clear_and_write(p_dia, fitz.Rect(268, 140, 325, 153), f"${c.get('meta_ideal', 0.0):,.2f}", fontsize=7.5, align_right=True)
 
-        clear_and_write(p_dia, fitz.Rect(395, 95, 445, 108), f"{c.get('wea_unid_meta', 1)}", fontsize=7.5, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(395, 110, 445, 123), f"{c.get('kids_unid_meta', 1)}", fontsize=7.5, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(395, 125, 445, 138), f"{c.get('ck_unid_meta', 1)}", fontsize=7.5, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(446.5, 95, 481.0, 108), f"{c.get('wea_unid_meta', 1)}", fontsize=7.5, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(446.5, 110, 481.0, 123), f"{c.get('kids_unid_meta', 1)}", fontsize=7.5, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(446.5, 125, 481.0, 138), f"{c.get('ck_unid_meta', 1)}", fontsize=7.5, align_center=True)
 
         clear_and_write(p_dia, fitz.Rect(98, 203, 148, 216), f"${c.get('vta_neta_prod', 0.0):,.2f}", fontsize=7.5, align_right=True)
         clear_and_write(p_dia, fitz.Rect(98, 218, 148, 231), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5, align_right=True)
