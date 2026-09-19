@@ -1751,13 +1751,20 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             y_r2 = y_r + 13.0
             if idx < len(active_colabs):
                 cr = active_colabs[idx]
-                clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), cr.get('nombre', ''), fontsize=6.0, fill=None)
-                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), f"{cr.get('horas', 0):.1f}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), f"${cr.get('meta_vta', 0.0):,.2f}", fontsize=5.0, fill=None, align_right=True)
-                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), f"{cr.get('meta_ana', 0)}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), f"{cr.get('meta_wea', 0)}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), f"{cr.get('meta_kid', 0)}", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), f"{cr.get('meta_ck', 0)}", fontsize=6.0, fill=None, align_center=True)
+                c_nom = str(cr.get('nombre', '') or '')
+                c_hrs = float(cr.get('horas', 0.0) or 0.0)
+                c_vta = float(cr.get('meta_vta', 0.0) or 0.0)
+                c_ana = int(cr.get('meta_ana', 0) or 0)
+                c_wea = int(cr.get('meta_wea', 0) or 0)
+                c_kid = int(cr.get('meta_kid', 0) or 0)
+                c_ck = int(cr.get('meta_ck', 0) or 0)
+                clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), c_nom, fontsize=6.0, fill=None)
+                clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), f"{c_hrs:.1f}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(164, y_r, 201, y_r2), f"${c_vta:,.2f}", fontsize=5.0, fill=None, align_right=True)
+                clear_and_write(p_dia, fitz.Rect(202, y_r, 252, y_r2), f"{c_ana}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(253, y_r, 314, y_r2), f"{c_wea}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(315, y_r, 343, y_r2), f"{c_kid}", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(344, y_r, 372, y_r2), f"{c_ck}", fontsize=6.0, fill=None, align_center=True)
             else:
                 clear_and_write(p_dia, fitz.Rect(48, y_r, 104, y_r2), "", fill=None)
                 clear_and_write(p_dia, fitz.Rect(105, y_r, 163, y_r2), "", fill=None)
@@ -1769,34 +1776,44 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
 
         y_t = 480.0
         y_t2 = 494.0
-        clear_and_write(p_dia, fitz.Rect(105, y_t, 163, y_t2), f"{c.get('tot_horas', 0):.1f}", fontsize=6.0, fill=None, align_center=True)
+        tot_hrs_val = float(c.get('tot_horas', 0.0) or 0.0)
+        tot_ana_val = sum(int(cr.get('meta_ana', 0) or 0) for cr in active_colabs)
+        tot_wea_val = sum(int(cr.get('meta_wea', 0) or 0) for cr in active_colabs)
+        tot_kid_val = sum(int(cr.get('meta_kid', 0) or 0) for cr in active_colabs)
+        tot_ck_val = sum(int(cr.get('meta_ck', 0) or 0) for cr in active_colabs)
+
+        clear_and_write(p_dia, fitz.Rect(105, y_t, 163, y_t2), f"{tot_hrs_val:.1f}", fontsize=6.0, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(164, y_t, 201, y_t2), f"${m_dia:,.2f}", fontsize=5.0, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(202, y_t, 252, y_t2), f"{sum(cr.get('meta_ana', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(253, y_t, 314, y_t2), f"{sum(cr.get('meta_wea', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(315, y_t, 343, y_t2), f"{sum(cr.get('meta_kid', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(344, y_t, 372, y_t2), f"{sum(cr.get('meta_ck', 0) for cr in active_colabs)}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(202, y_t, 252, y_t2), f"{tot_ana_val}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(253, y_t, 314, y_t2), f"{tot_wea_val}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(315, y_t, 343, y_t2), f"{tot_kid_val}", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(344, y_t, 372, y_t2), f"{tot_ck_val}", fontsize=6.0, fill=None, align_center=True)
 
         # 2. Estampar Plan de Acción
         clear_and_write(p_plan, fitz.Rect(425, 68, 470, 80), semana_str, fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_plan, fitz.Rect(508, 68, 560, 80), dia_base, fontsize=7.5, fill=None, align_center=True)
 
-        tot_h = max(c.get('tot_horas', 0.0), 0.1)
-        clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{c.get('tot_horas', 0):.1f}", fontsize=7.5, fill=None, align_center=True)
+        tot_h = max(tot_hrs_val, 0.1)
+        tot_unids = int(c.get('total_unidades', 0) or 0)
+        vta_prod = float(c.get('vta_neta_prod', 0.0) or 0.0)
+        u_prod_val = float(c.get('u_prod', 0.0) or 0.0)
+
+        clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{tot_hrs_val:.1f}", fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_plan, fitz.Rect(136, 160, 175, 175), f"${m_dia:,.0f}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(176, 160, 215, 175), f"{c.get('total_unidades', 0)}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${c.get('vta_neta_prod', 0.0):,.0f}", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{c.get('u_prod', 0.0):.2f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(176, 160, 215, 175), f"{tot_unids}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${vta_prod:,.0f}", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{u_prod_val:.2f}", fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_h):,.2f} / hr", fontsize=7.5, fill=None, align_center=True)
 
         # SMART (Líneas perfectamente alineadas)
-        clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), d_data.get("smart_especifico", ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 698, 315, 707), d_data.get("smart_medible", ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 707, 315, 716), d_data.get("smart_alcanzable", ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 716, 315, 725), d_data.get("smart_reto", ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 725, 315, 734), d_data.get("smart_tiempo", ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), str(d_data.get("smart_especifico") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 698, 315, 707), str(d_data.get("smart_medible") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 707, 315, 716), str(d_data.get("smart_alcanzable") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 716, 315, 725), str(d_data.get("smart_reto") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(125, 725, 315, 734), str(d_data.get("smart_tiempo") or ""), fontsize=6.0, fill=None)
 
         # Tu enfoque para hoy
-        enf_hoy = d_data.get("enfoque_hoy", "")
+        enf_hoy = str(d_data.get("enfoque_hoy") or "").strip()
         if enf_hoy:
             p_plan.insert_textbox(fitz.Rect(325, 688, 550, 734), enf_hoy, fontsize=6.8, fontname="helv", color=(0,0,0))
 
@@ -1813,6 +1830,8 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         return out_pdf_path if os.path.exists(out_pdf_path) else None
     except Exception as ex:
         print("Error en generar_pdf_enfoque_vectorial:", ex)
+        import traceback
+        traceback.print_exc()
         return None
 
 def generar_excel_enfoque(d_name, user_id, page=None):
@@ -1826,6 +1845,9 @@ def generar_pdf_enfoque_file(d_name, user_id):
 
     # Generación vectorial nativa 100% de alta velocidad con PyMuPDF (Calibración exacta 1:1)
     try:
+        if os.path.exists(web_pdf_path):
+            try: os.remove(web_pdf_path)
+            except Exception: pass
         vec_res = generar_pdf_enfoque_vectorial(d_name, user_id, web_pdf_path)
         if vec_res and os.path.exists(vec_res):
             return vec_res
