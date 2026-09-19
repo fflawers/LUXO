@@ -576,6 +576,56 @@ def ejecutar_js_flet(page: ft.Page, js_code: str):
         print("Error al ejecutar JS en Flet:", ex_ej)
 
 
+GLOBAL_SIM_VIEW_STATE = {}
+
+def activar_mic_simulador_js(page: ft.Page, visible: bool = True, modo: str = "chat"):
+    """Activa el botón nativo HTML del Simulador IA con auto-inyección física garantizada."""
+    if not page:
+        return
+    tok = getattr(page, "_luxo_token", None)
+    u_id = getattr(page, "user_id", None)
+    u_name = getattr(page, "username", None)
+    dev_id = getattr(page, "device_id", None)
+    
+    st_val = {"visible": visible, "mode": modo}
+    if tok: GLOBAL_SIM_VIEW_STATE[tok] = st_val
+    if dev_id: GLOBAL_SIM_VIEW_STATE[dev_id] = st_val
+    if u_name: GLOBAL_SIM_VIEW_STATE[str(u_name).strip().lower()] = st_val
+    if u_id: 
+        GLOBAL_SIM_VIEW_STATE[str(u_id)] = st_val
+        if str(u_id).isdigit():
+            GLOBAL_SIM_VIEW_STATE[int(u_id)] = st_val
+    GLOBAL_SIM_VIEW_STATE["1"] = st_val
+    GLOBAL_SIM_VIEW_STATE["unknown"] = st_val
+    GLOBAL_SIM_VIEW_STATE["global"] = st_val
+
+    # Actualizar en active_sessions
+    try:
+        for uid_k, sess in list(active_sessions.items()):
+            if sess.get("page") == page:
+                sess["active_view"] = "simulador" if visible else ""
+                sess["sim_modo_activo"] = modo if visible else None
+    except Exception:
+        pass
+
+    vis_str = "true" if visible else "false"
+    js_code = f"""
+    (function() {{
+        window._simuladorModo = '{modo}';
+        window._simCurrentMode = '{modo}';
+        window._simuladorVisible = {vis_str};
+        window._simPollVisible = {vis_str};
+        window._luxoActiveView = {'"simulador"' if visible else '""'};
+        if (window.showSimuladorMicBtn) {{
+            window.showSimuladorMicBtn({vis_str}, '{modo}');
+        }} else if (window.evaluarVisibilidadSimulador) {{
+            window.evaluarVisibilidadSimulador();
+        }}
+    }})();
+    """
+    ejecutar_js_flet(page, js_code)
+
+
 import tempfile
 import os
 import requests
@@ -869,7 +919,7 @@ def configurar_rutas_fastapi(app):
             day = urllib.parse.unquote(day)
             clean_d_name = enfoque_diario.sanitize_filename(day)
             pdf_path = enfoque_diario.generar_pdf_enfoque_file(day, user_id)
-            if pdf_path and os.path.exists(pdf_path):
+            if pdf_path and os.path.exists(pdf_path) and str(pdf_path).lower().endswith(".pdf"):
                 from fastapi.responses import FileResponse
                 filename = f"Enfoque_Diario_{clean_d_name}_SGH_2026.pdf"
                 return FileResponse(
@@ -881,9 +931,13 @@ def configurar_rutas_fastapi(app):
                         "Cache-Control": "no-cache, no-store, must-revalidate"
                     }
                 )
+            else:
+                from fastapi.responses import HTMLResponse
+                html_code = enfoque_diario.generar_html_impresion(day, user_id)
+                return HTMLResponse(content=html_code)
         except Exception as ex:
             print("Error en endpoint print_enfoque_pdf_route:", ex)
-        return {"error": "No se pudo generar el archivo PDF oficial"}
+        return {"error": "No se pudo generar el archivo de impresión oficial"}
 
     @app.get("/api/download_excel/{day}")
     def download_excel_route(day: str, user_id: str = "invitado"):
@@ -1002,6 +1056,32 @@ def configurar_rutas_fastapi(app):
         if evt and evt.get("id") != last_id:
             response_data = evt
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
+        
+        sim_st = None
+        for k in [token, str(user_id).strip(), str(username).strip().lower(), "1", "unknown"]:
+            if k and k in GLOBAL_SIM_VIEW_STATE:
+                sim_st = GLOBAL_SIM_VIEW_STATE[k]
+                break
+            if k and k in active_sessions:
+                sess_info = active_sessions[k]
+                if isinstance(sess_info, dict) and sess_info.get("active_view") == "simulador":
+                    sim_st = {"visible": True, "mode": sess_info.get("sim_modo_activo") or "chat"}
+                    break
+        
+        if not sim_st:
+            for s_key, sess_info in list(active_sessions.items()):
+                if isinstance(sess_info, dict) and sess_info.get("active_view") == "simulador":
+                    sim_st = {"visible": True, "mode": sess_info.get("sim_modo_activo") or "chat"}
+                    break
+
+        if not sim_st and "global" in GLOBAL_SIM_VIEW_STATE:
+            sim_st = GLOBAL_SIM_VIEW_STATE["global"]
+        if not sim_st:
+            sim_st = {"visible": False, "mode": "chat"}
+        
+        response_data["sim_visible"] = sim_st.get("visible", False)
+        response_data["sim_mode"] = sim_st.get("mode", "chat")
+
         from fastapi.responses import JSONResponse
         return JSONResponse(
             content=response_data,
@@ -1036,220 +1116,52 @@ def configurar_rutas_fastapi(app):
                 # que bloquean el micrófono cuando se invoca desde WebSockets (Flet).
                 mobile_mic_script = """
                 <script>
-                window.getLuxoUserId = function() {
-                    if (window.luxoUserId) return window.luxoUserId;
-                    try {
-                        for (let i = 0; i < localStorage.length; i++) {
-                            let key = localStorage.key(i);
-                            if (key && key.includes('logged_user_id')) {
-                                let val = localStorage.getItem(key);
-                                if (val) return val.replace(/["']/g, '');
-                            }
-                        }
-                    } catch(e) {}
-                    return '1';
-                };
-                document.addEventListener("DOMContentLoaded", function() {
-                    const isMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent);
-                    if (isMobile) {
-                        let mobileMicBtn = document.createElement("div");
-                        mobileMicBtn.innerHTML = "🎙️";
-                        mobileMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 64px; z-index: 9999999; font-size: 20px; background: #1E1E2E; border: 1.5px solid #00FFFF; border-radius: 23px; width: 46px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 255, 255, 0.5); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;";
-                        mobileMicBtn.style.display = "flex";
-                        
-                        let isDragging = false;
-                        let startX, startY, initialX, initialY;
-                        
-                        mobileMicBtn.addEventListener('touchstart', function(e) {
-                            isDragging = false;
-                            let touch = e.touches[0];
-                            startX = touch.clientX;
-                            startY = touch.clientY;
-                            let rect = mobileMicBtn.getBoundingClientRect();
-                            initialX = rect.left;
-                            initialY = rect.top;
-                            mobileMicBtn.style.transition = 'none'; // Disable transition during drag
-                        });
-
-                        mobileMicBtn.addEventListener('touchmove', function(e) {
-                            let touch = e.touches[0];
-                            let dx = touch.clientX - startX;
-                            let dy = touch.clientY - startY;
-                            
-                            // If moved more than 5 pixels, consider it a drag
-                            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-                                isDragging = true;
-                                e.preventDefault(); // Prevent scrolling while dragging
-                                let newX = initialX + dx;
-                                let newY = initialY + dy;
-                                
-                                // Keep within screen bounds
-                                newX = Math.max(0, Math.min(newX, window.innerWidth - 46));
-                                newY = Math.max(0, Math.min(newY, window.innerHeight - 46));
-                                
-                                mobileMicBtn.style.left = newX + 'px';
-                                mobileMicBtn.style.top = newY + 'px';
-                                mobileMicBtn.style.right = 'auto';
-                                mobileMicBtn.style.bottom = 'auto';
-                            }
-                        }, { passive: false });
-
-                        mobileMicBtn.addEventListener('touchend', function(e) {
-                            mobileMicBtn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease'; // Re-enable transitions
-                            // The actual logic is moved to onclick to ensure trusted user gesture on Android
-                        });
-                        
-                        mobileMicBtn.onclick = function(e) {
-                            if (isDragging) {
-                                return; // Was a drag, do not trigger click
-                            }
-
-                            function playBeep(count) {
-                                try {
-                                    const cnt = count || 1;
-                                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                                    function emitTone(freq, duration, delay) {
-                                        setTimeout(function() {
-                                            try {
-                                                const osc = ctx.createOscillator();
-                                                const gain = ctx.createGain();
-                                                osc.type = 'sine';
-                                                osc.frequency.value = freq;
-                                                gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                                                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-                                                osc.connect(gain);
-                                                gain.connect(ctx.destination);
-                                                osc.start();
-                                                osc.stop(ctx.currentTime + duration);
-                                            } catch(err){}
-                                        }, delay);
-                                    }
-                                    if (cnt === 1) { emitTone(880, 0.12, 0); } 
-                                    else { emitTone(1046, 0.1, 0); emitTone(1318, 0.15, 100); }
-                                } catch(err) {}
-                            }
-                            
-                            // Was a click/tap
-                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
-                            if (!SR) { 
-                                alert('❌ Tu navegador no soporta dictado. Usa Safari o Chrome.'); 
-                                return; 
-                            }
-                            const r = new SR();
-                            r.lang = 'es-MX';
-                            r.interimResults = false;
-                            r.continuous = false;
-                            r.maxAlternatives = 1;
-                            
-                            r.onstart = function() {
-                                console.log("[LUXO MIC] ACTIVANDO MICROFONO", { source: "floating_mic_button", mobile: true, timestamp: Date.now() });
-                                playBeep(1);
-                                mobileMicBtn.style.background = "#FF0000";
-                                mobileMicBtn.style.borderColor = "#FFFFFF";
-                                mobileMicBtn.style.boxShadow = "0 0 25px #FF0000";
-                            };
-                            r.onresult = function(ev) {
-                                const txt = ev.results[0][0].transcript;
-                                if (txt) {
-                                    playBeep(2);
-                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                                    if (window._luxoActiveView === 'simulador' || (window.location && (window.location.hash.includes('simulador') || window.location.pathname.includes('simulador')))) {
-                                        fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
-                                    } else {
-                                        fetch('/text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
-                                    }
+                (function() {
+                    window.getLuxoUserId = function() {
+                        if (window.luxoUserId) return window.luxoUserId;
+                        try {
+                            for (let i = 0; i < localStorage.length; i++) {
+                                let key = localStorage.key(i);
+                                if (key && key.includes('logged_user_id')) {
+                                    let val = localStorage.getItem(key);
+                                    if (val) return val.replace(/["']/g, '');
                                 }
-                            };
-                            r.onerror = function(ev) { 
-                                console.log("Speech recognition error:", ev.error);
-                                mobileMicBtn.style.background = "#1E1E2E";
-                                mobileMicBtn.style.borderColor = "#00FFFF";
-                                mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
-                            };
-                            r.onend = function() { 
-                                console.log("[LUXO MIC] DETENIENDO MICROFONO", { source: "floating_mic_button", timestamp: Date.now() });
-                                mobileMicBtn.style.background = "#1E1E2E";
-                                mobileMicBtn.style.borderColor = "#00FFFF";
-                                mobileMicBtn.style.boxShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
-                            };
-                            
-                            try { 
-                                r.start(); 
-                            } catch(e) { 
-                                console.log("Error iniciando micrófono:", e); 
                             }
-                        };
-                        
-                        document.body.appendChild(mobileMicBtn);
-                    }
-
-                    // --- RECONOCIMIENTO DE VOZ DEDICADO PARA SIMULADOR DE VENTAS IA ---
-                    let simMicBtn = document.getElementById("luxo-sim-mic-btn");
-                    if (!simMicBtn) {
-                        simMicBtn = document.createElement("div");
-                        simMicBtn.id = "luxo-sim-mic-btn";
-                        simMicBtn.innerHTML = `
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00FFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                <line x1="12" y1="19" x2="12" y2="23"></line>
-                                <line x1="8" y1="23" x2="16" y2="23"></line>
-                            </svg>
-                        `;
-                        simMicBtn.setAttribute("title", "Hablar al Cliente (Simulador IA)");
-                        simMicBtn.style.cssText = `
-                            position: fixed;
-                            bottom: 24px;
-                            right: 76px;
-                            width: 44px;
-                            height: 44px;
-                            border-radius: 22px;
-                            background: linear-gradient(135deg, #1E1E2E 0%, #2A1B4E 100%);
-                            border: 2px solid #9D50BB;
-                            box-shadow: 0 4px 18px rgba(157, 80, 187, 0.45);
-                            display: none;
-                            align-items: center;
-                            justify-content: center;
-                            cursor: pointer;
-                            z-index: 999999;
-                            transition: all 0.2s ease;
-                            touch-action: manipulation;
-                            user-select: none;
-                        `;
-                        
-                        function onSimMicPress(e) {
-                            if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
-                            console.log("[SIMULADOR MIC] Clic físico nativo en #luxo-sim-mic-btn");
-                            simMicBtn.style.transform = "scale(0.92)";
-                            simMicBtn.style.borderColor = "#FF0055";
-                            simMicBtn.style.boxShadow = "0 0 22px rgba(255, 0, 85, 0.8)";
-                            setTimeout(function() {
-                                simMicBtn.style.transform = "scale(1)";
-                            }, 180);
-                            window.iniciarDictadoSimulador('chat');
-                        }
-
-                        simMicBtn.addEventListener("click", onSimMicPress);
-                        simMicBtn.addEventListener("touchend", onSimMicPress);
-                        document.body.appendChild(simMicBtn);
-                    }
-
-                    window.showSimuladorMicBtn = function(visible) {
-                        const btn = document.getElementById("luxo-sim-mic-btn");
-                        if (btn) {
-                            btn.style.display = visible ? "flex" : "none";
-                            if (visible) {
-                                btn.style.borderColor = "#9D50BB";
-                                btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
-                            }
-                        }
+                        } catch(e) {}
+                        return '1';
                     };
+
+                    function playToneSim(count) {
+                        try {
+                            const cnt = count || 1;
+                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                            function emit(freq, duration, delay) {
+                                setTimeout(function() {
+                                    try {
+                                        const osc = ctx.createOscillator();
+                                        const gain = ctx.createGain();
+                                        osc.type = 'sine';
+                                        osc.frequency.value = freq;
+                                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                                        osc.connect(gain);
+                                        gain.connect(ctx.destination);
+                                        osc.start();
+                                        osc.stop(ctx.currentTime + duration);
+                                    } catch(err){}
+                                }, delay);
+                            }
+                            if (cnt === 1) { emit(880, 0.12, 0); } 
+                            else { emit(1046, 0.1, 0); emit(1318, 0.15, 100); }
+                        } catch(err) {}
+                    }
 
                     window.iniciarDictadoSimulador = function(modo) {
                         try {
+                            const m = modo || window._simuladorModo || 'chat';
                             const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                             if (!SR) { 
-                                alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome o Microsoft Edge.'); 
+                                alert('❌ Tu navegador no soporta reconocimiento de voz. Usa Google Chrome, Edge o Safari.'); 
                                 return; 
                             }
                             if (window._simRecognitionActive) {
@@ -1263,49 +1175,27 @@ def configurar_rutas_fastapi(app):
                             rSim.maxAlternatives = 1;
                             window._simRecognitionActive = rSim;
 
-                            function playToneSim(count) {
-                                try {
-                                    const cnt = count || 1;
-                                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                                    function emit(freq, duration, delay) {
-                                        setTimeout(function() {
-                                            try {
-                                                const osc = ctx.createOscillator();
-                                                const gain = ctx.createGain();
-                                                osc.type = 'sine';
-                                                osc.frequency.value = freq;
-                                                gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                                                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-                                                osc.connect(gain);
-                                                gain.connect(ctx.destination);
-                                                osc.start();
-                                                osc.stop(ctx.currentTime + duration);
-                                            } catch(err){}
-                                        }, delay);
-                                    }
-                                    if (cnt === 1) { emit(880, 0.12, 0); } 
-                                    else { emit(1046, 0.1, 0); emit(1318, 0.15, 100); }
-                                } catch(err) {}
-                            }
-
                             rSim.onstart = function() {
-                                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: modo, timestamp: Date.now() });
+                                console.log("[SIMULADOR MIC] ACTIVANDO MICROFONO SIMULADOR", { modo: m, timestamp: Date.now() });
                                 playToneSim(1);
                                 const btn = document.getElementById("luxo-sim-mic-btn");
                                 if (btn) {
+                                    btn.style.background = "linear-gradient(135deg, #FF0055 0%, #FF5500 100%)";
                                     btn.style.borderColor = "#FF0055";
-                                    btn.style.boxShadow = "0 0 22px rgba(255, 0, 85, 0.9)";
+                                    btn.style.boxShadow = "0 0 24px rgba(255, 0, 85, 0.9)";
+                                    const lbl = document.getElementById("luxo-sim-mic-label");
+                                    if (lbl) lbl.innerText = "🔴 Escuchando...";
                                 }
                             };
                             rSim.onresult = function(ev) {
                                 const txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
                                 if (txt) {
                                     playToneSim(2);
-                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
                                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
                                     const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                                    fetch('/simulador_text_input?session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&mode=' + encodeURIComponent(modo || 'chat') + '&text=' + encodeURIComponent(txt), { method: 'POST' })
+                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=' + encodeURIComponent(m) + '&session_id=' + encodeURIComponent(sid) + '&device_id=' + encodeURIComponent(did) + '&username=' + encodeURIComponent(uname) + '&text=' + encodeURIComponent(txt), { method: 'POST' })
                                     .then(function(r) { return r.json(); })
                                     .then(function(res) {
                                         console.log("[SIMULADOR MIC] Respuesta backend:", res);
@@ -1319,8 +1209,11 @@ def configurar_rutas_fastapi(app):
                                 window._simRecognitionActive = null;
                                 const btn = document.getElementById("luxo-sim-mic-btn");
                                 if (btn) {
-                                    btn.style.borderColor = "#9D50BB";
-                                    btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                                    btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                                    btn.style.borderColor = "#00FFFF";
+                                    btn.style.boxShadow = "0 4px 20px rgba(0, 255, 255, 0.45)";
+                                    const lbl = document.getElementById("luxo-sim-mic-label");
+                                    if (lbl) lbl.innerText = "Hablar al Cliente";
                                 }
                                 if (ev.error === 'not-allowed') {
                                     alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
@@ -1331,8 +1224,11 @@ def configurar_rutas_fastapi(app):
                                 window._simRecognitionActive = null;
                                 const btn = document.getElementById("luxo-sim-mic-btn");
                                 if (btn) {
-                                    btn.style.borderColor = "#9D50BB";
-                                    btn.style.boxShadow = "0 4px 18px rgba(157, 80, 187, 0.45)";
+                                    btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                                    btn.style.borderColor = "#00FFFF";
+                                    btn.style.boxShadow = "0 4px 20px rgba(0, 255, 255, 0.45)";
+                                    const lbl = document.getElementById("luxo-sim-mic-label");
+                                    if (lbl) lbl.innerText = "Hablar al Cliente";
                                 }
                             };
                             
@@ -1343,51 +1239,398 @@ def configurar_rutas_fastapi(app):
                         }
                     };
 
-                    // Interceptor de toques y clics físicos directos para el micrófono del simulador
-                    let lastSimClickTime = 0;
-                    function handleSimDirectClick(e) {
-                        try {
-                            const now = Date.now();
-                            if (now - lastSimClickTime < 500) return;
+                    window.detenerDictadoSimulador = function() {
+                        if (window._simRecognitionActive) {
+                            try { window._simRecognitionActive.stop(); } catch(e){}
+                            window._simRecognitionActive = null;
+                        }
+                        const btn = document.getElementById("luxo-sim-mic-btn");
+                        if (btn) {
+                            btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                            btn.style.borderColor = "#00FFFF";
+                            btn.style.boxShadow = "0 4px 20px rgba(0, 255, 255, 0.45)";
+                            const lbl = document.getElementById("luxo-sim-mic-label");
+                            if (lbl) lbl.innerText = "Hablar al Cliente";
+                        }
+                    };
 
-                            let target = e.target;
-                            let isSimMic = false;
-                            let isSimVoz = false;
-                            for (let i = 0; i < 10 && target && target !== document.body && target !== document.documentElement; i++) {
-                                const title = (target.getAttribute && (target.getAttribute('title') || target.getAttribute('aria-label') || target.getAttribute('data-tooltip') || '')) || '';
-                                const txt = (target.innerText || target.textContent || target.innerHTML || '').trim();
-                                const lowerTitle = title.toLowerCase();
-                                const lowerTxt = txt.toLowerCase();
+                    function initButtons() {
+                        if (!document.body) {
+                            setTimeout(initButtons, 100);
+                            return;
+                        }
+                        
+                        // Inyectar estilos de animación de Ondas Fluidas Orgánicas estilo Siri / Apple Intelligence
+                        if (!document.getElementById("siri-orb-button-style")) {
+                            const orbStyle = document.createElement("style");
+                            orbStyle.id = "siri-orb-button-style";
+                            orbStyle.innerHTML = `
+                                @keyframes siriFluidMorph {
+                                    0% {
+                                        border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+                                        transform: rotate(0deg) scale(1);
+                                        box-shadow: 0 0 20px rgba(224, 64, 251, 0.85), 0 0 35px rgba(0, 240, 255, 0.65), 0 0 50px rgba(121, 40, 202, 0.4), inset 0 0 15px rgba(255, 255, 255, 0.8);
+                                    }
+                                    25% {
+                                        border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+                                        transform: rotate(90deg) scale(1.05);
+                                        box-shadow: 0 0 25px rgba(0, 240, 255, 0.95), 0 0 45px rgba(255, 0, 128, 0.8), 0 0 60px rgba(0, 255, 170, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.9);
+                                    }
+                                    50% {
+                                        border-radius: 30% 70% 70% 30% / 50% 60% 40% 50%;
+                                        transform: rotate(180deg) scale(0.96);
+                                        box-shadow: 0 0 30px rgba(255, 0, 128, 0.9), 0 0 50px rgba(121, 40, 202, 0.85), 0 0 70px rgba(0, 240, 255, 0.6), inset 0 0 18px rgba(255, 255, 255, 0.85);
+                                    }
+                                    75% {
+                                        border-radius: 70% 30% 46% 54% / 30% 65% 35% 70%;
+                                        transform: rotate(270deg) scale(1.04);
+                                        box-shadow: 0 0 25px rgba(0, 255, 170, 0.9), 0 0 45px rgba(0, 240, 255, 0.85), 0 0 65px rgba(224, 64, 251, 0.7), inset 0 0 20px rgba(255, 255, 255, 0.85);
+                                    }
+                                    100% {
+                                        border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+                                        transform: rotate(360deg) scale(1);
+                                        box-shadow: 0 0 20px rgba(224, 64, 251, 0.85), 0 0 35px rgba(0, 240, 255, 0.65), 0 0 50px rgba(121, 40, 202, 0.4), inset 0 0 15px rgba(255, 255, 255, 0.8);
+                                    }
+                                }
+                                @keyframes siriFluidActive {
+                                    0% {
+                                        border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%;
+                                        transform: rotate(0deg) scale(1.1);
+                                        box-shadow: 0 0 35px #FF007F, 0 0 65px #00F0FF, 0 0 90px #7928CA, inset 0 0 25px #FFFFFF;
+                                    }
+                                    50% {
+                                        border-radius: 60% 40% 30% 70% / 40% 70% 30% 60%;
+                                        transform: rotate(180deg) scale(1.24);
+                                        box-shadow: 0 0 50px #00F0FF, 0 0 85px #FF007F, 0 0 115px #00FFAA, inset 0 0 30px #FFFFFF;
+                                    }
+                                    100% {
+                                        border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%;
+                                        transform: rotate(360deg) scale(1.1);
+                                        box-shadow: 0 0 35px #FF007F, 0 0 65px #00F0FF, 0 0 90px #7928CA, inset 0 0 25px #FFFFFF;
+                                    }
+                                }
+                                @keyframes innerFluidWave {
+                                    0%, 100% { transform: scale(0.7) rotate(0deg); opacity: 0.85; }
+                                    50% { transform: scale(1.1) rotate(180deg); opacity: 1; }
+                                }
+                            `;
+                            document.head.appendChild(orbStyle);
+                        }
+                        
+                        // 1. Boton flotante principal LUXO (Onda Fluida Siri / Apple Intelligence) - EXCLUSIVO CELULARES
+                        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+                        const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
+                        const isMobileDevice = isTouchDevice && !isDesktopOS;
 
-                                if (lowerTitle.includes('hablar por micrófono') || lowerTitle.includes('sim-mic') || (target.id && target.id.includes('sim-mic'))) {
-                                    isSimMic = true;
-                                    break;
-                                }
-                                if (lowerTxt.includes('hablar ahora') || lowerTitle.includes('hablar ahora') || lowerTxt.includes('hablar ahora 🎙') || lowerTitle.includes('hablar ahora 🎙')) {
-                                    isSimVoz = true;
-                                    break;
-                                }
-                                target = target.parentElement;
+                        let mobileMicBtn = document.getElementById("luxo-floating-main-mic");
+                        if (!isMobileDevice) {
+                            if (mobileMicBtn && mobileMicBtn.parentNode) {
+                                mobileMicBtn.parentNode.removeChild(mobileMicBtn);
                             }
-                            if (isSimMic) {
-                                lastSimClickTime = now;
-                                console.log('[SIMULADOR MIC] Toque/Clic físico interceptado en botón micrófono');
-                                window.iniciarDictadoSimulador('chat');
-                            } else if (isSimVoz) {
-                                lastSimClickTime = now;
-                                console.log('[SIMULADOR MIC] Toque/Clic físico interceptado en botón hablar voz');
-                                window.iniciarDictadoSimulador('voz');
+                        } else if (!mobileMicBtn) {
+                            mobileMicBtn = document.createElement("div");
+                            mobileMicBtn.id = "luxo-floating-main-mic";
+                            mobileMicBtn.innerHTML = `
+                                <div style="width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(0,240,255,0.9) 45%, rgba(224,64,251,0.6) 80%, transparent 100%); animation: innerFluidWave 2.5s infinite ease-in-out; filter: blur(2px); pointer-events: none;"></div>
+                            `;
+                            mobileMicBtn.setAttribute("title", "Asistente de Voz LUXO");
+                            mobileMicBtn.style.cssText = "position: fixed; bottom: 14px; right: 64px; z-index: 9999999; background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95) 0%, rgba(0, 240, 255, 0.9) 25%, rgba(224, 64, 251, 0.85) 55%, rgba(121, 40, 202, 0.95) 80%, rgba(10, 10, 25, 0.98) 100%); border: 1.6px solid rgba(255, 255, 255, 0.7); width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; cursor: pointer; animation: siriFluidMorph 5s infinite linear; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
+                            
+                            let isDragging = false;
+                            let startX, startY, initialX, initialY;
+                            
+                            mobileMicBtn.addEventListener('touchstart', function(e) {
+                                isDragging = false;
+                                let touch = e.touches[0];
+                                startX = touch.clientX;
+                                startY = touch.clientY;
+                                let rect = mobileMicBtn.getBoundingClientRect();
+                                initialX = rect.left;
+                                initialY = rect.top;
+                                mobileMicBtn.style.transition = 'none';
+                            });
+
+                            mobileMicBtn.addEventListener('touchmove', function(e) {
+                                let touch = e.touches[0];
+                                let dx = touch.clientX - startX;
+                                let dy = touch.clientY - startY;
+                                
+                                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                                    isDragging = true;
+                                    e.preventDefault();
+                                    let newX = Math.max(0, Math.min(initialX + dx, window.innerWidth - 52));
+                                    let newY = Math.max(0, Math.min(initialY + dy, window.innerHeight - 52));
+                                    
+                                    mobileMicBtn.style.left = newX + 'px';
+                                    mobileMicBtn.style.top = newY + 'px';
+                                    mobileMicBtn.style.right = 'auto';
+                                    mobileMicBtn.style.bottom = 'auto';
+                                }
+                            }, { passive: false });
+
+                            mobileMicBtn.addEventListener('touchend', function(e) {
+                                mobileMicBtn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease';
+                            });
+                            
+                            function onMainFloatingMicClick(e) {
+                                if (isDragging) return;
+
+                                function playBeep(count) {
+                                    try {
+                                        const cnt = count || 1;
+                                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                        function emitTone(freq, duration, delay) {
+                                            setTimeout(function() {
+                                                try {
+                                                    const osc = ctx.createOscillator();
+                                                    const gain = ctx.createGain();
+                                                    osc.type = 'sine';
+                                                    osc.frequency.value = freq;
+                                                    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                                                    osc.connect(gain);
+                                                    gain.connect(ctx.destination);
+                                                    osc.start();
+                                                    osc.stop(ctx.currentTime + duration);
+                                                } catch(err){}
+                                            }, delay);
+                                        }
+                                        if (cnt === 1) { emitTone(880, 0.12, 0); } 
+                                        else { emitTone(1046, 0.1, 0); emitTone(1318, 0.15, 100); }
+                                    } catch(err) {}
+                                }
+                                
+                                const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+                                if (!SR) { 
+                                    alert('❌ Tu navegador no soporta dictado. Usa Safari, Chrome o Edge.'); 
+                                    return; 
+                                }
+                                const r = new SR();
+                                r.lang = 'es-MX';
+                                r.interimResults = false;
+                                r.continuous = false;
+                                r.maxAlternatives = 1;
+                                
+                                r.onstart = function() {
+                                    console.log("[LUXO MIC] ACTIVANDO MICROFONO", { source: "floating_mic_button", timestamp: Date.now() });
+                                    playBeep(1);
+                                    mobileMicBtn.style.animation = 'siriFluidActive 1.2s infinite ease-in-out';
+                                    mobileMicBtn.style.background = 'radial-gradient(circle at 35% 35%, #FFFFFF 0%, #FF0055 35%, #9900FF 70%, #00F0FF 100%)';
+                                    mobileMicBtn.style.borderColor = '#FFFFFF';
+                                };
+                                r.onresult = function(ev) {
+                                    const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
+                                    if (txt) {
+                                        playBeep(2);
+                                        const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                        console.log('[MIC MAESTRO LUXO] Enviando consulta a LUXO general:', txt);
+                                        fetch('/text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    }
+                                };
+                                r.onerror = function(ev) { 
+                                    console.log("Speech recognition error:", ev.error);
+                                    mobileMicBtn.style.animation = 'siriFluidMorph 5s infinite linear';
+                                    mobileMicBtn.style.background = 'radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95) 0%, rgba(0, 240, 255, 0.9) 25%, rgba(224, 64, 251, 0.85) 55%, rgba(121, 40, 202, 0.95) 80%, rgba(10, 10, 25, 0.98) 100%)';
+                                    mobileMicBtn.style.borderColor = 'rgba(255, 255, 255, 0.7)';
+                                    if (ev.error === 'not-allowed') {
+                                        alert('⚠️ Permiso de micrófono denegado. Permítelo en tu navegador.');
+                                    }
+                                };
+                                r.onend = function() { 
+                                    console.log("[LUXO MIC] DETENIENDO MICROFONO", { source: "floating_mic_button", timestamp: Date.now() });
+                                    mobileMicBtn.style.animation = 'siriFluidMorph 5s infinite linear';
+                                    mobileMicBtn.style.background = 'radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.95) 0%, rgba(0, 240, 255, 0.9) 25%, rgba(224, 64, 251, 0.85) 55%, rgba(121, 40, 202, 0.95) 80%, rgba(10, 10, 25, 0.98) 100%)';
+                                    mobileMicBtn.style.borderColor = 'rgba(255, 255, 255, 0.7)';
+                                };
+                                
+                                try { 
+                                    r.start(); 
+                                } catch(e) { 
+                                    console.log("Error iniciando micrófono:", e); 
+                                }
                             }
-                        } catch(err) {
-                            console.log('Error en interceptor clic simulador:', err);
+
+                            mobileMicBtn.onclick = onMainFloatingMicClick;
+                            document.body.appendChild(mobileMicBtn);
+                        }
+
+                        // 2. Botón flotante nativo [🎙️ SIM] exclusivo de Simulador IA
+                        ensureSimMicBtnCreated();
+                    }
+
+                    function updateSimMicButtonMode(modo) {
+                        const btn = document.getElementById("luxo-floating-sim-mic");
+                        if (!btn) return;
+                        const m = modo || window._simCurrentMode || 'chat';
+                        if (m === 'voz') {
+                            btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFAA;margin-left:2px;">VOZ</span>`;
+                            btn.style.background = "linear-gradient(135deg, #0575E6 0%, #00F260 100%)";
+                            btn.style.borderColor = "#00FFAA";
+                            btn.style.boxShadow = "0 0 15px rgba(0, 255, 170, 0.8)";
+                            btn.setAttribute("title", "Hablar por Voz (Simulador IA)");
+                        } else {
+                            btn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
+                            btn.style.background = "linear-gradient(135deg, #7928CA 0%, #B800FF 100%)";
+                            btn.style.borderColor = "#00FFFF";
+                            btn.style.boxShadow = "0 0 12px rgba(184, 0, 255, 0.7)";
+                            btn.setAttribute("title", "Dictar al Chat (Simulador IA)");
                         }
                     }
 
-                    document.addEventListener('touchstart', handleSimDirectClick, { passive: true, capture: true });
-                    document.addEventListener('pointerdown', handleSimDirectClick, { passive: true, capture: true });
-                    document.addEventListener('mousedown', handleSimDirectClick, { passive: true, capture: true });
-                    document.addEventListener('click', handleSimDirectClick, { passive: true, capture: true });
-                });
+                    function ensureSimMicBtnCreated() {
+                        let simMicBtn = document.getElementById("luxo-floating-sim-mic");
+                        if (!simMicBtn && (document.body || document.documentElement)) {
+                            simMicBtn = document.createElement("div");
+                            simMicBtn.id = "luxo-floating-sim-mic";
+                            simMicBtn.innerHTML = `<span style="font-size:18px;">🎙️</span><span id="luxo-sim-btn-label" style="font-size:10px;font-weight:900;color:#00FFFF;margin-left:2px;">CHAT</span>`;
+                            simMicBtn.setAttribute("title", "Micrófono Simulador de Ventas IA");
+                            simMicBtn.style.cssText = "position: fixed; bottom: 12px; right: 118px; z-index: 9999999; font-size: 18px; background: linear-gradient(135deg, #7928CA 0%, #B800FF 100%); border: 1.8px solid #00FFFF; border-radius: 23px; width: 56px; height: 46px; display: none; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(184, 0, 255, 0.7); cursor: pointer; transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; touch-action: manipulation; user-select: none;";
+                            
+                            let isDraggingSim = false;
+                            let startXSim, startYSim, initialXSim, initialYSim;
+                            
+                            simMicBtn.addEventListener('touchstart', function(e) {
+                                isDraggingSim = false;
+                                let touch = e.touches[0];
+                                startXSim = touch.clientX;
+                                startYSim = touch.clientY;
+                                let rect = simMicBtn.getBoundingClientRect();
+                                initialXSim = rect.left;
+                                initialYSim = rect.top;
+                                simMicBtn.style.transition = 'none';
+                            });
+
+                            simMicBtn.addEventListener('touchmove', function(e) {
+                                let touch = e.touches[0];
+                                let dx = touch.clientX - startXSim;
+                                let dy = touch.clientY - startYSim;
+                                
+                                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                                    isDraggingSim = true;
+                                    e.preventDefault();
+                                    let newX = Math.max(0, Math.min(initialXSim + dx, window.innerWidth - 56));
+                                    let newY = Math.max(0, Math.min(initialYSim + dy, window.innerHeight - 46));
+                                    
+                                    simMicBtn.style.left = newX + 'px';
+                                    simMicBtn.style.top = newY + 'px';
+                                    simMicBtn.style.right = 'auto';
+                                    simMicBtn.style.bottom = 'auto';
+                                }
+                            }, { passive: false });
+
+                            simMicBtn.addEventListener('touchend', function(e) {
+                                simMicBtn.style.transition = 'background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease';
+                            });
+                            
+                            function onSimMicPress(e) {
+                                if (isDraggingSim) return;
+                                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                                const currentModo = window._simCurrentMode || 'chat';
+                                console.log("[SIMULADOR MIC] Clic en #luxo-floating-sim-mic con modo:", currentModo);
+                                simMicBtn.style.transform = "scale(0.9)";
+                                setTimeout(function() { simMicBtn.style.transform = "scale(1)"; }, 150);
+                                if (window.iniciarDictadoSimulador) {
+                                    window.iniciarDictadoSimulador(currentModo);
+                                }
+                            }
+
+                            simMicBtn.onclick = onSimMicPress;
+                            (document.body || document.documentElement).appendChild(simMicBtn);
+                        }
+                        return simMicBtn;
+                    }
+
+                    function evaluarVisibilidadSimulador() {
+                        let isDomSim = false;
+                        let domMode = null;
+                        try {
+                            const bodyText = (document.body && document.body.innerText) ? document.body.innerText.toLowerCase() : '';
+                            if (bodyText.includes('simulador de ventas') || bodyText.includes('roleplay') || bodyText.includes('iniciar roleplay') || bodyText.includes('hablar al cliente') || bodyText.includes('finalizar y evaluar')) {
+                                isDomSim = true;
+                                if (bodyText.includes('conversación por voz') || bodyText.includes('ia hablada') || bodyText.includes('grabando voz...')) {
+                                    domMode = 'voz';
+                                } else if (bodyText.includes('roleplay de ventas') || bodyText.includes('chat con el cliente')) {
+                                    domMode = 'chat';
+                                }
+                            }
+                        } catch(e){}
+
+                        const hash = (window.location.hash || '').toLowerCase();
+                        const path = (window.location.pathname || '').toLowerCase();
+                        const isUrlSim = hash.includes('simulador') || path.includes('simulador') || hash.includes('capacitacion') || path.includes('capacitacion');
+                        const isStateSim = (window._simuladorVisible === true) || (window._luxoActiveView === 'simulador') || (window._luxoActiveView === 'capacitacion_ia');
+                        const isPollSim = (window._simPollVisible === true);
+                        
+                        const shouldBeVisible = (isDomSim || isUrlSim || isStateSim || isPollSim);
+                        const btn = ensureSimMicBtnCreated();
+                        if (btn) {
+                            const currentDisplay = btn.style.display;
+                            const targetDisplay = shouldBeVisible ? "flex" : "none";
+                            if (currentDisplay !== targetDisplay) {
+                                btn.style.display = targetDisplay;
+                            }
+                            if (shouldBeVisible) {
+                                const targetModo = domMode || window._simCurrentMode || 'chat';
+                                updateSimMicButtonMode(targetModo);
+                            }
+                        }
+                        return shouldBeVisible;
+                    }
+
+                    window.evaluarVisibilidadSimulador = evaluarVisibilidadSimulador;
+
+                    window.showSimuladorMicBtn = function(visible, modo) {
+                        window._simCurrentMode = modo || window._simCurrentMode || 'chat';
+                        window._simuladorVisible = (visible !== false);
+                        window._simPollVisible = (visible !== false);
+                        if (!visible) {
+                            if (window.detenerDictadoSimulador) window.detenerDictadoSimulador();
+                        }
+                        evaluarVisibilidadSimulador();
+                    };
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener("DOMContentLoaded", function() {
+                            initButtons();
+                            evaluarVisibilidadSimulador();
+                        });
+                    } else {
+                        initButtons();
+                        evaluarVisibilidadSimulador();
+                    }
+
+                    // Sincronización continua de visibilidad
+                    setInterval(function() {
+                        const btnMain = document.getElementById("luxo-floating-main-mic");
+                        if (!btnMain && document.body) {
+                            initButtons();
+                        }
+                        evaluarVisibilidadSimulador();
+                    }, 400);
+
+                    window.addEventListener('hashchange', evaluarVisibilidadSimulador);
+                    window.addEventListener('popstate', evaluarVisibilidadSimulador);
+
+                    async function pollSimStateLive() {
+                        try {
+                            const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                            const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
+                            const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                            const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
+                            const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&device_id=' + encodeURIComponent(did) + '&_t=' + Date.now(), { cache: 'no-store' });
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (typeof data.sim_visible !== 'undefined') {
+                                    window._simPollVisible = (data.sim_visible === true);
+                                    if (data.sim_mode) window._simCurrentMode = data.sim_mode;
+                                    evaluarVisibilidadSimulador();
+                                }
+                            }
+                        } catch(e){}
+                        setTimeout(pollSimStateLive, 800);
+                    }
+                    setTimeout(pollSimStateLive, 1000);
+                })();
                 </script>
                 """
                 html_text = html_text.replace("</body>", mobile_mic_script + "</body>")
@@ -1476,207 +1719,12 @@ def configurar_rutas_fastapi(app):
                         if (b && color) b.style.borderColor = color;
                     }
 
-                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-                    function playBeep(count) {
-                        try {
-                            const cnt = count || 1;
-                            if (!window.luxoAudioCtx || window.luxoAudioCtx.state === 'closed') {
-                                window.luxoAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                            }
-                            const ctx = window.luxoAudioCtx;
-                            if (ctx.state === 'suspended') {
-                                ctx.resume().catch(function(){});
-                            }
-                            function emitTone(freq, duration, delay) {
-                                setTimeout(function() {
-                                    try {
-                                        if (ctx.state === 'suspended') { ctx.resume().catch(function(){}); }
-                                        const osc = ctx.createOscillator();
-                                        const gain = ctx.createGain();
-                                        osc.type = 'sine';
-                                        osc.frequency.value = freq;
-                                        gain.gain.setValueAtTime(0.18, ctx.currentTime);
-                                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-                                        osc.connect(gain);
-                                        gain.connect(ctx.destination);
-                                        osc.start();
-                                        osc.stop(ctx.currentTime + duration);
-                                    } catch(e){}
-                                }, delay);
-                            }
-                            if (cnt === 1) {
-                                emitTone(880, 0.12, 0);
-                            } else if (cnt >= 2) {
-                                emitTone(1050, 0.1, 0);
-                                emitTone(1400, 0.16, 120);
-                            }
-                        } catch(e){}
-                    }
-
-                    document.addEventListener('click', function() {
-                        if (window.luxoAudioCtx && window.luxoAudioCtx.state === 'suspended') {
-                            window.luxoAudioCtx.resume().catch(function(){});
-                        }
-                    }, { once: true });
-
-
-                    let rec = null;
-                    let isListening = false;
-                    let lastSentText = "";
-                    let lastSentTime = 0;
-
-                    // Detección de dispositivo móvil para evitar loop de SpeechRecognition en celulares
-                    const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
-                    const isMobileDevice = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) && !isDesktopOS;
-
                     window.initLuxoMicPermission = function() {
-                        // En celulares/tablets: NO activar reconocimiento continuo "Oye LUXO"
-                        if (isMobileDevice) {
-                            console.log("📱 [Luxo Global Mic]: Dispositivo móvil detectado. 'Oye LUXO' desactivado.");
-                            return;
-                        }
-                        if (window.luxoSpeechRecognitionActive) {
-                            console.log("🎙️ [Luxo Global Mic]: Already active. Skipping duplicate init.");
-                            return;
-                        }
-                        setStatus("Solicitando permiso...", "#FFFF00", "⏳");
-                        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                            navigator.mediaDevices.getUserMedia({ audio: true })
-                            .then(function(stream) {
-                                setStatus("🟢 ESCUCHANDO... Di 'Oye LUXO'", "#00FF00", "🎤");
-                                playBeep();
-                                startRecognition();
-                            })
-                            .catch(function(err) {
-                                console.log("Mic permission error:", err);
-                                setStatus("❌ Permiso Denegado (Clica 🔒 en URL)", "#FF0000", "⚠️");
-                            });
-                        } else {
-                            startRecognition();
-                        }
+                        console.log("🎙️ [Luxo Mic]: Global permission helper initialized.");
                     };
 
-                    function startRecognition() {
-                        if (isMobileDevice) return;
-                        if (!SpeechRecognition) {
-                            setStatus("❌ Usa Chrome o Edge para 'Oye LUXO'", "#FF0000", "❌");
-                            return;
-                        }
-                        try {
-                            if (rec) { try { rec.stop(); } catch(e){} }
-                            rec = new SpeechRecognition();
-                            rec.continuous = false;
-                            rec.interimResults = true;
-                            rec.lang = 'es-MX';
-
-                            function sendVoiceQuery(queryText) {
-                                if (!queryText) return;
-                                lastSentText = queryText;
-                                lastSentTime = Date.now();
-                                playBeep(2);
-                                window.showLuxoSiriOrb(5000);
-                                setStatus("⚡ Enviando a LUXO: " + queryText, "#7CFC00", "🚀");
-                                fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(queryText), { method: 'POST' }).catch(function(){});
-                                window.luxoIsListeningAlertSent = false;
-                                window.luxoManualDictating = false;
-                                if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
-                                if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
-                                setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
-                            }
-
-                            rec.onstart = function() {
-                                isListening = true;
-                                window.luxoSpeechRecognitionActive = true;
-                                setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
-                            };
-
-                            rec.onresult = function(e) {
-                                for (let i = e.resultIndex; i < e.results.length; ++i) {
-                                    const transcript = e.results[i][0].transcript;
-                                    const lower = transcript.toLowerCase();
-                                    console.log("🎙️ [Luxo Global Mic]:", transcript, "isFinal:", e.results[i].isFinal);
-                                    
-                                    if (lower.includes("oye luxo") || lower.includes("oye lujo") || lower.includes("oye lux") || lower.includes("oye luco")) {
-                                        let query = transcript
-                                            .replace(/oye luxo/gi, '')
-                                            .replace(/oye lujo/gi, '')
-                                            .replace(/oye lux/gi, '')
-                                            .replace(/oye luco/gi, '')
-                                            .replace(/hola luxo/gi, '')
-                                            .replace(/hey luxo/gi, '')
-                                            .trim();
-                                            
-                                        if (!window.luxoManualDictating) {
-                                            playBeep(1);
-                                            window.luxoManualDictating = true;
-                                        }
-                                        if (!window.luxoIsListeningAlertSent) {
-                                            window.luxoIsListeningAlertSent = true;
-                                            fetch('/luxo_listening_start?user_id=' + window.getLuxoUserId(), { method: 'POST' }).catch(function(){});
-                                        }
-                                        window.showLuxoSiriOrb(8000);
-
-                                        if (!query) {
-                                            setStatus("👂 ¡Oye LUXO Detectado! Di tu pregunta...", "#FF00FF", "🔊");
-                                        } else {
-                                            if (e.results[i].isFinal) {
-                                                sendVoiceQuery(query);
-                                            } else {
-                                                setStatus("👂 Escuchando: " + query, "#FF00FF", "🔊");
-                                                if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
-                                                window.luxoSilenceTimer = setTimeout(function() {
-                                                    sendVoiceQuery(query);
-                                                }, 1000);
-                                            }
-                                        }
-                                    } else if (window.luxoManualDictating) {
-                                        const query = transcript.trim();
-                                        if (query) {
-                                            if (e.results[i].isFinal) {
-                                                sendVoiceQuery(query);
-                                            } else {
-                                                setStatus("👂 Escuchando: " + query, "#FF00FF", "🔊");
-                                                if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
-                                                window.luxoSilenceTimer = setTimeout(function() {
-                                                    sendVoiceQuery(query);
-                                                }, 1000);
-                                            }
-                                        }
-                                    }
-                                }
-                            };
-
-                            rec.onerror = function(err) {
-                                console.log("Luxo Voice Error:", err);
-                                if (err.error === 'not-allowed') {
-                                    setStatus("❌ Micrófono Bloqueado en Navegador", "#FF0000", "🔒");
-                                }
-                            };
-
-                            rec.onend = function() {
-                                window.luxoSpeechRecognitionActive = false;
-                                if (isListening && !isMobileDevice) {
-                                    setTimeout(function() {
-                                        try {
-                                            rec.start();
-                                        } catch(e) {
-                                            setTimeout(function() {
-                                                try { rec.start(); } catch(e2){}
-                                            }, 1500);
-                                        }
-                                    }, 1200);
-                                }
-                            };
-
-                            rec.start();
-                        } catch(ex) {
-                            console.log("Exception in startRecognition:", ex);
-                        }
-                    }
-
                     banner.onclick = function() {
-                        window.initLuxoMicPermission();
+                        if (typeof window.showLuxoSiriOrb === "function") window.showLuxoSiriOrb(4000);
                     };
 
                     let _luxoCachedVoices = [];
@@ -2447,15 +2495,44 @@ def configurar_rutas_fastapi(app):
         return {"status": "success"}
 
     @app.api_route("/text_input", methods=["GET", "POST"])
-    async def post_text_input(user_id: str = "1", text: str = ""):
+    async def post_text_input(request: Request = None, user_id: str = "", text: str = ""):
         import traceback
         try:
+            if request:
+                try:
+                    qp = request.query_params
+                    user_id = user_id or qp.get("user_id", "")
+                    text = text or qp.get("text", "")
+                    if not text:
+                        try:
+                            body_json = await request.json()
+                            user_id = user_id or body_json.get("user_id", "")
+                            text = text or body_json.get("text", "")
+                        except Exception: pass
+                except Exception: pass
+
+            user_id = str(user_id or "1")
+            text = str(text or "").strip()
             print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
             session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
-            if not session and active_sessions:
-                session = list(active_sessions.values())[-1]
-                print(f"DEBUG: Session fallback activado en /text_input -> usando UID={session.get('user_info', {}).get('id')}")
+            
+            # Si no se encontró sesión o faltan controles, buscar en active_sessions
+            if not (session and (session.get("input_msg") or session.get("page"))):
+                for k, s in active_sessions.items():
+                    if isinstance(s, dict) and s.get("page"):
+                        u_inf = s.get("user_info") or {}
+                        p = s.get("page")
+                        if str(u_inf.get("id")) == str(user_id) or str(k) == str(user_id) or (p and getattr(p, "user_id", None) == str(user_id)):
+                            session = s
+                            break
+
+            if not (session and session.get("page")) and active_sessions:
+                for s in reversed(list(active_sessions.values())):
+                    if isinstance(s, dict) and s.get("page"):
+                        session = s
+                        print(f"DEBUG: Session fallback activado en /text_input -> usando UID={session.get('user_info', {}).get('id')}")
+                        break
 
             print(f"DEBUG: active_sessions keys={list(active_sessions.keys())}, session encontrada={'Sí' if session else 'No'}")
             if session and text:
@@ -2468,14 +2545,18 @@ def configurar_rutas_fastapi(app):
                     except Exception as ex:
                         print("Error al cambiar a vista chat:", ex)
 
-                input_msg = session.get("input_msg")
-                enviar_mensaje = session.get("enviar_mensaje")
+                # Re-obtener componentes frescos tras el cambio de vista
+                user_info = session.get("user_info") or {}
+                u_id_fresh = user_info.get("id")
+                fresh_session = (active_sessions.get(u_id_fresh) or active_sessions.get(str(u_id_fresh)) or session) if u_id_fresh else session
+                
+                input_msg = fresh_session.get("input_msg") or session.get("input_msg")
+                enviar_mensaje = fresh_session.get("enviar_mensaje") or session.get("enviar_mensaje")
 
                 if input_msg and enviar_mensaje and page:
-                    btn_mic_cont = session.get("btn_mic_container")
-                    siri_orb = session.get("siri_orb")
+                    btn_mic_cont = fresh_session.get("btn_mic_container") or session.get("btn_mic_container")
+                    siri_orb = fresh_session.get("siri_orb") or session.get("siri_orb")
                     
-                    # Forzar el encendido visual del Orbe Javascript inyectado (mucho más robusto en Mac/Desktop)
                     try:
                         target_url = "javascript:if(typeof window.showLuxoSiriOrb === 'function'){ window.showLuxoSiriOrb(5000); } void(0);"
                         import urllib.parse
@@ -2493,20 +2574,22 @@ def configurar_rutas_fastapi(app):
                         
                     if btn_mic_cont:
                         try:
-                            btn_mic_cont.bgcolor = "#9D50BB" # Morado brilloso (Siri vibe)
-                            btn_mic_cont.border = ft.Border.all(3, "#00FFFF") # Cyan grueso
+                            btn_mic_cont.bgcolor = "#9D50BB"
+                            btn_mic_cont.border = ft.Border.all(3, "#00FFFF")
                             btn_mic_cont.update()
                             def revert_glow(bmc, orb):
                                 import time
                                 time.sleep(3)
-                                bmc.bgcolor = "#1E1E2E"
-                                bmc.border = ft.Border.all(1.5, "#00FFFF")
-                                try: bmc.update()
+                                try:
+                                    bmc.bgcolor = "#1E1E2E"
+                                    bmc.border = ft.Border.all(1.5, "#00FFFF")
+                                    bmc.update()
                                 except: pass
                                 if orb:
-                                    orb.opacity = 0
-                                    orb.scale = 0.1
-                                    try: orb.update()
+                                    try:
+                                        orb.opacity = 0
+                                        orb.scale = 0.1
+                                        orb.update()
                                     except: pass
                             threading.Thread(target=revert_glow, args=(btn_mic_cont, siri_orb), daemon=True).start()
                         except: pass
@@ -2521,10 +2604,7 @@ def configurar_rutas_fastapi(app):
                         print(f"WARN page.update() falló: {ex}")
 
                     try:
-                        if hasattr(page, "run_thread"):
-                            page.run_thread(enviar_mensaje, None)
-                        else:
-                            enviar_mensaje(None)
+                        threading.Thread(target=enviar_mensaje, args=(None,), daemon=True).start()
                     except Exception as ex:
                         print(f"ERROR en enviar_mensaje: {ex}\n{traceback.format_exc()}")
                     return {"status": "success"}
@@ -2539,6 +2619,18 @@ def configurar_rutas_fastapi(app):
     async def post_simulador_text_input(request: Request = None, session_id: str = "", device_id: str = "", user_id: str = "", username: str = "", text: str = "", mode: str = "chat"):
         import traceback
         try:
+            if request:
+                try:
+                    qp = request.query_params
+                    session_id = session_id or qp.get("session_id", "")
+                    device_id = device_id or qp.get("device_id", "")
+                    user_id = user_id or qp.get("user_id", "")
+                    username = username or qp.get("username", "")
+                    text = text or qp.get("text", "")
+                    mode = mode or qp.get("mode", "chat")
+                except Exception:
+                    pass
+
             texto_final = text or ""
             modo_solicitado = mode or "chat"
 
@@ -2578,24 +2670,24 @@ def configurar_rutas_fastapi(app):
             print(f"🎙️ [SIMULADOR MIC] /simulador_text_input recibido: session_id='{session_id}', device_id='{device_id}', user_id='{user_id}', username='{username}', mode='{modo_solicitado}', text='{texto_final}'")
             session = None
             
-            # 1. Búsqueda estricta por token de sesión
-            if session_id and session_id in active_sessions:
-                session = active_sessions[session_id]
-            # 2. Búsqueda por device_id
-            if not session and device_id and device_id in active_sessions:
-                session = active_sessions[device_id]
-            # 3. Búsqueda por user_id autenticado
-            if not session and user_id and str(user_id).strip() not in ["", "unknown", "None", "null", "undefined"]:
+            # 1. Búsqueda estricta por user_id autenticado
+            if user_id and str(user_id).strip() not in ["", "unknown", "None", "null", "undefined"]:
                 user_id_val = int(user_id) if str(user_id).isdigit() else user_id
                 session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
+            # 2. Búsqueda por token de sesión
+            if not session and session_id and session_id in active_sessions:
+                session = active_sessions[session_id]
+            # 3. Búsqueda por device_id
+            if not session and device_id and device_id in active_sessions:
+                session = active_sessions[device_id]
             # 4. Búsqueda por username autenticado
             if not session and username and str(username).strip().lower() not in ["", "unknown", "None", "null", "undefined"]:
                 session = active_sessions.get(str(username).strip().lower())
             
-            # 5. Fallback a cualquier sesión con simulador activo
+            # 5. Fallback a cualquier sesión con simulador activo o funciones del simulador
             if not session:
                 for s_key, s_val in list(active_sessions.items()):
-                    if isinstance(s_val, dict) and s_val.get("sim_modo_activo"):
+                    if isinstance(s_val, dict) and (s_val.get("sim_modo_activo") or s_val.get("sim_enviar_fn") or s_val.get("sim_voz_enviar_fn")):
                         session = s_val
                         print(f"🎙️ [SIMULADOR MIC] Encontrada sesión activa mediante fallback de simulador (key='{s_key}')")
                         break
@@ -2607,14 +2699,11 @@ def configurar_rutas_fastapi(app):
             
             # Si no se encuentra sesión, retornar error seguro
             if not session:
-                print(f"[SIMULADOR MIC] Sesión no encontrada para session_id='{session_id}', user_id='{user_id}', username='{username}'")
+                print(f"[SIMULADOR MIC] Sesión no encontrada para user_id='{user_id}', session_id='{session_id}'")
                 return {"status": "session_not_found"}
 
             if texto_final:
-                modo_activo = modo_solicitado or session.get("sim_modo_activo", "chat")
-                if not modo_activo:
-                    print(f"[SIMULADOR MIC] Ignorando audio '{texto_final}' porque la simulación no está activa en la sesión.")
-                    return {"status": "simulation_inactive"}
+                modo_activo = modo_solicitado or session.get("sim_modo_activo") or ("voz" if session.get("sim_voz_enviar_fn") else "chat")
                 page = session.get("page")
                 btn_mic_sim = session.get("btn_mic_simulador_container")
 
@@ -2631,25 +2720,26 @@ def configurar_rutas_fastapi(app):
                         if hasattr(page, "run_thread"):
                             page.run_thread(sim_voz_fn, texto_final)
                         else:
-                            sim_voz_fn(texto_final)
+                            threading.Thread(target=sim_voz_fn, args=(texto_final,), daemon=True).start()
                     except Exception as ex_v:
                         print(f"ERROR en sim_voz_enviar_fn: {ex_v}")
                     return {"status": "success", "mode": "voz"}
                 else:
                     sim_input = session.get("sim_user_input")
                     sim_enviar = session.get("sim_enviar_fn")
-                    if sim_enviar and page:
+                    if sim_enviar:
                         if sim_input:
-                            sim_input.value = ""
+                            sim_input.value = texto_final
                             try: sim_input.update()
                             except Exception: pass
-                        try: page.update()
-                        except Exception: pass
+                        if page:
+                            try: page.update()
+                            except Exception: pass
                         try:
                             if hasattr(page, "run_thread"):
                                 page.run_thread(sim_enviar, None, texto_final)
                             else:
-                                sim_enviar(None, texto_forzado=texto_final)
+                                threading.Thread(target=sim_enviar, args=(None, texto_final), daemon=True).start()
                         except Exception as ex:
                             print(f"ERROR en sim_enviar: {ex}")
                         return {"status": "success", "mode": "chat"}
@@ -6753,7 +6843,9 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     if hasattr(page, "shared_preferences") and page.shared_preferences:
                         await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
                 except: pass
-            page.run_task(ping_actividad)
+            try:
+                page.run_task(ping_actividad)
+            except Exception: pass
 
             # Expandir abreviaturas informales antes de procesar el mensaje
             user_text_expandido = expandir_abreviaturas(user_text)
@@ -7052,6 +7144,15 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "presupuesto": "presupuesto",
                     "bouget": "presupuesto",
                     "budget": "presupuesto",
+
+                    # Pendientes y Tareas
+                    "pendientes": "pendientes",
+                    "mis pendientes": "pendientes",
+                    "abrir pendientes": "pendientes",
+                    "abre pendientes": "pendientes",
+                    "ver pendientes": "pendientes",
+                    "tareas pendientes": "pendientes",
+                    "modulo pendientes": "pendientes",
 
                     # Enfoque Diario 2026
                     "abrir enfoque diario": "enfoque_diario",
@@ -9221,6 +9322,17 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         page_dev = getattr(page, "device_id", None)
         if page_dev:
             active_sessions[page_dev] = sess_data
+        page_token = getattr(page, "_luxo_token", None)
+        if page_token:
+            active_sessions[page_token] = sess_data
+        if getattr(page, "username", None):
+            active_sessions[page.username] = sess_data
+
+        # Sincronizar ID de usuario y sesión en el navegador cliente
+        u_id_str = str(user_info.get("id") or "")
+        u_name_str = str(user_info.get("usuario") or "").lower().strip()
+        if u_id_str:
+            ejecutar_js_flet(page, f"window.luxoUserId = '{u_id_str}'; window.luxoUsername = '{u_name_str}'; try {{ localStorage.setItem('logged_user_id', '{u_id_str}'); localStorage.setItem('logged_username', '{u_name_str}'); }} catch(e){{}}")
 
 
         # =================================
@@ -9317,299 +9429,14 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     b.style.pointerEvents = "none";
                 };
 
-                const iconEl = topDoc.getElementById("luxo-voice-icon");
-                const textEl = topDoc.getElementById("luxo-voice-text");
-                
-                function setStatus(text, color, icon) {
-                    if (textEl) textEl.innerText = text;
-                    if (iconEl && icon) iconEl.innerText = icon;
-                    if (banner && color) banner.style.borderColor = color;
-                }
-
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
-                
-                function playBeep(count) {
-                    try {
-                        const cnt = count || 1;
-                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                        if (ctx.state === 'suspended') {
-                            ctx.resume().catch(function(){});
-                        }
-                        function emitTone(freq, duration, delay) {
-                            setTimeout(function() {
-                                try {
-                                    if (ctx.state === 'suspended') { ctx.resume().catch(function(){}); }
-                                    const osc = ctx.createOscillator();
-                                    const gain = ctx.createGain();
-                                    osc.type = 'sine';
-                                    osc.frequency.value = freq;
-                                    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-                                    osc.connect(gain);
-                                    gain.connect(ctx.destination);
-                                    osc.start();
-                                    osc.stop(ctx.currentTime + duration);
-                                } catch(e){}
-                            }, delay);
-                        }
-                        if (cnt === 1) {
-                            emitTone(880, 0.12, 0);
-                        } else if (cnt >= 2) {
-                            emitTone(1050, 0.08, 0);
-                            emitTone(1320, 0.12, 120);
-                        }
-                    } catch(e){}
-                }
-
-
-                let rec = null;
-                let isListening = false;
-                let lastSentText = "";
-                let lastSentTime = 0;
-
-                // Detección estricta de dispositivo móvil/tablet (excluye computadoras de escritorio)
-                const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-                const isDesktopOS = /Windows NT|Macintosh|Linux x86_64/i.test(navigator.userAgent);
-                const isMobileDevice = isTouchDevice || ((/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) && !isDesktopOS);
-
-                // Page Visibility API: Apagar micrófono inmediatamente si la pestaña pasa a segundo plano o se minimiza
-                topDoc.addEventListener("visibilitychange", function() {
-                    if (topDoc.hidden) {
-                        console.log("📱 [Luxo Chat Mic]: Pestaña oculta/segundo plano. Apagando micrófono.");
-                        window.luxoSpeechRecognitionActive = false;
-                        if (rec) {
-                            try { rec.stop(); } catch(e){}
-                        }
-                    } else if (!isMobileDevice && !window.luxoSpeechRecognitionActive) {
-                        console.log("📱 [Luxo Chat Mic]: Pestaña visible nuevamente en escritorio.");
-                        setTimeout(function() {
-                            if (window.initLuxoMicPermission) window.initLuxoMicPermission();
-                        }, 1000);
-                    }
-                });
-
+                window.luxoUserId = "${user_info['id']}";
+                window.getLuxoUserId = function() { return "${user_info['id']}"; };
                 window.initLuxoMicPermission = function() {
-                    // En celulares/tablets: NO activar escucha continua en segundo plano
-                    if (isMobileDevice) {
-                        console.log("📱 [Luxo Chat Mic]: Dispositivo móvil/tablet. Micrófono automático desactivado.");
-                        return;
-                    }
-                    if (window.luxoSpeechRecognitionActive) {
-                        console.log("🎙️ [Luxo Chat Mic]: Already active. Skipping duplicate init.");
-                        return;
-                    }
-                    setStatus("Solicitando permiso de micrófono...", "#FFFF00", "⏳");
-                    
-                    let mediaDev = navigator.mediaDevices || (window.top && window.top.navigator && window.top.navigator.mediaDevices);
-                    
-                    if (mediaDev && mediaDev.getUserMedia) {
-                        mediaDev.getUserMedia({ audio: true })
-                        .then(function(stream) {
-                            setStatus("🟢 ESCUCHANDO... Di 'Oye LUXO'", "#00FF00", "🎤");
-                            playBeep();
-                            startRecognition();
-                        })
-                        .catch(function(err) {
-                            console.log("Mic permission error:", err);
-                            setStatus("❌ Permiso Denegado (Clica 🔒 en URL para permitir)", "#FF0000", "⚠️");
-                        });
-                    } else {
-                        startRecognition();
-                    }
+                    console.log("🎙️ [Luxo Chat Mic]: User ID synced: " + window.luxoUserId);
                 };
-
-                function startRecognition() {
-                    if (isMobileDevice) return;
-                    if (!SpeechRecognition) {
-                        setStatus("❌ Usa Chrome o Edge para 'Oye LUXO'", "#FF0000", "❌");
-                        return;
-                    }
-                    
-                    try {
-                        if (rec) {
-                            try { rec.stop(); } catch(e){}
-                        }
-                        rec = new SpeechRecognition();
-                        rec.continuous = true;
-                        rec.interimResults = true;
-                        rec.lang = 'es-MX';
-
-                        rec.onstart = function() {
-                            isListening = true;
-                            window.luxoSpeechRecognitionActive = true;
-                            setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
-                        };
-
-                        function sendVoiceQuery(queryText) {
-                            if (!queryText || queryText === lastSentText) return;
-                            lastSentText = queryText;
-                            lastSentTime = Date.now();
-                            playBeep(2);
-                            window.showLuxoSiriOrb(5000);
-                            setStatus("⚡ Enviando a LUXO: " + queryText, "#7CFC00", "🚀");
-                            fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(queryText), { method: 'POST' });
-                            window.luxoIsListeningAlertSent = false;
-                            window.luxoManualDictating = false;
-                            window.luxoWakeIndex = -1;
-                            if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
-                            if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
-                            setTimeout(function(){ setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤"); }, 3500);
-                        }
-
-                        rec.onresult = function(e) {
-                            for (let i = e.resultIndex; i < e.results.length; ++i) {
-                                const transcript = e.results[i][0].transcript;
-                                const lower = transcript.toLowerCase();
-                                console.log("🎙️ [Luxo Chat Mic]: index=" + i + ", text:", transcript, "isFinal:", e.results[i].isFinal);
-                                
-                                if (lower.includes("oye luxo") || lower.includes("oye lujo") || lower.includes("oye lux") || lower.includes("oye luco")) {
-                                    let query = transcript
-                                        .replace(/oye luxo/gi, '')
-                                        .replace(/oye lujo/gi, '')
-                                        .replace(/oye lux/gi, '')
-                                        .replace(/oye luco/gi, '')
-                                        .trim();
-                                        
-                                    if (!window.luxoManualDictating) {
-                                        playBeep(1);
-                                        window.luxoManualDictating = true;
-                                        window.luxoWakeIndex = i;
-                                    }
-                                    if (!window.luxoIsListeningAlertSent) {
-                                        window.luxoIsListeningAlertSent = true;
-                                        fetch('/luxo_listening_start?user_id=' + window.getLuxoUserId(), { method: 'POST' }).catch(function(){});
-                                    }
-                                    window.showLuxoSiriOrb(8000);
-
-                                    if (!query) {
-                                        setStatus("👂 ¡Oye LUXO Detectado! Di tu pregunta...", "#FF00FF", "🔊");
-                                        if (window.luxoDictatingTimeout) clearTimeout(window.luxoDictatingTimeout);
-                                        window.luxoDictatingTimeout = setTimeout(function(){
-                                            window.luxoManualDictating = false;
-                                            window.luxoWakeIndex = -1;
-                                            setStatus("🟢 ESCUCHANDO EN VIVO... Di 'Oye LUXO'", "#00FFFF", "🎤");
-                                        }, 14000);
-                                    } else {
-                                        if (e.results[i].isFinal) {
-                                            sendVoiceQuery(query);
-                                        } else {
-                                            setStatus("👂 Escuchando: " + query, "#FF00FF", "🔊");
-                                            if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
-                                            window.luxoSilenceTimer = setTimeout(function() {
-                                                sendVoiceQuery(query);
-                                            }, 1200);
-                                        }
-                                    }
-                                } else if (window.luxoManualDictating && i > (window.luxoWakeIndex || -1)) {
-                                    const query = transcript.trim();
-                                    if (query) {
-                                        if (e.results[i].isFinal) {
-                                            sendVoiceQuery(query);
-                                        } else {
-                                            setStatus("👂 Escuchando: " + query, "#FF00FF", "🔊");
-                                            if (window.luxoSilenceTimer) clearTimeout(window.luxoSilenceTimer);
-                                            window.luxoSilenceTimer = setTimeout(function() {
-                                                sendVoiceQuery(query);
-                                            }, 1200);
-                                        }
-                                    }
-                                }
-                            }
-                        };
-
-                        rec.onerror = function(err) {
-                            console.log("Luxo Voice Error:", err);
-                            if (err.error === 'not-allowed') {
-                                setStatus("❌ Micrófono Bloqueado en el Navegador", "#FF0000", "🔒");
-                            }
-                        };
-
-                        rec.onend = function() {
-                            window.luxoSpeechRecognitionActive = false;
-                            if (!isMobileDevice && !topDoc.hidden) {
-                                setTimeout(function() {
-                                    try {
-                                        if (!topDoc.hidden && !window.luxoSpeechRecognitionActive) {
-                                            rec.start();
-                                        }
-                                    } catch(e){}
-                                }, 800);
-                            }
-                        };
-
-                        rec.start();
-                    } catch(ex) {
-                        console.log("Exception in startRecognition:", ex);
-                    }
-                }
-
-                // Limpieza de buffer de voz cada 10 minutos (600,000 ms) en PC para evitar saturación
-                if (!window.luxo10MinCleanupTimer && !isMobileDevice) {
-                    window.luxo10MinCleanupTimer = setInterval(function() {
-                        console.log("🧹 [Luxo Web Mic]: Limpieza de memoria y buffer de voz de 10 minutos.");
-                        if (rec && isListening && !isMobileDevice) {
-                            try { rec.abort(); } catch(e){}
-                        }
-                    }, 600000);
-                }
-
                 banner.onclick = function() {
-                    window.toggleLuxoDictate();
+                    if (typeof window.showLuxoSiriOrb === "function") window.showLuxoSiriOrb(4000);
                 };
-                
-                window.toggleLuxoDictate = function() {
-                    if (isMobileDevice) {
-                        let SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
-                        if (!SR) {
-                            alert('❌ Reconocimiento de voz no soportado en este navegador.');
-                            return;
-                        }
-                        if (window.luxoMobileDictating) {
-                            window.luxoMobileDictating = false;
-                            window.hideLuxoSiriOrb();
-                            if (rec) try { rec.stop(); } catch(e){}
-                            return;
-                        }
-                        try {
-                            if (rec) try { rec.stop(); } catch(e){}
-                            let r = new SR();
-                            r.lang = 'es-MX';
-                            r.interimResults = false;
-                            r.continuous = false;
-                            window.luxoMobileDictating = true;
-                            window.showLuxoSiriOrb(6000);
-                            
-                            r.onstart = function() {
-                                console.log("[LUXO MIC] ACTIVANDO MICROFONO", { source: "toggleLuxoDictate", mobile: isMobileDevice, timestamp: Date.now() });
-                                playBeep(1);
-                            };
-                            r.onresult = function(ev) {
-                                const txt = ev.results[0][0].transcript;
-                                if (txt) {
-                                    playBeep(2);
-                                    fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(txt.trim()), { method: 'POST' });
-                                    window.showLuxoSiriOrb(3000);
-                                }
-                            };
-                            r.onerror = function(ev) {
-                                console.log("📱 [Luxo Mobile Mic Error]:", ev.error);
-                                window.luxoMobileDictating = false;
-                                window.hideLuxoSiriOrb();
-                            };
-                            r.onend = function() {
-                                console.log("[LUXO MIC] DETENIENDO MICROFONO", { source: "toggleLuxoDictate", timestamp: Date.now() });
-                                window.luxoMobileDictating = false;
-                                window.hideLuxoSiriOrb();
-                            };
-                            r.start();
-                        } catch(err) {
-                            console.log("Error iniciando micrófono móvil:", err);
-                        }
-                    } else {
-                        window.initLuxoMicPermission();
-                    }
-                };
-
                 window.initLuxoMicPermission();
             })(); void(0);"""
 
@@ -9786,6 +9613,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 ),
                 ft.Row([
                     input_msg,
+                    user_id_field,
                     btn_mic_container,
                     btn_send_whatsapp
                 ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
@@ -16754,6 +16582,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 except: pass
                                 try: sim_voz_estado_texto.update()
                                 except: pass
+                                tiempo_inicio_turno[0] = time.time()
                                 if on_finish_callback and simulacion_activa[0] and not sim_stop_requested[0]:
                                     try: on_finish_callback()
                                     except Exception as ex_cb: print("Error en callback fin audio:", ex_cb)
@@ -16766,6 +16595,8 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             simulacion_activa = [False]
             sim_dictado_en_progreso = [False]
             sim_stop_requested = [False]
+            tiempo_inicio_turno = [time.time()]
+            tiempos_respuesta = []
 
             def play_sim_beep(tipo="start"):
                 def _beep_worker():
@@ -16886,35 +16717,15 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                     threading.Thread(target=sim_dictado_local_worker, args=("chat",), daemon=True).start()
 
-                # Enviar evento de dictado a la cola de polling HTTP del cliente web (compatible Firefox/Chrome/Safari)
-                tok = getattr(page, "_luxo_token", None)
-                u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
-                u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
-                dev_id_k = getattr(page, "device_id", None)
-                evt_dict = {
-                    "id": f"sim_mic_{int(time.time()*1000)}",
-                    "action": "dictate_simulador",
-                    "mode": "chat",
-                    "timestamp": time.time()
-                }
-                if tok: GLOBAL_WEB_TTS_EVENTS[tok] = evt_dict
-                if dev_id_k: GLOBAL_WEB_TTS_EVENTS[dev_id_k] = evt_dict
-                if u_id: GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_dict
-                if u_name: GLOBAL_WEB_TTS_EVENTS[u_name] = evt_dict
-
                 js_sim_dictate = """javascript:void((function(){
                     try {
-                        let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                        if (!SR && window.top) {
-                            try { SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition; } catch(e){}
+                        if (window.iniciarDictadoSimulador) {
+                            window.iniciarDictadoSimulador('chat');
+                            return;
                         }
-                        if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+                        const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                         if (!SR) {
-                            if (window.iniciarDictadoSimulador) {
-                                window.iniciarDictadoSimulador('chat');
-                                return;
-                            }
-                            alert('❌ API de voz no soportada. Usa Google Chrome o Microsoft Edge.');
+                            alert('❌ API de voz no soportada en este navegador.');
                             return;
                         }
                         const r = new SR();
@@ -16922,31 +16733,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         r.interimResults = false;
                         r.continuous = false;
                         r.maxAlternatives = 1;
-                        r.onstart = function() {
-                            console.log('[SIMULADOR MIC CHAT] Escuchando...');
-                        };
                         r.onresult = function(ev) {
                             const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
                             if (txt) {
-                                const uid = (window.getLuxoUserId ? window.getLuxoUserId() : '') || (window.luxoSessionToken || '');
+                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
                                 fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=chat&text=' + encodeURIComponent(txt), { method: 'POST' });
                             }
-                        };
-                        r.onerror = function(ev) {
-                            console.log('[SIMULADOR MIC CHAT] Error:', ev.error);
-                            if (ev.error === 'not-allowed') {
-                                alert('⚠️ Permiso de micrófono denegado. Permite el micrófono en tu navegador.');
-                            } else if (window.iniciarDictadoSimulador) {
-                                window.iniciarDictadoSimulador('chat');
-                            }
-                        };
-                        r.onend = function() {
-                            if (window.reanudarReconocimientoGlobal) window.reanudarReconocimientoGlobal();
                         };
                         r.start();
                     } catch(err) {
                         console.log('[SIMULADOR MIC] Error:', err);
-                        if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('chat');
                     }
                 })());"""
 
@@ -16974,7 +16770,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 icon=ft.Icons.MIC_ROUNDED,
                 icon_color="#00FFFF",
                 icon_size=20,
-                tooltip="Hablar por Micrófono 🎙️",
+                tooltip="sim-mic-chat-btn Hablar por Micrófono 🎙️",
                 on_click=on_mic_sim_click,
                 disabled=True
             )
@@ -16986,7 +16782,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 width=44,
                 height=44,
                 alignment=ft.alignment.Alignment(0, 0),
-                tooltip="Hablar por Micrófono 🎙️"
+                tooltip="sim-mic-chat-btn Hablar por Micrófono 🎙️"
             )
 
             vendedor_seleccionado_id = [None]
@@ -17054,6 +16850,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 msg_txt = (texto_forzado if texto_forzado is not None else (user_input.value or "")).strip()
                 if not msg_txt:
                     return
+                
+                t_ahora = time.time()
+                if tiempo_inicio_turno[0] > 0:
+                    dt = round(t_ahora - tiempo_inicio_turno[0], 1)
+                    if 0.5 <= dt <= 300:
+                        tiempos_respuesta.append(dt)
+                
                 user_input.value = ""
                 try:
                     user_input.update()
@@ -17075,6 +16878,7 @@ REGLAS OBLIGATORIAS:
                 ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
                 if not simulacion_activa[0] or sim_stop_requested[0]:
                     return
+                tiempo_inicio_turno[0] = time.time()
                 if ok and respuesta:
                     chat_history.append({"role": "assistant", "content": respuesta})
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
@@ -17179,7 +16983,7 @@ REGLAS OBLIGATORIAS:
                 cargar_historial_evaluaciones()
                 page.update()
 
-            def mostrar_evaluacion_detalle(score, feedback, nombre_vendedor="Asesor de Ventas", perfil="", fecha=""):
+            def mostrar_evaluacion_detalle(score, feedback, nombre_vendedor="Asesor de Ventas", perfil="", fecha="", stats_tiempo=None):
                 eval_detail_card.controls.clear()
                 
                 score_num = int(score) if str(score).isdigit() else 70
@@ -17193,6 +16997,40 @@ REGLAS OBLIGATORIAS:
                     extension_set=ft.MarkdownExtensionSet.GITHUB_WEB
                 )
 
+                metricas_col = [
+                    ft.Row([
+                        ft.Text("AUDITORÍA DE VENTA Y NEUROVENTAS", color="#00FFFF", weight="bold", size=16),
+                        ft.Container(
+                            content=ft.Text(f"SCORE: {score_num}/100", color="white", weight="bold", size=15),
+                            bgcolor=badge_bg,
+                            padding=ft.Padding(left=12, top=6, right=12, bottom=6),
+                            border_radius=8,
+                            border=ft.Border.all(1.5, badge_color)
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center"),
+                    ft.Divider(color="#333355", height=15),
+                    ft.Row([
+                        ft.Text(f"👤 Asesor: {nombre_vendedor}", color="white", weight="bold", size=13),
+                        ft.Text(f"📅 Fecha: {fecha}", color="#AAAAAA", size=12),
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    ft.Text(f"🎯 Escenario / Perfil: {perfil}", color="#D8B4FE", size=12, italic=True),
+                ]
+
+                if stats_tiempo and isinstance(stats_tiempo, dict):
+                    metricas_col.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.TIMER_OUTLINED, color="#00FFFF", size=18),
+                                ft.Text(f"⏱️ Tiempo Promedio de Respuesta: {stats_tiempo.get('avg', 0)} seg", color="#00FFFF", weight="bold", size=13),
+                                ft.Text(f"(Más rápida: {stats_tiempo.get('min', 0)}s • Más pausada: {stats_tiempo.get('max', 0)}s • {stats_tiempo.get('count', 0)} turnos)", color="#AAAAAA", size=11),
+                            ], spacing=8, wrap=True, vertical_alignment="center"),
+                            bgcolor="#1C1C36",
+                            padding=ft.Padding(left=12, top=8, right=12, bottom=8),
+                            border_radius=8,
+                            border=ft.Border.all(1, "#00FFFF44")
+                        )
+                    )
+
                 eval_detail_card.controls.extend([
                     ft.Row([
                         ft.ElevatedButton(
@@ -17205,24 +17043,7 @@ REGLAS OBLIGATORIAS:
                         )
                     ]),
                     ft.Container(
-                        content=ft.Column([
-                            ft.Row([
-                                ft.Text("AUDITORÍA DE VENTA Y NEUROVENTAS", color="#00FFFF", weight="bold", size=16),
-                                ft.Container(
-                                    content=ft.Text(f"SCORE: {score_num}/100", color="white", weight="bold", size=15),
-                                    bgcolor=badge_bg,
-                                    padding=ft.Padding(left=12, top=6, right=12, bottom=6),
-                                    border_radius=8,
-                                    border=ft.Border.all(1.5, badge_color)
-                                )
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center"),
-                            ft.Divider(color="#333355", height=15),
-                            ft.Row([
-                                ft.Text(f"👤 Asesor: {nombre_vendedor}", color="white", weight="bold", size=13),
-                                ft.Text(f"📅 Fecha: {fecha}", color="#AAAAAA", size=12),
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                            ft.Text(f"🎯 Escenario / Perfil: {perfil}", color="#D8B4FE", size=12, italic=True),
-                        ], spacing=8),
+                        content=ft.Column(metricas_col, spacing=8),
                         bgcolor="#141424",
                         padding=15,
                         border_radius=10,
@@ -17325,6 +17146,14 @@ REGLAS OBLIGATORIAS:
                         ### 🎯 Plan de Acción y Consejos Clave para la Próxima Simulación
                         """
                     
+                    stats_tiempo = None
+                    if tiempos_respuesta:
+                        avg_t = round(sum(tiempos_respuesta) / len(tiempos_respuesta), 1)
+                        min_t = round(min(tiempos_respuesta), 1)
+                        max_t = round(max(tiempos_respuesta), 1)
+                        stats_tiempo = {"avg": avg_t, "min": min_t, "max": max_t, "count": len(tiempos_respuesta)}
+                        eval_prompt += f"\n\n⏱️ TIEMPO DE RESPUESTA DEL VENDEDOR:\n- Promedio por turno: {avg_t} segundos (Mínimo: {min_t}s, Máximo: {max_t}s en {len(tiempos_respuesta)} intervenciones).\n- Evalúa si la velocidad y dinamismo de respuesta fueron óptimos (ideal 2 a 6 segundos para mantener la conexión sin titubeos)."
+
                     for msg in chat_history:
                         rol_label = "VENDEDOR (ASESOR DE VENTAS)" if msg['role'] == 'user' else "CLIENTE (COMPRADOR SIMULADO)"
                         eval_prompt += f"\n{rol_label}: {msg['content']}"
@@ -17370,7 +17199,7 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                         
                         from datetime import datetime
                         fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, cliente_dropdown.value, fecha_ahora)
+                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, cliente_dropdown.value, fecha_ahora, stats_tiempo=stats_tiempo)
                     else:
                         btn_finalizar.disabled = False
                         try: page.update()
@@ -17389,6 +17218,7 @@ Evalúa de forma rigurosa pero altamente formativa en español usando Markdown. 
                 
                 simulacion_activa[0] = True
                 sim_stop_requested[0] = False
+                tiempos_respuesta.clear()
                 v_val = vendedor_dropdown.value
                 vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
                 perfil_cliente_txt[0] = cliente_dropdown.value
@@ -17446,7 +17276,8 @@ REGLAS OBLIGATORIAS:
                     btn_mic_sim_icon.disabled = False
                     btn_finalizar.disabled = False
                     agregar_mensaje_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
-                    ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'chat');")
+                    tiempo_inicio_turno[0] = time.time()
+                    activar_mic_simulador_js(page, True, "chat")
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
 
@@ -17457,7 +17288,7 @@ REGLAS OBLIGATORIAS:
                 for uid_k, sess in list(active_sessions.items()):
                     if sess.get("page") == page:
                         sess["sim_modo_activo"] = None
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
+                activar_mic_simulador_js(page, False)
                 config_area.visible = True
                 chat_area.visible = False
                 chat_history.clear()
@@ -17501,7 +17332,7 @@ REGLAS OBLIGATORIAS:
 
             chat_area = ft.Column([
                 sim_chat_column,
-                ft.Row([user_input, btn_mic_sim_container, btn_enviar], spacing=6, vertical_alignment="center"),
+                ft.Row([user_input, btn_enviar], spacing=6, vertical_alignment="center"),
                 ft.Container(height=10),
                 ft.Row([btn_finalizar, btn_cancelar], spacing=10, wrap=True)
             ], visible=False, expand=True)
@@ -17557,35 +17388,15 @@ REGLAS OBLIGATORIAS:
                     if platform.system() == "Windows" and not sim_dictado_en_progreso[0]:
                         threading.Thread(target=sim_dictado_local_worker, args=("voz",), daemon=True).start()
                     
-                    # Enviar evento de dictado a la cola de polling HTTP del cliente web (compatible Firefox/Chrome/Safari)
-                    tok = getattr(page, "_luxo_token", None)
-                    u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
-                    u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
-                    dev_id_k = getattr(page, "device_id", None)
-                    evt_dict = {
-                        "id": f"sim_mic_{int(time.time()*1000)}",
-                        "action": "dictate_simulador",
-                        "mode": "voz",
-                        "timestamp": time.time()
-                    }
-                    if tok: GLOBAL_WEB_TTS_EVENTS[tok] = evt_dict
-                    if dev_id_k: GLOBAL_WEB_TTS_EVENTS[dev_id_k] = evt_dict
-                    if u_id: GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_dict
-                    if u_name: GLOBAL_WEB_TTS_EVENTS[u_name] = evt_dict
-                    
                     js_sim_voz = """javascript:void((function(){
                         try {
-                            let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                            if (!SR && window.top) {
-                                try { SR = window.top.SpeechRecognition || window.top.webkitSpeechRecognition; } catch(e){}
+                            if (window.iniciarDictadoSimulador) {
+                                window.iniciarDictadoSimulador('voz');
+                                return;
                             }
-                            if (window.pausarReconocimientoGlobal) window.pausarReconocimientoGlobal();
+                            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                             if (!SR) {
-                                if (window.iniciarDictadoSimulador) {
-                                    window.iniciarDictadoSimulador('voz');
-                                    return;
-                                }
-                                alert('❌ API de voz no soportada. Usa Google Chrome o Microsoft Edge.');
+                                alert('❌ API de voz no soportada en este navegador.');
                                 return;
                             }
                             const r = new SR();
@@ -17593,31 +17404,16 @@ REGLAS OBLIGATORIAS:
                             r.interimResults = false;
                             r.continuous = false;
                             r.maxAlternatives = 1;
-                            r.onstart = function() {
-                                console.log('[SIMULADOR MIC VOZ] Escuchando...');
-                            };
                             r.onresult = function(ev) {
                                 const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
                                 if (txt) {
-                                    const uid = (window.getLuxoUserId ? window.getLuxoUserId() : '') || (window.luxoSessionToken || '');
-                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=voz&text=' + encodeURIComponent(txt), { method: 'POST' });
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                    fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=' + encodeURIComponent('voz') + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
-                            };
-                            r.onerror = function(ev) {
-                                console.log('[SIMULADOR MIC VOZ] Error:', ev.error);
-                                if (ev.error === 'not-allowed') {
-                                    alert('⚠️ Permiso de micrófono denegado. Permite el micrófono en tu navegador.');
-                                } else if (window.iniciarDictadoSimulador) {
-                                    window.iniciarDictadoSimulador('voz');
-                                }
-                            };
-                            r.onend = function() {
-                                if (window.reanudarReconocimientoGlobal) window.reanudarReconocimientoGlobal();
                             };
                             r.start();
                         } catch(err) {
                             console.log('[SIMULADOR MIC VOZ] Error:', err);
-                            if (window.iniciarDictadoSimulador) window.iniciarDictadoSimulador('voz');
                         }
                     })());"""
 
@@ -17658,7 +17454,7 @@ REGLAS OBLIGATORIAS:
                     sim_voz_chat_column.scroll_to(offset=-1, duration=300)
                 except Exception: pass
                 try: page.update()
-                except Exception: pass
+                except: pass
 
             def enviar_mensaje_simulacion_voz(msg_txt):
                 if not simulacion_activa[0] or sim_stop_requested[0]:
@@ -17666,6 +17462,13 @@ REGLAS OBLIGATORIAS:
                 if not msg_txt or not str(msg_txt).strip():
                     return
                 msg_txt = str(msg_txt).strip()
+                
+                t_ahora = time.time()
+                if tiempo_inicio_turno[0] > 0:
+                    dt = round(t_ahora - tiempo_inicio_turno[0], 1)
+                    if 0.5 <= dt <= 300:
+                        tiempos_respuesta.append(dt)
+                
                 voz_chat_history.append({"role": "user", "content": msg_txt})
                 agregar_mensaje_voz_chat("Vendedor", msg_txt, ft.Icons.PERSON, "#D8B4FE")
                 
@@ -17714,6 +17517,7 @@ REGLAS OBLIGATORIAS:
                 
                 simulacion_activa[0] = True
                 sim_stop_requested[0] = False
+                tiempos_respuesta.clear()
                 v_val = vendedor_voz_dropdown.value
                 vendedor_seleccionado_id[0] = int(v_val) if v_val and str(v_val).isdigit() else 1
                 perfil_cliente_txt[0] = cliente_voz_dropdown.value
@@ -17764,7 +17568,7 @@ REGLAS OBLIGATORIAS:
                     btn_hablar_voz.disabled = False
                     btn_finalizar_voz.disabled = False
                     agregar_mensaje_voz_chat("Cliente", respuesta, ft.Icons.SUPPORT_AGENT, "#00FFFF")
-                    ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(true, 'voz');")
+                    activar_mic_simulador_js(page, True, "voz")
                     reproducir_voz_cliente(respuesta, on_finish_callback=activar_mic_voz_automatico)
                 else:
                     mostrar_snack(f"Error de conexión con la IA ({status})", "red")
@@ -17776,7 +17580,7 @@ REGLAS OBLIGATORIAS:
                 for uid_k, sess in list(active_sessions.items()):
                     if sess.get("page") == page:
                         sess["sim_modo_activo"] = None
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
+                activar_mic_simulador_js(page, False)
                 config_area_voz.visible = True
                 chat_area_voz.visible = False
                 voz_chat_history.clear()
@@ -17796,7 +17600,7 @@ REGLAS OBLIGATORIAS:
                 for uid_k, sess in list(active_sessions.items()):
                     if sess.get("page") == page:
                         sess["sim_modo_activo"] = None
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
+                activar_mic_simulador_js(page, False)
                 if len(voz_chat_history) < 2:
                     mostrar_snack("La conversación debe tener al menos una intervención por voz del vendedor.", "red")
                     return
@@ -17813,6 +17617,14 @@ REGLAS OBLIGATORIAS:
                     eval_prompt = f"""Analiza la siguiente conversación de roleplay 100% de voz entre un Asesor de Ventas Sunglass Hut y un Cliente ('{perfil_nombre}').
 Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de frases prohibidas de neuroventas (como 'sin compromiso' o 'ayudar en algo'):
 """
+                    stats_tiempo = None
+                    if tiempos_respuesta:
+                        avg_t = round(sum(tiempos_respuesta) / len(tiempos_respuesta), 1)
+                        min_t = round(min(tiempos_respuesta), 1)
+                        max_t = round(max(tiempos_respuesta), 1)
+                        stats_tiempo = {"avg": avg_t, "min": min_t, "max": max_t, "count": len(tiempos_respuesta)}
+                        eval_prompt += f"\n\n⏱️ TIEMPO DE RESPUESTA DEL VENDEDOR:\n- Promedio por turno: {avg_t} segundos (Mínimo: {min_t}s, Máximo: {max_t}s en {len(tiempos_respuesta)} intervenciones).\n- Evalúa si la velocidad y dinamismo de respuesta por voz fueron óptimos."
+
                     for msg in voz_chat_history:
                         rol_label = "VENDEDOR" if msg['role'] == 'user' else "CLIENTE"
                         eval_prompt += f"\n{rol_label}: {msg['content']}"
@@ -17852,7 +17664,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
 
                         from datetime import datetime
                         fecha_ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, f"🎙️ [Voz en Vivo] {cliente_voz_dropdown.value}", fecha_ahora)
+                        mostrar_evaluacion_detalle(score_val, eval_text, nom_vend_txt, f"🎙️ [Voz en Vivo] {cliente_voz_dropdown.value}", fecha_ahora, stats_tiempo=stats_tiempo)
                     else:
                         btn_finalizar_voz.disabled = False
                         try: page.update()
@@ -17873,7 +17685,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
                 on_click=hablar_ahora_voz_click,
                 bgcolor="#1f6f43",
                 color="white",
-                tooltip="Hablar Ahora 🎙️",
+                tooltip="sim-mic-voz-btn Hablar Ahora 🎙️",
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
                 disabled=True
             )
@@ -17904,7 +17716,7 @@ Evalúa la fluidez, argumentación de valor, preguntas de sondeo y detección de
                 ft.Container(height=5),
                 sim_voz_chat_column,
                 ft.Container(height=10),
-                ft.Row([btn_hablar_voz, btn_finalizar_voz, btn_cancelar_voz], spacing=10, wrap=True)
+                ft.Row([btn_finalizar_voz, btn_cancelar_voz], spacing=10, wrap=True)
             ], visible=False, expand=True)
 
             tab_voz = ft.Column([config_area_voz, chat_area_voz], expand=True)
@@ -18231,11 +18043,24 @@ Ejemplo:
                 perfiles_cards_container
             ], expand=True)
 
+            def on_tab_change(e):
+                try:
+                    idx = getattr(e.control, "selected_index", 0)
+                    if idx == 0:
+                        activar_mic_simulador_js(page, True, "chat")
+                    elif idx == 1:
+                        activar_mic_simulador_js(page, True, "voz")
+                    else:
+                        activar_mic_simulador_js(page, False)
+                except Exception as ex_tab:
+                    print("Error on_tab_change simulador:", ex_tab)
+
             tabs = ft.Tabs(
                 selected_index=0,
                 animation_duration=300,
                 length=4,
                 expand=True,
+                on_change=on_tab_change,
                 content=ft.Column(
                     expand=True,
                     controls=[
@@ -22679,6 +22504,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_pendientes = ft.TextButton(
+            content=ft.Row([ft.Text("📌", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Mis Pendientes 📌", "My Tasks 📌", "Mes Tâches 📌", "I Miei Compiti 📌", "我的待办 📌"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("pendientes", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_tareas = ft.TextButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Tareas 📋", "Tasks 📋", "Tâches 📋", "Attività 📋", "任务 📋"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("tareas", desde_menu_manual=True),
@@ -22822,11 +22653,15 @@ Ejemplo:
         # Cambiar vistas con hover y estilos activos
         def cambiar_vista(vista, desde_menu_manual=False):
             active_view[0] = vista
+            if str(vista) in ["simulador"]:
+                activar_mic_simulador_js(page, True, "chat")
+            else:
+                ejecutar_js_flet(page, f"window._luxoActiveView = '{vista}';")
             if str(vista) not in ["capacitacion_ia", "simulador"]:
                 for uid_k, sess in list(active_sessions.items()):
                     if sess.get("page") == page:
                         sess["sim_modo_activo"] = None
-                ejecutar_js_flet(page, "if (window.showSimuladorMicBtn) window.showSimuladorMicBtn(false); if(window.detenerDictadoSimulador) window.detenerDictadoSimulador();")
+                activar_mic_simulador_js(page, False)
                 async def _hide_sim_w():
                     try:
                         await page.launch_url("javascript:if(window.showSimuladorMicWidget){window.showSimuladorMicWidget(false);}void(0);")
@@ -22855,7 +22690,7 @@ Ejemplo:
                 except Exception:
                     pass
             all_btn_tuples = [
-                (btn_chat, "chat"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
+                (btn_chat, "chat"), (btn_pendientes, "pendientes"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
                 (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_catalogo_upc, "catalogo_upc"), (btn_garantias, "garantias"), 
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
@@ -22886,9 +22721,19 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
+                    if vista not in main_views_cache or vista in ["chat", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
+                        elif vista == "pendientes":
+                            import importlib
+                            import pendientes_view
+                            importlib.reload(pendientes_view)
+                            main_views_cache["pendientes"] = pendientes_view.build_pendientes_view(
+                                page,
+                                user_info=user_info,
+                                conectar_db_fn=conectar_db,
+                                mostrar_snack_fn=mostrar_snack
+                            )
                         elif vista == "catalogo_upc":
                             import catalogo_upc_view
                             main_views_cache["catalogo_upc"] = catalogo_upc_view.build_catalogo_upc_view(
@@ -23015,6 +22860,11 @@ Ejemplo:
                         content_area.update()
                     except Exception as ex_cu:
                         print("Notice content_area.update():", ex_cu)
+
+                    if vista == "simulador":
+                        activar_mic_simulador_js(page, True, "chat")
+                    else:
+                        activar_mic_simulador_js(page, False)
 
                     # Cerrar el menú lateral en móviles al cambiar de vista
                     if getattr(page, "width", None) and page.width < 800:
@@ -23335,7 +23185,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_pendientes, btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
@@ -24479,6 +24329,9 @@ Ejemplo:
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
                     sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                    page.user_id = str(user_id_key)
+                    page._luxo_token = sess_token
+                    page.username = u_clean_login
                     sess_dict = {
                         "page": page,
                         "user_info": user_info,
@@ -24487,6 +24340,9 @@ Ejemplo:
                     }
                     active_sessions[sess_token] = sess_dict
                     active_sessions[user_id_key] = sess_dict
+                    active_sessions[str(user_id_key)] = sess_dict
+                    if page.username:
+                        active_sessions[page.username] = sess_dict
 
                     # --- REGISTRAR INICIO DE SESIÓN ---
                     ip_client = getattr(page, "client_ip", None) or "Desconocido"
@@ -24998,6 +24854,11 @@ Ejemplo:
                         user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
                         user_id_key = user_data["ID_Usuario"]
                         sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                        page.user_id = str(user_id_key)
+                        page._luxo_token = sess_token
+                        u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
+                        page.username = u_clean_login
+                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,
@@ -25006,6 +24867,9 @@ Ejemplo:
                         }
                         active_sessions[sess_token] = sess_dict
                         active_sessions[user_id_key] = sess_dict
+                        active_sessions[str(user_id_key)] = sess_dict
+                        if page.username:
+                            active_sessions[page.username] = sess_dict
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
                         cargar_chat(initial_view=last_view_saved)
                         return # Termina sin mostrar login

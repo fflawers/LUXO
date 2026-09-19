@@ -7145,6 +7145,15 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "bouget": "presupuesto",
                     "budget": "presupuesto",
 
+                    # Pendientes y Tareas
+                    "pendientes": "pendientes",
+                    "mis pendientes": "pendientes",
+                    "abrir pendientes": "pendientes",
+                    "abre pendientes": "pendientes",
+                    "ver pendientes": "pendientes",
+                    "tareas pendientes": "pendientes",
+                    "modulo pendientes": "pendientes",
+
                     # Enfoque Diario 2026
                     "abrir enfoque diario": "enfoque_diario",
                     "abre enfoque diario": "enfoque_diario",
@@ -22495,6 +22504,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_pendientes = ft.TextButton(
+            content=ft.Row([ft.Text("📌", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Mis Pendientes 📌", "My Tasks 📌", "Mes Tâches 📌", "I Miei Compiti 📌", "我的待办 📌"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("pendientes", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_tareas = ft.TextButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Tareas 📋", "Tasks 📋", "Tâches 📋", "Attività 📋", "任务 📋"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("tareas", desde_menu_manual=True),
@@ -22675,7 +22690,7 @@ Ejemplo:
                 except Exception:
                     pass
             all_btn_tuples = [
-                (btn_chat, "chat"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
+                (btn_chat, "chat"), (btn_pendientes, "pendientes"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
                 (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_catalogo_upc, "catalogo_upc"), (btn_garantias, "garantias"), 
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
@@ -22706,9 +22721,19 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
+                    if vista not in main_views_cache or vista in ["chat", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
+                        elif vista == "pendientes":
+                            import importlib
+                            import pendientes_view
+                            importlib.reload(pendientes_view)
+                            main_views_cache["pendientes"] = pendientes_view.build_pendientes_view(
+                                page,
+                                user_info=user_info,
+                                conectar_db_fn=conectar_db,
+                                mostrar_snack_fn=mostrar_snack
+                            )
                         elif vista == "catalogo_upc":
                             import catalogo_upc_view
                             main_views_cache["catalogo_upc"] = catalogo_upc_view.build_catalogo_upc_view(
@@ -23160,7 +23185,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_pendientes, btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
