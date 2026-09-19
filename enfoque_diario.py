@@ -866,6 +866,59 @@ def calcular_dia(d_name, user_id):
         "carekits_pct": cv_carekits_pct
     }
 
+def generar_plan_smart_ia(dia_base, user_id=None):
+    """
+    Genera recomendaciones inteligentes y un plan de acción SMART
+    personalizado para el día, basado en los cálculos matemáticos,
+    cuotas de venta, tráfico horario y métricas de productividad.
+    """
+    if user_id and user_id not in user_states:
+        init_user_state(user_id)
+    s_state = user_states[user_id]["store_state"] if (user_id and user_id in user_states) else (user_states.get("default", {}).get("store_state", {}))
+    calc = calcular_dia(dia_base, user_id if user_id else "default")
+    data = s_state.get(dia_base, {})
+    
+    meta_ns = float(calc.get("meta_diaria", 0.0) or 0.0)
+    meta_ideal = float(calc.get("meta_ideal", 0.0) or (meta_ns * 1.10))
+    tot_horas = float(calc.get("tot_horas", 0.0) or 0.0)
+    vta_prod = float(calc.get("vta_neta_prod", 0.0) or 0.0)
+    u_prod = float(calc.get("u_prod", 0.0) or 0.0)
+    meta_conv = float(calc.get("conversion_target", 0.15) or 0.15) * 100.0
+    tot_pzas = int(calc.get("total_unidades", 0) or 0)
+    trafico_esp = int(data.get("trafico_esperado", 0) or 0)
+    atv_val = float(data.get("atv_dia", 0.0) or 3620.0)
+    aur_val = float(data.get("aur_dia", 0.0) or 3390.0)
+    
+    colabs_activos = [c for c in data.get("colaboradores", []) if (c.get("nombre") or "").strip() and float(c.get("horas", 0) or 0) > 0]
+    num_colabs = len(colabs_activos)
+    
+    colab_rows = calc.get("colab_rows", [])
+    tot_wea = sum(int(r.get("meta_wea", 0) or 0) for r in colab_rows)
+    tot_kid = sum(int(r.get("meta_kid", 0) or 0) for r in colab_rows)
+    tot_ck = sum(int(r.get("meta_ck", 0) or 0) for r in colab_rows)
+    
+    ritmo_hora_tienda = (meta_ns / tot_horas) if tot_horas > 0 else (meta_ns / 8.0)
+    
+    ritmo_str = f"Ritmo tienda: ${ritmo_hora_tienda:,.0f}/hr (${meta_ns:,.0f} en {tot_horas:.1f} hrs totales). Cada asesor debe colocar ${vta_prod:,.0f}/hr ({u_prod:.2f} pzs/hr). Horas pico clave: 3:00pm-4:00pm y 5:00pm-6:00pm."
+    especifico_str = f"Aplicar técnica 'Pulir es Poder' con los {trafico_esp} clientes esperados. Realizar al menos 2 demos de Smart Glasses (Wearables) por asesor y presentar 3 armazones en charola."
+    medible_str = f"Alcanzar venta de ${meta_ns:,.0f} ({tot_pzas} piezas) con {meta_conv:.1f}% de conversión. Cuotas no negociables: {tot_wea} Wearables, {tot_kid} Kids y {tot_ck} CareKits en equipo."
+    alcanzable_str = f"Concentrar energía en bloques de 3-4pm y 5-6pm (50% tráfico). Los {num_colabs if num_colabs > 0 else 'asesores en'} colaboradores en turno impulsarán venta cruzada (2do par + kit) fuera de caja."
+    reto_str = f"Superar la Meta Ideal de ${meta_ideal:,.0f} (+10%), elevando el ATV por encima de ${atv_val:,.0f} con modelos solares premium/wearables y cuidando un AUR de ${aur_val:,.0f}."
+    tiempo_str = f"Monitoreo en Store Dashboard cada 2 horas (12:00pm, 2:00pm, 4:00pm, 6:00pm y 8:00pm). Asignación de zonas y relevos 15 min antes de picos de tráfico."
+    logros_str = f"Excelente dinamismo en bloques pico de la tarde, cumplimiento de metas en demos de Wearables y apego riguroso a estándares de limpieza e imagen personal."
+    oportunidades_str = f"Reforzar el ofrecimiento proactivo de CareKits al cierre de cada venta y profundizar preguntas abiertas en el Customer Journey para maximizar el ticket promedio."
+    
+    return {
+        "ritmo_venta_hoy": ritmo_str,
+        "smart_especifico": especifico_str,
+        "smart_medible": medible_str,
+        "smart_alcanzable": alcanzable_str,
+        "smart_reto": reto_str,
+        "smart_tiempo": tiempo_str,
+        "logros_hoy": logros_str,
+        "oportunidades_manana": oportunidades_str
+    }
+
 DAY_TO_PLAN_SHEET = {
     "DOMINGO": "PLAN ACCION DOMINGO",
     "LUNES": "PLAN ACCION LUNES",
@@ -2255,6 +2308,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         calc = calcular_dia(d_name, user_id)
         data = s_state[d_name]
         green_txts = {}
+        white_input_fields = {}
         is_mobile = (page.width < 800) if (page and getattr(page, "width", None)) else False
         cell_font_size = 10 if is_mobile else 11
         cell_height = 28 if is_mobile else 32
@@ -2335,7 +2389,21 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 if e.control.data == "meta_diaria":
                     data["meta_diaria"] = float(v) if v else 0.0
                 elif e.control.data == "trafico_esperado":
-                    data["trafico_esperado"] = int(v) if v else 0
+                    t_val = int(v) if v else 0
+                    data["trafico_esperado"] = t_val
+                    if t_val > 0:
+                        b0 = round(t_val * 0.15)
+                        b1 = round(t_val * 0.20)
+                        b2 = round(t_val * 0.25)
+                        b3 = round(t_val * 0.25)
+                        b4 = max(0, t_val - (b0 + b1 + b2 + b3))
+                        data["trafico_bloques"] = [b0, b1, b2, b3, b4]
+                        for b_idx, b_val in enumerate([b0, b1, b2, b3, b4]):
+                            b_field = white_input_fields.get(f"trafico_b_{b_idx}")
+                            if b_field:
+                                b_field.value = str(b_val)
+                                try: b_field.update()
+                                except Exception: pass
                 elif e.control.data == "conversion_target":
                     data["conversion_target"] = (float(v) / 100.0) if v else 0.0
                 elif e.control.data == "vta_ly":
@@ -2462,21 +2530,23 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                         e.control.update()
                 except Exception: pass
 
+            tf_obj = ft.TextField(
+                value=val_formatted,
+                data=data_id,
+                on_change=on_white_cell_change,
+                on_blur=on_blur_format_commas,
+                text_size=cell_font_size,
+                text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
+                bgcolor="#1F2937",
+                border_color="#374151",
+                focused_border_color="#00FFFF",
+                content_padding=cell_padding,
+                suffix=ft.Text(suffix, color="#AAAAAA", size=9 if is_mobile else 10) if suffix else None,
+                dense=True
+            )
+            white_input_fields[data_id] = tf_obj
             return ft.Container(
-                content=ft.TextField(
-                    value=val_formatted,
-                    data=data_id,
-                    on_change=on_white_cell_change,
-                    on_blur=on_blur_format_commas,
-                    text_size=cell_font_size,
-                    text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
-                    bgcolor="#1F2937",
-                    border_color="#374151",
-                    focused_border_color="#00FFFF",
-                    content_padding=cell_padding,
-                    suffix=ft.Text(suffix, color="#AAAAAA", size=9 if is_mobile else 10) if suffix else None,
-                    dense=True
-                ),
+                content=tf_obj,
                 width=width,
                 expand=expand,
                 height=cell_height
@@ -2910,6 +2980,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     def build_plan_accion_ui(d_name):
         data = s_state[d_name]
         is_mobile_w = (page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False
+        smart_text_fields = {}
 
         data.setdefault("ritmo_venta_hoy", "")
         data.setdefault("checks_estandares", {"limpieza": False, "imagen": False, "reunion": False})
@@ -2929,10 +3000,35 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             data["logros_hoy"] = e.control.value
             guardar_estado_persistente(user_id)
 
+        def on_oportunidades_change(e):
+            data["oportunidades_manana"] = e.control.value
+            guardar_estado_persistente(user_id)
+
         def on_check_change(section, key, val):
             if section in data and isinstance(data[section], dict):
                 data[section][key] = val
                 guardar_estado_persistente(user_id)
+
+        def on_generar_smart_ia_click(e):
+            plan_res = generar_plan_smart_ia(d_name, user_id)
+            for k, val in plan_res.items():
+                data[k] = val
+                if k in smart_text_fields:
+                    smart_text_fields[k].value = val
+                    try:
+                        smart_text_fields[k].update()
+                    except Exception:
+                        pass
+            guardar_estado_persistente(user_id)
+            if page:
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"⚡ Plan SMART generado con IA para {d_name} basado en métricas reales.", color="black", weight="bold"),
+                    bgcolor="#00FFFF",
+                    duration=3000
+                )
+                page.snack_bar.open = True
+                try: page.update()
+                except Exception: pass
 
         # Cálculo de métricas del día para el encabezado del plan
         horas_prog = sum(float(c.get("horas", 0.0) or 0.0) for c in data.get("colaboradores", []))
@@ -2963,22 +3059,25 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             make_mini_metric("PROD. (PZS/H)", f"{meta_prod_pzs:.2f}", "#00FFFF"),
         ], wrap=True, spacing=6)
 
+        tf_ritmo = ft.TextField(
+            value=data.get("ritmo_venta_hoy", ""),
+            on_change=on_ritmo_change,
+            hint_text="Escribe aquí el ritmo de venta proyectado o presiona Generar con IA...",
+            bgcolor="#111827",
+            border_color="#374151",
+            color="white",
+            text_size=11 if is_mobile_w else 12,
+            dense=True
+        )
+        smart_text_fields["ritmo_venta_hoy"] = tf_ritmo
+
         question_box = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.HELP_OUTLINE_ROUNDED, color="#FFD700", size=16),
                     ft.Text("¿Cuál debe ser nuestro ritmo de venta hoy?", color="#FFD700", weight="bold", size=11 if is_mobile_w else 12)
                 ], spacing=4),
-                ft.TextField(
-                    value=data.get("ritmo_venta_hoy", ""),
-                    on_change=on_ritmo_change,
-                    hint_text="Escribe aquí el ritmo de venta proyectado o estrategia horaria...",
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    color="white",
-                    text_size=11 if is_mobile_w else 12,
-                    dense=True
-                )
+                tf_ritmo
             ], spacing=4),
             bgcolor="#0B0E17",
             padding=8,
@@ -3184,6 +3283,19 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             def _on_txt_change(e):
                 data[key] = e.control.value
                 guardar_estado_persistente(user_id)
+            tf_smart = ft.TextField(
+                value=data.get(key, ""),
+                on_change=_on_txt_change,
+                hint_text=hint_txt,
+                bgcolor="#111827",
+                border_color="#374151",
+                focused_border_color=color_hex,
+                color="white",
+                text_size=11,
+                dense=True,
+                expand=True
+            )
+            smart_text_fields[key] = tf_smart
             return ft.Container(
                 content=ft.Row([
                     ft.Container(
@@ -3192,18 +3304,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                         alignment=ft.alignment.Alignment(0, 0)
                     ),
                     ft.Text(label, weight="bold", color=color_hex, size=11, width=85),
-                    ft.TextField(
-                        value=data.get(key, ""),
-                        on_change=_on_txt_change,
-                        hint_text=hint_txt,
-                        bgcolor="#111827",
-                        border_color="#374151",
-                        focused_border_color=color_hex,
-                        color="white",
-                        text_size=11,
-                        dense=True,
-                        expand=True
-                    )
+                    tf_smart
                 ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 bgcolor="#0F172A",
                 padding=ft.Padding(8, 4, 8, 4),
@@ -3219,12 +3320,35 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             make_smart_field("T", "TIEMPO:", "smart_tiempo", "#E040FB", "Cadencia horaria (ej. seguimiento cada 2 horas en Store Dashboard)..."),
         ]
 
+        btn_ia_smart = ft.ElevatedButton(
+            "⚡ Generar Plan SMART con IA",
+            icon=ft.Icons.AUTO_AWESOME,
+            bgcolor="#00FFFF",
+            color="#000000",
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                text_style=ft.TextStyle(weight="bold", size=11)
+            ),
+            on_click=on_generar_smart_ia_click
+        )
+
+        header_smart_content = ft.Column([
+            ft.Row([
+                ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#00FFFF", size=18),
+                ft.Text("🎯 TU ENFOQUE PARA HOY (S.M.A.R.T.)", color="#00FFFF", weight="bold", size=11.5),
+            ], spacing=6),
+            btn_ia_smart
+        ], spacing=6) if is_mobile_w else ft.Row([
+            ft.Row([
+                ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#00FFFF", size=18),
+                ft.Text("🎯 TU ENFOQUE PARA HOY (METODOLOGÍA S.M.A.R.T.)", color="#00FFFF", weight="bold", size=13),
+            ], spacing=6),
+            btn_ia_smart
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
         card_enfoque_texto = ft.Container(
             content=ft.Column([
-                ft.Row([
-                    ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#00FFFF", size=18),
-                    ft.Text("🎯 TU ENFOQUE PARA HOY (METODOLOGÍA S.M.A.R.T.)", color="#00FFFF", weight="bold", size=12 if is_mobile_w else 13)
-                ], spacing=6),
+                header_smart_content,
                 ft.Divider(height=6, color="#374151"),
                 ft.Column(smart_rows, spacing=6)
             ]),
@@ -3252,14 +3376,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             ]
         ], spacing=2, vertical_alignment="center")
 
-        def on_logros_change(e):
-            data["logros_hoy"] = e.control.value
-            guardar_estado_persistente(user_id)
-
-        def on_oportunidades_change(e):
-            data["oportunidades_manana"] = e.control.value
-            guardar_estado_persistente(user_id)
-
         # Tarjeta 7: Logros de Hoy y Oportunidades para Mañana (2 Cuadros Oficiales)
         if is_mobile_w:
             header_logros_content = ft.Column([
@@ -3278,27 +3394,44 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 star_row_logros
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
+        tf_logros = ft.TextField(
+            value=data.get("logros_hoy", ""),
+            on_change=on_logros_change,
+            hint_text="Escribe aquí los logros, metas alcanzadas y éxitos del día...",
+            multiline=True,
+            min_lines=3,
+            max_lines=5,
+            bgcolor="#111827",
+            border_color="#374151",
+            color="white",
+            text_size=11 if is_mobile_w else 12
+        )
+        smart_text_fields["logros_hoy"] = tf_logros
+
         txt_logros_box = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10B981", size=14),
                     ft.Text("LOGROS DE HOY", color="#10B981", weight="bold", size=11),
                 ], spacing=4),
-                ft.TextField(
-                    value=data.get("logros_hoy", ""),
-                    on_change=on_logros_change,
-                    hint_text="Escribe aquí los logros, metas alcanzadas y éxitos del día...",
-                    multiline=True,
-                    min_lines=3,
-                    max_lines=5,
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    color="white",
-                    text_size=11 if is_mobile_w else 12
-                )
+                tf_logros
             ], spacing=6),
             expand=True
         )
+
+        tf_oportunidades = ft.TextField(
+            value=data.get("oportunidades_manana", ""),
+            on_change=on_oportunidades_change,
+            hint_text="Escribe aquí las áreas de oportunidad y enfoque para mañana...",
+            multiline=True,
+            min_lines=3,
+            max_lines=5,
+            bgcolor="#111827",
+            border_color="#374151",
+            color="white",
+            text_size=11 if is_mobile_w else 12
+        )
+        smart_text_fields["oportunidades_manana"] = tf_oportunidades
 
         txt_oportunidades_box = ft.Container(
             content=ft.Column([
@@ -3306,18 +3439,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Icon(ft.Icons.LIGHTBULB_ROUNDED, color="#F59E0B", size=14),
                     ft.Text("OPORTUNIDADES PARA MAÑANA", color="#F59E0B", weight="bold", size=11),
                 ], spacing=4),
-                ft.TextField(
-                    value=data.get("oportunidades_manana", ""),
-                    on_change=on_oportunidades_change,
-                    hint_text="Escribe aquí las áreas de oportunidad y enfoque para mañana...",
-                    multiline=True,
-                    min_lines=3,
-                    max_lines=5,
-                    bgcolor="#111827",
-                    border_color="#374151",
-                    color="white",
-                    text_size=11 if is_mobile_w else 12
-                )
+                tf_oportunidades
             ], spacing=6),
             expand=True
         )
