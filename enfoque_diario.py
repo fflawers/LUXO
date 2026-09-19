@@ -460,29 +460,53 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
     except Exception as ex:
         print(f"Error en _async_save_worker para {user_id}:", ex)
 
-def guardar_estado_persistente(user_id):
+_save_timers = {}
+_save_lock = threading.Lock()
+
+def guardar_estado_persistente(user_id, debounce_seconds=0.6):
     try:
         if user_id not in user_states: return
-        g_meta = user_states[user_id]["global_meta"]
-        s_state = user_states[user_id]["store_state"]
-        h_state = user_states[user_id]["historico_semanal_state"]
+        
+        with _save_lock:
+            if user_id in _save_timers and _save_timers[user_id] is not None:
+                try:
+                    _save_timers[user_id].cancel()
+                except Exception:
+                    pass
+            
+            def _debounced_save():
+                try:
+                    if user_id not in user_states: return
+                    g_meta = user_states[user_id]["global_meta"]
+                    s_state = user_states[user_id]["store_state"]
+                    h_state = user_states[user_id]["historico_semanal_state"]
 
-        sincronizar_baselines_domingo(s_state)
-        key = f"S{g_meta.get('semana', '30')}_{g_meta.get('num_tienda', '0')}_{g_meta.get('tienda', '')}"
-        import copy
-        h_state[key] = copy.deepcopy(s_state)
+                    sincronizar_baselines_domingo(s_state)
+                    key = f"S{g_meta.get('semana', '30')}_{g_meta.get('num_tienda', '0')}_{g_meta.get('tienda', '')}"
+                    import copy
+                    h_state[key] = copy.deepcopy(s_state)
 
-        payload = {
-            "global_meta": g_meta,
-            "store_state": s_state,
-            "historico_semanal_state": h_state,
-            "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
-        }
-        sem_str = str(g_meta.get("semana", "30"))
-        tienda_id = int(g_meta.get("num_tienda", 0))
+                    payload = {
+                        "global_meta": g_meta,
+                        "store_state": s_state,
+                        "historico_semanal_state": h_state,
+                        "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
+                    }
+                    sem_str = str(g_meta.get("semana", "30"))
+                    tienda_id = int(g_meta.get("num_tienda", 0))
 
-        t = threading.Thread(target=_async_save_worker, args=(user_id, payload, sem_str, tienda_id), daemon=True)
-        t.start()
+                    _async_save_worker(user_id, payload, sem_str, tienda_id)
+                except Exception as ex:
+                    print(f"Error en _debounced_save para {user_id}:", ex)
+
+            if debounce_seconds <= 0:
+                t = threading.Thread(target=_debounced_save, daemon=True)
+                t.start()
+            else:
+                t = threading.Timer(debounce_seconds, _debounced_save)
+                t.daemon = True
+                _save_timers[user_id] = t
+                t.start()
     except Exception as ex:
         print(f"Error al guardar estado de enfoque diario para {user_id}:", ex)
 
@@ -2293,7 +2317,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         except Exception:
             pass
             
-        page.update()
+        try:
+            tab_content_container.update()
+        except Exception:
+            try: page.update()
+            except Exception: pass
 
     # Callback al modificar celdas globales de Semana/Tienda
     def on_global_header_change(e):
@@ -2331,56 +2359,66 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         def sync_green_cells():
             c = calcular_dia(d_name, user_id)
-            if "analogos" in green_txts: green_txts["analogos"].value = f"${c['analogos']:,.2f}"
-            if "wearables" in green_txts: green_txts["wearables"].value = f"${c['wearables']:,.2f}"
-            if "total_unidades" in green_txts: green_txts["total_unidades"].value = f"{c['total_unidades']} Pza"
-            if "transacciones" in green_txts: green_txts["transacciones"].value = f"{c['transacciones']} Transac."
-            if "meta_ideal" in green_txts: green_txts["meta_ideal"].value = f"${c['meta_ideal']:,.2f}"
-            if "vta_neta_prod" in green_txts: green_txts["vta_neta_prod"].value = f"${c['vta_neta_prod']:,.2f}"
-            if "u_prod" in green_txts: green_txts["u_prod"].value = f"{c['u_prod']}"
-            if "tot_trafico_b" in green_txts: green_txts["tot_trafico_b"].value = str(c["tot_trafico_b"])
+            updated_controls = []
+            def _set_txt(k, v_str):
+                if k in green_txts and green_txts[k].value != v_str:
+                    green_txts[k].value = v_str
+                    updated_controls.append(green_txts[k])
+
+            _set_txt("analogos", f"${c['analogos']:,.2f}")
+            _set_txt("wearables", f"${c['wearables']:,.2f}")
+            _set_txt("total_unidades", f"{c['total_unidades']} Pza")
+            _set_txt("transacciones", f"{c['transacciones']} Transac.")
+            _set_txt("meta_ideal", f"${c['meta_ideal']:,.2f}")
+            _set_txt("vta_neta_prod", f"${c['vta_neta_prod']:,.2f}")
+            _set_txt("u_prod", f"{c['u_prod']}")
+            _set_txt("tot_trafico_b", str(c["tot_trafico_b"]))
             
             for idx, p in enumerate(c["b_pesos"]):
-                if f"b_peso_{idx}" in green_txts: green_txts[f"b_peso_{idx}"].value = f"{p*100:.1f}%"
+                _set_txt(f"b_peso_{idx}", f"{p*100:.1f}%")
             for idx, m in enumerate(c["b_metas"]):
-                if f"b_meta_{idx}" in green_txts: green_txts[f"b_meta_{idx}"].value = f"${m:,.0f}"
-            if "b_meta_tot" in green_txts: green_txts["b_meta_tot"].value = f"${c['meta_diaria']:,.0f}"
+                _set_txt(f"b_meta_{idx}", f"${m:,.0f}")
+            _set_txt("b_meta_tot", f"${c['meta_diaria']:,.0f}")
 
             for idx, r in enumerate(c["colab_rows"]):
-                if f"colab_vta_{idx}" in green_txts: green_txts[f"colab_vta_{idx}"].value = f"${r['meta_vta']:,.2f}"
-                if f"colab_ana_{idx}" in green_txts: green_txts[f"colab_ana_{idx}"].value = str(r['meta_ana'])
-                if f"colab_wea_{idx}" in green_txts: green_txts[f"colab_wea_{idx}"].value = str(r['meta_wea'])
-                if f"colab_kid_{idx}" in green_txts: green_txts[f"colab_kid_{idx}"].value = str(r['meta_kid'])
-                if f"colab_ck_{idx}" in green_txts: green_txts[f"colab_ck_{idx}"].value = str(r['meta_ck'])
+                _set_txt(f"colab_vta_{idx}", f"${r['meta_vta']:,.2f}")
+                _set_txt(f"colab_ana_{idx}", str(r['meta_ana']))
+                _set_txt(f"colab_wea_{idx}", str(r['meta_wea']))
+                _set_txt(f"colab_kid_{idx}", str(r['meta_kid']))
+                _set_txt(f"colab_ck_{idx}", str(r['meta_ck']))
                 
                 # CÓMO VAMOS green cells
-                if f"colab_cv_hrs_{idx}" in green_txts: green_txts[f"colab_cv_hrs_{idx}"].value = f"{r['horas']:.1f}"
-                if f"colab_conv_cierre_{idx}" in green_txts: green_txts[f"colab_conv_cierre_{idx}"].value = f"{r['conversion_cierre']*100:.1f}%"
-                if f"colab_conv_wea_{idx}" in green_txts: green_txts[f"colab_conv_wea_{idx}"].value = f"{r['conversion_wea']*100:.1f}%"
+                _set_txt(f"colab_cv_hrs_{idx}", f"{r['horas']:.1f}")
+                _set_txt(f"colab_conv_cierre_{idx}", f"{r['conversion_cierre']*100:.1f}%")
+                _set_txt(f"colab_conv_wea_{idx}", f"{r['conversion_wea']*100:.1f}%")
 
-            if "tot_colab_hrs" in green_txts: green_txts["tot_colab_hrs"].value = f"{c['tot_horas']:.1f} hrs"
-            if "tot_colab_vta" in green_txts: green_txts["tot_colab_vta"].value = f"${c['meta_diaria']:,.2f}"
-            if "tot_colab_ana" in green_txts: green_txts["tot_colab_ana"].value = str(sum(r["meta_ana"] for r in c["colab_rows"]))
-            if "tot_colab_wea" in green_txts: green_txts["tot_colab_wea"].value = str(sum(r["meta_wea"] for r in c["colab_rows"]))
-            if "tot_colab_kid" in green_txts: green_txts["tot_colab_kid"].value = str(sum(r["meta_kid"] for r in c["colab_rows"]))
-            if "tot_colab_ck" in green_txts: green_txts["tot_colab_ck"].value = str(sum(r["meta_ck"] for r in c["colab_rows"]))
+            _set_txt("tot_colab_hrs", f"{c['tot_horas']:.1f} hrs")
+            _set_txt("tot_colab_vta", f"${c['meta_diaria']:,.2f}")
+            _set_txt("tot_colab_ana", str(sum(r["meta_ana"] for r in c["colab_rows"])))
+            _set_txt("tot_colab_wea", str(sum(r["meta_wea"] for r in c["colab_rows"])))
+            _set_txt("tot_colab_kid", str(sum(r["meta_kid"] for r in c["colab_rows"])))
+            _set_txt("tot_colab_ck", str(sum(r["meta_ck"] for r in c["colab_rows"])))
 
             # Global CÓMO VAMOS
-            if "tot_cv_meta" in green_txts: green_txts["tot_cv_meta"].value = f"${c['meta_diaria']:,.2f}"
-            if "tot_cv_meta_unidades" in green_txts: green_txts["tot_cv_meta_unidades"].value = str(c["total_unidades"])
-            if "tot_cv_conversion" in green_txts: green_txts["tot_cv_conversion"].value = f"{c['conversion_dia']*100:.1f}%"
-            if "tot_cv_crecimiento" in green_txts: green_txts["tot_cv_crecimiento"].value = f"{c['crecimiento_conversion']*100:.1f}%"
-            if "tot_cv_wearables_pct" in green_txts: green_txts["tot_cv_wearables_pct"].value = f"{c['wearables_pct']*100:.1f}%"
-            if "tot_cv_kids_pct" in green_txts: green_txts["tot_cv_kids_pct"].value = f"{c['kids_pct']*100:.1f}%"
+            _set_txt("tot_cv_meta", f"${c['meta_diaria']:,.2f}")
+            _set_txt("tot_cv_meta_unidades", str(c["total_unidades"]))
+            _set_txt("tot_cv_conversion", f"{c['conversion_dia']*100:.1f}%")
+            _set_txt("tot_cv_crecimiento", f"{c['crecimiento_conversion']*100:.1f}%")
+            _set_txt("tot_cv_wearables_pct", f"{c['wearables_pct']*100:.1f}%")
+            _set_txt("tot_cv_kids_pct", f"{c['kids_pct']*100:.1f}%")
 
             # Sumas columna CÓMO VAMOS
-            if "sum_cv_interacciones" in green_txts: green_txts["sum_cv_interacciones"].value = str(c["tot_interacciones"])
-            if "sum_cv_convertidos" in green_txts: green_txts["sum_cv_convertidos"].value = str(c["tot_convertidos"])
-            if "sum_cv_vta_cierre" in green_txts: green_txts["sum_cv_vta_cierre"].value = f"${c['tot_vta_cierre']:,.2f}"
-            if "sum_cv_ana_cierre" in green_txts: green_txts["sum_cv_ana_cierre"].value = str(c["tot_ana_cierre"])
-            if "sum_cv_wea_demos" in green_txts: green_txts["sum_cv_wea_demos"].value = str(c["tot_wea_demos"])
-            if "sum_cv_wea_cierre" in green_txts: green_txts["sum_cv_wea_cierre"].value = str(c["tot_wea_cierre"])
-            if "sum_cv_kid_cierre" in green_txts: green_txts["sum_cv_kid_cierre"].value = str(c["tot_kid_cierre"])
+            _set_txt("sum_cv_interacciones", str(c["tot_interacciones"]))
+            _set_txt("sum_cv_convertidos", str(c["tot_convertidos"]))
+            _set_txt("sum_cv_vta_cierre", f"${c['tot_vta_cierre']:,.2f}")
+            _set_txt("sum_cv_ana_cierre", str(c["tot_ana_cierre"]))
+            _set_txt("sum_cv_wea_demos", str(c["tot_wea_demos"]))
+            _set_txt("sum_cv_wea_cierre", str(c["tot_wea_cierre"]))
+            _set_txt("sum_cv_kid_cierre", str(c["tot_kid_cierre"]))
+
+            for ctrl in updated_controls:
+                try: ctrl.update()
+                except Exception: pass
 
         def on_white_cell_change(e):
             try:
@@ -2502,8 +2540,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             
             sync_green_cells()
             guardar_estado_persistente(user_id)
-            try: page.update()
-            except Exception: pass
 
         # Componente Celda Blanca (Entrada editable ⚪)
         def make_white_input(val, data_id, width=None, suffix="", expand=None):
