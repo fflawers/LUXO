@@ -168,6 +168,19 @@ def obtener_semana_sgh_de_fecha(d_date):
         week_num = 52
     return y, week_num
 
+def obtener_mes_de_semana(anio=2026, semana=30):
+    try:
+        fechas = obtener_fechas_semana(int(anio), int(semana))
+        d_mid = fechas.get("MIÉRCOLES", {}).get("date")
+        if d_mid:
+            return d_mid.year, d_mid.month
+    except Exception:
+        pass
+    try:
+        return int(anio), 1
+    except Exception:
+        return 2026, 1
+
 def crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_seleccionada):
     hoy = datetime.date.today()
     g_meta = user_states[user_id]["global_meta"]
@@ -423,6 +436,7 @@ def init_user_state(user_id):
             "global_meta": default_global_meta(),
             "store_state": default_store_state(),
             "historico_semanal_state": {},
+            "monthly_targets": {},
             "active_tab": [day_now]
         }
         cargar_estado_persistente(user_id)
@@ -490,6 +504,7 @@ def guardar_estado_persistente(user_id, debounce_seconds=0.6):
                         "global_meta": g_meta,
                         "store_state": s_state,
                         "historico_semanal_state": h_state,
+                        "monthly_targets": user_states[user_id].get("monthly_targets", {}),
                         "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
                     }
                     sem_str = str(g_meta.get("semana", "30"))
@@ -564,6 +579,8 @@ def cargar_estado_persistente(user_id):
                             g_meta[k] = v
                     if "historico_semanal_state" in payload:
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+                    if "monthly_targets" in payload:
+                        user_states[user_id]["monthly_targets"].update(payload["monthly_targets"])
                     if "active_tab" in payload:
                         user_states[user_id]["active_tab"] = payload["active_tab"]
                     loaded = True
@@ -594,6 +611,8 @@ def cargar_estado_persistente(user_id):
                                 g_meta[k] = v
                         if "historico_semanal_state" in payload:
                             user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+                        if "monthly_targets" in payload:
+                            user_states[user_id]["monthly_targets"].update(payload["monthly_targets"])
                         if "active_tab" in payload:
                             user_states[user_id]["active_tab"] = payload["active_tab"]
                         loaded = True
@@ -620,6 +639,28 @@ def guardar_semana_historico(user_id):
     import copy
     h_state[key] = copy.deepcopy(s_state)
     guardar_estado_persistente(user_id)
+
+def aplicar_metas_mensuales_a_semana(user_id, num_semana, s_state):
+    """Aplica automáticamente el ATV MTD y AUR MTD del mes a todos los días de la semana cargada si existen metas registradas para ese mes."""
+    try:
+        if user_id not in user_states: return
+        g_meta = user_states[user_id]["global_meta"]
+        cur_yr = int(g_meta.get("anio", 2026))
+        t_id = str(g_meta.get("num_tienda", "0"))
+        y_m, m_m = obtener_mes_de_semana(cur_yr, int(num_semana))
+        m_key = f"{y_m}_{m_m}_{t_id}"
+        m_targets = user_states[user_id].get("monthly_targets", {}).get(m_key, {})
+        if m_targets:
+            if "atv_mtd" in m_targets and m_targets["atv_mtd"] is not None:
+                for d in DIAS:
+                    if d in s_state:
+                        s_state[d]["atv_mtd"] = float(m_targets["atv_mtd"])
+            if "aur_mtd" in m_targets and m_targets["aur_mtd"] is not None:
+                for d in DIAS:
+                    if d in s_state:
+                        s_state[d]["aur_mtd"] = float(m_targets["aur_mtd"])
+    except Exception as ex:
+        print("Error al aplicar metas mensuales a semana:", ex)
 
 def cargar_semana_historico(user_id, num_semana):
     if user_id not in user_states: return
@@ -670,6 +711,8 @@ def cargar_semana_historico(user_id, num_semana):
             for d in DIAS:
                 s_state[d] = copy.deepcopy(def_s[d])
             h_state[key] = copy.deepcopy(s_state)
+
+    aplicar_metas_mensuales_a_semana(user_id, num_semana, s_state)
     sincronizar_baselines_domingo(s_state)
     guardar_estado_persistente(user_id)
 
@@ -2468,17 +2511,63 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 elif e.control.data == "atv_mtd":
                     val_num = float(v) if v else 0.0
                     data["atv_mtd"] = val_num
-                    if d_name == "DOMINGO":
-                        for day_other in DIAS:
-                            if day_other in s_state:
-                                s_state[day_other]["atv_mtd"] = val_num
+                    for day_other in DIAS:
+                        if day_other in s_state:
+                            s_state[day_other]["atv_mtd"] = val_num
+                    try:
+                        cur_sem = int(g_meta.get("semana", 30))
+                        cur_yr = int(g_meta.get("anio", 2026))
+                        t_id = str(g_meta.get("num_tienda", "0"))
+                        y_m, m_m = obtener_mes_de_semana(cur_yr, cur_sem)
+                        m_key = f"{y_m}_{m_m}_{t_id}"
+                        if "monthly_targets" not in user_states[user_id]:
+                            user_states[user_id]["monthly_targets"] = {}
+                        user_states[user_id]["monthly_targets"].setdefault(m_key, {})["atv_mtd"] = val_num
+                        
+                        h_state = user_states[user_id].get("historico_semanal_state", {})
+                        for h_k, h_s in h_state.items():
+                            if h_k.startswith("S"):
+                                try:
+                                    h_sem = int(h_k.split("_")[0].replace("S", ""))
+                                    h_y, h_m = obtener_mes_de_semana(cur_yr, h_sem)
+                                    if h_y == y_m and h_m == m_m:
+                                        for d_k in DIAS:
+                                            if d_k in h_s:
+                                                h_s[d_k]["atv_mtd"] = val_num
+                                except Exception:
+                                    pass
+                    except Exception as ex_m:
+                        print("Error sync monthly atv_mtd:", ex_m)
                 elif e.control.data == "aur_mtd":
                     val_num = float(v) if v else 0.0
                     data["aur_mtd"] = val_num
-                    if d_name == "DOMINGO":
-                        for day_other in DIAS:
-                            if day_other in s_state:
-                                s_state[day_other]["aur_mtd"] = val_num
+                    for day_other in DIAS:
+                        if day_other in s_state:
+                            s_state[day_other]["aur_mtd"] = val_num
+                    try:
+                        cur_sem = int(g_meta.get("semana", 30))
+                        cur_yr = int(g_meta.get("anio", 2026))
+                        t_id = str(g_meta.get("num_tienda", "0"))
+                        y_m, m_m = obtener_mes_de_semana(cur_yr, cur_sem)
+                        m_key = f"{y_m}_{m_m}_{t_id}"
+                        if "monthly_targets" not in user_states[user_id]:
+                            user_states[user_id]["monthly_targets"] = {}
+                        user_states[user_id]["monthly_targets"].setdefault(m_key, {})["aur_mtd"] = val_num
+                        
+                        h_state = user_states[user_id].get("historico_semanal_state", {})
+                        for h_k, h_s in h_state.items():
+                            if h_k.startswith("S"):
+                                try:
+                                    h_sem = int(h_k.split("_")[0].replace("S", ""))
+                                    h_y, h_m = obtener_mes_de_semana(cur_yr, h_sem)
+                                    if h_y == y_m and h_m == m_m:
+                                        for d_k in DIAS:
+                                            if d_k in h_s:
+                                                h_s[d_k]["aur_mtd"] = val_num
+                                except Exception:
+                                    pass
+                    except Exception as ex_m:
+                        print("Error sync monthly aur_mtd:", ex_m)
                 elif e.control.data == "venta_neta_dia":
                     data["venta_neta_dia"] = float(v) if v else 0.0
                 elif e.control.data == "venta_unidades_dia":
