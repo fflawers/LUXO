@@ -7215,6 +7215,15 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "abre panamericano": "panamericano",
                     "ver panamericano": "panamericano",
 
+                    # DiSA / Cortes
+                    "disa": "disa",
+                    "cortes disa": "disa",
+                    "corte disa": "disa",
+                    "abrir disa": "disa",
+                    "abre disa": "disa",
+                    "ver disa": "disa",
+                    "auditoria disa": "disa",
+
                     # Conteos Cíclicos
                     "conteos ciclicos": "ciclicos",
                     "conteo ciclico": "ciclicos",
@@ -22600,6 +22609,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_disa = ft.TextButton(
+            content=ft.Row([ft.Text("📸", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("DiSA", "DiSA", "DiSA", "DiSA", "DiSA"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("disa", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_enfoque = ft.TextButton(
             content=ft.Row([ft.Text("☀️", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Enfoque Diario ☀️", "Daily Focus ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_diario", desde_menu_manual=True),
@@ -22697,7 +22712,7 @@ Ejemplo:
                 (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_polar, "polar"), (btn_enfoque, "enfoque_diario"),
                 (btn_enfoque_semanal, "enfoque_semanal"), (btn_parroquiales_minutas, "parroquiales_minutas"),
                 (btn_crm, "crm"), (btn_fedex, "fedex"),
-                (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_panamericano, "panamericano")
+                (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_panamericano, "panamericano"), (btn_disa, "disa")
             ]
             for btn_tuple in all_btn_tuples:
                 btn = btn_tuple[0]
@@ -22721,7 +22736,7 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos"]:
+                    if vista not in main_views_cache or vista in ["chat", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos", "disa"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
                         elif vista == "pendientes":
@@ -22742,6 +22757,11 @@ Ejemplo:
                         elif vista == "panamericano":
                             import panamericano_view
                             main_views_cache["panamericano"] = panamericano_view.build_panamericano_view(
+                                page, user_info=user_info, seleccionar_archivo_async=seleccionar_archivo_async
+                            )
+                        elif vista == "disa":
+                            import disa_view
+                            main_views_cache["disa"] = disa_view.build_disa_view(
                                 page, user_info=user_info, seleccionar_archivo_async=seleccionar_archivo_async
                             )
                         elif vista == "ciclicos":
@@ -23186,7 +23206,7 @@ Ejemplo:
             clientes_controls
         )
 
-        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
+        operacion_controls = [btn_historial, btn_checklists, btn_tareas, btn_campanas, btn_manuales, btn_catalogo_upc, btn_panamericano, btn_disa, btn_ciclicos, btn_descuentos, btn_fedex, btn_vendedores]
         tile_operacion = crear_acordeon(
             ft.Text(tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营"), color="#00FFFF", weight="bold", size=12),
             operacion_controls
