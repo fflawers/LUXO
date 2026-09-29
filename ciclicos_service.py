@@ -102,6 +102,82 @@ def limpiar_upc(upc_raw):
     # Normalizar ceros a la izquierda (empareja 08053672879018 con 8053672879018)
     return cleaned.lstrip('0')
 
+def detectar_marca_luxottica(desc, upc=""):
+    """
+    Infiere la marca del producto analizando la descripción o código de modelo de SAP / Luxottica.
+    """
+    if not desc or desc == "Sin descripción":
+        return "Ray-Ban"
+    
+    desc_upper = str(desc).upper().strip()
+    first_token = desc_upper.split()[0] if desc_upper else ""
+    
+    # Oakley (OO, OX o nombres de modelos emblemáticos)
+    if first_token.startswith("OO") or first_token.startswith("OX") or any(k in desc_upper for k in ["OAKLEY", "BXTR", "HOLBROOK", "FROGSKINS", "RADAR", "SUTRO", "FLAK", "GASSCAN", "BATWOLF", "CLIFDEN", "EVZERO", "JAWBREAKER", "KATO", "PLAZMA", "PORTAL", "TURBINE", "WHISKER", "LATCH", "EYEPATCH"]):
+        return "Oakley"
+        
+    # Ray-Ban (RB, RX o modelos icónicos)
+    if first_token.startswith("RB") or first_token.startswith("RX") or any(k in desc_upper for k in ["RAY-BAN", "RAYBAN", "WAYFARER", "AVIATOR", "CLUBMASTER", "JUSTIN", "ERIKA", "ROUND", "CARAVAN", "NOMAD", "BALORAMA", "PREDATOR"]):
+        return "Ray-Ban"
+        
+    # Persol (PO)
+    if first_token.startswith("PO") or "PERSOL" in desc_upper:
+        return "Persol"
+        
+    # Prada / Prada Linea Rossa (PR, PS, SPS, SPR)
+    if first_token.startswith("PR") or first_token.startswith("PS") or first_token.startswith("SPS") or first_token.startswith("SPR") or "PRADA" in desc_upper:
+        return "Prada"
+        
+    # Versace (VE)
+    if first_token.startswith("VE") or "VERSACE" in desc_upper:
+        return "Versace"
+        
+    # Michael Kors (MK)
+    if first_token.startswith("MK") or "MICHAEL KORS" in desc_upper:
+        return "Michael Kors"
+        
+    # Armani
+    if first_token.startswith("EA") or "EMPORIO ARMANI" in desc_upper:
+        return "Emporio Armani"
+    if first_token.startswith("GA") or "GIORGIO ARMANI" in desc_upper:
+        return "Giorgio Armani"
+    if first_token.startswith("AX") or "ARMANI EXCHANGE" in desc_upper:
+        return "Armani Exchange"
+        
+    # Burberry (BE)
+    if first_token.startswith("BE") or "BURBERRY" in desc_upper:
+        return "Burberry"
+        
+    # Vogue Eyewear (VO)
+    if first_token.startswith("VO") or "VOGUE" in desc_upper:
+        return "Vogue Eyewear"
+        
+    # Coach (CO)
+    if first_token.startswith("CO") or "COACH" in desc_upper:
+        return "Coach"
+        
+    # Dolce & Gabbana (DG)
+    if first_token.startswith("DG") or "DOLCE" in desc_upper or "GABBANA" in desc_upper:
+        return "Dolce & Gabbana"
+        
+    # Tiffany & Co. (TF)
+    if first_token.startswith("TF") or "TIFFANY" in desc_upper:
+        return "Tiffany & Co."
+        
+    # Ralph Lauren / Polo (PH, RL)
+    if first_token.startswith("PH") or "POLO" in desc_upper:
+        return "Polo Ralph Lauren"
+    if first_token.startswith("RL") or "RALPH LAUREN" in desc_upper:
+        return "Ralph Lauren"
+        
+    # Bvlgari / Chanel (BV, CH)
+    if first_token.startswith("BV") or "BVLGARI" in desc_upper:
+        return "Bvlgari"
+    if first_token.startswith("CH") or "CHANEL" in desc_upper:
+        return "Chanel"
+        
+    return "Ray-Ban"
+
 def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     """
     Lee y compara el archivo de escaneo vs el archivo de inventario de SAP.
@@ -273,7 +349,9 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
         # Construir info de ART y MARCA para la tabla Suma de DIF
         extra_info = info_escaneo_extra.get(upc, {})
         art_code = extra_info.get("art") or (desc.split()[0] if desc and desc != "Sin descripción" else "N/A")
-        marca_name = extra_info.get("marca") or "Ray-Ban"
+        marca_name = extra_info.get("marca")
+        if not marca_name or str(marca_name).strip() == "":
+            marca_name = detectar_marca_luxottica(desc, upc)
         
         if diff != 0:
             tabla_suma_dif.append({
