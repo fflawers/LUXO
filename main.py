@@ -23309,7 +23309,7 @@ Ejemplo:
             lang_row,
             voice_row,
             btn_logout
-        ]
+        ])
 
         print(">>> LUXO SYSTEM: SIDEBAR ACTIVADO CON ENFOQUE DIARIO 2026 <<<")
 
