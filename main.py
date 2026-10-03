@@ -24645,7 +24645,7 @@ Ejemplo:
                 playlist_mode=fv.PlaylistMode.LOOP,
                 autoplay=True,
                 volume=100.0,
-                muted=False,
+                muted=True,
                 show_controls=False,
                 expand=True,
                 fit=ft.BoxFit.COVER,
