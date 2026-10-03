@@ -137,6 +137,10 @@
     window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, failedAudioUrl) {
         try {
             if (!('speechSynthesis' in window)) return;
+            if (voiceId === 'luxo_avatar' || (failedAudioUrl && failedAudioUrl.includes('saludo_login'))) {
+                console.log('[LUXO TTS] Omitiendo WebSpeech para audio del avatar original.');
+                return;
+            }
             window.speechSynthesis.cancel();
 
             let cleanText = (text || '').replace(/https?:\/\/\S+/g, '')

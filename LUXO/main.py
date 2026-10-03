@@ -1754,6 +1754,10 @@ def configurar_rutas_fastapi(app):
                     window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, failedAudioUrl) {
                         try {
                             if (!('speechSynthesis' in window)) return;
+                            if (voiceId === 'luxo_avatar' || (failedAudioUrl && failedAudioUrl.includes('saludo_login'))) {
+                                console.log('[LUXO TTS] Omitiendo WebSpeech para audio del avatar original.');
+                                return;
+                            }
                             window.speechSynthesis.cancel();
 
                             let cleanText = (text || '').replace(/https?:\/\/\S+/g, '')
@@ -24517,17 +24521,25 @@ Ejemplo:
             js = """
             (function() {
                 try {
+                    if (window.speechSynthesis) {
+                        try { window.speechSynthesis.cancel(); } catch(e){}
+                    }
                     var audioUrl = '/custom_assets/saludo_login.mp3?v=' + Date.now();
-                    var snd = new Audio(audioUrl);
+                    var snd = document.getElementById('luxo_avatar_audio_el');
+                    if (!snd) {
+                        snd = document.createElement('audio');
+                        snd.id = 'luxo_avatar_audio_el';
+                        snd.preload = 'auto';
+                        (document.body || document.documentElement).appendChild(snd);
+                    }
+                    snd.src = audioUrl;
                     snd.volume = 1.0;
                     snd.muted = false;
+                    snd.currentTime = 0;
                     var p = snd.play();
                     if (p !== undefined) {
                         p.catch(function(err) {
-                            console.log('Intento audio login:', err);
-                            if (window.luxoPlayDirect) {
-                                window.luxoPlayDirect('/custom_assets/saludo_login.mp3', '', 'luxo_avatar', 'female');
-                            }
+                            console.log('[LUXO AVATAR] Esperando interacción para audio:', err);
                         });
                     }
                 } catch(e) {
