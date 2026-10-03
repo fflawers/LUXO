@@ -24512,63 +24512,37 @@ Ejemplo:
     btn_audio = None
     has_interacted_audio = [False]
 
+    def reproducir_audio_avatar_nativo():
+        try:
+            ejecutar_js_flet(page, "try { if (window.luxoPlayDirect) { window.luxoPlayDirect('/custom_assets/saludo_login.mp3', '', 'luxo_avatar', 'female'); } else { let a = new Audio('/custom_assets/saludo_login.mp3'); a.play(); } } catch(e){ console.log(e); }")
+        except Exception as ex_nat:
+            print("Notice reproducir audio avatar nativo:", ex_nat)
+
     def toggle_audio(e=None):
         nonlocal login_video_player, btn_audio
         has_interacted_audio[0] = True
-        if login_video_player:
+        reproducir_audio_avatar_nativo()
+        if btn_audio:
             try:
-                is_currently_muted = login_video_player.muted
-                new_muted_state = not is_currently_muted
-                login_video_player.muted = new_muted_state
-                login_video_player.volume = 0.0 if new_muted_state else 100.0
-                if not new_muted_state:
-                    login_video_player.playlist = [fv.VideoMedia(video_login_url)]
-                    login_video_player.play()
-                login_video_player.update()
-
-                if btn_audio:
-                    btn_audio.content = ft.Text("🔇" if new_muted_state else "🔊", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Activar Audio" if new_muted_state else "Silenciar Audio"
-                    btn_audio.update()
-            except Exception as err:
-                print("Error video toggle:", err)
+                btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                btn_audio.tooltip = "Reproducir Audio"
+                btn_audio.update()
+            except Exception: pass
 
     def unmute_on_first_interaction(e=None):
         if not has_interacted_audio[0]:
             has_interacted_audio[0] = True
-            if login_video_player:
-                try:
-                    login_video_player.playlist = [fv.VideoMedia(video_login_url)]
-                    login_video_player.muted = False
-                    login_video_player.volume = 100.0
-                    login_video_player.play()
-                    login_video_player.update()
-                except Exception as ex_a:
-                    print("Notice auto unmute video:", ex_a)
+            reproducir_audio_avatar_nativo()
             if btn_audio:
                 try:
                     btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Silenciar Audio"
+                    btn_audio.tooltip = "Reproducir Audio"
                     btn_audio.update()
                 except Exception: pass
 
     def desmutear_avatar_logout():
         has_interacted_audio[0] = True
-        if login_video_player:
-            try:
-                login_video_player.playlist = [fv.VideoMedia(video_login_url)]
-                login_video_player.muted = False
-                login_video_player.volume = 100.0
-                login_video_player.play()
-                login_video_player.update()
-            except Exception as ex_v:
-                print("Notice desmutear avatar logout:", ex_v)
-        if btn_audio:
-            try:
-                btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                btn_audio.tooltip = "Silenciar Audio"
-                btn_audio.update()
-            except Exception: pass
+        reproducir_audio_avatar_nativo()
 
     txt_user_input = ft.TextField(
         hint_text="Ej. admin",
