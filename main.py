@@ -24514,7 +24514,28 @@ Ejemplo:
 
     def reproducir_audio_avatar_nativo():
         try:
-            ejecutar_js_flet(page, "try { if (window.luxoPlayDirect) { window.luxoPlayDirect('/custom_assets/saludo_login.mp3', '', 'luxo_avatar', 'female'); } else { let a = new Audio('/custom_assets/saludo_login.mp3'); a.play(); } } catch(e){ console.log(e); }")
+            js = """
+            (function() {
+                try {
+                    var audioUrl = '/custom_assets/saludo_login.mp3?v=' + Date.now();
+                    var snd = new Audio(audioUrl);
+                    snd.volume = 1.0;
+                    snd.muted = false;
+                    var p = snd.play();
+                    if (p !== undefined) {
+                        p.catch(function(err) {
+                            console.log('Intento audio login:', err);
+                            if (window.luxoPlayDirect) {
+                                window.luxoPlayDirect('/custom_assets/saludo_login.mp3', '', 'luxo_avatar', 'female');
+                            }
+                        });
+                    }
+                } catch(e) {
+                    console.log('Error audio avatar:', e);
+                }
+            })();
+            """
+            ejecutar_js_flet(page, js)
         except Exception as ex_nat:
             print("Notice reproducir audio avatar nativo:", ex_nat)
 
