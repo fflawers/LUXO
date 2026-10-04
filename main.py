@@ -737,21 +737,89 @@ def optimizar_archivo_multimedia(filepath):
         print("Error en optimización multimedia:", ex_opt)
 
 
+def limpiar_texto_para_voz(text: str) -> str:
+    if not text:
+        return ""
+    import re
+    t = str(text)
+    # 1. Eliminar URLs y enlaces Markdown manteniendo texto visible
+    t = re.sub(r'https?://\S+', '', t)
+    t = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', t)
+
+    # 2. Eliminar bloques de código o etiquetas HTML
+    t = re.sub(r'```[\s\S]*?```', '', t)
+    t = re.sub(r'`[^`]*`', '', t)
+    t = re.sub(r'<[^>]+>', '', t)
+
+    # 3. Eliminar Emojis y pictogramas para que el sintetizador no verbalice su nombre (ej. "iluminación", "foco")
+    emoji_pattern = re.compile(
+        '['
+        '\U0001F600-\U0001F64F'  # Emoticons
+        '\U0001F300-\U0001F5FF'  # Símbolos & pictogramas
+        '\U0001F680-\U0001F6FF'  # Transporte & mapas
+        '\U0001F700-\U0001F77F'  # Símbolos alquímicos
+        '\U0001F780-\U0001F7FF'  # Figuras geométricas
+        '\U0001F800-\U0001F8FF'  # Flechas suplementarias
+        '\U0001F900-\U0001F9FF'  # Símbolos suplementarios
+        '\U0001FA00-\U0001FA6F'  # Símbolos ajedrez
+        '\U0001FA70-\U0001FAFF'  # Símbolos variados
+        '\U00002702-\U000027B0'  # Dingbats
+        '\U000024C2-\U0001F251'  # Enclosed characters
+        '\U00002600-\U000026FF'  # Símbolos varios (foco, sol, etc.)
+        '\U00002B50-\U00002B55'  # Estrellas
+        '\U0000200D'              # Zero width joiner
+        '\U0000FE0F'              # Variation selector
+        ']+', flags=re.UNICODE
+    )
+    t = emoji_pattern.sub(' ', t)
+
+    # 4. Limpiar sintaxis de formato Markdown
+    t = re.sub(r'#+\s*', '', t)
+    t = re.sub(r'[*_~`|]+', ' ', t)
+
+    # 5. Transformar viñetas de lista en pausas suaves de lectura
+    t = re.sub(r'^\s*[-•*+–—]\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'[-•*+–—]\s+', '. ', t)
+
+    # 6. Símbolos matemáticos y comerciales a palabras
+    t = t.replace('÷', ' entre ').replace('/', ' o ').replace('%', ' por ciento ')
+    t = t.replace('&', ' y ').replace('@', ' arroba ')
+
+    # 7. Separar acrónimos clave para pronunciación natural fonética
+    acronimos = {
+        'PPT': 'P P T',
+        'UPT': 'U P T',
+        'SAP': 'S A P',
+        'KPI': 'K P I',
+        'VLT': 'V L T',
+        'UPC': 'U P C',
+        'POS': 'P O S',
+        'SKU': 'S K U'
+    }
+    for acr, pron in acronimos.items():
+        t = re.sub(r'\b' + acr + r'\b', pron, t, flags=re.IGNORECASE)
+
+    # 8. Puntuación y reglas de lectura (pausas respiratorias naturales)
+    t = re.sub(r'[:;]+', '.', t)
+    t = re.sub(r'[¿¡]+', '', t)
+    t = re.sub(r'[?!]+', '.', t)
+    t = re.sub(r'[()\[\]{}"\']+', ' ', t)
+
+    # 9. Normalizar espacios en blanco
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
+
 def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
-    import re, urllib.parse, hashlib, os, asyncio, threading
+    import urllib.parse, hashlib, os, asyncio, threading
     try:
         import edge_tts
     except ImportError:
         return ""
-    clean_text = re.sub(r'https?://\S+', '', text or '')
-    clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
-    clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
-    clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
-    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    clean_text = limpiar_texto_para_voz(text)
     if not clean_text:
         return ""
-    if len(clean_text) > 500:
-        clean_text = clean_text[:500] + "..."
+    if len(clean_text) > 3500:
+        clean_text = clean_text[:3500] + "."
 
     temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
     os.makedirs(temp_audio_dir, exist_ok=True)
@@ -790,7 +858,7 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
 
         t = threading.Thread(target=_do_run)
         t.start()
-        t.join(timeout=8.0)
+        t.join(timeout=12.0)
     
     if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
         f_size = os.path.getsize(filepath)
@@ -964,20 +1032,16 @@ def configurar_rutas_fastapi(app):
         return {"error": "Archivo no encontrado"}
 
     async def generar_audio_tts_edge_local(text: str, voice_id: str = "jarvis") -> str:
-        import re, urllib.parse, hashlib, os
+        import urllib.parse, hashlib, os
         try:
             import edge_tts
         except ImportError:
             return ""
-        clean_text = re.sub(r'https?://\S+', '', text or '')
-        clean_text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', clean_text)
-        clean_text = re.sub(r'[*_#`~>\[\]\(\)\|\-]+', ' ', clean_text)
-        clean_text = clean_text.replace('"', '').replace("'", "").replace('\n', ' ')
-        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        clean_text = limpiar_texto_para_voz(text)
         if not clean_text:
             return ""
-        if len(clean_text) > 500:
-            clean_text = clean_text[:500] + "..."
+        if len(clean_text) > 3500:
+            clean_text = clean_text[:3500] + "."
 
         temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
         os.makedirs(temp_audio_dir, exist_ok=True)
@@ -1762,8 +1826,25 @@ def configurar_rutas_fastapi(app):
 
                             let cleanText = (text || '').replace(/https?:\/\/\S+/g, '')
                                                       .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-                                                      .replace(/[*_#`~>\[\]\(\)\|\-]+/g, ' ')
-                                                      .replace(/["']/g, '')
+                                                      .replace(/```[\s\S]*?```/g, '')
+                                                      .replace(/`[^`]*`/g, '')
+                                                      .replace(/<[^>]+>/g, '')
+                                                      .replace(/[\\u{1F600}-\\u{1F64F}\\u{1F300}-\\u{1F5FF}\\u{1F680}-\\u{1F6FF}\\u{1F700}-\\u{1F77F}\\u{1F780}-\\u{1F7FF}\\u{1F800}-\\u{1F8FF}\\u{1F900}-\\u{1F9FF}\\u{1FA00}-\\u{1FA6F}\\u{1FA70}-\\u{1FAFF}\\u{2600}-\\u{26FF}\\u{2700}-\\u{27BF}\\u{2B50}-\\u{2B55}\\u{FE0F}\\u{200D}]/gu, ' ')
+                                                      .replace(/#+\s*/g, '')
+                                                      .replace(/[*_~`|]+/g, ' ')
+                                                      .replace(/^\s*[-•*+–—]\s+/gm, '')
+                                                      .replace(/[-•*+–—]\s+/g, '. ')
+                                                      .replace(/÷/g, ' entre ')
+                                                      .replace(/\bPPT\b/gi, 'P P T')
+                                                      .replace(/\bUPT\b/gi, 'U P T')
+                                                      .replace(/\bSAP\b/gi, 'S A P')
+                                                      .replace(/\bKPI\b/gi, 'K P I')
+                                                      .replace(/\bVLT\b/gi, 'V L T')
+                                                      .replace(/\bUPC\b/gi, 'U P C')
+                                                      .replace(/[:;]+/g, '.')
+                                                      .replace(/[¿¡]+/g, '')
+                                                      .replace(/[?!]+/g, '.')
+                                                      .replace(/[()[\]{}"']+/g, ' ')
                                                       .replace(/\s+/g, ' ')
                                                       .trim();
                             if (!cleanText) return;
@@ -5550,8 +5631,9 @@ def main(page: ft.Page):
         def _speak_worker():
             try:
                 v_actual = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
+                texto_fonetico = limpiar_texto_para_voz(text)
                 try:
-                    audio_url = generar_audio_tts_edge_sync(text, v_actual)
+                    audio_url = generar_audio_tts_edge_sync(texto_fonetico, v_actual)
                 except Exception:
                     audio_url = ""
                 
@@ -5566,8 +5648,8 @@ def main(page: ft.Page):
 
                 g_actual = voice_gender or ("female" if v_actual in ["helena", "sabina", "barbara", "luxo_avatar"] else "male")
                 
-                # Despachar a navegador y eventos de sesión aislada
-                reproducir_audio_local(audio_url, text=text, voice_id=v_actual, voice_gender=g_actual)
+                # Despachar a navegador y eventos de sesión aislada con texto fonético
+                reproducir_audio_local(audio_url, text=texto_fonetico, voice_id=v_actual, voice_gender=g_actual)
 
                 # 3. Si es escritorio local Windows (no web), reproducir también en hardware local
                 if not getattr(page, "web", False) and audio_url:
