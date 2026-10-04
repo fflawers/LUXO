@@ -24368,13 +24368,12 @@ Ejemplo:
     # =====================================
 
     def login_click(e):
+        detener_audio_avatar_nativo()
         # 1. Feedback visual inmediato en el botón
         btn_acceder.disabled = True
         btn_acceder.content.value = "Validando credenciales..."
         try: page.update()
         except: pass
-        import time
-        time.sleep(0.01)
 
         def procesar_login():
             try:
@@ -24927,9 +24926,18 @@ Ejemplo:
             
             if hasattr(page, "shared_preferences") and page.shared_preferences:
                 try:
-                    uid_saved = await asyncio.wait_for(page.shared_preferences.get("logged_user_id"), timeout=2.5)
-                    last_act_str = await asyncio.wait_for(page.shared_preferences.get("last_activity_timestamp"), timeout=2.5)
-                    last_view_saved = await asyncio.wait_for(page.shared_preferences.get("last_active_view"), timeout=2.5)
+                    pref_results = await asyncio.wait_for(
+                        asyncio.gather(
+                            page.shared_preferences.get("logged_user_id"),
+                            page.shared_preferences.get("last_activity_timestamp"),
+                            page.shared_preferences.get("last_active_view"),
+                            return_exceptions=True
+                        ),
+                        timeout=0.8
+                    )
+                    uid_saved = pref_results[0] if not isinstance(pref_results[0], Exception) else None
+                    last_act_str = pref_results[1] if not isinstance(pref_results[1], Exception) else None
+                    last_view_saved = pref_results[2] if not isinstance(pref_results[2], Exception) else None
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
@@ -24959,6 +24967,7 @@ Ejemplo:
                     pass
                     
             if uid_saved:
+                detener_audio_avatar_nativo()
                 db_r = conectar_db()
                 if db_r:
                     cur_r = db_r.cursor(dictionary=True)

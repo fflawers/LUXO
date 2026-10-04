@@ -94,12 +94,22 @@
 
     // 4. Desbloqueo de Audio por Gesto de Usuario & Gestión de Avatar de Inicio
     window._lastInteractionTime = Date.now();
-    window._luxoAvatarAudioActive = true;
+    window._luxoAvatarAudioActive = false;
     window._luxoAvatarAudioMuted = false;
     window.luxoUserIsLoggedIn = false;
 
+    function hasActiveStoredSession() {
+        try {
+            let u = localStorage.getItem('logged_user_id') || sessionStorage.getItem('logged_user_id');
+            if (u && !['unknown', '', 'null', 'undefined'].includes(String(u).toLowerCase())) {
+                return true;
+            }
+        } catch(e){}
+        return false;
+    }
+
     window.luxoPlayLoginAvatarAudio = function() {
-        if (window.luxoUserIsLoggedIn) {
+        if (window.luxoUserIsLoggedIn || hasActiveStoredSession()) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
@@ -139,16 +149,16 @@
         }
     };
 
-    // Auto-activación inmediata al cargar el DOM si no ha iniciado sesión
+    // Auto-activación al cargar el DOM ÚNICAMENTE si no existe una sesión previa
     try {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() {
-                if (!window.luxoUserIsLoggedIn) {
+                if (!window.luxoUserIsLoggedIn && !hasActiveStoredSession()) {
                     window.luxoPlayLoginAvatarAudio();
                 }
             });
         } else {
-            if (!window.luxoUserIsLoggedIn) {
+            if (!window.luxoUserIsLoggedIn && !hasActiveStoredSession()) {
                 window.luxoPlayLoginAvatarAudio();
             }
         }
@@ -173,6 +183,22 @@
             }
         } catch(e){}
     };
+
+    // Interceptor INMEDIATO al hacer clic en ACCEDER o presionar Enter (corta el audio al instante con 0ms de latencia)
+    try {
+        document.addEventListener('click', function(e) {
+            let t = e.target;
+            if (t && (t.innerText === 'ACCEDER' || (t.textContent && t.textContent.trim().toUpperCase() === 'ACCEDER') || (t.getAttribute && t.getAttribute('tooltip') === 'ACCEDER'))) {
+                window.luxoUserIsLoggedIn = true;
+                window.luxoStopLoginAvatarAudio();
+            }
+        }, true);
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                window.luxoStopLoginAvatarAudio();
+            }
+        }, true);
+    } catch(e){}
 
     window.luxoToggleLoginAvatarAudio = function() {
         let snd = document.getElementById('luxo_avatar_audio_el');
@@ -802,33 +828,18 @@
     };
 
     function evaluarVisibilidadSimulador() {
-        // 1. Detección por texto real presente en el DOM de la página
-        let isDomSim = false;
-        let domMode = null;
-        try {
-            const bodyText = (document.body && document.body.innerText) ? document.body.innerText.toLowerCase() : '';
-            if (bodyText.includes('simulador de ventas') || bodyText.includes('roleplay') || bodyText.includes('iniciar roleplay') || bodyText.includes('hablar al cliente') || bodyText.includes('finalizar y evaluar')) {
-                isDomSim = true;
-                if (bodyText.includes('conversación por voz') || bodyText.includes('ia hablada') || bodyText.includes('grabando voz...')) {
-                    domMode = 'voz';
-                } else if (bodyText.includes('roleplay de ventas') || bodyText.includes('chat con el cliente')) {
-                    domMode = 'chat';
-                }
-            }
-        } catch(e){}
-
-        // 2. Detección por ruta de URL en navegador (Flet SPA routing)
+        // 1. Detección por ruta de URL en navegador (Flet SPA routing)
         const hash = (window.location.hash || '').toLowerCase();
         const path = (window.location.pathname || '').toLowerCase();
         const isUrlSim = hash.includes('simulador') || path.includes('simulador') || hash.includes('capacitacion') || path.includes('capacitacion');
         
-        // 3. Detección por estado en memoria JS
+        // 2. Detección por estado en memoria JS
         const isStateSim = (window._simuladorVisible === true) || (window._luxoActiveView === 'simulador') || (window._luxoActiveView === 'capacitacion_ia');
         
-        // 4. Detección por respuesta de polling backend
+        // 3. Detección por respuesta de polling backend
         const isPollSim = (window._simPollVisible === true);
         
-        const shouldBeVisible = (isDomSim || isUrlSim || isStateSim || isPollSim);
+        const shouldBeVisible = (isUrlSim || isStateSim || isPollSim);
         const btn = ensureSimMicBtnCreated();
         if (btn) {
             const currentDisplay = btn.style.display;
@@ -837,7 +848,7 @@
                 btn.style.display = targetDisplay;
             }
             if (shouldBeVisible) {
-                const targetModo = domMode || window._simCurrentMode || _simCurrentMode || 'chat';
+                const targetModo = window._simCurrentMode || _simCurrentMode || 'chat';
                 updateSimMicButtonMode(targetModo);
             }
         }
@@ -870,8 +881,8 @@
         evaluarVisibilidadSimulador();
     }
 
-    // Reconciliación continua ultra-rápida (cada 400ms) para respuesta visual instantánea
-    setInterval(evaluarVisibilidadSimulador, 400);
+    // Reconciliación periódica ligera (cada 2s) sin provocar reflow de layout
+    setInterval(evaluarVisibilidadSimulador, 2000);
     window.addEventListener('hashchange', evaluarVisibilidadSimulador);
     window.addEventListener('popstate', evaluarVisibilidadSimulador);
 })();
