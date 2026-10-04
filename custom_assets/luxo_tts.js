@@ -96,9 +96,10 @@
     window._lastInteractionTime = Date.now();
     window._luxoAvatarAudioActive = false;
     window._luxoAvatarAudioMuted = false;
+    window.luxoUserIsLoggedIn = false;
 
     window.luxoPlayLoginAvatarAudio = function() {
-        if (window.getLuxoUserId()) {
+        if (window.luxoUserIsLoggedIn) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
@@ -188,7 +189,7 @@
                 } catch(e){}
             }
             // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar en el primer gesto
-            if (window._luxoAvatarAudioActive && !window._luxoAvatarAudioMuted && !window.getLuxoUserId()) {
+            if (window._luxoAvatarAudioActive && !window._luxoAvatarAudioMuted && !window.luxoUserIsLoggedIn) {
                 let snd = document.getElementById('luxo_avatar_audio_el');
                 if (snd && snd.paused) {
                     let p = snd.play();

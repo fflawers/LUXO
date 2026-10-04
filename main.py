@@ -25011,6 +25011,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
+        ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false;")
         reproducir_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)
