@@ -92,8 +92,86 @@
         return el;
     }
 
-    // 4. Desbloqueo de Audio por Gesto de Usuario
+    // 4. Desbloqueo de Audio por Gesto de Usuario & Gestión de Avatar de Inicio
     window._lastInteractionTime = Date.now();
+    window._luxoAvatarAudioActive = false;
+    window._luxoAvatarAudioMuted = false;
+
+    window.luxoPlayLoginAvatarAudio = function() {
+        if (window.getLuxoUserId()) {
+            window.luxoStopLoginAvatarAudio();
+            return;
+        }
+        window._luxoAvatarAudioActive = true;
+        if (window._luxoAvatarAudioMuted) return;
+
+        try {
+            if (window.speechSynthesis) {
+                try { window.speechSynthesis.cancel(); } catch(e){}
+            }
+            let snd = document.getElementById('luxo_avatar_audio_el');
+            if (!snd) {
+                snd = document.createElement('audio');
+                snd.id = 'luxo_avatar_audio_el';
+                snd.preload = 'auto';
+                snd.src = '/custom_assets/saludo_login.mp3';
+                snd.loop = true;
+                snd.volume = 1.0;
+                (document.body || document.documentElement).appendChild(snd);
+            } else {
+                if (!snd.src || !snd.src.includes('saludo_login')) {
+                    snd.src = '/custom_assets/saludo_login.mp3';
+                }
+                snd.loop = true;
+                snd.volume = 1.0;
+            }
+            let p = snd.play();
+            if (p !== undefined) {
+                p.then(function() {
+                    console.log('[LUXO AVATAR] Audio reproduciéndose en bucle.');
+                }).catch(function(err) {
+                    console.log('[LUXO AVATAR] Autoplay esperando interacción del usuario.');
+                });
+            }
+        } catch(e){
+            console.log('[LUXO AVATAR] Error al reproducir:', e);
+        }
+    };
+
+    window.luxoStopLoginAvatarAudio = function() {
+        window._luxoAvatarAudioActive = false;
+        try {
+            let snd = document.getElementById('luxo_avatar_audio_el');
+            if (snd) {
+                snd.pause();
+                snd.currentTime = 0;
+                snd.loop = false;
+            }
+            let gTts = document.getElementById('luxo_global_tts_player');
+            if (gTts && gTts.src && gTts.src.includes('saludo_login')) {
+                gTts.pause();
+                gTts.currentTime = 0;
+            }
+            if (window.speechSynthesis) {
+                try { window.speechSynthesis.cancel(); } catch(e){}
+            }
+        } catch(e){}
+    };
+
+    window.luxoToggleLoginAvatarAudio = function() {
+        let snd = document.getElementById('luxo_avatar_audio_el');
+        let isCurrentlyPlaying = (snd && !snd.paused && !snd.muted && snd.currentTime > 0);
+        if (isCurrentlyPlaying || (!window._luxoAvatarAudioMuted && window._luxoAvatarAudioActive && snd && !snd.paused)) {
+            window._luxoAvatarAudioMuted = true;
+            window.luxoStopLoginAvatarAudio();
+            return true; // Silenciado
+        } else {
+            window._luxoAvatarAudioMuted = false;
+            window.luxoPlayLoginAvatarAudio();
+            return false; // Con audio
+        }
+    };
+
     window.luxoUnmuteAudio = function() {
         window._lastInteractionTime = Date.now();
         try {
@@ -108,6 +186,18 @@
                         }
                     }
                 } catch(e){}
+            }
+            // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar en el primer gesto
+            if (window._luxoAvatarAudioActive && !window._luxoAvatarAudioMuted && !window.getLuxoUserId()) {
+                let snd = document.getElementById('luxo_avatar_audio_el');
+                if (snd && snd.paused) {
+                    let p = snd.play();
+                    if (p !== undefined) {
+                        p.catch(function(){});
+                    }
+                } else if (!snd) {
+                    window.luxoPlayLoginAvatarAudio();
+                }
             }
         } catch(e){}
     };

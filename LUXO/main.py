@@ -24617,63 +24617,13 @@ Ejemplo:
         try:
             if audio_is_muted[0]:
                 return
-            js = """
-            (function() {
-                try {
-                    if (window.speechSynthesis) {
-                        try { window.speechSynthesis.cancel(); } catch(e){}
-                    }
-                    var audioUrl = '/custom_assets/saludo_login.mp3?v=' + Date.now();
-                    var snd = document.getElementById('luxo_avatar_audio_el');
-                    if (!snd) {
-                        snd = document.createElement('audio');
-                        snd.id = 'luxo_avatar_audio_el';
-                        snd.preload = 'auto';
-                        (document.body || document.documentElement).appendChild(snd);
-                    }
-                    snd.src = audioUrl;
-                    snd.volume = 1.0;
-                    snd.muted = false;
-                    snd.loop = true;
-                    snd.currentTime = 0;
-                    var p = snd.play();
-                    if (p !== undefined) {
-                        p.catch(function(err) {
-                            console.log('[LUXO AVATAR] Esperando interacción para audio:', err);
-                        });
-                    }
-                } catch(e) {
-                    console.log('Error audio avatar:', e);
-                }
-            })();
-            """
-            ejecutar_js_flet(page, js)
+            ejecutar_js_flet(page, "if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(); }")
         except Exception as ex_nat:
             print("Notice reproducir audio avatar nativo:", ex_nat)
 
     def detener_audio_avatar_nativo():
         try:
-            js = """
-            (function() {
-                try {
-                    var snd = document.getElementById('luxo_avatar_audio_el');
-                    if (snd) {
-                        snd.pause();
-                        snd.currentTime = 0;
-                        snd.loop = false;
-                    }
-                    var gTts = document.getElementById('luxo_global_tts_player');
-                    if (gTts && gTts.src && gTts.src.includes('saludo_login')) {
-                        gTts.pause();
-                        gTts.currentTime = 0;
-                    }
-                    if (window.speechSynthesis) {
-                        try { window.speechSynthesis.cancel(); } catch(e){}
-                    }
-                } catch(e){}
-            })();
-            """
-            ejecutar_js_flet(page, js)
+            ejecutar_js_flet(page, "if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); }")
         except Exception as ex_stop:
             print("Notice detener audio avatar nativo:", ex_stop)
 
@@ -24712,7 +24662,7 @@ Ejemplo:
     def desmutear_avatar_logout():
         has_interacted_audio[0] = True
         audio_is_muted[0] = False
-        reproducir_audio_avatar_nativo()
+        ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(); }")
         if btn_audio:
             try:
                 btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
@@ -24946,6 +24896,7 @@ Ejemplo:
         content=login_card,
         alignment=ft.alignment.Alignment(0, 0),
         expand=True,
+        on_click=unmute_on_first_interaction,
         gradient=ft.LinearGradient(
             colors=["#021622", "#05070D", "#220228"],
             begin=ft.alignment.Alignment(-1, -0.2),
