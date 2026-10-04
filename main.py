@@ -197,7 +197,7 @@ def generar_respuesta_simulador_fallback(messages, system_prompt="", modo="chat"
         return "Sinceramente siento que no me estás prestando atención y solo repites lo mismo. Preferiría que me atienda otro asesor. Hasta luego."
 
     # Primer saludo del roleplay (Entrada a la tienda)
-    if user_turn_count <= 1:
+    if user_turn_count <= 1 and len(messages) <= 2:
         if "apurado" in prompt_str or "vuelo" in prompt_str:
             return "*(El cliente entra a la tienda y mira su reloj con prisa)* \"¡Hola, buenas tardes! La verdad vengo muy apurado porque mi vuelo sale en unas cuantas horas. Necesito unas gafas clásicas polarizadas como unas Ray-Ban Aviator. ¿Las tienes disponibles?\""
         elif "caro" in prompt_str or "precio" in prompt_str:
@@ -259,10 +259,10 @@ def consultar_groq_api(messages, system_prompt=None, temperature=0.7, timeout=4,
             }
             if key.startswith("sk-or-"):
                 target_url = "https://openrouter.ai/api/v1/chat/completions"
-                modelos_to_use = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct"]
+                modelos_to_use = ["groq/compound-mini", "meta-llama/llama-3.3-70b-instruct", "qwen/qwen-2.5-72b-instruct"]
             else:
                 target_url = URL_GROQ
-                modelos_to_use = ["groq/compound-mini", "groq/compound", "qwen/qwen3.6-27b"]
+                modelos_to_use = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "allam-2-7b"]
 
             # Probar los modelos disponibles de la llave
             for mod in modelos_to_use:
@@ -16982,7 +16982,7 @@ REGLAS OBLIGATORIAS:
 5. RESPUESTAS BREVES Y NATURALES: Escribe de 1 a 2 oraciones en español mexicano natural de tienda.
 """
                 
-                mensajes_api = chat_history[-6:]
+                mensajes_api = chat_history[-14:]
                 
                 ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
                 if not simulacion_activa[0] or sim_stop_requested[0]:
@@ -17597,7 +17597,7 @@ REGLAS OBLIGATORIAS:
 3. NUNCA repitas objeciones que ya dijiste.
 4. Si el vendedor te ofrece probarte los lentes o te explica las micas, reacciona a lo que te dijo.
 """
-                mensajes_api = voz_chat_history[-6:]
+                mensajes_api = voz_chat_history[-14:]
                 ok, respuesta, status = consultar_groq_api(mensajes_api, system_prompt=system_prompt, temperature=0.5, timeout=15, modo="simulador")
                 if not simulacion_activa[0] or sim_stop_requested[0]:
                     return
