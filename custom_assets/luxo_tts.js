@@ -737,52 +737,15 @@
         evaluarVisibilidadSimulador();
     };
 
-    // Auto-reproducción del saludo de bienvenida del Avatar en Login
-    function intentarReproducirSaludoAvatar() {
-        if (window._saludoAvatarReproducido) return;
-        const hash = (window.location.hash || '').toLowerCase();
-        const path = (window.location.pathname || '').toLowerCase();
-        const esLogin = (!hash || hash === '#' || hash === '#/' || hash.includes('login') || path === '/' || path.includes('login'));
-        if (esLogin) {
-            const el = getOrCreateAudioElement();
-            if (el) {
-                el.src = window.location.origin + '/custom_assets/saludo_login.mp3';
-                el.muted = false;
-                el.volume = 1.0;
-                let p = el.play();
-                if (p !== undefined) {
-                    p.then(function() {
-                        window._saludoAvatarReproducido = true;
-                        console.log("[LUXO TTS] Saludo de avatar iniciado exitosamente al cargar.");
-                    }).catch(function(e) {
-                        console.log("[LUXO TTS] Esperando primer gesto para liberar audio de bienvenida.");
-                    });
-                }
-            }
-        }
-    }
-
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             ensureSimMicBtnCreated();
             evaluarVisibilidadSimulador();
-            intentarReproducirSaludoAvatar();
         });
     } else {
         ensureSimMicBtnCreated();
         evaluarVisibilidadSimulador();
-        intentarReproducirSaludoAvatar();
     }
-
-    // Si el navegador requería un toque/clic en cualquier parte de la pantalla, reproducirlo al primer toque
-    function onFirstTouchPlayGreeting() {
-        if (!window._saludoAvatarReproducido) {
-            intentarReproducirSaludoAvatar();
-        }
-    }
-    window.addEventListener('pointerdown', onFirstTouchPlayGreeting, { once: true, passive: true });
-    window.addEventListener('touchstart', onFirstTouchPlayGreeting, { once: true, passive: true });
-    window.addEventListener('click', onFirstTouchPlayGreeting, { once: true, passive: true });
 
     // Reconciliación continua ultra-rápida (cada 400ms) para respuesta visual instantánea
     setInterval(evaluarVisibilidadSimulador, 400);

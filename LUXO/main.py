@@ -6530,6 +6530,20 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         return "".join(resultado)
 
     def cargar_chat(initial_view=None, desde_login=False):
+        try:
+            js_stop = """
+            (function() {
+                try {
+                    var snd = document.getElementById('luxo_avatar_audio_el');
+                    if (snd) { snd.pause(); snd.currentTime = 0; snd.loop = false; }
+                    var gTts = document.getElementById('luxo_global_tts_player');
+                    if (gTts && gTts.src && gTts.src.includes('saludo_login')) { gTts.pause(); gTts.currentTime = 0; }
+                    if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); } catch(e){} }
+                } catch(e){}
+            })();
+            """
+            ejecutar_js_flet(page, js_stop)
+        except Exception: pass
         page.clean()
         page.add(
             ft.Container(
@@ -24515,9 +24529,12 @@ Ejemplo:
     login_video_player = None
     btn_audio = None
     has_interacted_audio = [False]
+    audio_is_muted = [False]
 
     def reproducir_audio_avatar_nativo():
         try:
+            if audio_is_muted[0]:
+                return
             js = """
             (function() {
                 try {
@@ -24535,6 +24552,7 @@ Ejemplo:
                     snd.src = audioUrl;
                     snd.volume = 1.0;
                     snd.muted = false;
+                    snd.loop = true;
                     snd.currentTime = 0;
                     var p = snd.play();
                     if (p !== undefined) {
@@ -24551,31 +24569,74 @@ Ejemplo:
         except Exception as ex_nat:
             print("Notice reproducir audio avatar nativo:", ex_nat)
 
+    def detener_audio_avatar_nativo():
+        try:
+            js = """
+            (function() {
+                try {
+                    var snd = document.getElementById('luxo_avatar_audio_el');
+                    if (snd) {
+                        snd.pause();
+                        snd.currentTime = 0;
+                        snd.loop = false;
+                    }
+                    var gTts = document.getElementById('luxo_global_tts_player');
+                    if (gTts && gTts.src && gTts.src.includes('saludo_login')) {
+                        gTts.pause();
+                        gTts.currentTime = 0;
+                    }
+                    if (window.speechSynthesis) {
+                        try { window.speechSynthesis.cancel(); } catch(e){}
+                    }
+                } catch(e){}
+            })();
+            """
+            ejecutar_js_flet(page, js)
+        except Exception as ex_stop:
+            print("Notice detener audio avatar nativo:", ex_stop)
+
     def toggle_audio(e=None):
         nonlocal login_video_player, btn_audio
         has_interacted_audio[0] = True
-        reproducir_audio_avatar_nativo()
-        if btn_audio:
-            try:
-                btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                btn_audio.tooltip = "Reproducir Audio"
-                btn_audio.update()
-            except Exception: pass
+        audio_is_muted[0] = not audio_is_muted[0]
+        if audio_is_muted[0]:
+            detener_audio_avatar_nativo()
+            if btn_audio:
+                try:
+                    btn_audio.content = ft.Text("🔇", size=11, color="#888899", text_align="center")
+                    btn_audio.tooltip = "Activar Audio del Avatar"
+                    btn_audio.update()
+                except Exception: pass
+        else:
+            reproducir_audio_avatar_nativo()
+            if btn_audio:
+                try:
+                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                    btn_audio.tooltip = "Silenciar Audio del Avatar"
+                    btn_audio.update()
+                except Exception: pass
 
     def unmute_on_first_interaction(e=None):
-        if not has_interacted_audio[0]:
+        if not has_interacted_audio[0] and not audio_is_muted[0]:
             has_interacted_audio[0] = True
             reproducir_audio_avatar_nativo()
             if btn_audio:
                 try:
                     btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Reproducir Audio"
+                    btn_audio.tooltip = "Silenciar Audio del Avatar"
                     btn_audio.update()
                 except Exception: pass
 
     def desmutear_avatar_logout():
         has_interacted_audio[0] = True
+        audio_is_muted[0] = False
         reproducir_audio_avatar_nativo()
+        if btn_audio:
+            try:
+                btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                btn_audio.tooltip = "Silenciar Audio del Avatar"
+                btn_audio.update()
+            except Exception: pass
 
     txt_user_input = ft.TextField(
         hint_text="Ej. admin",
@@ -24917,6 +24978,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
+        reproducir_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)
     
