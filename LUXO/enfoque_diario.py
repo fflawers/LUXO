@@ -248,8 +248,8 @@ def crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_selecc
 
             def make_sem_click(sn=sem_num, rd=row_date):
                 def _click(e):
-                    on_fecha_seleccionada(rd)
                     cerrar_dialogo()
+                    on_fecha_seleccionada(rd)
                 return _click
 
             sem_cell = ft.Container(
@@ -268,8 +268,8 @@ def crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_selecc
 
                 def make_day_click(dt=c_date):
                     def _click(e):
-                        on_fecha_seleccionada(dt)
                         cerrar_dialogo()
+                        on_fecha_seleccionada(dt)
                     return _click
 
                 bg_col = "#1E1E2E" if in_month else "#0D0F17"
@@ -677,9 +677,16 @@ def aplicar_metas_mensuales_a_semana(user_id, num_semana, s_state):
     try:
         if user_id not in user_states: return
         g_meta = user_states[user_id]["global_meta"]
-        cur_yr = int(g_meta.get("anio", 2026))
-        t_id = str(g_meta.get("num_tienda", "0"))
-        y_m, m_m = obtener_mes_de_semana(cur_yr, int(num_semana))
+        try:
+            cur_yr = int(g_meta.get("anio", 2026) or 2026)
+        except Exception:
+            cur_yr = 2026
+        t_id = str(g_meta.get("num_tienda", "0") or "0")
+        try:
+            sem_int = int(num_semana)
+        except Exception:
+            sem_int = 30
+        y_m, m_m = obtener_mes_de_semana(cur_yr, sem_int)
         m_key = f"{y_m}_{m_m}_{t_id}"
         m_targets = user_states[user_id].get("monthly_targets", {}).get(m_key, {})
         if m_targets:
@@ -702,7 +709,12 @@ def cargar_semana_historico(user_id, num_semana):
     num_sem_str = str(num_semana)
     g_meta["semana"] = num_sem_str
 
-    tienda_id = int(g_meta.get("num_tienda", 0))
+    raw_t = g_meta.get("num_tienda", 0)
+    try:
+        tienda_id = int(raw_t) if str(raw_t).isdigit() else 0
+    except Exception:
+        tienda_id = 0
+
     key = f"S{num_sem_str}_{g_meta.get('num_tienda','0')}_{g_meta.get('tienda','')}"
     import copy
 
@@ -744,9 +756,15 @@ def cargar_semana_historico(user_id, num_semana):
                 s_state[d] = copy.deepcopy(def_s[d])
             h_state[key] = copy.deepcopy(s_state)
 
-    aplicar_metas_mensuales_a_semana(user_id, num_semana, s_state)
-    sincronizar_baselines_domingo(s_state)
-    guardar_estado_persistente(user_id)
+    try:
+        aplicar_metas_mensuales_a_semana(user_id, num_semana, s_state)
+    except Exception: pass
+    try:
+        sincronizar_baselines_domingo(s_state)
+    except Exception: pass
+    try:
+        guardar_estado_persistente(user_id)
+    except Exception: pass
 
 def sincronizar_colaboradores_db(user_info=None, tienda_name=None, user_id=None):
     """Consulta los colaboradores registrados en la base de datos de Configuración de Tienda y los auto-llena en Enfoque Diario 2026."""
@@ -4608,38 +4626,44 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 pass
 
     def on_fecha_calendario_seleccionada(d_date):
-        guardar_semana_historico(user_id)
-        n_year, n_sem = obtener_semana_sgh_de_fecha(d_date)
-        sgh_dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO']
-        sgh_idx = (d_date.weekday() + 1) % 7
-        target_day = sgh_dias[sgh_idx]
-
-        g_meta["semana"] = str(n_sem)
-        g_meta["anio"] = str(n_year)
         try:
-            dd_anio.value = str(n_year)
-        except Exception: pass
+            guardar_semana_historico(user_id)
+            n_year, n_sem = obtener_semana_sgh_de_fecha(d_date)
+            sgh_dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO']
+            sgh_idx = (d_date.weekday() + 1) % 7
+            target_day = sgh_dias[sgh_idx]
 
-        cargar_semana_historico(user_id, n_sem)
-        user_states[user_id]["active_tab"][0] = target_day
-
-        actualizar_etiquetas_pestañas()
-        guardar_estado_persistente(user_id)
-        update_active_view()
-
-        try:
-            fechas_n = obtener_fechas_semana(n_year, n_sem)
-            lbl_f = fechas_n.get(target_day, {}).get("str_short", d_date.strftime("%d/%m"))
-            btn_calendar_txt.value = f"Sem {n_sem} ({target_day[:3]} {lbl_f}) ▾"
-            btn_calendar.update()
-        except Exception: pass
-
-        if page:
-            snack = ft.SnackBar(ft.Text(f"📅 Cargado: Sem {n_sem} - {target_day} ({d_date.strftime('%d/%m/%Y')})", color="white"), bgcolor="#059669")
-            page.overlay.append(snack)
-            snack.open = True
-            try: page.update()
+            g_meta["semana"] = str(n_sem)
+            g_meta["anio"] = str(n_year)
+            try:
+                if dd_anio:
+                    dd_anio.value = str(n_year)
+                    dd_anio.update()
             except Exception: pass
+
+            tab_view_cache.clear()
+            cargar_semana_historico(user_id, n_sem)
+
+            actualizar_etiquetas_pestañas()
+            guardar_estado_persistente(user_id)
+
+            select_tab(target_day)
+
+            try:
+                fechas_n = obtener_fechas_semana(n_year, n_sem)
+                lbl_f = fechas_n.get(target_day, {}).get("str_short", d_date.strftime("%d/%m"))
+                btn_calendar_txt.value = f"Sem {n_sem} ({target_day[:3]} {lbl_f}) ▾"
+                btn_calendar.update()
+            except Exception: pass
+
+            if page:
+                snack = ft.SnackBar(ft.Text(f"📅 Cargado: Sem {n_sem} - {target_day} ({d_date.strftime('%d/%m/%Y')})", color="white"), bgcolor="#059669")
+                page.overlay.append(snack)
+                snack.open = True
+                try: page.update()
+                except Exception: pass
+        except Exception as ex_cal:
+            print("Error en on_fecha_calendario_seleccionada:", ex_cal)
 
     def abrir_calendario(e):
         crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_calendario_seleccionada)
