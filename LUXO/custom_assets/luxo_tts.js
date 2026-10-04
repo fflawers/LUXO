@@ -94,7 +94,7 @@
 
     // 4. Desbloqueo de Audio por Gesto de Usuario & Gestión de Avatar de Inicio
     window._lastInteractionTime = Date.now();
-    window._luxoAvatarAudioActive = false;
+    window._luxoAvatarAudioActive = true;
     window._luxoAvatarAudioMuted = false;
     window.luxoUserIsLoggedIn = false;
 
@@ -138,6 +138,21 @@
             console.log('[LUXO AVATAR] Error al reproducir:', e);
         }
     };
+
+    // Auto-activación inmediata al cargar el DOM si no ha iniciado sesión
+    try {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                if (!window.luxoUserIsLoggedIn) {
+                    window.luxoPlayLoginAvatarAudio();
+                }
+            });
+        } else {
+            if (!window.luxoUserIsLoggedIn) {
+                window.luxoPlayLoginAvatarAudio();
+            }
+        }
+    } catch(e){}
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
@@ -191,23 +206,23 @@
             // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar en el primer gesto
             if (window._luxoAvatarAudioActive && !window._luxoAvatarAudioMuted && !window.luxoUserIsLoggedIn) {
                 let snd = document.getElementById('luxo_avatar_audio_el');
-                if (snd && snd.paused) {
-                    let p = snd.play();
-                    if (p !== undefined) {
-                        p.catch(function(){});
+                if (snd) {
+                    if (snd.paused) {
+                        let p = snd.play();
+                        if (p !== undefined) {
+                            p.catch(function(){});
+                        }
                     }
-                } else if (!snd) {
+                } else {
                     window.luxoPlayLoginAvatarAudio();
                 }
             }
         } catch(e){}
     };
     try {
-        window.addEventListener('pointerdown', window.luxoUnmuteAudio, { capture: true, passive: true });
-        window.addEventListener('touchstart', window.luxoUnmuteAudio, { capture: true, passive: true });
-        window.addEventListener('mousedown', window.luxoUnmuteAudio, { capture: true, passive: true });
-        window.addEventListener('click', window.luxoUnmuteAudio, { capture: true, passive: true });
-        window.addEventListener('keydown', window.luxoUnmuteAudio, { capture: true, passive: true });
+        ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown', 'focus', 'pointerup', 'touchend'].forEach(function(evName) {
+            window.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
+        });
     } catch(e) {}
 
     // 5. Detener Audio / Speech
