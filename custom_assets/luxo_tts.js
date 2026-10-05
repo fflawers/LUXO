@@ -166,17 +166,30 @@
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
+        window.luxoUserIsLoggedIn = true;
         try {
             let snd = document.getElementById('luxo_avatar_audio_el');
             if (snd) {
-                snd.pause();
-                snd.currentTime = 0;
-                snd.loop = false;
+                try {
+                    snd.pause();
+                    snd.currentTime = 0;
+                    snd.loop = false;
+                    snd.muted = true;
+                    snd.removeAttribute('src');
+                    snd.load();
+                } catch(e){}
+                if (snd.parentNode) {
+                    try { snd.parentNode.removeChild(snd); } catch(e){}
+                }
             }
             let gTts = document.getElementById('luxo_global_tts_player');
             if (gTts && gTts.src && gTts.src.includes('saludo_login')) {
-                gTts.pause();
-                gTts.currentTime = 0;
+                try {
+                    gTts.pause();
+                    gTts.currentTime = 0;
+                    gTts.removeAttribute('src');
+                    gTts.load();
+                } catch(e){}
             }
             if (window.speechSynthesis) {
                 try { window.speechSynthesis.cancel(); } catch(e){}
@@ -229,8 +242,13 @@
                     }
                 } catch(e){}
             }
+            // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
+            if (window.luxoUserIsLoggedIn || hasActiveStoredSession() || (window.getLuxoUserId && window.getLuxoUserId())) {
+                window.luxoStopLoginAvatarAudio();
+                return;
+            }
             // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar en el primer gesto
-            if (window._luxoAvatarAudioActive && !window._luxoAvatarAudioMuted && !window.luxoUserIsLoggedIn) {
+            if (window._luxoAvatarAudioActive && !window._luxoAvatarAudioMuted) {
                 let snd = document.getElementById('luxo_avatar_audio_el');
                 if (snd) {
                     if (snd.paused) {
@@ -448,6 +466,14 @@
                     const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+
+                    if (uid || window.luxoUserIsLoggedIn || hasActiveStoredSession()) {
+                        let oldAvatarSnd = document.getElementById('luxo_avatar_audio_el');
+                        if (oldAvatarSnd) {
+                            window.luxoStopLoginAvatarAudio();
+                        }
+                    }
+
                     const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' });
                     if (res && res.ok) {
                         const data = await res.json();
