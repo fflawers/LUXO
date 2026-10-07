@@ -108,8 +108,11 @@
         return false;
     }
 
-    window.luxoPlayLoginAvatarAudio = function() {
-        if (window.luxoUserIsLoggedIn || hasActiveStoredSession()) {
+    window.luxoPlayLoginAvatarAudio = function(force) {
+        if (force === true) {
+            window.luxoUserIsLoggedIn = false;
+        }
+        if (window.luxoUserIsLoggedIn) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
@@ -149,16 +152,16 @@
         }
     };
 
-    // Auto-activación al cargar el DOM ÚNICAMENTE si no existe una sesión previa
+    // Auto-activación al cargar el DOM si no se ha iniciado sesión
     try {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() {
-                if (!window.luxoUserIsLoggedIn && !hasActiveStoredSession()) {
+                if (!window.luxoUserIsLoggedIn) {
                     window.luxoPlayLoginAvatarAudio();
                 }
             });
         } else {
-            if (!window.luxoUserIsLoggedIn && !hasActiveStoredSession()) {
+            if (!window.luxoUserIsLoggedIn) {
                 window.luxoPlayLoginAvatarAudio();
             }
         }
@@ -243,12 +246,12 @@
                 } catch(e){}
             }
             // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
-            if (window.luxoUserIsLoggedIn || hasActiveStoredSession() || (window.getLuxoUserId && window.getLuxoUserId())) {
+            if (window.luxoUserIsLoggedIn) {
                 window.luxoStopLoginAvatarAudio();
                 return;
             }
             // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar en el primer gesto
-            if (window._luxoAvatarAudioActive && !window._luxoAvatarAudioMuted) {
+            if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted) {
                 let snd = document.getElementById('luxo_avatar_audio_el');
                 if (snd) {
                     if (snd.paused) {

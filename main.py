@@ -2598,6 +2598,16 @@ def configurar_rutas_fastapi(app):
 
             user_id = str(user_id or "1")
             text = str(text or "").strip()
+            
+            # Normalización inteligente de dictado por voz: unir secuencias de números hablados en bloques (ej. "80 53 67 24 98 21" -> "805367249821")
+            if text:
+                import re
+                def _unir_digitos_upc(m):
+                    digs = re.findall(r'\d+', m.group(0))
+                    tot = "".join(digs)
+                    return tot if (8 <= len(tot) <= 15) else m.group(0)
+                text = re.sub(r'(?:\b\d{1,4}\b[\s\-_]+)+\b\d{1,4}\b', _unir_digitos_upc, text)
+
             print(f"DEBUG: /text_input recibido con user_id={user_id}, text='{text}'")
             user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
             session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
@@ -9577,7 +9587,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     print("[DEBUG-MIC] UI actualizada a ROJO. Lanzando JS...")
 
                     # Agregamos alerts de depuración al JS para que el usuario las vea en su celular
-                    js_dictate = """javascript:void((function(){
+                    js_dictate = r"""javascript:void((function(){
                         try {
                             const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
                             if (!SR) { 
@@ -9593,8 +9603,12 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                 console.log('[DEBUG-MIC] JS: onstart');
                             };
                             r.onresult = function(ev) {
-                                const txt = ev.results[0][0].transcript;
+                                let txt = (ev.results[0][0].transcript || '').trim();
                                 if (txt) {
+                                    txt = txt.replace(/(?:\b\d{1,4}\b[\s\-_]+)+\b\d{1,4}\b/g, function(m) {
+                                        let digs = m.replace(/[^\d]/g, '');
+                                        return (digs.length >= 8 && digs.length <= 15) ? digs : m;
+                                    });
                                     fetch('/text_input?user_id=' + window.getLuxoUserId() + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
@@ -19681,7 +19695,8 @@ Ejemplo:
             
             db = conectar_db()
             is_mobile_w = (page.width < 700) if (page and page.width) else False
-            tienda_actual = sucursal_activa[0] if 'sucursal_activa' in locals() and sucursal_activa else "Interlomas (3502)"
+            is_adm_user = es_admin() or user_info.get("usuario") == "mx204562" or user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1"
+            tienda_actual = user_info.get("tienda") or (sucursal_activa[0] if 'sucursal_activa' in locals() and sucursal_activa else "Interlomas (3502)")
 
             portal_badge = ft.Container(
                 content=ft.Row([
@@ -19691,7 +19706,6 @@ Ejemplo:
                 bgcolor="#1E2330", padding=ft.Padding(8, 4, 8, 4), border_radius=6, border=ft.Border.all(1, "#00FF88")
             )
 
-            # --- CAMPOS DE EXTRACCIÓN OCR Y VERIFICACIÓN ---
             # --- CAMPOS DE EXTRACCIÓN OCR Y VERIFICACIÓN ---
             tf_rfc = ft.TextField(label="1. RFC del Cliente *", value="", width=220, border_color="#00FFFF", color="white")
             tf_razon = ft.TextField(label="2. Nombre Completo o Razón Social *", value="", width=380 if not is_mobile_w else 280, border_color="#00FFFF", color="white")
@@ -19713,7 +19727,15 @@ Ejemplo:
 
             # --- CAMPOS DE COMPRA Y CONTACTO ---
             tf_ticket = ft.TextField(label="Número de Ticket *", value="", width=180, border_color="#00FFFF", color="white")
-            tf_tienda = ft.TextField(label="Número / Nombre de Tienda *", value=tienda_actual, width=220, border_color="#00FFFF", color="white")
+            tf_tienda = ft.TextField(
+                label="Número / Nombre de Tienda *",
+                value=tienda_actual,
+                width=220,
+                border_color="#00FFFF" if is_adm_user else "#00FF88",
+                color="white",
+                read_only=not is_adm_user,
+                tooltip="Tienda asignada (🔒 Fija)" if not is_adm_user else "Número / Nombre de Tienda"
+            )
             tf_hora = ft.TextField(label="Hora de la Compra (ej. 14:30)", value="14:00", width=180, border_color="#00FFFF", color="white")
 
             dd_pago = ft.Dropdown(
@@ -21918,18 +21940,47 @@ Ejemplo:
             except Exception as ex:
                 print("Error cargando opciones weekly:", ex)
 
-            user_tienda = user_info.get("tienda", "")
+            import re
+            user_tienda = (user_info.get("tienda") or "").strip()
+            user_uname = (user_info.get("usuario") or "").strip()
             default_tienda = None
-            if user_tienda and tiendas_opts:
-                for t_opt in tiendas_opts:
-                    if user_tienda.lower() in t_opt.lower() or t_opt.lower() in user_tienda.lower():
-                        default_tienda = t_opt
-                        break
-            if not default_tienda and tiendas_opts:
-                default_tienda = tiendas_opts[0]
+
+            if tiendas_opts:
+                # 1. Estrategia por Número de Tienda (Dígitos de 3 a 5 cifras)
+                cand_nums = re.findall(r'\d{3,5}', user_tienda) + re.findall(r'\d{3,5}', user_uname)
+                if cand_nums:
+                    for num_str in cand_nums:
+                        for t_opt in tiendas_opts:
+                            if re.search(r'\b' + re.escape(num_str) + r'\b', t_opt) or num_str in t_opt:
+                                default_tienda = t_opt
+                                break
+                        if default_tienda:
+                            break
+
+                # 2. Estrategia por Subcadena Completa
+                if not default_tienda and user_tienda:
+                    for t_opt in tiendas_opts:
+                        if user_tienda.lower() in t_opt.lower() or t_opt.lower() in user_tienda.lower():
+                            default_tienda = t_opt
+                            break
+
+                # 3. Estrategia por Palabras Clave Limpias (Sin paréntesis, números ni conectores)
+                if not default_tienda and user_tienda:
+                    palabras_limpias = [w.lower() for w in re.split(r'[\s\(\)\-_/]+', user_tienda) if len(w) > 3 and not w.isdigit() and w.lower() not in ["tienda", "sunglass", "plaza", "centro", "mall"]]
+                    if palabras_limpias:
+                        for t_opt in tiendas_opts:
+                            t_opt_low = t_opt.lower()
+                            if any(pw in t_opt_low for pw in palabras_limpias):
+                                default_tienda = t_opt
+                                break
+
+                # 4. Fallback si no hubo coincidencia (Admin o corporativo)
+                if not default_tienda:
+                    default_tienda = tiendas_opts[0]
 
             default_semana = semanas_opts[0] if semanas_opts else None
 
+            is_adm_user = es_admin() or user_info.get("usuario") == "mx204562" or user_info.get("rol") == "Admin" or str(user_info.get("rol_id", "0")) == "1"
             is_mobile_w = (page.width < 800) if (page and page.width) else False
             w_tienda_dd = 180 if is_mobile_w else 320
             w_semana_dd = 120 if is_mobile_w else 180
@@ -21942,7 +21993,8 @@ Ejemplo:
                 border_color="#9D50BB",
                 color="white",
                 text_size=11 if is_mobile_w else 13,
-                height=36 if is_mobile_w else 40
+                height=36 if is_mobile_w else 40,
+                visible=is_adm_user
             )
 
             dd_tiendas = ft.Dropdown(
@@ -21950,9 +22002,11 @@ Ejemplo:
                 value=default_tienda,
                 options=[ft.dropdown.Option(t_opt) for t_opt in tiendas_opts],
                 width=w_tienda_dd,
-                border_color="#9D50BB",
+                border_color="#00FFFF" if is_adm_user else "#00FF88",
                 color="white",
-                text_size=11 if is_mobile_w else 13
+                text_size=11 if is_mobile_w else 13,
+                disabled=not is_adm_user,
+                tooltip="Tienda asignada (🔒 Fija)" if not is_adm_user else "Seleccionar tienda"
             )
 
             dd_semanas = ft.Dropdown(
@@ -21990,6 +22044,7 @@ Ejemplo:
                 bgcolor="#0284c7",
                 color="white",
                 height=36 if is_mobile_w else 40,
+                visible=is_adm_user,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=8),
                     padding=ft.padding.Padding(8, 0, 8, 0) if is_mobile_w else None
