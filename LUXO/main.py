@@ -1149,6 +1149,10 @@ def configurar_rutas_fastapi(app):
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
+            # Consumir eventos biométricos de un solo uso para que no se repitan
+            if evt.get("action") in ["open_facial_login", "open_passkey_login", "open_colab_face", "open_colab_huella"]:
+                if "global" in GLOBAL_WEB_TTS_EVENTS and GLOBAL_WEB_TTS_EVENTS["global"].get("id") == evt.get("id"):
+                    del GLOBAL_WEB_TTS_EVENTS["global"]
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}'")
         
         sim_st = None
@@ -25107,6 +25111,7 @@ Ejemplo:
 
     async def on_click_login_huella(e):
         print("🔒 [FLET] Clic en Login Huella")
+        disparar_evento_biometrico(page, 'open_passkey_login')
         try:
             if hasattr(page, "run_js_code"):
                 await page.run_js_code("if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); }")
@@ -25117,6 +25122,7 @@ Ejemplo:
 
     async def on_click_login_facial(e):
         print("🔒 [FLET] Clic en Login Facial")
+        disparar_evento_biometrico(page, 'open_facial_login')
         try:
             if hasattr(page, "run_js_code"):
                 await page.run_js_code("if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); }")

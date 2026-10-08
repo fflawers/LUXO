@@ -507,7 +507,7 @@
                                 }
                             } else if (data.action === 'open_facial_login' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
-                                if (!document.getElementById('luxo-facial-modal') && !window._luxoFacialActivo && !window._luxoUsuarioLogueado && !window.luxoUserId) {
+                                if (!document.getElementById('luxo-facial-modal')) {
                                     console.log("[LUXO BIOMETRIA] Disparando Reconocimiento Facial Login");
                                     if (window.luxoAbrirCamaraFacialLogin) {
                                         window.luxoAbrirCamaraFacialLogin();
@@ -515,7 +515,7 @@
                                 }
                             } else if (data.action === 'open_passkey_login' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
-                                if (!document.getElementById('luxo-passkey-login-banner') && !window._luxoPasskeyActivo && !window._luxoUsuarioLogueado && !window.luxoUserId) {
+                                if (!document.getElementById('luxo-passkey-login-banner')) {
                                     console.log("[LUXO BIOMETRIA] Disparando WebAuthn / Passkey Login");
                                     if (window.luxoActivarPasskeyLogin) {
                                         window.luxoActivarPasskeyLogin();
@@ -944,8 +944,7 @@
     // ==============================================================================
 
     window.luxoAbrirCamaraFacialLogin = function() {
-        if (window._luxoFacialActivo || document.getElementById('luxo-facial-modal') || window._luxoUsuarioLogueado || window.luxoUserId) return;
-        window._luxoFacialActivo = true;
+        if (document.getElementById('luxo-facial-modal')) return;
 
         const exist = document.getElementById('luxo-facial-modal');
         if (exist) exist.remove();
@@ -977,7 +976,6 @@
         function closeModal() {
             stopCam();
             modal.remove();
-            window._luxoFacialActivo = false;
         }
 
         document.getElementById('btn-close-face-login').onclick = closeModal;
@@ -1019,7 +1017,6 @@
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'ok') {
-                    window._luxoUsuarioLogueado = true;
                     setMsg('✅ ¡Identidad Verificada! Bienvenido, ' + data.nombre, '#7CFC00');
                     stopCam();
                     try {
@@ -1028,7 +1025,6 @@
                     } catch(e){}
                     setTimeout(() => {
                         modal.remove();
-                        window._luxoFacialActivo = false;
                     }, 800);
                 } else {
                     setMsg('❌ ' + (data.message || 'Rostro no reconocido.'), '#FF4500');
@@ -1041,8 +1037,7 @@
     };
 
     window.luxoActivarPasskeyLogin = async function() {
-        if (window._luxoPasskeyActivo || document.getElementById('luxo-passkey-login-banner') || window._luxoUsuarioLogueado || window.luxoUserId) return;
-        window._luxoPasskeyActivo = true;
+        if (document.getElementById('luxo-passkey-login-banner')) return;
 
         console.log("LUXO: [DIAGNÓSTICO INICIAL WEBAUTHN]");
         const exist = document.getElementById('luxo-passkey-login-banner');
