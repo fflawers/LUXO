@@ -1118,7 +1118,6 @@
             console.log("LUXO: respuesta de verificación passkey_verify:", verData);
 
             if (verData.status === 'ok') {
-                window._luxoUsuarioLogueado = true;
                 setTxt('✅ ¡Bienvenido, ' + verData.nombre + '!', '#7CFC00');
                 banner.style.borderColor = '#7CFC00';
                 banner.style.color = '#7CFC00';
@@ -1128,14 +1127,12 @@
                 } catch(e){}
                 setTimeout(() => {
                     banner.remove();
-                    window._luxoPasskeyActivo = false;
                 }, 800);
             } else {
                 setTxt('❌ ' + (verData.message || 'Huella / Passkey no encontrada.'), '#FF4500');
                 banner.style.borderColor = '#FF4500';
                 setTimeout(() => {
                     banner.remove();
-                    window._luxoPasskeyActivo = false;
                 }, 3500);
             }
         } catch(ex) {

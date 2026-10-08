@@ -3325,6 +3325,10 @@ def configurar_rutas_fastapi(app):
             session = None
             if device_token and device_token in active_sessions:
                 session = active_sessions[device_token]
+            elif device_token and f"dev_{device_token}" in active_sessions:
+                session = active_sessions[f"dev_{device_token}"]
+            elif "latest_page" in active_sessions:
+                session = active_sessions["latest_page"]
             elif active_sessions:
                 session = list(active_sessions.values())[-1]
 
@@ -3333,12 +3337,23 @@ def configurar_rutas_fastapi(app):
                 if page_s:
                     ui = session.get("user_info", {})
                     ui["id"] = bio_user["ID_Usuario"]
+                    ui["usuario"] = bio_user.get("Usuario") or ""
                     ui["nombre"] = bio_user["Nombre_Completo"]
                     ui["rol"] = bio_user["Rol"]
                     ui["tienda"] = bio_user.get("Tienda") or ""
                     ui["zona"] = bio_user.get("Zona") or "Zona Centro"
                     ui["biometria_metodo"] = "Huella"
                     ui["es_gerente_verificado"] = es_gerente
+                    
+                    if hasattr(page_s, "shared_preferences") and page_s.shared_preferences:
+                        import time as _t_sp_h
+                        async def _persist_huella_session():
+                            try:
+                                await page_s.shared_preferences.set("logged_user_id", str(bio_user["ID_Usuario"]))
+                                await page_s.shared_preferences.set("last_activity_timestamp", str(int(_t_sp_h.time())))
+                            except Exception: pass
+                        page_s.run_task(_persist_huella_session)
+
                     cargar_chat_fn = session.get("cargar_chat")
                     if cargar_chat_fn:
                         _nombre_bio = bio_user["Nombre_Completo"]
