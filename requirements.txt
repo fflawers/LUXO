@@ -15,3 +15,4 @@ gTTS
 edge-tts
 opencv-python-headless
 numpy
+pillow

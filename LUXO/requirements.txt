@@ -1,4 +1,4 @@
-flet
+flet==0.86.5
 flet-video
 mysql-connector-python
 PyMuPDF
@@ -13,3 +13,6 @@ pyaudio
 python-multipart
 gTTS
 edge-tts
+opencv-python-headless
+numpy
+pillow

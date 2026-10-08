@@ -3169,93 +3169,115 @@ def configurar_rutas_fastapi(app):
 
     def _extraer_vector_facial(img_bytes) -> tuple:
         """
-        Extrae un vector biométrico unitario normalizado a partir de los bytes de una imagen usando OpenCV.
-        Valida que exista un rostro visible y con iluminación adecuada.
+        Extrae un vector biométrico unitario normalizado a partir de los bytes de una imagen.
+        Soporta OpenCV (con CLAHE y Sobel) y cuenta con fallback universal nativo PIL de alta resiliencia.
         Retorna: (vector_lista_floats, error_mensaje)
         """
         try:
-            import io, cv2, numpy as np
-            from PIL import Image
+            import io, math
+            from PIL import Image, ImageOps
 
             img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            img_np = np.array(img_pil)
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            w_orig, h_orig = img_pil.size
+            if w_orig < 20 or h_orig < 20:
+                return None, "Imagen inválida o demasiado pequeña"
 
-            # Validación de calidad mínima de imagen e iluminación
-            mean_val = float(np.mean(gray))
-            std_val = float(np.std(gray))
-            if mean_val < 15:
-                return None, "Imagen demasiado oscura. Asegúrate de tener buena iluminación."
-            if mean_val > 245 or std_val < 8:
-                return None, "Imagen sobreexpuesta o sin contraste. Ajusta la iluminación frente a la cámara."
-
-            # Detección de región facial: segmentación o recorte centrado de la cámara circular
-            face_crop = gray
-            h_img, w_img = gray.shape[:2]
+            # 1. Intentar extracción con OpenCV si está disponible
             try:
-                ycrcb = cv2.cvtColor(img_np, cv2.COLOR_RGB2YCrCb)
-                skin_mask = cv2.inRange(ycrcb, np.array([0, 133, 77], dtype=np.uint8), np.array([255, 173, 127], dtype=np.uint8))
-                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-                skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_OPEN, kernel, iterations=2)
-                contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                
-                valid_faces = []
-                for c in contours:
-                    area = cv2.contourArea(c)
-                    if area >= (h_img * w_img * 0.06):
-                        x, y, w, h = cv2.boundingRect(c)
-                        ratio = float(w) / float(h + 1e-5)
-                        if 0.4 <= ratio <= 2.0:
-                            valid_faces.append((x, y, w, h))
-                
-                if len(valid_faces) == 1:
-                    x, y, w, h = valid_faces[0]
-                    pad_x, pad_y = int(w * 0.1), int(h * 0.1)
-                    x0, y0 = max(0, x - pad_x), max(0, y - pad_y)
-                    x1, y1 = min(w_img, x + w + pad_x), min(h_img, y + h + pad_y)
-                    face_crop = gray[y0:y1, x0:x1]
-                else:
-                    # Si hay variación en el tono de piel, recortar el 80% central del círculo de la cámara
-                    margin_y = int(h_img * 0.1)
-                    margin_x = int(w_img * 0.1)
-                    face_crop = gray[margin_y:h_img-margin_y, margin_x:w_img-margin_x]
-            except Exception:
-                face_crop = gray
+                import cv2, numpy as np
+                img_np = np.array(img_pil)
+                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
-            face_resized = cv2.resize(face_crop, (128, 128))
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            face_eq = clahe.apply(face_resized)
+                mean_val = float(np.mean(gray))
+                std_val = float(np.std(gray))
+                if mean_val < 10:
+                    return None, "Imagen demasiado oscura. Asegúrate de tener buena iluminación."
+                if mean_val > 248 or std_val < 5:
+                    return None, "Imagen sobreexpuesta o sin contraste. Ajusta la iluminación frente a la cámara."
 
-            vector = []
-            for row in range(4):
-                for col in range(4):
-                    block = face_eq[row*32:(row+1)*32, col*32:(col+1)*32].astype(np.float32)
-                    mean = float(np.mean(block)) / 255.0
-                    std = float(np.std(block)) / 255.0
-                    gx = cv2.Sobel(block, cv2.CV_32F, 1, 0, ksize=3)
-                    gy = cv2.Sobel(block, cv2.CV_32F, 0, 1, ksize=3)
-                    mag, ang = cv2.cartToPolar(gx, gy)
-                    mag_mean = float(np.mean(mag)) / 255.0
-                    mag_std = float(np.std(mag)) / 255.0
-                    vector.extend([
-                        round(mean, 5),
-                        round(std, 5),
-                        round(mag_mean, 5),
-                        round(mag_std, 5),
-                        round(float(np.median(block)) / 255.0, 5),
-                        round(float(np.percentile(block, 25)) / 255.0, 5),
-                        round(float(np.percentile(block, 75)) / 255.0, 5),
-                        round(float(np.mean(ang)) / 6.28318, 5)
-                    ])
+                h_img, w_img = gray.shape[:2]
+                margin_y = int(h_img * 0.08)
+                margin_x = int(w_img * 0.08)
+                face_crop = gray[margin_y:h_img-margin_y, margin_x:w_img-margin_x]
 
-            v_np = np.array(vector[:128], dtype=np.float32)
-            norm = np.linalg.norm(v_np)
-            if norm > 0:
-                v_np = v_np / norm
-            return v_np.tolist(), None
+                face_resized = cv2.resize(face_crop, (128, 128))
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                face_eq = clahe.apply(face_resized)
+
+                vector = []
+                for row in range(4):
+                    for col in range(4):
+                        block = face_eq[row*32:(row+1)*32, col*32:(col+1)*32].astype(np.float32)
+                        mean = float(np.mean(block)) / 255.0
+                        std = float(np.std(block)) / 255.0
+                        gx = cv2.Sobel(block, cv2.CV_32F, 1, 0, ksize=3)
+                        gy = cv2.Sobel(block, cv2.CV_32F, 0, 1, ksize=3)
+                        mag, ang = cv2.cartToPolar(gx, gy)
+                        mag_mean = float(np.mean(mag)) / 255.0
+                        mag_std = float(np.std(mag)) / 255.0
+                        vector.extend([
+                            round(mean, 5),
+                            round(std, 5),
+                            round(mag_mean, 5),
+                            round(mag_std, 5),
+                            round(float(np.median(block)) / 255.0, 5),
+                            round(float(np.percentile(block, 25)) / 255.0, 5),
+                            round(float(np.percentile(block, 75)) / 255.0, 5),
+                            round(float(np.mean(ang)) / 6.28318, 5)
+                        ])
+
+                v_np = np.array(vector[:128], dtype=np.float32)
+                norm = float(np.linalg.norm(v_np))
+                if norm > 0:
+                    v_np = v_np / norm
+                return v_np.tolist(), None
+
+            except ImportError:
+                # 2. Fallback nativo 100% puro PIL / Python sin depender de librerías C externas
+                gray_pil = ImageOps.grayscale(img_pil)
+                m_x, m_y = int(w_orig * 0.08), int(h_orig * 0.08)
+                crop_pil = gray_pil.crop((m_x, m_y, w_orig - m_x, h_orig - m_y))
+                resized_pil = crop_pil.resize((128, 128), Image.Resampling.BILINEAR)
+                pixels = list(resized_pil.get_flattened_data() if hasattr(resized_pil, "get_flattened_data") else resized_pil.getdata())
+
+                vector = []
+                for row in range(4):
+                    for col in range(4):
+                        block_vals = []
+                        for r in range(row * 32, (row + 1) * 32):
+                            for c in range(col * 32, (col + 1) * 32):
+                                block_vals.append(pixels[r * 128 + c])
+                        b_sorted = sorted(block_vals)
+                        n_b = len(b_sorted)
+                        b_mean = sum(b_sorted) / float(n_b)
+                        b_std = math.sqrt(sum((x - b_mean) ** 2 for x in b_sorted) / float(n_b))
+                        b_med = b_sorted[n_b // 2]
+                        b_p25 = b_sorted[int(n_b * 0.25)]
+                        b_p75 = b_sorted[int(n_b * 0.75)]
+                        
+                        grad_h = sum(abs(b_sorted[i] - b_sorted[max(0, i - 1)]) for i in range(n_b)) / float(n_b)
+                        grad_v = sum(abs(b_sorted[i] - b_sorted[max(0, i - 32)]) for i in range(n_b)) / float(n_b)
+                        mag_approx = math.sqrt(grad_h**2 + grad_v**2)
+
+                        vector.extend([
+                            round(b_mean / 255.0, 5),
+                            round(b_std / 255.0, 5),
+                            round(mag_approx / 255.0, 5),
+                            round(grad_h / 255.0, 5),
+                            round(b_med / 255.0, 5),
+                            round(b_p25 / 255.0, 5),
+                            round(b_p75 / 255.0, 5),
+                            round(grad_v / 255.0, 5)
+                        ])
+
+                sum_sq = sum(x**2 for x in vector[:128])
+                norm = math.sqrt(sum_sq) if sum_sq > 0 else 1.0
+                norm_vec = [round(x / norm, 5) for x in vector[:128]]
+                return norm_vec, None
+
         except Exception as ex_ext:
             print("Error extrayendo vector facial:", ex_ext)
-            return None, str(ex_ext)
+            return None, f"Error procesando rostro: {ex_ext}"
 
     # --- Generar desafío WebAuthn (Passkey) para login ---
     @app.get("/api/biometria/passkey_challenge")
