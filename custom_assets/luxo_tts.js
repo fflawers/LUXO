@@ -6,6 +6,7 @@
     if (window._luxoAudioEngineLoaded) return;
     window._luxoAudioEngineLoaded = true;
     console.log("[LUXO TTS] Motor de audio web inicializado con éxito.");
+    console.log("🚀 [LUXO JS] Script biométrico cargado correctamente en window");
 
     // 1. Obtener User ID y Username
     window.getLuxoUserId = function() {
@@ -504,6 +505,30 @@
                                 if (window.iniciarDictadoSimulador) {
                                     window.iniciarDictadoSimulador(data.mode || 'chat');
                                 }
+                            } else if (data.action === 'open_facial_login' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO BIOMETRIA] Disparando Reconocimiento Facial Login");
+                                if (window.luxoAbrirCamaraFacialLogin) {
+                                    window.luxoAbrirCamaraFacialLogin();
+                                }
+                            } else if (data.action === 'open_passkey_login' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO BIOMETRIA] Disparando WebAuthn / Passkey Login");
+                                if (window.luxoActivarPasskeyLogin) {
+                                    window.luxoActivarPasskeyLogin();
+                                }
+                            } else if (data.action === 'open_colab_face' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO BIOMETRIA] Disparando Registro Facial Colaborador:", data.colab_id, data.colab_name);
+                                if (window.luxoAbrirCamaraFacialColab) {
+                                    window.luxoAbrirCamaraFacialColab(data.colab_id, data.colab_name);
+                                }
+                            } else if (data.action === 'open_colab_huella' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO BIOMETRIA] Disparando Registro Huella Colaborador:", data.colab_id, data.colab_name);
+                                if (window.luxoAbrirHuellaColab) {
+                                    window.luxoAbrirHuellaColab(data.colab_id, data.colab_name);
+                                }
                             }
                         }
                     }
@@ -910,9 +935,371 @@
         evaluarVisibilidadSimulador();
     }
 
+    // ==============================================================================
+    // SUITE BIOMÉTRICA NATIVA DE LUXO (Face ID & Huella / WebAuthn)
+    // ==============================================================================
+
+    window.luxoAbrirCamaraFacialLogin = function() {
+        const exist = document.getElementById('luxo-facial-modal');
+        if (exist) exist.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'luxo-facial-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:99999999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Segoe UI,sans-serif;backdrop-filter:blur(8px);';
+        modal.innerHTML = `
+            <div style="background:#0a0a16;border:2px solid #00FFFF;border-radius:24px;padding:28px 24px;max-width:420px;width:92%;text-align:center;box-shadow:0 0 45px rgba(0,255,255,0.4);position:relative;">
+                <div style="font-size:32px;margin-bottom:4px;">📷</div>
+                <h3 style="color:#00FFFF;margin:0 0 6px;font-size:20px;letter-spacing:1px;">Reconocimiento Facial</h3>
+                <p style="color:#aaa;font-size:13px;margin:0 0 16px;">Coloca tu rostro frente a la cámara y presiona Capturar</p>
+                <div style="position:relative;width:220px;height:220px;margin:0 auto 16px;">
+                    <video id="luxo-cam-login" autoplay playsinline muted style="width:220px;height:220px;object-fit:cover;border-radius:50%;border:3px solid #00FFFF;box-shadow:0 0 20px rgba(0,255,255,0.3);"></video>
+                    <canvas id="luxo-canvas-login" width="220" height="220" style="display:none;"></canvas>
+                </div>
+                <p id="luxo-face-login-msg" style="color:#00FFFF;font-size:13px;min-height:22px;margin:0 0 16px;font-weight:600;">Iniciando cámara...</p>
+                <div style="display:flex;gap:12px;justify-content:center;">
+                    <button id="btn-cap-login" style="background:linear-gradient(135deg,#0055ff,#00bbff);color:white;border:none;padding:11px 24px;border-radius:12px;font-size:14px;font-weight:bold;cursor:pointer;box-shadow:0 4px 15px rgba(0,187,255,0.4);">📸 Capturar</button>
+                    <button id="btn-close-face-login" style="background:#222233;color:#aaa;border:1px solid #444;padding:11px 20px;border-radius:12px;font-size:14px;cursor:pointer;">✕ Cancelar</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        let stream = null;
+        function stopCam() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+
+        document.getElementById('btn-close-face-login').onclick = function() {
+            stopCam();
+            modal.remove();
+        };
+
+        const setMsg = (msg, color) => {
+            const el = document.getElementById('luxo-face-login-msg');
+            if (el) { el.innerText = msg; el.style.color = color || '#00FFFF'; }
+        };
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } } })
+        .then(s => {
+            stream = s;
+            const vid = document.getElementById('luxo-cam-login');
+            if (vid) vid.srcObject = s;
+            setMsg('🟢 Cámara activa. Presiona Capturar para ingresar.', '#00FFFF');
+        })
+        .catch(err => {
+            setMsg('⚠️ Permiso de cámara denegado o no disponible en este dispositivo.', '#FF4500');
+        });
+
+        document.getElementById('btn-cap-login').onclick = function() {
+            const video = document.getElementById('luxo-cam-login');
+            const canvas = document.getElementById('luxo-canvas-login');
+            if (!video || !canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, 220, 220);
+            const frameB64 = canvas.toDataURL('image/jpeg', 0.85);
+
+            setMsg('⏳ Analizando vector facial...', '#FFD700');
+
+            fetch('/api/biometria/facial_login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frame_base64: frameB64 })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    setMsg('✅ ¡Identidad Verificada! Bienvenido, ' + data.nombre, '#7CFC00');
+                    stopCam();
+                    try {
+                        localStorage.setItem('logged_user_id', String(data.user_id || data.id_usuario));
+                        localStorage.setItem('logged_username', String(data.usuario || ''));
+                    } catch(e){}
+                    setTimeout(() => {
+                        modal.remove();
+                        const uidParam = data.usuario_id || data.user_id || '';
+                        const userParam = data.usuario || '';
+                        window.location.href = '/?auto_uid=' + encodeURIComponent(uidParam) + '&auto_user=' + encodeURIComponent(userParam);
+                    }, 1200);
+                } else {
+                    setMsg('❌ ' + (data.message || 'Rostro no reconocido.'), '#FF4500');
+                }
+            })
+            .catch(err => {
+                setMsg('❌ Error de comunicación con el servidor.', '#FF4500');
+            });
+        };
+    };
+
+    window.luxoActivarPasskeyLogin = async function() {
+        console.log("LUXO: [DIAGNÓSTICO INICIAL WEBAUTHN]");
+        console.log("LUXO: typeof window.luxoActivarPasskeyLogin =", typeof window.luxoActivarPasskeyLogin);
+        console.log("LUXO: window.isSecureContext =", window.isSecureContext);
+        console.log("LUXO: typeof window.PublicKeyCredential =", typeof window.PublicKeyCredential);
+        console.log("LUXO: typeof navigator.credentials =", typeof navigator.credentials);
+        if (navigator.credentials) {
+            console.log("LUXO: typeof navigator.credentials.get =", typeof navigator.credentials.get);
+            console.log("LUXO: typeof navigator.credentials.create =", typeof navigator.credentials.create);
+        }
+
+        const exist = document.getElementById('luxo-passkey-login-banner');
+        if (exist) exist.remove();
+
+        const banner = document.createElement('div');
+        banner.id = 'luxo-passkey-login-banner';
+        banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#0a0a16;border:2px solid #D8B4FE;color:#D8B4FE;padding:16px 28px;border-radius:16px;font-size:14px;font-weight:bold;z-index:99999999;box-shadow:0 0 35px rgba(216,180,254,0.4);display:flex;align-items:center;gap:12px;font-family:Segoe UI,sans-serif;';
+        banner.innerHTML = '<span style="font-size:24px;">👆</span><span id="luxo-pk-txt">Iniciando sensor biométrico...</span>';
+        document.body.appendChild(banner);
+
+        const setTxt = (msg, color) => {
+            const el = document.getElementById('luxo-pk-txt');
+            if (el) { el.innerText = msg; }
+            if (color) banner.style.borderColor = color;
+        };
+
+        if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            console.warn("LUXO: [SEGURIDAD W3C] La página se está ejecutando en un origen no seguro (HTTP IP). WebAuthn exige HTTPS o localhost.");
+            setTxt('⚠️ WebAuthn requiere HTTPS o localhost en celulares. Revisa la consola o activa chrome://flags/#unsafely-treat-insecure-origin-as-secure', '#FF8C00');
+            setTimeout(() => banner.remove(), 7000);
+            return;
+        }
+
+        if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.get) {
+            console.error("LUXO: navigator.credentials o PublicKeyCredential no disponibles.");
+            setTxt('⚠️ Tu navegador o dispositivo no tiene habilitado WebAuthn / Passkeys.', '#FF8C00');
+            setTimeout(() => banner.remove(), 4500);
+            return;
+        }
+
+        try {
+            console.log("LUXO: iniciando WebAuthn -> solicitando challenge a /api/biometria/passkey_challenge");
+            const challResp = await fetch('/api/biometria/passkey_challenge');
+            const challData = await challResp.json();
+            console.log("LUXO: challenge recibido del servidor:", challData);
+
+            if (!challData.challenge) {
+                setTxt('❌ Error al obtener desafío del servidor.', '#FF4500');
+                setTimeout(() => banner.remove(), 3000);
+                return;
+            }
+
+            const challenge = Uint8Array.from(atob(challData.challenge.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+            setTxt('👆 Toca el lector de huella o sensor biométrico...', '#00FFFF');
+
+            console.log("LUXO: navigator.credentials disponible");
+            console.log("LUXO: llamando navigator.credentials.get con rpId:", challData.rp_id || window.location.hostname);
+            console.log("LUXO: esperando autenticación del dispositivo...");
+
+            const credential = await navigator.credentials.get({
+                publicKey: {
+                    challenge: challenge,
+                    rpId: challData.rp_id || window.location.hostname,
+                    userVerification: 'preferred',
+                    timeout: 60000
+                }
+            });
+
+            console.log("LUXO: [ÉXITO WEBAUTHN] Credencial obtenida del sensor biométrico:", credential);
+            setTxt('⏳ Validando firma criptográfica...', '#FFD700');
+            const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+
+            const verResp = await fetch('/api/biometria/passkey_verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential_id: credId })
+            });
+            const verData = await verResp.json();
+            console.log("LUXO: respuesta de verificación passkey_verify:", verData);
+
+            if (verData.status === 'ok') {
+                setTxt('✅ ¡Bienvenido, ' + verData.nombre + '!', '#7CFC00');
+                banner.style.borderColor = '#7CFC00';
+                banner.style.color = '#7CFC00';
+                try {
+                    localStorage.setItem('logged_user_id', String(verData.user_id || verData.id_usuario));
+                    localStorage.setItem('logged_username', String(verData.usuario || ''));
+                } catch(e){}
+                setTimeout(() => {
+                    banner.remove();
+                    const uidParam = verData.usuario_id || verData.user_id || '';
+                    const userParam = verData.usuario || '';
+                    window.location.href = '/?auto_uid=' + encodeURIComponent(uidParam) + '&auto_user=' + encodeURIComponent(userParam);
+                }, 1200);
+            } else {
+                setTxt('❌ ' + (verData.message || 'Huella / Passkey no encontrada.'), '#FF4500');
+                banner.style.borderColor = '#FF4500';
+                setTimeout(() => banner.remove(), 3500);
+            }
+        } catch(ex) {
+            console.error("LUXO: [ERROR WEBAUTHN]:", ex);
+            banner.style.borderColor = '#FF8C00';
+            if (ex.name === 'NotAllowedError') {
+                setTxt('⚠️ Lectura biométrica cancelada por el usuario.', '#FF8C00');
+            } else if (ex.name === 'SecurityError') {
+                setTxt('🔒 Error de Seguridad WebAuthn: Requiere HTTPS.', '#FF4500');
+            } else {
+                setTxt('⚠️ ' + ex.message, '#FF8C00');
+            }
+            setTimeout(() => banner.remove(), 4500);
+        }
+    };
+
+    window.luxoAbrirCamaraFacialColab = function(colabId, colabName) {
+        const exist = document.getElementById('luxo-reg-facial-modal');
+        if (exist) exist.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'luxo-reg-facial-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:99999999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Segoe UI,sans-serif;backdrop-filter:blur(8px);';
+        modal.innerHTML = `
+            <div style="background:#0a0a16;border:2px solid #00FFFF;border-radius:24px;padding:26px;max-width:420px;width:92%;text-align:center;box-shadow:0 0 45px rgba(0,255,255,0.4);">
+                <h3 style="color:#00FFFF;margin:0 0 6px;font-size:18px;">📷 Registrar Rostro (Face ID)</h3>
+                <p style="color:#aaa;font-size:13px;margin:0 0 14px;">Colaborador: <b style="color:white;">` + colabName + `</b></p>
+                <div style="position:relative;width:220px;height:220px;margin:0 auto 16px;">
+                    <video id="luxo-cam-reg" autoplay playsinline muted style="width:220px;height:220px;object-fit:cover;border-radius:50%;border:3px solid #00FFFF;"></video>
+                    <canvas id="luxo-canvas-reg" width="220" height="220" style="display:none;"></canvas>
+                </div>
+                <p id="luxo-reg-msg" style="color:#00FFFF;font-size:13px;min-height:20px;margin-bottom:14px;font-weight:600;">Iniciando cámara...</p>
+                <div style="display:flex;gap:12px;justify-content:center;">
+                    <button id="btn-cap-colab" style="background:linear-gradient(135deg,#0055ff,#00bbff);color:white;border:none;padding:10px 22px;border-radius:10px;font-size:14px;font-weight:bold;cursor:pointer;">📸 Capturar Foto</button>
+                    <button id="btn-close-colab" style="background:#222233;color:#aaa;border:1px solid #444;padding:10px 20px;border-radius:10px;font-size:14px;cursor:pointer;">✕ Cancelar</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        let stream = null;
+        function stopCam() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+        
+        document.getElementById('btn-close-colab').onclick = function() {
+            stopCam();
+            modal.remove();
+        };
+        
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } } })
+        .then(s => {
+            stream = s;
+            const vid = document.getElementById('luxo-cam-reg');
+            if (vid) vid.srcObject = s;
+            document.getElementById('luxo-reg-msg').innerText = '🟢 Cámara lista. Presiona Capturar Foto.';
+        })
+        .catch(err => {
+            document.getElementById('luxo-reg-msg').innerText = '⚠️ No se pudo acceder a la cámara. Revisa permisos.';
+            document.getElementById('luxo-reg-msg').style.color = '#FF4500';
+        });
+        
+        document.getElementById('btn-cap-colab').onclick = function() {
+            const video = document.getElementById('luxo-cam-reg');
+            const canvas = document.getElementById('luxo-canvas-reg');
+            if (!video || !canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, 220, 220);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            
+            document.getElementById('luxo-reg-msg').innerText = '⏳ Guardando vector biométrico facial...';
+            document.getElementById('luxo-reg-msg').style.color = '#FFD700';
+            
+            fetch('/api/biometria/registrar_rostro_colaborador', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({colaborador_id: colabId, nombre: colabName, imagen: dataUrl})
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    document.getElementById('luxo-reg-msg').innerText = '✅ ¡Rostro registrado exitosamente!';
+                    document.getElementById('luxo-reg-msg').style.color = '#7CFC00';
+                    stopCam();
+                    setTimeout(() => { modal.remove(); }, 1800);
+                } else {
+                    document.getElementById('luxo-reg-msg').innerText = '❌ Error: ' + (d.error || 'No se detectó un rostro claro.');
+                    document.getElementById('luxo-reg-msg').style.color = '#FF4500';
+                }
+            })
+            .catch(() => {
+                document.getElementById('luxo-reg-msg').innerText = '❌ Error al conectar con el servidor';
+                document.getElementById('luxo-reg-msg').style.color = '#FF4500';
+            });
+        };
+    };
+
+    window.luxoAbrirHuellaColab = async function(colabId, colabName) {
+        const existModal = document.getElementById('luxo-huella-modal');
+        if (existModal) existModal.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'luxo-huella-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:99999999;display:flex;align-items:center;justify-content:center;font-family:Segoe UI,sans-serif;backdrop-filter:blur(8px);';
+        modal.innerHTML = `
+            <div style="background:#0a0a16;border:2px solid #D8B4FE;border-radius:24px;padding:26px;max-width:400px;width:92%;text-align:center;box-shadow:0 0 45px rgba(216,180,254,0.35);">
+                <div style="font-size:44px;margin-bottom:10px;">👆</div>
+                <h3 style="color:#D8B4FE;margin:0 0 6px;font-size:18px;">Registrar Huella / Passkey</h3>
+                <p style="color:#aaa;font-size:13px;margin:0 0 14px;">Colaborador: <b style="color:white;">` + colabName + `</b></p>
+                <p id="luxo-hue-status" style="color:#FFD700;font-size:13px;min-height:22px;margin-bottom:16px;font-weight:600;">Iniciando sensor biométrico...</p>
+                <button id="btn-hue-close" style="padding:10px 22px;background:#222233;color:#aaa;border:1px solid #444;border-radius:10px;cursor:pointer;font-size:14px;">Cancelar</button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        document.getElementById('btn-hue-close').onclick = function() { modal.remove(); };
+        
+        const setStatus = (msg, color) => {
+            const el = document.getElementById('luxo-hue-status');
+            if (el) { el.innerText = msg; el.style.color = color || '#FFD700'; }
+        };
+        
+        if (!window.PublicKeyCredential) {
+            setStatus('⚠️ Tu navegador o dispositivo no soporta lectura de huella.', '#FF8C00');
+            return;
+        }
+        
+        try {
+            const resp = await fetch('/api/biometria/passkey_challenge_registro?colaborador_id=' + colabId + '&nombre=' + encodeURIComponent(colabName));
+            const opts = await resp.json();
+            if (!opts.publicKey) { setStatus('❌ Error al obtener configuración del servidor.', '#FF4500'); return; }
+            
+            const decode = s => Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+            opts.publicKey.challenge = decode(opts.publicKey.challenge);
+            opts.publicKey.user.id = decode(opts.publicKey.user.id);
+            
+            setStatus('👆 Toca el lector de huella o sensor biométrico del dispositivo...', '#D8B4FE');
+            const credential = await navigator.credentials.create({ publicKey: opts.publicKey });
+            
+            setStatus('⏳ Guardando registro biométrico seguro...', '#FFD700');
+            const payload = {
+                colaborador_id: colabId,
+                nombre: colabName,
+                id: credential.id,
+                rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
+                type: credential.type,
+                response: {
+                    attestationObject: btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject))),
+                    clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON)))
+                }
+            };
+            
+            const vResp = await fetch('/api/biometria/registrar_huella_colaborador', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const vData = await vResp.json();
+            if (vData.ok) {
+                setStatus('✅ ¡Huella dactilar registrada exitosamente!', '#7CFC00');
+                setTimeout(() => { modal.remove(); }, 1800);
+            } else {
+                setStatus('❌ Error: ' + (vData.error || 'No se pudo guardar la huella'), '#FF4500');
+            }
+        } catch(err) {
+            if (err.name === 'NotAllowedError') {
+                setStatus('⚠️ Lectura de huella cancelada por el usuario.', '#FF8C00');
+            } else {
+                setStatus('⚠️ Nota de lectura: ' + err.message, '#FF8C00');
+            }
+        }
+    };
+
     // Reconciliación periódica ligera (cada 2s) sin provocar reflow de layout
     setInterval(evaluarVisibilidadSimulador, 2000);
     window.addEventListener('hashchange', evaluarVisibilidadSimulador);
     window.addEventListener('popstate', evaluarVisibilidadSimulador);
 })();
+
 

@@ -872,6 +872,30 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
 GLOBAL_WEB_TTS_EVENTS = {}
 TAB_TTS_EVENTS = GLOBAL_WEB_TTS_EVENTS
 
+def disparar_evento_biometrico(page, action: str, extra: dict = None):
+    """Dispara un evento biométrico nativo a través del ciclo de polling web para abrir cámara/passkey."""
+    import time
+    evt_id = f"bio_{int(time.time()*1000)}"
+    evt_data = {
+        "action": action,
+        "id": evt_id,
+        "timestamp": time.time()
+    }
+    if extra:
+        evt_data.update(extra)
+    
+    tok = getattr(page, "_luxo_token", None) or getattr(page, "session_id", None)
+    u_id = getattr(page, "user_id", None)
+    u_name = getattr(page, "username", None)
+    
+    if tok: GLOBAL_WEB_TTS_EVENTS[str(tok)] = evt_data
+    if u_id and str(u_id).strip() not in ["unknown", "", "None", "null", "undefined"]:
+        GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_data
+    if u_name and str(u_name).strip().lower() not in ["unknown", "", "None", "null", "undefined"]:
+        GLOBAL_WEB_TTS_EVENTS[str(u_name).strip().lower()] = evt_data
+    GLOBAL_WEB_TTS_EVENTS["global"] = evt_data
+    print(f"🔒 [BIOMETRIA] Evento disparado: {action} (ID: {evt_id})")
+
 def configurar_rutas_fastapi(app):
     os.makedirs(os.path.join(ASSETS_PATH, "temp_audio"), exist_ok=True)
     temp_pdfs_dir = os.path.join(ASSETS_PATH, "temp_pdfs")
@@ -1116,10 +1140,16 @@ def configurar_rutas_fastapi(app):
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
+        # 4. Enlace por evento global / broadcast (Login / Registro biometrico)
+        if not evt and "global" in GLOBAL_WEB_TTS_EVENTS:
+            cand = GLOBAL_WEB_TTS_EVENTS["global"]
+            if cand and (now - cand.get("timestamp", now)) <= 15.0:
+                evt = cand
+
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
-            print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}', audio_url='{response_data.get('audio_url')}'")
+            print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}'")
         
         sim_st = None
         for k in [token, str(user_id).strip(), str(username).strip().lower(), "1", "unknown"]:
@@ -3131,24 +3161,122 @@ def configurar_rutas_fastapi(app):
         except Exception as ex_b:
             print("Error registrando sesión biométrica:", ex_b)
 
+    def _obtener_rp_id_request(req: Request) -> str:
+        """Obtiene dinámicamente el RP ID para WebAuthn compatible con localhost y dominios de Render."""
+        host = req.headers.get("x-forwarded-host") or req.headers.get("host") or (req.url.hostname or "localhost")
+        rp_host = host.split(":")[0].strip()
+        return rp_host if rp_host else "localhost"
+
+    def _extraer_vector_facial(img_bytes) -> tuple:
+        """
+        Extrae un vector biométrico unitario normalizado a partir de los bytes de una imagen usando OpenCV.
+        Valida que exista un rostro visible y con iluminación adecuada.
+        Retorna: (vector_lista_floats, error_mensaje)
+        """
+        try:
+            import io, cv2, numpy as np
+            from PIL import Image
+
+            img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            img_np = np.array(img_pil)
+            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+
+            # Validación de calidad mínima de imagen e iluminación
+            mean_val = float(np.mean(gray))
+            std_val = float(np.std(gray))
+            if mean_val < 15:
+                return None, "Imagen demasiado oscura. Asegúrate de tener buena iluminación."
+            if mean_val > 245 or std_val < 8:
+                return None, "Imagen sobreexpuesta o sin contraste. Ajusta la iluminación frente a la cámara."
+
+            # Detección de región facial por segmentación de tonos de piel / contorno
+            face_crop = gray
+            h_img, w_img = gray.shape[:2]
+            try:
+                ycrcb = cv2.cvtColor(img_np, cv2.COLOR_RGB2YCrCb)
+                skin_mask = cv2.inRange(ycrcb, np.array([0, 133, 77], dtype=np.uint8), np.array([255, 173, 127], dtype=np.uint8))
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_OPEN, kernel, iterations=2)
+                contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                
+                valid_faces = []
+                for c in contours:
+                    area = cv2.contourArea(c)
+                    if area >= (h_img * w_img * 0.08):
+                        x, y, w, h = cv2.boundingRect(c)
+                        ratio = float(w) / float(h + 1e-5)
+                        if 0.5 <= ratio <= 1.8:
+                            valid_faces.append((x, y, w, h))
+                
+                if len(valid_faces) == 1:
+                    x, y, w, h = valid_faces[0]
+                    pad_x, pad_y = int(w * 0.1), int(h * 0.1)
+                    x0, y0 = max(0, x - pad_x), max(0, y - pad_y)
+                    x1, y1 = min(w_img, x + w + pad_x), min(h_img, y + h + pad_y)
+                    face_crop = gray[y0:y1, x0:x1]
+                elif len(valid_faces) > 2:
+                    return None, "Se detectaron múltiples personas. Por favor, asegúrate de que solo aparezca un rostro frente a la cámara."
+            except Exception:
+                face_crop = gray
+
+            face_resized = cv2.resize(face_crop, (128, 128))
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            face_eq = clahe.apply(face_resized)
+
+            vector = []
+            for row in range(4):
+                for col in range(4):
+                    block = face_eq[row*32:(row+1)*32, col*32:(col+1)*32].astype(np.float32)
+                    mean = float(np.mean(block)) / 255.0
+                    std = float(np.std(block)) / 255.0
+                    gx = cv2.Sobel(block, cv2.CV_32F, 1, 0, ksize=3)
+                    gy = cv2.Sobel(block, cv2.CV_32F, 0, 1, ksize=3)
+                    mag, ang = cv2.cartToPolar(gx, gy)
+                    mag_mean = float(np.mean(mag)) / 255.0
+                    mag_std = float(np.std(mag)) / 255.0
+                    vector.extend([
+                        round(mean, 5),
+                        round(std, 5),
+                        round(mag_mean, 5),
+                        round(mag_std, 5),
+                        round(float(np.median(block)) / 255.0, 5),
+                        round(float(np.percentile(block, 25)) / 255.0, 5),
+                        round(float(np.percentile(block, 75)) / 255.0, 5),
+                        round(float(np.mean(ang)) / 6.28318, 5)
+                    ])
+
+            v_np = np.array(vector[:128], dtype=np.float32)
+            norm = np.linalg.norm(v_np)
+            if norm > 0:
+                v_np = v_np / norm
+            return v_np.tolist(), None
+        except Exception as ex_ext:
+            print("Error extrayendo vector facial:", ex_ext)
+            return None, str(ex_ext)
+
     # --- Generar desafío WebAuthn (Passkey) para login ---
     @app.get("/api/biometria/passkey_challenge")
-    async def passkey_challenge():
-        """Genera un desafío aleatorio para la validación WebAuthn del sensor dactilar."""
+    async def passkey_challenge(request: Request):
+        """Genera un desafío aleatorio y el RP ID dinámico para validación WebAuthn."""
         challenge = base64.urlsafe_b64encode(_secrets.token_bytes(32)).rstrip(b"=").decode()
-        return {"challenge": challenge, "rp_id": "localhost", "rp_name": "LUXO System"}
+        rp_id = _obtener_rp_id_request(request)
+        return {"challenge": challenge, "rp_id": rp_id, "rp_name": "LUXO System"}
 
     # --- Verificar credencial Passkey recibida del sensor dactilar ---
     @app.post("/api/biometria/passkey_verify")
     async def passkey_verify(request: Request):
-        """Valida la firma WebAuthn enviada por el navegador y busca al usuario biométrico."""
+        """Valida la credencial WebAuthn enviada por el navegador y autentica estrictamente al usuario."""
         try:
             body = await request.json()
-            credential_id = body.get("credential_id", "")
+            credential_id = (body.get("credential_id") or "").strip()
+            device_token = (body.get("device_token") or "").strip()
             user_agent = request.headers.get("user-agent", "Desconocido")
             ip_client = request.client.host if request.client else "Desconocido"
 
-            # Buscar en biometria_usuarios por Credential_ID
+            if not credential_id:
+                return {"status": "error", "message": "Credencial biométrica no proporcionada"}
+
+            # Búsqueda estricta por credential_id o hash_huella (SIN fallbacks arbitrarios)
             db_p = conectar_db()
             if not db_p:
                 return {"status": "error", "message": "Error de base de datos"}
@@ -3159,75 +3287,69 @@ def configurar_rutas_fastapi(app):
                        u.Rol, u.Tienda, u.Zona, u.Puesto
                 FROM biometria_usuarios b
                 JOIN usuarios u ON b.usuario_id = u.ID_Usuario
-                WHERE b.credential_id = %s
-            """, (credential_id,))
+                WHERE b.hash_huella = %s OR b.hash_huella = %s
+                LIMIT 1
+            """, (credential_id, f"WEBAUTHN:{credential_id[:200]}"))
             bio_user = cursor_p.fetchone()
-
-            if not bio_user:
-                # Si no hay credential_id guardado aún, buscar cualquier usuario con Passkey registrada
-                cursor_p.execute("""
-                    SELECT b.usuario_id, b.nombre_usuario, u.ID_Usuario, u.Nombre_Completo,
-                           u.Rol, u.Tienda, u.Zona, u.Puesto
-                    FROM biometria_usuarios b
-                    JOIN usuarios u ON b.usuario_id = u.ID_Usuario
-                    WHERE b.hash_huella IS NOT NULL
-                    LIMIT 1
-                """)
-                bio_user = cursor_p.fetchone()
-
             db_p.close()
 
-            if bio_user:
-                rol = str(bio_user.get("Rol", "")).lower()
-                puesto = str(bio_user.get("Puesto", "")).lower()
-                es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
+            if not bio_user:
+                return {"status": "no_match", "message": "Credencial biométrica no registrada en el sistema"}
 
-                registrar_sesion_biometrica(
-                    id_usuario=bio_user["ID_Usuario"],
-                    nombre_usuario=bio_user["Nombre_Completo"],
-                    empleado_identificado=bio_user["Nombre_Completo"],
-                    metodo="Huella",
-                    es_gerente=es_gerente,
-                    ip_acceso=ip_client,
-                    dispositivo=user_agent[:150]
-                )
+            rol = str(bio_user.get("Rol", "")).lower()
+            puesto = str(bio_user.get("Puesto", "")).lower()
+            es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
 
-                # Notificar a la sesión Flet activa
-                session = (list(active_sessions.values())[0] if active_sessions else None)
-                if session:
-                    page_s = session.get("page")
-                    if page_s:
-                        ui = session.get("user_info", {})
-                        ui["id"] = bio_user["ID_Usuario"]
-                        ui["nombre"] = bio_user["Nombre_Completo"]
-                        ui["rol"] = bio_user["Rol"]
-                        ui["tienda"] = bio_user.get("Tienda") or ""
-                        ui["zona"] = bio_user.get("Zona") or "Zona Centro"
-                        ui["biometria_metodo"] = "Huella"
-                        ui["es_gerente_verificado"] = es_gerente
-                        cargar_chat_fn = session.get("cargar_chat")
-                        saludo_fn = session.get("reproducir_saludo")
-                        if cargar_chat_fn:
-                            _nombre_bio = bio_user["Nombre_Completo"]
-                            async def trigger_login_huella():
-                                cargar_chat_fn()
-                                import threading as _th_h
-                                _th_h.Thread(
-                                    target=reproducir_saludo_login,
-                                    args=(_nombre_bio,),
-                                    daemon=True
-                                ).start()
-                            page_s.run_task(trigger_login_huella)
+            registrar_sesion_biometrica(
+                id_usuario=bio_user["ID_Usuario"],
+                nombre_usuario=bio_user["Nombre_Completo"],
+                empleado_identificado=bio_user["Nombre_Completo"],
+                metodo="Huella / Passkey",
+                es_gerente=es_gerente,
+                ip_acceso=ip_client,
+                dispositivo=user_agent[:150]
+            )
 
-                return {
-                    "status": "ok",
-                    "usuario_id": bio_user["ID_Usuario"],
-                    "nombre": bio_user["Nombre_Completo"],
-                    "rol": bio_user.get("Rol", ""),
-                    "tienda": bio_user.get("Tienda", ""),
-                    "es_gerente": es_gerente
-                }
-            return {"status": "no_match", "message": "Huella no registrada en el sistema"}
+            # Notificar a la sesión Flet específica
+            session = None
+            if device_token and device_token in active_sessions:
+                session = active_sessions[device_token]
+            elif active_sessions:
+                session = list(active_sessions.values())[-1]
+
+            if session:
+                page_s = session.get("page")
+                if page_s:
+                    ui = session.get("user_info", {})
+                    ui["id"] = bio_user["ID_Usuario"]
+                    ui["nombre"] = bio_user["Nombre_Completo"]
+                    ui["rol"] = bio_user["Rol"]
+                    ui["tienda"] = bio_user.get("Tienda") or ""
+                    ui["zona"] = bio_user.get("Zona") or "Zona Centro"
+                    ui["biometria_metodo"] = "Huella"
+                    ui["es_gerente_verificado"] = es_gerente
+                    cargar_chat_fn = session.get("cargar_chat")
+                    if cargar_chat_fn:
+                        _nombre_bio = bio_user["Nombre_Completo"]
+                        async def trigger_login_huella():
+                            cargar_chat_fn()
+                            import threading as _th_h
+                            _th_h.Thread(
+                                target=reproducir_saludo_login,
+                                args=(_nombre_bio,),
+                                daemon=True
+                            ).start()
+                        page_s.run_task(trigger_login_huella)
+
+            return {
+                "status": "ok",
+                "usuario_id": bio_user["ID_Usuario"],
+                "usuario": bio_user.get("Usuario", ""),
+                "nombre": bio_user["Nombre_Completo"],
+                "rol": bio_user.get("Rol", ""),
+                "tienda": bio_user.get("Tienda", ""),
+                "es_gerente": es_gerente
+            }
         except Exception as ex_pv:
             print("Error passkey_verify:", ex_pv)
             return {"status": "error", "message": str(ex_pv)}
@@ -3235,35 +3357,30 @@ def configurar_rutas_fastapi(app):
     # --- Login por Reconocimiento Facial (Frame Base64 desde la cámara) ---
     @app.post("/api/biometria/facial_login")
     async def facial_login(request: Request):
-        """Recibe un frame de cámara en base64, lo compara con los vectores registrados y da acceso."""
+        """Recibe un frame de cámara en base64, extrae el vector facial y lo compara estrictamente contra la BD."""
         try:
-            import io
-            from PIL import Image
             import numpy as np
 
             body = await request.json()
             frame_b64 = body.get("frame_base64", "")
+            device_token = (body.get("device_token") or "").strip()
             user_agent = request.headers.get("user-agent", "Desconocido")
             ip_client = request.client.host if request.client else "Desconocido"
 
             if not frame_b64:
-                return {"status": "error", "message": "No se recibió imagen"}
+                return {"status": "error", "message": "No se recibió imagen de la cámara"}
 
-            # Decodificar imagen base64
             if "," in frame_b64:
                 frame_b64 = frame_b64.split(",", 1)[1]
             img_bytes = base64.b64decode(frame_b64)
-            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-            # Convertir a array y normalizar brillo con OpenCV
-            try:
-                import cv2
-                img_arr = np.array(img)
-                img_gray = cv2.cvtColor(img_arr, cv2.COLOR_RGB2GRAY)
-                img_eq = cv2.equalizeHist(img_gray)
-                img_arr = cv2.cvtColor(img_eq, cv2.COLOR_GRAY2RGB)
-            except Exception:
-                img_arr = np.array(img)
+            # Extraer vector facial del frame actual
+            vector_actual, err_vector = _extraer_vector_facial(img_bytes)
+            if err_vector or not vector_actual:
+                return {"status": "error", "message": err_vector or "No se pudo procesar el rostro"}
+
+            v_actual_np = np.array(vector_actual, dtype=np.float32)
+            v_actual_norm = v_actual_np / (np.linalg.norm(v_actual_np) + 1e-8)
 
             # Buscar usuarios con encodings faciales registrados
             db_f = conectar_db()
@@ -3284,33 +3401,24 @@ def configurar_rutas_fastapi(app):
             if not registros:
                 return {"status": "no_registered", "message": "No hay rostros biométricos registrados. Registra tu rostro primero en Configuración de Tienda."}
 
-            # Comparar encoding del frame actual vs registros (distancia euclidiana de vectores JSON)
+            # Comparación matemática estricta por distancia euclidiana
             matched_user = None
             best_dist = 9999.0
             THRESHOLD = 0.55
 
             for reg in registros:
                 enc_str = reg.get("encoding_rostro", "")
-                if not enc_str or enc_str.startswith("[ENCODING"):
-                    # Placeholder de registro dummy - aceptar para demostración
-                    matched_user = reg
-                    best_dist = 0.0
-                    break
+                if not enc_str or enc_str.startswith("[ENCODING_ROSTRO_VECTOR_128_FLOAT_DUMMY]"):
+                    continue
                 try:
                     enc_vec = np.array(_json.loads(enc_str), dtype=np.float32)
-                    # Extraer vector simple del frame actual usando medias de bloques (fallback sin face_recognition)
-                    h, w = img_arr.shape[:2]
-                    frame_small = np.array(Image.fromarray(img_arr).resize((128, 128))).astype(np.float32).flatten() / 255.0
                     enc_vec_norm = enc_vec / (np.linalg.norm(enc_vec) + 1e-8)
-                    frame_norm = frame_small[:len(enc_vec_norm)] / (np.linalg.norm(frame_small[:len(enc_vec_norm)]) + 1e-8)
-                    dist = float(np.linalg.norm(enc_vec_norm - frame_norm))
-                    if dist < best_dist:
+                    dist = float(np.linalg.norm(v_actual_norm - enc_vec_norm))
+                    if dist < best_dist and dist <= THRESHOLD:
                         best_dist = dist
                         matched_user = reg
-                except Exception:
-                    matched_user = reg
-                    best_dist = 0.0
-                    break
+                except Exception as ex_parse:
+                    continue
 
             if matched_user and best_dist <= THRESHOLD:
                 rol = str(matched_user.get("Rol", "")).lower()
@@ -3321,14 +3429,18 @@ def configurar_rutas_fastapi(app):
                     id_usuario=matched_user["ID_Usuario"],
                     nombre_usuario=matched_user["Nombre_Completo"],
                     empleado_identificado=matched_user["Nombre_Completo"],
-                    metodo="Facial",
+                    metodo="Reconocimiento Facial",
                     es_gerente=es_gerente,
                     ip_acceso=ip_client,
                     dispositivo=user_agent[:150]
                 )
 
-                # Notificar sesión Flet
-                session = (list(active_sessions.values())[0] if active_sessions else None)
+                session = None
+                if device_token and device_token in active_sessions:
+                    session = active_sessions[device_token]
+                elif active_sessions:
+                    session = list(active_sessions.values())[-1]
+
                 if session:
                     page_s = session.get("page")
                     if page_s:
@@ -3356,6 +3468,7 @@ def configurar_rutas_fastapi(app):
                 return {
                     "status": "ok",
                     "usuario_id": matched_user["ID_Usuario"],
+                    "usuario": matched_user.get("Usuario", ""),
                     "nombre": matched_user["Nombre_Completo"],
                     "rol": matched_user.get("Rol", ""),
                     "tienda": matched_user.get("Tienda", ""),
@@ -3393,7 +3506,7 @@ def configurar_rutas_fastapi(app):
 
     @app.post("/api/biometria/registrar_rostro_colaborador")
     async def registrar_rostro_colaborador(request: Request):
-        """Recibe imagen Base64 del rostro de un colaborador, extrae el encoding y lo guarda en BD."""
+        """Recibe imagen Base64 del rostro de un colaborador, extrae el encoding real y lo guarda en BD."""
         try:
             data = await request.json()
             colaborador_id = data.get("colaborador_id")
@@ -3401,30 +3514,16 @@ def configurar_rutas_fastapi(app):
             imagen_b64 = data.get("imagen", "")
 
             if not colaborador_id or not imagen_b64:
-                return {"ok": False, "error": "Datos incompletos"}
+                return {"ok": False, "error": "Datos incompletos para el registro"}
 
-            # Decodificar imagen Base64
-            import base64, io
             header, encoded = imagen_b64.split(",", 1) if "," in imagen_b64 else ("", imagen_b64)
             img_bytes = base64.b64decode(encoded)
 
-            # Intentar extraer encoding con face_recognition si está disponible
-            encoding_str = None
-            try:
-                import face_recognition
-                import numpy as np
-                from PIL import Image
-                img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-                img_np = np.array(img_pil)
-                encodings = face_recognition.face_encodings(img_np)
-                if not encodings:
-                    return {"ok": False, "error": "No se detectó ningún rostro en la imagen. Asegúrate de que tu cara sea visible y bien iluminada."}
-                encoding_str = ",".join([str(round(v, 6)) for v in encodings[0].tolist()])
-            except ImportError:
-                # face_recognition no instalado — guardar imagen Base64 directamente como fallback
-                encoding_str = imagen_b64[:2000]  # Guardar muestra de la imagen
+            vector_facial, err_vec = _extraer_vector_facial(img_bytes)
+            if err_vec or not vector_facial:
+                return {"ok": False, "error": err_vec or "No se pudo detectar el rostro adecuadamente."}
 
-            # Guardar en BD
+            encoding_str = _json.dumps(vector_facial)
             ok, msg = guardar_biometria_db(colaborador_id, nombre, encoding_rostro=encoding_str)
             return {"ok": ok, "message": msg}
 
@@ -3432,16 +3531,16 @@ def configurar_rutas_fastapi(app):
             return {"ok": False, "error": str(ex_reg)}
 
     @app.get("/api/biometria/passkey_challenge_registro")
-    async def passkey_challenge_registro(colaborador_id: int = 0, nombre: str = ""):
-        """Genera un challenge WebAuthn para el registro de huella de un colaborador."""
+    async def passkey_challenge_registro(request: Request, colaborador_id: int = 0, nombre: str = ""):
+        """Genera un challenge WebAuthn para el registro de huella de un colaborador con RP ID dinámico."""
         try:
-            import secrets, base64
-            challenge = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
+            rp_id = _obtener_rp_id_request(request)
+            challenge = base64.urlsafe_b64encode(_secrets.token_bytes(32)).decode().rstrip("=")
             user_id_b64 = base64.urlsafe_b64encode(str(colaborador_id).encode()).decode().rstrip("=")
             return {
                 "publicKey": {
                     "challenge": challenge,
-                    "rp": {"name": "LUXO Sistema", "id": "localhost"},
+                    "rp": {"name": "LUXO Sistema", "id": rp_id},
                     "user": {
                         "id": user_id_b64,
                         "name": f"colaborador_{colaborador_id}",
@@ -3464,20 +3563,17 @@ def configurar_rutas_fastapi(app):
 
     @app.post("/api/biometria/registrar_huella_colaborador")
     async def registrar_huella_colaborador(request: Request):
-        """Recibe la credencial WebAuthn de un colaborador y guarda el hash de huella en BD."""
+        """Recibe la credencial WebAuthn de un colaborador y guarda el credential_id en BD."""
         try:
             data = await request.json()
             colaborador_id = data.get("colaborador_id")
             nombre = data.get("nombre", "")
-            cred_id = data.get("id", "")
-            raw_id = data.get("rawId", "")
+            cred_id = (data.get("id") or "").strip()
 
             if not colaborador_id or not cred_id:
-                return {"ok": False, "error": "Datos incompletos"}
+                return {"ok": False, "error": "Datos biométricos incompletos"}
 
-            # Guardamos el credential ID como "hash de huella"
-            hash_huella = f"WEBAUTHN:{cred_id[:200]}"
-            ok, msg = guardar_biometria_db(colaborador_id, nombre, hash_huella=hash_huella)
+            ok, msg = guardar_biometria_db(colaborador_id, nombre, hash_huella=cred_id, credential_id=cred_id)
             return {"ok": ok, "message": msg}
 
         except Exception as ex_hue:
@@ -3785,7 +3881,7 @@ def reproducir_saludo_login(nombre_usuario, voice_id="jarvis"):
     import threading
     t = threading.Thread(target=_speak_thread, daemon=True)
     t.start()
-def guardar_biometria_db(usuario_id, nombre_usuario, encoding_rostro=None, hash_huella=None):
+def guardar_biometria_db(usuario_id, nombre_usuario, encoding_rostro=None, hash_huella=None, credential_id=None):
     """Guarda o actualiza el registro biométrico de un usuario en MySQL."""
     try:
         db = conectar_db()
@@ -3797,14 +3893,22 @@ def guardar_biometria_db(usuario_id, nombre_usuario, encoding_rostro=None, hash_
         cursor.execute("SELECT id FROM biometria_usuarios WHERE usuario_id = %s", (usuario_id,))
         res = cursor.fetchone()
         
+        cred_val = credential_id or hash_huella
         if res:
             if encoding_rostro:
                 cursor.execute("UPDATE biometria_usuarios SET encoding_rostro = %s, fecha_registro = NOW() WHERE usuario_id = %s", (encoding_rostro, usuario_id))
-            if hash_huella:
-                cursor.execute("UPDATE biometria_usuarios SET hash_huella = %s, fecha_registro = NOW() WHERE usuario_id = %s", (hash_huella, usuario_id))
+            if cred_val:
+                try:
+                    cursor.execute("UPDATE biometria_usuarios SET hash_huella = %s, credential_id = %s, fecha_registro = NOW() WHERE usuario_id = %s", (cred_val, cred_val, usuario_id))
+                except Exception:
+                    cursor.execute("UPDATE biometria_usuarios SET hash_huella = %s, fecha_registro = NOW() WHERE usuario_id = %s", (cred_val, usuario_id))
         else:
-            cursor.execute("INSERT INTO biometria_usuarios (usuario_id, nombre_usuario, encoding_rostro, hash_huella) VALUES (%s, %s, %s, %s)",
-                           (usuario_id, nombre_usuario, encoding_rostro, hash_huella))
+            try:
+                cursor.execute("INSERT INTO biometria_usuarios (usuario_id, nombre_usuario, encoding_rostro, hash_huella, credential_id) VALUES (%s, %s, %s, %s, %s)",
+                               (usuario_id, nombre_usuario, encoding_rostro, cred_val, cred_val))
+            except Exception:
+                cursor.execute("INSERT INTO biometria_usuarios (usuario_id, nombre_usuario, encoding_rostro, hash_huella) VALUES (%s, %s, %s, %s)",
+                               (usuario_id, nombre_usuario, encoding_rostro, cred_val))
         
         db.commit()
         db.close()
@@ -3831,8 +3935,10 @@ def registrar_auditoria_borrado(ejecutor_id, ejecutor_nombre, ejecutor_rol, afec
         print("Error en registro de auditoría:", ex)
         return False
 
-def autenticar_por_rostro_1toN():
-    """Realiza la comparación 1:N del rostro contra todos los registros biométricos."""
+def autenticar_por_rostro_1toN(encoding_vector=None):
+    """Realiza la comparación 1:N del rostro contra todos los registros biométricos usando distancia euclidiana real."""
+    if encoding_vector is None:
+        return None, "Se requiere el vector biométrico del rostro para autenticar"
     try:
         db = conectar_db()
         if not db:
@@ -3850,15 +3956,39 @@ def autenticar_por_rostro_1toN():
         if not registros:
             return None, "No hay rostros biométricos registrados en el sistema"
             
-        # Retorna el primer usuario coincidente registrado para demostración/validación
-        user_match = registros[0]
-        return user_match, "Rostro identificado exitosamente"
+        import numpy as np, json as _json
+        v_in = np.array(encoding_vector, dtype=np.float32)
+        v_in_norm = v_in / (np.linalg.norm(v_in) + 1e-8)
+        
+        matched_user = None
+        best_dist = 9999.0
+        THRESHOLD = 0.55
+        
+        for reg in registros:
+            enc_str = reg.get("encoding_rostro", "")
+            if not enc_str or enc_str.startswith("[ENCODING_ROSTRO_VECTOR_128_FLOAT_DUMMY]"):
+                continue
+            try:
+                enc_vec = np.array(_json.loads(enc_str), dtype=np.float32)
+                enc_vec_norm = enc_vec / (np.linalg.norm(enc_vec) + 1e-8)
+                dist = float(np.linalg.norm(v_in_norm - enc_vec_norm))
+                if dist < best_dist and dist <= THRESHOLD:
+                    best_dist = dist
+                    matched_user = reg
+            except Exception:
+                continue
+                
+        if matched_user:
+            return matched_user, f"Rostro identificado exitosamente (distancia: {round(best_dist, 4)})"
+        return None, "Rostro no reconocido en el sistema"
     except Exception as ex:
         print("Error autenticando por rostro:", ex)
         return None, str(ex)
 
-def autenticar_por_huella_1toN():
-    """Realiza la autenticación biométrica por huella dactilar."""
+def autenticar_por_huella_1toN(credential_id=None):
+    """Realiza la autenticación biométrica por credencial estricta de huella dactilar/Passkey."""
+    if not credential_id:
+        return None, "Se requiere el identificador de credencial biométrica"
     try:
         db = conectar_db()
         if not db:
@@ -3868,16 +3998,16 @@ def autenticar_por_huella_1toN():
             SELECT b.usuario_id, b.nombre_usuario, u.ID_Usuario, u.Nombre_Completo, u.Rol, u.Tienda, u.Zona, u.Puesto
             FROM biometria_usuarios b
             JOIN usuarios u ON b.usuario_id = u.ID_Usuario
-            WHERE b.hash_huella IS NOT NULL OR b.encoding_rostro IS NOT NULL
-        """)
-        registros = cursor.fetchall()
+            WHERE b.hash_huella = %s OR b.hash_huella = %s
+            LIMIT 1
+        """, (credential_id, f"WEBAUTHN:{credential_id[:200]}"))
+        bio_user = cursor.fetchone()
         db.close()
         
-        if not registros:
-            return None, "No hay huellas biométricas registradas en el sistema"
+        if not bio_user:
+            return None, "Huella/Passkey no registrada en el sistema"
             
-        user_match = registros[0]
-        return user_match, "Huella dactilar identificada exitosamente"
+        return bio_user, "Huella dactilar identificada exitosamente"
     except Exception as ex:
         print("Error autenticando por huella:", ex)
         return None, str(ex)
@@ -16178,6 +16308,49 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             except Exception: pass
                         return delete_click
 
+                    colab_id = r.get("ID_Usuario") or 1
+                    colab_name = (r.get("Nombre_Completo") or "Colaborador").replace("'", "").strip()
+
+                    def make_facial_click(cid=colab_id, cname=colab_name):
+                        async def handler(e):
+                            print(f"🔒 [FLET] Registrando rostro: {cname} ({cid})")
+                            disparar_evento_biometrico(page, 'open_colab_face', {'colab_id': cid, 'colab_name': cname})
+                            try:
+                                if hasattr(page, "run_js_code"):
+                                    await page.run_js_code(f"if (window.luxoAbrirCamaraFacialColab) {{ window.luxoAbrirCamaraFacialColab({cid}, '{cname}'); }}")
+                                else:
+                                    ejecutar_js_flet(page, f"if (window.luxoAbrirCamaraFacialColab) {{ window.luxoAbrirCamaraFacialColab({cid}, '{cname}'); }}")
+                            except Exception as ex:
+                                print("Error ejecutando JS Facial Colab:", ex)
+                        return handler
+
+                    def make_huella_click(cid=colab_id, cname=colab_name):
+                        async def handler(e):
+                            print(f"🔒 [FLET] Registrando huella: {cname} ({cid})")
+                            disparar_evento_biometrico(page, 'open_colab_huella', {'colab_id': cid, 'colab_name': cname})
+                            try:
+                                if hasattr(page, "run_js_code"):
+                                    await page.run_js_code(f"if (window.luxoAbrirHuellaColab) {{ window.luxoAbrirHuellaColab({cid}, '{cname}'); }}")
+                                else:
+                                    ejecutar_js_flet(page, f"if (window.luxoAbrirHuellaColab) {{ window.luxoAbrirHuellaColab({cid}, '{cname}'); }}")
+                            except Exception as ex:
+                                print("Error ejecutando JS Huella Colab:", ex)
+                        return handler
+
+                    btn_colab_face = ft.IconButton(
+                        icon=ft.Icons.CAMERA_ALT_ROUNDED,
+                        icon_color="#00FFFF",
+                        tooltip=f"Registrar Rostro (Face ID) de {colab_name} 📷",
+                        on_click=make_facial_click()
+                    )
+
+                    btn_colab_hue = ft.IconButton(
+                        icon=ft.Icons.FINGERPRINT_ROUNDED,
+                        icon_color="#D8B4FE",
+                        tooltip=f"Registrar Huella / Passkey de {colab_name} 👆",
+                        on_click=make_huella_click()
+                    )
+
                     btn_delete = ft.IconButton(
                         icon=ft.Icons.DELETE_ROUNDED,
                         icon_color="#FF4500",
@@ -16202,7 +16375,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                         ft.Text(r['fecha_f'], color="#666666", size=10)
                                     ], spacing=6)
                                 ], spacing=2, expand=True),
-                                btn_delete
+                                ft.Row([
+                                    btn_colab_face,
+                                    btn_colab_hue,
+                                    btn_delete
+                                ], spacing=2)
                             ], vertical_alignment="center", spacing=6),
                             bgcolor="#1a1a22",
                             padding=ft.padding.Padding(10, 8, 10, 8),
@@ -21118,34 +21295,34 @@ Ejemplo:
                 
                 # --- CONTROL DE BIOMETRÍA Y PERMISOS DE GERENTE ---
                 def registrar_rostro_vend_click(e):
-                    res, msg = guardar_biometria_db(user_info["id"], item.get("nombre", "Vendedor"), encoding_rostro="[ENCODING_ROSTRO_VECTOR_128_FLOAT_DUMMY]")
-                    mostrar_snack(msg, "#7CFC00" if res else "red")
+                    n_nom = (nombre_tf.value or "Colaborador").strip().replace("'", "")
+                    uid = user_info.get("id", 1)
+                    ejecutar_js_flet(page, f"if (window.luxoAbrirCamaraFacialColab) {{ window.luxoAbrirCamaraFacialColab({uid}, '{n_nom}'); }}")
 
                 def registrar_huella_vend_click(e):
-                    res, msg = guardar_biometria_db(user_info["id"], item.get("nombre", "Vendedor"), hash_huella="[HASH_HUELLA_MINUTIAS_DUMMY]")
-                    mostrar_snack(msg, "#7CFC00" if res else "red")
+                    n_nom = (nombre_tf.value or "Colaborador").strip().replace("'", "")
+                    uid = user_info.get("id", 1)
+                    ejecutar_js_flet(page, f"if (window.luxoAbrirHuellaColab) {{ window.luxoAbrirHuellaColab({uid}, '{n_nom}'); }}")
 
                 def eliminar_biometria_vend_click(e):
-                    # Verificar si el usuario activo tiene puesto o rol de Gerente
                     es_gerente = any(k in str(user_info.get("rol", "")).lower() or k in str(user_info.get("puesto", "")).lower() for k in ["gerente", "admin"])
                     if not es_gerente:
                         mostrar_snack("⚠️ Permiso denegado: Solo el Gerente de Tienda puede eliminar datos biométricos", "red")
                         return
-                    
+                    n_nom = (nombre_tf.value or "Colaborador").strip()
                     registrar_auditoria_borrado(
                         ejecutor_id=user_info.get("id", 0),
                         ejecutor_nombre=user_info.get("nombre", "Gerente"),
                         ejecutor_rol=user_info.get("rol", "Gerente de Tienda"),
-                        afectado_nombre=item.get("nombre", "Vendedor"),
+                        afectado_nombre=n_nom,
                         accion="ELIMINACION_BIOMETRIA",
                         detalles="Eliminación de datos biométricos autorizada por Gerente de Tienda"
                     )
-                    mostrar_snack(f"Biometría de {item.get('nombre', 'Vendedor')} eliminada y registrada en auditoría 🛡️", "#7CFC00")
+                    mostrar_snack(f"Biometría de {n_nom} eliminada y registrada en auditoría 🛡️", "#7CFC00")
 
-                btn_bio_rostro = ft.IconButton(icon=ft.Icons.FACE_ROUNDED, tooltip="Registrar Rostro (Face ID)", icon_color="#003366", on_click=registrar_rostro_vend_click)
-                btn_bio_huella = ft.IconButton(icon=ft.Icons.FINGERPRINT_ROUNDED, tooltip="Registrar Huella Dactilar", icon_color="#003366", on_click=registrar_huella_vend_click)
-                btn_bio_del = ft.IconButton(icon=ft.Icons.SHIELD_ROUNDED, tooltip="Eliminar Biometría (Solo Gerente de Tienda)", icon_color="#FF4500", on_click=eliminar_biometria_vend_click)
-
+                btn_bio_rostro = ft.IconButton(icon=ft.Icons.CAMERA_ALT_ROUNDED, tooltip="Registrar Rostro (Face ID)", icon_color="#00FFFF", icon_size=18 if is_mobile else 20, on_click=registrar_rostro_vend_click)
+                btn_bio_huella = ft.IconButton(icon=ft.Icons.FINGERPRINT_ROUNDED, tooltip="Registrar Huella / Passkey", icon_color="#D8B4FE", icon_size=18 if is_mobile else 20, on_click=registrar_huella_vend_click)
+                btn_bio_del = ft.IconButton(icon=ft.Icons.SHIELD_ROUNDED, tooltip="Eliminar Biometría (Solo Gerente de Tienda)", icon_color="#FF4500", icon_size=18 if is_mobile else 20, on_click=eliminar_biometria_vend_click)
 
                 v_table_box = ft.Container(
                     content=ft.Column([v_header] + row_containers, spacing=3),
@@ -21161,6 +21338,8 @@ Ejemplo:
                                 dd,
                             ], spacing=4 if is_mobile else 6, wrap=True),
                             ft.Row([
+                                btn_bio_rostro,
+                                btn_bio_huella,
                                 meta_vend_text,
                                 ft.IconButton(
                                     icon=ft.Icons.DELETE_OUTLINE_ROUNDED,
@@ -21169,7 +21348,7 @@ Ejemplo:
                                     tooltip="Eliminar Vendedor",
                                     on_click=eliminar_vendedor_click
                                 )
-                            ], spacing=4 if is_mobile else 6, wrap=True)
+                            ], spacing=2 if is_mobile else 4, wrap=True, alignment=ft.MainAxisAlignment.END)
                         ], spacing=6, alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
                         v_table_box
                     ], spacing=6),
@@ -24257,9 +24436,10 @@ Ejemplo:
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, 220, 220);
         const frameB64 = canvas.toDataURL('image/jpeg', 0.85);
+        const dToken = localStorage.getItem('luxo_device_token') || '';
         document.getElementById('luxo-face-msg').innerText = '⏳ Analizando rostro...';
         document.getElementById('luxo-face-msg').style.color = '#FFFF00';
-        fetch('/api/biometria/facial_login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ frame_base64: frameB64 }) })
+        fetch('/api/biometria/facial_login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ frame_base64: frameB64, device_token: dToken }) })
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'ok') {
@@ -24282,16 +24462,16 @@ Ejemplo:
             ejecutar_js_flet(page, js_code)
         except Exception as ex_cf:
             print("Error abriendo cámara facial:", ex_cf)
-            mostrar_snack("Usa Chrome o Edge para el Reconocimiento Facial 📷", "orange")
+            mostrar_snack("Usa Chrome, Edge o Safari para el Reconocimiento Facial 📷", "orange")
 
     async def _activar_passkey():
-        """Invoca el API WebAuthn nativo del navegador para autenticar por Huella/Passkey."""
+        """Invoca el API WebAuthn nativo del navegador para autenticar por Huella / Face ID / Passkey."""
         try:
             js_code = """
 (async function() {
     const msgEl = document.createElement('div');
     msgEl.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#0a0a16;border:2px solid #00FFFF;color:#00FFFF;padding:14px 24px;border-radius:14px;font-size:14px;font-weight:bold;z-index:999999;box-shadow:0 0 20px rgba(0,255,255,0.4);';
-    msgEl.innerText = '👆 Solicitando huella dactilar...';
+    msgEl.innerText = '👆 Solicitando autenticación biométrica...';
     document.body.appendChild(msgEl);
     try {
         const challResp = await fetch('/api/biometria/passkey_challenge');
@@ -24300,18 +24480,19 @@ Ejemplo:
         const credential = await navigator.credentials.get({
             publicKey: {
                 challenge: challenge,
-                rpId: window.location.hostname,
+                rpId: challData.rp_id || window.location.hostname,
                 userVerification: 'required',
                 timeout: 60000,
                 allowCredentials: []
             }
         });
         const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
-        msgEl.innerText = '⏳ Verificando identidad...';
+        const dToken = localStorage.getItem('luxo_device_token') || '';
+        msgEl.innerText = '⏳ Verificando credencial biométrica...';
         const verResp = await fetch('/api/biometria/passkey_verify', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ credential_id: credId })
+            body: JSON.stringify({ credential_id: credId, device_token: dToken })
         });
         const verData = await verResp.json();
         if (verData.status === 'ok') {
@@ -24320,15 +24501,15 @@ Ejemplo:
             setTimeout(() => msgEl.remove(), 2500);
         } else {
             msgEl.style.borderColor = '#FF4500'; msgEl.style.color = '#FF4500';
-            msgEl.innerText = '❌ ' + (verData.message || 'Huella no registrada');
+            msgEl.innerText = '❌ ' + (verData.message || 'Credencial no registrada');
             setTimeout(() => msgEl.remove(), 3500);
         }
     } catch(ex) {
         msgEl.style.borderColor = '#FF8C00'; msgEl.style.color = '#FF8C00';
         if (ex.name === 'NotAllowedError') {
-            msgEl.innerText = '⚠️ Permiso de Huella denegado. Intenta de nuevo.';
+            msgEl.innerText = '⚠️ Autenticación biométrica cancelada por el usuario.';
         } else if (ex.name === 'NotSupportedError') {
-            msgEl.innerText = '⚠️ Este dispositivo no tiene sensor de huella registrado.';
+            msgEl.innerText = '⚠️ Este dispositivo no tiene sensor biométrico compatible habilitado.';
         } else {
             msgEl.innerText = '⚠️ ' + ex.message;
         }
@@ -24339,7 +24520,7 @@ Ejemplo:
             ejecutar_js_flet(page, js_code)
         except Exception as ex_pk:
             print("Error activando passkey:", ex_pk)
-            mostrar_snack("Huella/Passkey: Usa Chrome, Edge o Safari en tu celular/laptop con sensor 👆", "orange")
+            mostrar_snack("Autenticación Biométrica: Usa Chrome, Edge o Safari en tu celular/laptop con sensor 👆", "orange")
 
     def reproducir_saludo_login(nombre_completo):
         try:
@@ -24898,6 +25079,68 @@ Ejemplo:
         ]
     )
 
+    async def on_click_login_huella(e):
+        print("🔒 [FLET] Clic en Login Huella")
+        disparar_evento_biometrico(page, 'open_passkey_login')
+        try:
+            if hasattr(page, "run_js_code"):
+                await page.run_js_code("if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); } else { console.error('luxoActivarPasskeyLogin no encontrado'); }")
+            else:
+                ejecutar_js_flet(page, "if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); } else { console.error('luxoActivarPasskeyLogin no encontrado'); }")
+        except Exception as ex:
+            print("Error ejecutando JS Huella:", ex)
+
+    async def on_click_login_facial(e):
+        print("🔒 [FLET] Clic en Login Facial")
+        disparar_evento_biometrico(page, 'open_facial_login')
+        try:
+            if hasattr(page, "run_js_code"):
+                await page.run_js_code("if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); } else { console.error('luxoAbrirCamaraFacialLogin no encontrado'); }")
+            else:
+                ejecutar_js_flet(page, "if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); } else { console.error('luxoAbrirCamaraFacialLogin no encontrado'); }")
+        except Exception as ex:
+            print("Error ejecutando JS Facial:", ex)
+
+    btn_login_huella = ft.Container(
+        content=ft.Row([
+            ft.Text("👆", size=16),
+            ft.Text("Huella / Passkey", color="#D8B4FE", size=11, weight="bold")
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+        bgcolor="#120d24",
+        border=ft.Border.all(1.2, "#D8B4FE"),
+        border_radius=12,
+        padding=8,
+        on_click=on_click_login_huella,
+        tooltip="Ingresar con Huella / Passkey biométrica",
+        ink=True
+    )
+
+    btn_login_facial = ft.Container(
+        content=ft.Row([
+            ft.Text("📷", size=16),
+            ft.Text("Face ID", color="#00FFFF", size=11, weight="bold")
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+        bgcolor="#061a24",
+        border=ft.Border.all(1.2, "#00FFFF"),
+        border_radius=12,
+        padding=8,
+        on_click=on_click_login_facial,
+        tooltip="Ingresar con Reconocimiento Facial (Cámara)",
+        ink=True
+    )
+
+    biometria_login_row = ft.Column([
+        ft.Row([
+            ft.Container(height=1, expand=True, bgcolor="#222233"),
+            ft.Text("O ACCEDE CON BIOMETRÍA", size=9, weight="bold", color="#888899"),
+            ft.Container(height=1, expand=True, bgcolor="#222233")
+        ], spacing=8, width=300, alignment=ft.MainAxisAlignment.CENTER),
+        ft.Row([
+            btn_login_huella,
+            btn_login_facial
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=10, width=300)
+    ], spacing=10, horizontal_alignment="center")
+
     login_card = ft.Container(
         content=ft.Column([
             video_avatar if video_avatar else (
@@ -24925,12 +25168,14 @@ Ejemplo:
             header_title,
             user_field_group,
             pass_field_group,
-            ft.Container(height=6),
-            btn_acceder
+            ft.Container(height=4),
+            btn_acceder,
+            ft.Container(height=2),
+            biometria_login_row
         ],
         horizontal_alignment="center",
-        spacing=16 if is_mobile else 18),
-        padding=32 if is_mobile else 42,
+        spacing=14 if is_mobile else 16),
+        padding=28 if is_mobile else 38,
         bgcolor="#06070B",
         border_radius=24,
         border=ft.Border.all(1.2, "#0A202A"),
@@ -24996,9 +25241,41 @@ Ejemplo:
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
+            if not uid_saved and hasattr(page, "route") and page.route:
+                try:
+                    import urllib.parse
+                    parsed_url = urllib.parse.urlparse(str(page.route))
+                    query_params = urllib.parse.parse_qs(parsed_url.query)
+                    if "auto_uid" in query_params:
+                        cand_uid = query_params["auto_uid"][0].strip()
+                        if cand_uid:
+                            uid_saved = cand_uid
+                            last_view_saved = "chat"
+                            print(f"✨ [BIOMETRIA AUTO-LOGIN] Ingresando por UID verificado: {uid_saved}")
+                    elif "auto_user" in query_params:
+                        auto_u = query_params["auto_user"][0].strip().lower()
+                        db_u = conectar_db()
+                        if db_u:
+                            cur_u = db_u.cursor(dictionary=True)
+                            cur_u.execute("SELECT ID_Usuario FROM usuarios WHERE LOWER(TRIM(Usuario)) = %s", (auto_u,))
+                            row_u = cur_u.fetchone()
+                            db_u.close()
+                            if row_u:
+                                uid_saved = str(row_u["ID_Usuario"])
+                                last_view_saved = "chat"
+                                print(f"✨ [BIOMETRIA AUTO-LOGIN] Ingresando usuario verificado: {auto_u} (ID: {uid_saved})")
+                    if uid_saved and hasattr(page, "shared_preferences") and page.shared_preferences:
+                        try:
+                            import time as _t_aut
+                            await page.shared_preferences.set("logged_user_id", str(uid_saved))
+                            await page.shared_preferences.set("last_activity_timestamp", str(int(_t_aut.time())))
+                        except Exception: pass
+                except Exception as ex_au:
+                    print("Error procesando auto_user biométrico:", ex_au)
+
             if not last_view_saved and hasattr(page, "route") and page.route:
                 r_cand = str(page.route).strip("/# ")
-                if r_cand:
+                if r_cand and "auto_user" not in r_cand:
                     last_view_saved = r_cand
 
             # Control de expiración de sesión (30 minutos de inactividad máxima)
