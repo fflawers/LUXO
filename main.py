@@ -3174,46 +3174,67 @@ def configurar_rutas_fastapi(app):
     def _extraer_vector_facial(img_bytes) -> tuple:
         """
         Extrae un vector biométrico discriminativo normalizado de 128 dimensiones a partir de las facciones de la imagen.
-        Utiliza normalización de media cero espacial (ZNCC) e histogramas de gradiente orientados (HOG) en 16 celdas.
+        Utiliza ecualización adaptativa de iluminación CLAHE e histogramas de gradiente estructurales (Sobel) en 16 celdas.
         Retorna: (vector_lista_floats, error_mensaje)
         """
         try:
             import io, math, numpy as np
             from PIL import Image, ImageOps
+            import cv2
 
-            img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            w_orig, h_orig = img_pil.size
+            # 1. Decodificar bytes de la imagen
+            nparr = np.frombuffer(img_bytes, np.uint8)
+            img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img_bgr is None:
+                img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                img_bgr = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+
+            h_orig, w_orig = img_bgr.shape[:2]
             if w_orig < 30 or h_orig < 30:
                 return None, "Imagen inválida o demasiado pequeña"
 
-            gray = ImageOps.grayscale(img_pil)
-            cx, cy = int(w_orig * 0.08), int(h_orig * 0.08)
-            cropped = gray.crop((cx, cy, w_orig - cx, h_orig - cy)).resize((128, 128), Image.Resampling.BILINEAR)
+            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-            g_pix = np.array(cropped, dtype=np.float32)
-            g_mean = float(np.mean(g_pix))
-            g_std = float(np.std(g_pix))
+            # 2. Encuadre facial y redimensionado estándar 128x128
+            cx, cy = int(w_orig * 0.08), int(h_orig * 0.08)
+            face_crop = gray[cy:h_orig - cy, cx:w_orig - cx]
+            face_resized = cv2.resize(face_crop, (128, 128), interpolation=cv2.INTER_AREA)
+
+            # 3. Normalización adaptativa de iluminación (CLAHE - Elimina sombras y homogeniza contraste)
+            try:
+                clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+                face_norm = clahe.apply(face_resized)
+            except Exception:
+                g_mean = float(np.mean(face_resized))
+                g_std = float(np.std(face_resized)) + 1e-5
+                face_norm = ((face_resized - g_mean) / g_std * 50.0 + 128.0).clip(0, 255).astype(np.uint8)
 
             # Validación de contraste mínimo de facciones
-            if g_std < 10:
+            if float(np.std(face_norm)) < 8:
                 return None, "No se detectaron facciones o contraste suficiente. Ilumina tu rostro frente a la cámara."
 
-            # Imagen normalizada de media cero espacial
-            norm_img = (g_pix - g_mean) / (g_std + 1e-5)
-            gy, gx = np.gradient(norm_img)
-            mag = np.sqrt(gx**2 + gy**2)
-            ang = np.arctan2(gy, gx)
+            # 4. Extracción de gradientes de facciones estructurales
+            face_float = face_norm.astype(np.float32)
+            try:
+                gx = cv2.Sobel(face_float, cv2.CV_32F, 1, 0, ksize=3)
+                gy = cv2.Sobel(face_float, cv2.CV_32F, 0, 1, ksize=3)
+                mag, ang = cv2.cartToPolar(gx, gy, angleInDegrees=False)
+                ang = np.where(ang > np.pi, ang - 2 * np.pi, ang)
+            except Exception:
+                gy, gx = np.gradient(face_float)
+                mag = np.sqrt(gx**2 + gy**2)
+                ang = np.arctan2(gy, gx)
 
             # 16 celdas espaciales (4x4 de 32x32 px cada una)
             vector = []
             for r in range(4):
                 for c in range(4):
-                    blk_img = norm_img[r*32:(r+1)*32, c*32:(c+1)*32]
+                    blk_img = face_norm[r*32:(r+1)*32, c*32:(c+1)*32].astype(np.float32)
                     blk_mag = mag[r*32:(r+1)*32, c*32:(c+1)*32]
                     blk_ang = ang[r*32:(r+1)*32, c*32:(c+1)*32]
 
-                    b_m = float(np.mean(blk_img))
-                    b_s = float(np.std(blk_img))
+                    b_m = float(np.mean(blk_img)) / 255.0
+                    b_s = float(np.std(blk_img)) / 255.0
 
                     hist, _ = np.histogram(blk_ang, bins=6, range=(-np.pi, np.pi), weights=blk_mag)
                     h_norm = hist / (np.linalg.norm(hist) + 1e-6)
