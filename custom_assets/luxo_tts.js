@@ -121,11 +121,18 @@
         if (window._luxoAvatarAudioMuted) return;
 
         try {
-            if (window.speechSynthesis) {
-                try { window.speechSynthesis.cancel(); } catch(e){}
-            }
             let snd = document.getElementById('luxo_avatar_audio_el');
-            if (!snd) {
+            if (snd) {
+                // Si ya está reproduciéndose activamente, no interrumpir ni recargar
+                if (!snd.paused && snd.currentTime > 0) {
+                    return;
+                }
+                if (!snd.src || !snd.src.includes('saludo_login')) {
+                    snd.src = '/custom_assets/saludo_login.mp3';
+                }
+                snd.loop = true;
+                snd.volume = 1.0;
+            } else {
                 snd = document.createElement('audio');
                 snd.id = 'luxo_avatar_audio_el';
                 snd.preload = 'auto';
@@ -133,12 +140,6 @@
                 snd.loop = true;
                 snd.volume = 1.0;
                 (document.body || document.documentElement).appendChild(snd);
-            } else {
-                if (!snd.src || !snd.src.includes('saludo_login')) {
-                    snd.src = '/custom_assets/saludo_login.mp3';
-                }
-                snd.loop = true;
-                snd.volume = 1.0;
             }
             let p = snd.play();
             if (p !== undefined) {
@@ -374,11 +375,16 @@
     };
 
     // 7. Reproducir Audio Principal con Telemetría
-    window.luxoPlayDirect = function(audioUrl, text, voiceId, voiceGender) {
-        window.luxoPlayTts(text, audioUrl, 'direct_' + Date.now(), voiceId, voiceGender);
+    window.luxoPlayDirect = function(audioUrl, text, voiceId, voiceGender, id) {
+        let playId = id || ('direct_' + Date.now());
+        lastHandledTtsId = playId;
+        window.luxoPlayTts(text, audioUrl, playId, voiceId, voiceGender);
     };
 
     window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
+        if (id) {
+            lastHandledTtsId = id;
+        }
         window.luxoStopTts();
         if (audioUrl) {
             function tryPlayAudio(retriesLeft) {

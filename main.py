@@ -4982,7 +4982,7 @@ def main(page: ft.Page):
                     fullUrl = window.location.origin + fullUrl;
                 }}
                 if (window.luxoPlayDirect) {{
-                    window.luxoPlayDirect(fullUrl, '{clean_js_text}', '{voice_id}', '{voice_gender}');
+                    window.luxoPlayDirect(fullUrl, '{clean_js_text}', '{voice_id}', '{voice_gender}', '{evt_id}');
                 }} else if (window.luxoPlayTts) {{
                     window.luxoPlayTts('{clean_js_text}', fullUrl, '{evt_id}', '{voice_id}', '{voice_gender}');
                 }} else {{
@@ -6803,9 +6803,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                 try {
                     var snd = document.getElementById('luxo_avatar_audio_el');
                     if (snd) { snd.pause(); snd.currentTime = 0; snd.loop = false; }
-                    var gTts = document.getElementById('luxo_global_tts_player');
-                    if (gTts && gTts.src && gTts.src.includes('saludo_login')) { gTts.pause(); gTts.currentTime = 0; }
-                    if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); } catch(e){} }
                 } catch(e){}
             })();
             """
