@@ -3276,7 +3276,7 @@ def configurar_rutas_fastapi(app):
             if posibles_ids:
                 format_strings = ','.join(['%s'] * len(posibles_ids))
                 query = f"""
-                    SELECT b.usuario_id, b.nombre_usuario, b.hash_huella, u.ID_Usuario, u.Nombre_Completo,
+                    SELECT b.usuario_id, b.nombre_usuario, b.hash_huella, b.voz_preferida, u.ID_Usuario, u.Nombre_Completo,
                            u.Rol, u.Tienda, u.Zona, u.Puesto, u.Usuario
                     FROM biometria_usuarios b
                     JOIN usuarios u ON b.usuario_id = u.ID_Usuario
@@ -3291,7 +3291,7 @@ def configurar_rutas_fastapi(app):
                 try:
                     u_id = int(user_handle)
                     cursor_p.execute("""
-                        SELECT b.usuario_id, b.nombre_usuario, b.hash_huella, u.ID_Usuario, u.Nombre_Completo,
+                        SELECT b.usuario_id, b.nombre_usuario, b.hash_huella, b.voz_preferida, u.ID_Usuario, u.Nombre_Completo,
                                u.Rol, u.Tienda, u.Zona, u.Puesto, u.Usuario
                         FROM biometria_usuarios b
                         JOIN usuarios u ON b.usuario_id = u.ID_Usuario
@@ -3307,14 +3307,18 @@ def configurar_rutas_fastapi(app):
             if not bio_user:
                 return {"status": "no_match", "message": "Credencial biométrica no registrada en el sistema. Asegúrate de registrar tu huella en el Panel de Colaboradores."}
 
+            colab_nom_h = (bio_user.get("nombre_usuario") or "").strip()
+            nombre_identificado_h = colab_nom_h if colab_nom_h else bio_user["Nombre_Completo"]
+            voz_colab_h = (bio_user.get("voz_preferida") or "jarvis").strip()
+
             rol = str(bio_user.get("Rol", "")).lower()
             puesto = str(bio_user.get("Puesto", "")).lower()
             es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
 
             registrar_sesion_biometrica(
                 id_usuario=bio_user["ID_Usuario"],
-                nombre_usuario=bio_user["Nombre_Completo"],
-                empleado_identificado=bio_user["Nombre_Completo"],
+                nombre_usuario=nombre_identificado_h,
+                empleado_identificado=nombre_identificado_h,
                 metodo="Huella / Passkey",
                 es_gerente=es_gerente,
                 ip_acceso=ip_client,
@@ -3338,12 +3342,18 @@ def configurar_rutas_fastapi(app):
                     ui = session.get("user_info", {})
                     ui["id"] = bio_user["ID_Usuario"]
                     ui["usuario"] = bio_user.get("Usuario") or ""
-                    ui["nombre"] = bio_user["Nombre_Completo"]
+                    ui["nombre"] = nombre_identificado_h
+                    ui["nombre_colaborador"] = nombre_identificado_h
+                    ui["voz_preferida"] = voz_colab_h
                     ui["rol"] = bio_user["Rol"]
                     ui["tienda"] = bio_user.get("Tienda") or ""
                     ui["zona"] = bio_user.get("Zona") or "Zona Centro"
                     ui["biometria_metodo"] = "Huella"
                     ui["es_gerente_verificado"] = es_gerente
+                    
+                    user_voice_pref_sess = session.get("user_voice_pref")
+                    if user_voice_pref_sess is not None and isinstance(user_voice_pref_sess, list):
+                        user_voice_pref_sess[0] = voz_colab_h
                     
                     if hasattr(page_s, "shared_preferences") and page_s.shared_preferences:
                         import time as _t_sp_h
@@ -3356,13 +3366,14 @@ def configurar_rutas_fastapi(app):
 
                     cargar_chat_fn = session.get("cargar_chat")
                     if cargar_chat_fn:
-                        _nombre_bio = bio_user["Nombre_Completo"]
+                        _nombre_bio = nombre_identificado_h
+                        _voz_bio = voz_colab_h
                         async def trigger_login_huella():
                             cargar_chat_fn()
                             import threading as _th_h
                             _th_h.Thread(
                                 target=reproducir_saludo_login,
-                                args=(_nombre_bio,),
+                                args=(_nombre_bio, _voz_bio),
                                 daemon=True
                             ).start()
                         page_s.run_task(trigger_login_huella)
@@ -3371,9 +3382,10 @@ def configurar_rutas_fastapi(app):
                 "status": "ok",
                 "usuario_id": bio_user["ID_Usuario"],
                 "usuario": bio_user.get("Usuario", ""),
-                "nombre": bio_user["Nombre_Completo"],
+                "nombre": nombre_identificado_h,
                 "rol": bio_user.get("Rol", ""),
                 "tienda": bio_user.get("Tienda", ""),
+                "voz": voz_colab_h,
                 "es_gerente": es_gerente
             }
         except Exception as ex_pv:
@@ -3415,7 +3427,7 @@ def configurar_rutas_fastapi(app):
 
             cursor_f = db_f.cursor(dictionary=True)
             cursor_f.execute("""
-                SELECT b.usuario_id, b.nombre_usuario, b.encoding_rostro,
+                SELECT b.usuario_id, b.nombre_usuario, b.encoding_rostro, b.voz_preferida,
                        u.ID_Usuario, u.Nombre_Completo, u.Rol, u.Tienda, u.Zona, u.Puesto, u.Usuario
                 FROM biometria_usuarios b
                 JOIN usuarios u ON b.usuario_id = u.ID_Usuario
@@ -3447,14 +3459,18 @@ def configurar_rutas_fastapi(app):
                     continue
 
             if matched_user and best_sim >= MIN_SIM_THRESHOLD:
+                colab_nom_f = (matched_user.get("nombre_usuario") or "").strip()
+                nombre_identificado_f = colab_nom_f if colab_nom_f else matched_user["Nombre_Completo"]
+                voz_colab_f = (matched_user.get("voz_preferida") or "jarvis").strip()
+
                 rol = str(matched_user.get("Rol", "")).lower()
                 puesto = str(matched_user.get("Puesto", "")).lower()
                 es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
 
                 registrar_sesion_biometrica(
                     id_usuario=matched_user["ID_Usuario"],
-                    nombre_usuario=matched_user["Nombre_Completo"],
-                    empleado_identificado=matched_user["Nombre_Completo"],
+                    nombre_usuario=nombre_identificado_f,
+                    empleado_identificado=nombre_identificado_f,
                     metodo="Reconocimiento Facial",
                     es_gerente=es_gerente,
                     ip_acceso=ip_client,
@@ -3477,12 +3493,18 @@ def configurar_rutas_fastapi(app):
                         ui = session.get("user_info", {})
                         ui["id"] = matched_user["ID_Usuario"]
                         ui["usuario"] = matched_user.get("Usuario") or ""
-                        ui["nombre"] = matched_user["Nombre_Completo"]
+                        ui["nombre"] = nombre_identificado_f
+                        ui["nombre_colaborador"] = nombre_identificado_f
+                        ui["voz_preferida"] = voz_colab_f
                         ui["rol"] = matched_user["Rol"]
                         ui["tienda"] = matched_user.get("Tienda") or ""
                         ui["zona"] = matched_user.get("Zona") or "Zona Centro"
                         ui["biometria_metodo"] = "Facial"
                         ui["es_gerente_verificado"] = es_gerente
+                        
+                        user_voice_pref_sess = session.get("user_voice_pref")
+                        if user_voice_pref_sess is not None and isinstance(user_voice_pref_sess, list):
+                            user_voice_pref_sess[0] = voz_colab_f
                         
                         if hasattr(page_s, "shared_preferences") and page_s.shared_preferences:
                             import time as _t_sp_f
@@ -3495,13 +3517,14 @@ def configurar_rutas_fastapi(app):
 
                         cargar_chat_fn = session.get("cargar_chat")
                         if cargar_chat_fn:
-                            _nombre_facial = matched_user["Nombre_Completo"]
+                            _nombre_facial = nombre_identificado_f
+                            _voz_facial = voz_colab_f
                             async def trigger_login_facial():
                                 cargar_chat_fn()
                                 import threading as _th_f
                                 _th_f.Thread(
                                     target=reproducir_saludo_login,
-                                    args=(_nombre_facial,),
+                                    args=(_nombre_facial, _voz_facial),
                                     daemon=True
                                 ).start()
                             page_s.run_task(trigger_login_facial)
@@ -3510,9 +3533,10 @@ def configurar_rutas_fastapi(app):
                     "status": "ok",
                     "usuario_id": matched_user["ID_Usuario"],
                     "usuario": matched_user.get("Usuario", ""),
-                    "nombre": matched_user["Nombre_Completo"],
+                    "nombre": nombre_identificado_f,
                     "rol": matched_user.get("Rol", ""),
                     "tienda": matched_user.get("Tienda", ""),
+                    "voz": voz_colab_f,
                     "es_gerente": es_gerente,
                     "similitud": round(best_sim, 4)
                 }
@@ -3624,8 +3648,23 @@ def configurar_rutas_fastapi(app):
         except Exception as ex_hue:
             return {"ok": False, "error": str(ex_hue)}
 
-    our_routes = app.router.routes[-10:]
-    del app.router.routes[-10:]
+    @app.post("/api/biometria/guardar_voz_colaborador")
+    async def guardar_voz_colaborador(request: Request):
+        """Guarda o actualiza la preferencia de voz de un colaborador."""
+        try:
+            data = await request.json()
+            colaborador_id = data.get("colaborador_id")
+            nombre = data.get("nombre", "")
+            voz = data.get("voz", "jarvis")
+            if not colaborador_id:
+                return {"ok": False, "error": "ID de colaborador requerido"}
+            ok, msg = guardar_biometria_db(colaborador_id, nombre, voz_preferida=voz)
+            return {"ok": ok, "message": msg}
+        except Exception as ex_gv:
+            return {"ok": False, "error": str(ex_gv)}
+
+    our_routes = app.router.routes[-11:]
+    del app.router.routes[-11:]
     app.router.routes = our_routes + app.router.routes
 
 
@@ -3926,38 +3965,75 @@ def reproducir_saludo_login(nombre_usuario, voice_id="jarvis"):
     import threading
     t = threading.Thread(target=_speak_thread, daemon=True)
     t.start()
-def guardar_biometria_db(usuario_id, nombre_usuario, encoding_rostro=None, hash_huella=None, credential_id=None):
-    """Guarda o actualiza el registro biométrico de un usuario en MySQL."""
+def guardar_biometria_db(usuario_id, nombre_usuario, encoding_rostro=None, hash_huella=None, credential_id=None, voz_preferida=None):
+    """Guarda o actualiza el registro biométrico de un usuario/colaborador en MySQL con su voz preferida."""
     try:
         db = conectar_db()
         if not db:
             return False, "Error de conexión a Base de Datos"
         cursor = db.cursor()
         
-        # Verificar si ya existe registro
-        cursor.execute("SELECT id FROM biometria_usuarios WHERE usuario_id = %s", (usuario_id,))
+        # Asegurar que exista la columna voz_preferida en biometria_usuarios
+        try:
+            cursor.execute("ALTER TABLE biometria_usuarios ADD COLUMN voz_preferida VARCHAR(50) DEFAULT 'jarvis'")
+            db.commit()
+        except Exception:
+            pass
+
+        n_clean = (nombre_usuario or "").strip()
+        
+        # Verificar si ya existe registro para este colaborador específico o usuario general
+        if n_clean:
+            cursor.execute("""
+                SELECT id FROM biometria_usuarios 
+                WHERE usuario_id = %s AND (LOWER(TRIM(nombre_usuario)) = %s OR nombre_usuario = %s)
+                LIMIT 1
+            """, (usuario_id, n_clean.lower(), n_clean))
+        else:
+            cursor.execute("SELECT id FROM biometria_usuarios WHERE usuario_id = %s LIMIT 1", (usuario_id,))
         res = cursor.fetchone()
         
         cred_val = credential_id or hash_huella
+        v_pref = voz_preferida or "jarvis"
+
         if res:
-            if encoding_rostro:
-                cursor.execute("UPDATE biometria_usuarios SET encoding_rostro = %s, fecha_registro = NOW() WHERE usuario_id = %s", (encoding_rostro, usuario_id))
-            if cred_val:
-                try:
-                    cursor.execute("UPDATE biometria_usuarios SET hash_huella = %s, credential_id = %s, fecha_registro = NOW() WHERE usuario_id = %s", (cred_val, cred_val, usuario_id))
-                except Exception:
-                    cursor.execute("UPDATE biometria_usuarios SET hash_huella = %s, fecha_registro = NOW() WHERE usuario_id = %s", (cred_val, usuario_id))
+            b_id = res[0]
+            if encoding_rostro and cred_val:
+                cursor.execute("""
+                    UPDATE biometria_usuarios 
+                    SET encoding_rostro = %s, hash_huella = %s, nombre_usuario = %s, 
+                        voz_preferida = COALESCE(%s, voz_preferida, 'jarvis'), fecha_registro = NOW() 
+                    WHERE id = %s
+                """, (encoding_rostro, cred_val, n_clean or 'Colaborador', voz_preferida, b_id))
+            elif encoding_rostro:
+                cursor.execute("""
+                    UPDATE biometria_usuarios 
+                    SET encoding_rostro = %s, nombre_usuario = %s, 
+                        voz_preferida = COALESCE(%s, voz_preferida, 'jarvis'), fecha_registro = NOW() 
+                    WHERE id = %s
+                """, (encoding_rostro, n_clean or 'Colaborador', voz_preferida, b_id))
+            elif cred_val:
+                cursor.execute("""
+                    UPDATE biometria_usuarios 
+                    SET hash_huella = %s, nombre_usuario = %s, 
+                        voz_preferida = COALESCE(%s, voz_preferida, 'jarvis'), fecha_registro = NOW() 
+                    WHERE id = %s
+                """, (cred_val, n_clean or 'Colaborador', voz_preferida, b_id))
+            elif voz_preferida:
+                cursor.execute("""
+                    UPDATE biometria_usuarios 
+                    SET voz_preferida = %s, nombre_usuario = %s, fecha_registro = NOW() 
+                    WHERE id = %s
+                """, (voz_preferida, n_clean or 'Colaborador', b_id))
         else:
-            try:
-                cursor.execute("INSERT INTO biometria_usuarios (usuario_id, nombre_usuario, encoding_rostro, hash_huella, credential_id) VALUES (%s, %s, %s, %s, %s)",
-                               (usuario_id, nombre_usuario, encoding_rostro, cred_val, cred_val))
-            except Exception:
-                cursor.execute("INSERT INTO biometria_usuarios (usuario_id, nombre_usuario, encoding_rostro, hash_huella) VALUES (%s, %s, %s, %s)",
-                               (usuario_id, nombre_usuario, encoding_rostro, cred_val))
+            cursor.execute("""
+                INSERT INTO biometria_usuarios (usuario_id, nombre_usuario, encoding_rostro, hash_huella, voz_preferida) 
+                VALUES (%s, %s, %s, %s, %s)
+            """, (usuario_id, n_clean or "Colaborador", encoding_rostro, cred_val, v_pref))
         
         db.commit()
         db.close()
-        return True, "Biometría registrada con éxito 🎉"
+        return True, "Biometría y preferencia de voz registradas con éxito 🎉"
     except Exception as e:
         print("Error guardando biometría:", e)
         return False, f"Error en base de datos: {e}"
@@ -21362,6 +21438,53 @@ Ejemplo:
                     )
                     mostrar_snack(f"Biometría de {n_nom} eliminada y registrada en auditoría 🛡️", "#7CFC00")
 
+                # Selector de Voz Personalizada para este Colaborador
+                VOCES_COLAB_OPTS = [
+                    ft.dropdown.Option("jarvis", "🎙️ Yarvis"),
+                    ft.dropdown.Option("barbara", "🎀 Bárbara"),
+                    ft.dropdown.Option("luxo_avatar", "🤖 Avatar LUXO"),
+                    ft.dropdown.Option("helena", "🌸 Helena"),
+                    ft.dropdown.Option("jorge", "👔 Jorge"),
+                    ft.dropdown.Option("sabina", "⚡ Sabina"),
+                    ft.dropdown.Option("alonso", "💼 Alonso"),
+                    ft.dropdown.Option("estandar", "🏢 Estándar"),
+                ]
+
+                voz_inicial_colab = "jarvis"
+                try:
+                    db_v_c = conectar_db()
+                    if db_v_c:
+                        cur_v_c = db_v_c.cursor(dictionary=True)
+                        cur_v_c.execute("SELECT voz_preferida FROM biometria_usuarios WHERE usuario_id = %s AND (LOWER(TRIM(nombre_usuario)) = %s OR nombre_usuario = %s) LIMIT 1", (user_info.get("id", 1), n_val.strip().lower(), n_val.strip()))
+                        row_v_c = cur_v_c.fetchone()
+                        db_v_c.close()
+                        if row_v_c and row_v_c.get("voz_preferida"):
+                            voz_inicial_colab = row_v_c["voz_preferida"]
+                except Exception:
+                    pass
+
+                def on_change_voz_colab(e):
+                    n_nom = (nombre_tf.value or "Colaborador").strip().replace("'", "")
+                    uid = user_info.get("id", 1)
+                    v_sel = e.control.value
+                    guardar_biometria_db(uid, n_nom, voz_preferida=v_sel)
+                    mostrar_snack(f"Voz de {n_nom} configurada a {v_sel.title()} ✨", "#00FFFF")
+
+                voz_colab_dd = ft.Dropdown(
+                    value=voz_inicial_colab,
+                    options=VOCES_COLAB_OPTS,
+                    width=105 if is_mobile else 130,
+                    height=32,
+                    text_size=10 if is_mobile else 11,
+                    content_padding=ft.padding.symmetric(horizontal=4, vertical=2),
+                    border_color="#333344",
+                    focused_border_color="#D8B4FE",
+                    border_radius=8,
+                    bgcolor="#0e0e1a",
+                    tooltip="Voz de bienvenida e IA para este colaborador",
+                    on_change=on_change_voz_colab
+                )
+
                 btn_bio_rostro = ft.IconButton(icon=ft.Icons.CAMERA_ALT_ROUNDED, tooltip="Registrar Rostro (Face ID)", icon_color="#00FFFF", icon_size=18 if is_mobile else 20, on_click=registrar_rostro_vend_click)
                 btn_bio_huella = ft.IconButton(icon=ft.Icons.FINGERPRINT_ROUNDED, tooltip="Registrar Huella / Passkey", icon_color="#D8B4FE", icon_size=18 if is_mobile else 20, on_click=registrar_huella_vend_click)
                 btn_bio_del = ft.IconButton(icon=ft.Icons.SHIELD_ROUNDED, tooltip="Eliminar Biometría (Solo Gerente de Tienda)", icon_color="#FF4500", icon_size=18 if is_mobile else 20, on_click=eliminar_biometria_vend_click)
@@ -21380,6 +21503,7 @@ Ejemplo:
                                 dd,
                             ], spacing=4 if is_mobile else 6, wrap=True),
                             ft.Row([
+                                voz_colab_dd,
                                 btn_bio_rostro,
                                 btn_bio_huella,
                                 meta_vend_text,
@@ -24564,14 +24688,14 @@ Ejemplo:
             print("Error activando passkey:", ex_pk)
             mostrar_snack("Autenticación Biométrica: Usa Chrome, Edge o Safari en tu celular/laptop con sensor 👆", "orange")
 
-    def reproducir_saludo_login(nombre_completo):
+    def reproducir_saludo_login(nombre_completo, voice_id=None):
         try:
             nombre_u = (nombre_completo or "").strip()
             usuario_u = (user_info.get("usuario") or "").strip()
             tienda_u = (user_info.get("tienda") or "").strip()
 
             is_store = False
-            if usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda "):
+            if (usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda ")) and (nombre_u.lower().startswith("tienda ") or "tienda" in nombre_u.lower()):
                 is_store = True
 
             if is_store:
@@ -24612,8 +24736,10 @@ Ejemplo:
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
 
-            # Determinar voz del usuario
-            v_pref = user_voice_pref[0] if user_voice_pref else "jarvis"
+            # Determinar voz del usuario o colaborador
+            v_pref = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
+            if user_voice_pref and v_pref:
+                user_voice_pref[0] = v_pref
 
             # 8 Frases personalizadas por voz
             FRASES_BIENVENIDA = {
@@ -24739,6 +24865,7 @@ Ejemplo:
                     sess_dict = {
                         "page": page,
                         "user_info": user_info,
+                        "user_voice_pref": user_voice_pref,
                         "cargar_chat": cargar_chat,
                         "active_file_callback": active_file_callback
                     }
@@ -25255,6 +25382,7 @@ Ejemplo:
     login_sess_dict = {
         "page": page,
         "user_info": user_info,
+        "user_voice_pref": user_voice_pref,
         "cargar_chat": cargar_chat,
         "active_file_callback": active_file_callback
     }
