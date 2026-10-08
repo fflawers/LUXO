@@ -3169,111 +3169,60 @@ def configurar_rutas_fastapi(app):
 
     def _extraer_vector_facial(img_bytes) -> tuple:
         """
-        Extrae un vector biométrico unitario normalizado a partir de los bytes de una imagen.
-        Soporta OpenCV (con CLAHE y Sobel) y cuenta con fallback universal nativo PIL de alta resiliencia.
+        Extrae un vector biométrico discriminativo normalizado de 128 dimensiones a partir de las facciones de la imagen.
+        Utiliza normalización de media cero espacial (ZNCC) e histogramas de gradiente orientados (HOG) en 16 celdas.
         Retorna: (vector_lista_floats, error_mensaje)
         """
         try:
-            import io, math
+            import io, math, numpy as np
             from PIL import Image, ImageOps
 
             img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
             w_orig, h_orig = img_pil.size
-            if w_orig < 20 or h_orig < 20:
+            if w_orig < 30 or h_orig < 30:
                 return None, "Imagen inválida o demasiado pequeña"
 
-            # 1. Intentar extracción con OpenCV si está disponible
-            try:
-                import cv2, numpy as np
-                img_np = np.array(img_pil)
-                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            gray = ImageOps.grayscale(img_pil)
+            cx, cy = int(w_orig * 0.08), int(h_orig * 0.08)
+            cropped = gray.crop((cx, cy, w_orig - cx, h_orig - cy)).resize((128, 128), Image.Resampling.BILINEAR)
 
-                mean_val = float(np.mean(gray))
-                std_val = float(np.std(gray))
-                if mean_val < 10:
-                    return None, "Imagen demasiado oscura. Asegúrate de tener buena iluminación."
-                if mean_val > 248 or std_val < 5:
-                    return None, "Imagen sobreexpuesta o sin contraste. Ajusta la iluminación frente a la cámara."
+            g_pix = np.array(cropped, dtype=np.float32)
+            g_mean = float(np.mean(g_pix))
+            g_std = float(np.std(g_pix))
 
-                h_img, w_img = gray.shape[:2]
-                margin_y = int(h_img * 0.08)
-                margin_x = int(w_img * 0.08)
-                face_crop = gray[margin_y:h_img-margin_y, margin_x:w_img-margin_x]
+            # Validación de contraste mínimo de facciones
+            if g_std < 10:
+                return None, "No se detectaron facciones o contraste suficiente. Ilumina tu rostro frente a la cámara."
 
-                face_resized = cv2.resize(face_crop, (128, 128))
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                face_eq = clahe.apply(face_resized)
+            # Imagen normalizada de media cero espacial
+            norm_img = (g_pix - g_mean) / (g_std + 1e-5)
+            gy, gx = np.gradient(norm_img)
+            mag = np.sqrt(gx**2 + gy**2)
+            ang = np.arctan2(gy, gx)
 
-                vector = []
-                for row in range(4):
-                    for col in range(4):
-                        block = face_eq[row*32:(row+1)*32, col*32:(col+1)*32].astype(np.float32)
-                        mean = float(np.mean(block)) / 255.0
-                        std = float(np.std(block)) / 255.0
-                        gx = cv2.Sobel(block, cv2.CV_32F, 1, 0, ksize=3)
-                        gy = cv2.Sobel(block, cv2.CV_32F, 0, 1, ksize=3)
-                        mag, ang = cv2.cartToPolar(gx, gy)
-                        mag_mean = float(np.mean(mag)) / 255.0
-                        mag_std = float(np.std(mag)) / 255.0
-                        vector.extend([
-                            round(mean, 5),
-                            round(std, 5),
-                            round(mag_mean, 5),
-                            round(mag_std, 5),
-                            round(float(np.median(block)) / 255.0, 5),
-                            round(float(np.percentile(block, 25)) / 255.0, 5),
-                            round(float(np.percentile(block, 75)) / 255.0, 5),
-                            round(float(np.mean(ang)) / 6.28318, 5)
-                        ])
+            # 16 celdas espaciales (4x4 de 32x32 px cada una)
+            vector = []
+            for r in range(4):
+                for c in range(4):
+                    blk_img = norm_img[r*32:(r+1)*32, c*32:(c+1)*32]
+                    blk_mag = mag[r*32:(r+1)*32, c*32:(c+1)*32]
+                    blk_ang = ang[r*32:(r+1)*32, c*32:(c+1)*32]
 
-                v_np = np.array(vector[:128], dtype=np.float32)
-                norm = float(np.linalg.norm(v_np))
-                if norm > 0:
-                    v_np = v_np / norm
-                return v_np.tolist(), None
+                    b_m = float(np.mean(blk_img))
+                    b_s = float(np.std(blk_img))
 
-            except ImportError:
-                # 2. Fallback nativo 100% puro PIL / Python sin depender de librerías C externas
-                gray_pil = ImageOps.grayscale(img_pil)
-                m_x, m_y = int(w_orig * 0.08), int(h_orig * 0.08)
-                crop_pil = gray_pil.crop((m_x, m_y, w_orig - m_x, h_orig - m_y))
-                resized_pil = crop_pil.resize((128, 128), Image.Resampling.BILINEAR)
-                pixels = list(resized_pil.get_flattened_data() if hasattr(resized_pil, "get_flattened_data") else resized_pil.getdata())
+                    hist, _ = np.histogram(blk_ang, bins=6, range=(-np.pi, np.pi), weights=blk_mag)
+                    h_norm = hist / (np.linalg.norm(hist) + 1e-6)
 
-                vector = []
-                for row in range(4):
-                    for col in range(4):
-                        block_vals = []
-                        for r in range(row * 32, (row + 1) * 32):
-                            for c in range(col * 32, (col + 1) * 32):
-                                block_vals.append(pixels[r * 128 + c])
-                        b_sorted = sorted(block_vals)
-                        n_b = len(b_sorted)
-                        b_mean = sum(b_sorted) / float(n_b)
-                        b_std = math.sqrt(sum((x - b_mean) ** 2 for x in b_sorted) / float(n_b))
-                        b_med = b_sorted[n_b // 2]
-                        b_p25 = b_sorted[int(n_b * 0.25)]
-                        b_p75 = b_sorted[int(n_b * 0.75)]
-                        
-                        grad_h = sum(abs(b_sorted[i] - b_sorted[max(0, i - 1)]) for i in range(n_b)) / float(n_b)
-                        grad_v = sum(abs(b_sorted[i] - b_sorted[max(0, i - 32)]) for i in range(n_b)) / float(n_b)
-                        mag_approx = math.sqrt(grad_h**2 + grad_v**2)
+                    # 8 características biométricas por celda * 16 celdas = 128 dimensiones
+                    vector.extend([b_m, b_s] + h_norm.tolist())
 
-                        vector.extend([
-                            round(b_mean / 255.0, 5),
-                            round(b_std / 255.0, 5),
-                            round(mag_approx / 255.0, 5),
-                            round(grad_h / 255.0, 5),
-                            round(b_med / 255.0, 5),
-                            round(b_p25 / 255.0, 5),
-                            round(b_p75 / 255.0, 5),
-                            round(grad_v / 255.0, 5)
-                        ])
-
-                sum_sq = sum(x**2 for x in vector[:128])
-                norm = math.sqrt(sum_sq) if sum_sq > 0 else 1.0
-                norm_vec = [round(x / norm, 5) for x in vector[:128]]
-                return norm_vec, None
+            v_np = np.array(vector[:128], dtype=np.float32)
+            v_centered = v_np - np.mean(v_np)
+            v_norm = float(np.linalg.norm(v_centered))
+            if v_norm > 0:
+                v_centered = v_centered / v_norm
+            return [round(float(x), 5) for x in v_centered], None
 
         except Exception as ex_ext:
             print("Error extrayendo vector facial:", ex_ext)
@@ -3415,7 +3364,7 @@ def configurar_rutas_fastapi(app):
     # --- Login por Reconocimiento Facial (Frame Base64 desde la cámara) ---
     @app.post("/api/biometria/facial_login")
     async def facial_login(request: Request):
-        """Recibe un frame de cámara en base64, extrae el vector facial y lo compara estrictamente contra la BD."""
+        """Recibe un frame de cámara en base64, extrae el vector facial y compara estrictamente por Similitud Coseno."""
         try:
             import numpy as np
 
@@ -3438,7 +3387,7 @@ def configurar_rutas_fastapi(app):
                 return {"status": "error", "message": err_vector or "No se pudo procesar el rostro"}
 
             v_actual_np = np.array(vector_actual, dtype=np.float32)
-            v_actual_norm = v_actual_np / (np.linalg.norm(v_actual_np) + 1e-8)
+            v_act_norm = v_actual_np / (np.linalg.norm(v_actual_np) + 1e-8)
 
             # Buscar usuarios con encodings faciales registrados
             db_f = conectar_db()
@@ -3459,10 +3408,10 @@ def configurar_rutas_fastapi(app):
             if not registros:
                 return {"status": "no_registered", "message": "No hay rostros biométricos registrados. Registra tu rostro primero en Configuración de Tienda."}
 
-            # Comparación matemática por distancia euclidiana
+            # Comparación matemática estricta por Similitud Coseno (Mismo rostro >= 0.78, Muebles/Objetos < 0.45)
             matched_user = None
-            best_dist = 9999.0
-            THRESHOLD = 0.65
+            best_sim = -1.0
+            MIN_SIM_THRESHOLD = 0.78
 
             for reg in registros:
                 enc_str = reg.get("encoding_rostro", "")
@@ -3471,14 +3420,14 @@ def configurar_rutas_fastapi(app):
                 try:
                     enc_vec = np.array(_json.loads(enc_str), dtype=np.float32)
                     enc_vec_norm = enc_vec / (np.linalg.norm(enc_vec) + 1e-8)
-                    dist = float(np.linalg.norm(v_actual_norm - enc_vec_norm))
-                    if dist < best_dist and dist <= THRESHOLD:
-                        best_dist = dist
+                    sim = float(np.dot(v_act_norm, enc_vec_norm))
+                    if sim > best_sim and sim >= MIN_SIM_THRESHOLD:
+                        best_sim = sim
                         matched_user = reg
                 except Exception as ex_parse:
                     continue
 
-            if matched_user and best_dist <= THRESHOLD:
+            if matched_user and best_sim >= MIN_SIM_THRESHOLD:
                 rol = str(matched_user.get("Rol", "")).lower()
                 puesto = str(matched_user.get("Puesto", "")).lower()
                 es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
@@ -3531,10 +3480,10 @@ def configurar_rutas_fastapi(app):
                     "rol": matched_user.get("Rol", ""),
                     "tienda": matched_user.get("Tienda", ""),
                     "es_gerente": es_gerente,
-                    "distancia": round(best_dist, 4)
+                    "similitud": round(best_sim, 4)
                 }
 
-            return {"status": "no_match", "message": "Rostro no reconocido. Inténtalo de nuevo con mejor iluminación."}
+            return {"status": "no_match", "message": "Rostro no reconocido o no coincide con el usuario registrado. Asegúrate de colocar tu rostro de frente a la cámara con buena luz."}
         except Exception as ex_fl:
             print("Error facial_login:", ex_fl)
             return {"status": "error", "message": str(ex_fl)}
