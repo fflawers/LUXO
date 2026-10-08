@@ -3365,17 +3365,16 @@ def configurar_rutas_fastapi(app):
                         page_s.run_task(_persist_huella_session)
 
                     cargar_chat_fn = session.get("cargar_chat")
+                    saludo_fn = session.get("reproducir_saludo_login")
                     if cargar_chat_fn:
                         _nombre_bio = nombre_identificado_h
                         _voz_bio = voz_colab_h
                         async def trigger_login_huella():
                             cargar_chat_fn()
-                            import threading as _th_h
-                            _th_h.Thread(
-                                target=reproducir_saludo_login,
-                                args=(_nombre_bio, _voz_bio),
-                                daemon=True
-                            ).start()
+                            if saludo_fn:
+                                saludo_fn(_nombre_bio, _voz_bio)
+                            else:
+                                reproducir_saludo_login(_nombre_bio, _voz_bio)
                         page_s.run_task(trigger_login_huella)
 
             return {
@@ -3439,10 +3438,10 @@ def configurar_rutas_fastapi(app):
             if not registros:
                 return {"status": "no_registered", "message": "No hay rostros biométricos registrados. Registra tu rostro primero en Configuración de Tienda."}
 
-            # Comparación matemática estricta por Similitud Coseno (Mismo rostro >= 0.78, Muebles/Objetos < 0.45)
+            # Comparación matemática estricta por Similitud Coseno (Mismo rostro >= 0.58, Muebles/Objetos < 0.40)
             matched_user = None
             best_sim = -1.0
-            MIN_SIM_THRESHOLD = 0.78
+            MIN_SIM_THRESHOLD = 0.58
 
             for reg in registros:
                 enc_str = reg.get("encoding_rostro", "")
@@ -3452,6 +3451,7 @@ def configurar_rutas_fastapi(app):
                     enc_vec = np.array(_json.loads(enc_str), dtype=np.float32)
                     enc_vec_norm = enc_vec / (np.linalg.norm(enc_vec) + 1e-8)
                     sim = float(np.dot(v_act_norm, enc_vec_norm))
+                    print(f"[FACIAL_LOGIN] Comparando '{reg.get('nombre_usuario')}': Sim={sim:.4f} (Umbral={MIN_SIM_THRESHOLD})")
                     if sim > best_sim and sim >= MIN_SIM_THRESHOLD:
                         best_sim = sim
                         matched_user = reg
@@ -3516,17 +3516,16 @@ def configurar_rutas_fastapi(app):
                             page_s.run_task(_persist_face_session)
 
                         cargar_chat_fn = session.get("cargar_chat")
+                        saludo_fn = session.get("reproducir_saludo_login")
                         if cargar_chat_fn:
                             _nombre_facial = nombre_identificado_f
                             _voz_facial = voz_colab_f
                             async def trigger_login_facial():
                                 cargar_chat_fn()
-                                import threading as _th_f
-                                _th_f.Thread(
-                                    target=reproducir_saludo_login,
-                                    args=(_nombre_facial, _voz_facial),
-                                    daemon=True
-                                ).start()
+                                if saludo_fn:
+                                    saludo_fn(_nombre_facial, _voz_facial)
+                                else:
+                                    reproducir_saludo_login(_nombre_facial, _voz_facial)
                             page_s.run_task(trigger_login_facial)
 
                 return {
@@ -4174,6 +4173,12 @@ def conectar_db():
             auto_sync_usuarios.sincronizar_usuarios_db(db)
         except Exception as ex_sync:
             print("Notice auto_sync_usuarios init:", ex_sync)
+        try:
+            cur_bio = db.cursor()
+            cur_bio.execute("ALTER TABLE biometria_usuarios ADD COLUMN voz_preferida VARCHAR(50) DEFAULT 'jarvis'")
+            db.commit()
+        except Exception:
+            pass
     return db
 
 def rebuild_rag_cache():
@@ -6638,6 +6643,11 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         page.clean()
         
+        # Limpiar también variables en memoria y storage del navegador
+        try:
+            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
+        except Exception: pass
+
         # Restaurar estado del botón de acceso y limpiar inputs
         try:
             txt_user.value = ""
@@ -25384,6 +25394,7 @@ Ejemplo:
         "user_info": user_info,
         "user_voice_pref": user_voice_pref,
         "cargar_chat": cargar_chat,
+        "reproducir_saludo_login": reproducir_saludo_login,
         "active_file_callback": active_file_callback
     }
     active_sessions[p_id_str] = login_sess_dict
