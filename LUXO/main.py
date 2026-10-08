@@ -3445,6 +3445,10 @@ def configurar_rutas_fastapi(app):
                 session = None
                 if device_token and device_token in active_sessions:
                     session = active_sessions[device_token]
+                elif device_token and f"dev_{device_token}" in active_sessions:
+                    session = active_sessions[f"dev_{device_token}"]
+                elif "latest_page" in active_sessions:
+                    session = active_sessions["latest_page"]
                 elif active_sessions:
                     session = list(active_sessions.values())[-1]
 
@@ -3453,12 +3457,23 @@ def configurar_rutas_fastapi(app):
                     if page_s:
                         ui = session.get("user_info", {})
                         ui["id"] = matched_user["ID_Usuario"]
+                        ui["usuario"] = matched_user.get("Usuario") or ""
                         ui["nombre"] = matched_user["Nombre_Completo"]
                         ui["rol"] = matched_user["Rol"]
                         ui["tienda"] = matched_user.get("Tienda") or ""
                         ui["zona"] = matched_user.get("Zona") or "Zona Centro"
                         ui["biometria_metodo"] = "Facial"
                         ui["es_gerente_verificado"] = es_gerente
+                        
+                        if hasattr(page_s, "shared_preferences") and page_s.shared_preferences:
+                            import time as _t_sp_f
+                            async def _persist_face_session():
+                                try:
+                                    await page_s.shared_preferences.set("logged_user_id", str(matched_user["ID_Usuario"]))
+                                    await page_s.shared_preferences.set("last_activity_timestamp", str(int(_t_sp_f.time())))
+                                except Exception: pass
+                            page_s.run_task(_persist_face_session)
+
                         cargar_chat_fn = session.get("cargar_chat")
                         if cargar_chat_fn:
                             _nombre_facial = matched_user["Nombre_Completo"]
@@ -25219,6 +25234,19 @@ Ejemplo:
     page.horizontal_alignment = "center"
     page.controls.clear()
     
+    # Registrar la sesión activa para biometría instantánea
+    p_id_str = str(getattr(page, "session_id", id(page)))
+    login_sess_dict = {
+        "page": page,
+        "user_info": user_info,
+        "cargar_chat": cargar_chat,
+        "active_file_callback": active_file_callback
+    }
+    active_sessions[p_id_str] = login_sess_dict
+    active_sessions[f"dev_{p_id_str}"] = login_sess_dict
+    active_sessions["latest_page"] = login_sess_dict
+    ejecutar_js_flet(page, f"window.luxoSessionId = '{p_id_str}'; window.luxoDeviceId = '{p_id_str}';")
+
     # Pantalla de carga inicial mientras se verifica la sesión
     loading_indicator = ft.Container(
         content=ft.ProgressRing(color="#00FFFF", stroke_width=3),

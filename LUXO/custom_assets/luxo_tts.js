@@ -1001,7 +1001,10 @@
             fetch('/api/biometria/facial_login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ frame_base64: frameB64 })
+                body: JSON.stringify({ 
+                    frame_base64: frameB64,
+                    device_token: window.luxoDeviceId || window.luxoSessionId || ''
+                })
             })
             .then(r => r.json())
             .then(data => {
@@ -1009,14 +1012,11 @@
                     setMsg('✅ ¡Identidad Verificada! Bienvenido, ' + data.nombre, '#7CFC00');
                     stopCam();
                     try {
-                        localStorage.setItem('logged_user_id', String(data.user_id || data.id_usuario));
+                        localStorage.setItem('logged_user_id', String(data.usuario_id || data.user_id || ''));
                         localStorage.setItem('logged_username', String(data.usuario || ''));
                     } catch(e){}
                     setTimeout(() => {
                         modal.remove();
-                        const uidParam = data.usuario_id || data.user_id || '';
-                        const userParam = data.usuario || '';
-                        window.location.href = '/?auto_uid=' + encodeURIComponent(uidParam) + '&auto_user=' + encodeURIComponent(userParam);
                     }, 1200);
                 } else {
                     setMsg('❌ ' + (data.message || 'Rostro no reconocido.'), '#FF4500');
@@ -1124,14 +1124,11 @@
                 banner.style.borderColor = '#7CFC00';
                 banner.style.color = '#7CFC00';
                 try {
-                    localStorage.setItem('logged_user_id', String(verData.user_id || verData.id_usuario));
+                    localStorage.setItem('logged_user_id', String(verData.usuario_id || verData.user_id || ''));
                     localStorage.setItem('logged_username', String(verData.usuario || ''));
                 } catch(e){}
                 setTimeout(() => {
                     banner.remove();
-                    const uidParam = verData.usuario_id || verData.user_id || '';
-                    const userParam = verData.usuario || '';
-                    window.location.href = '/?auto_uid=' + encodeURIComponent(uidParam) + '&auto_user=' + encodeURIComponent(userParam);
                 }, 1200);
             } else {
                 setTxt('❌ ' + (verData.message || 'Huella / Passkey no encontrada.'), '#FF4500');
