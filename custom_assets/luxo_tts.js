@@ -171,7 +171,6 @@
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
-        window.luxoUserIsLoggedIn = true;
         try {
             let snd = document.getElementById('luxo_avatar_audio_el');
             if (snd) {
@@ -186,18 +185,6 @@
                 if (snd.parentNode) {
                     try { snd.parentNode.removeChild(snd); } catch(e){}
                 }
-            }
-            let gTts = document.getElementById('luxo_global_tts_player');
-            if (gTts && gTts.src && gTts.src.includes('saludo_login')) {
-                try {
-                    gTts.pause();
-                    gTts.currentTime = 0;
-                    gTts.removeAttribute('src');
-                    gTts.load();
-                } catch(e){}
-            }
-            if (window.speechSynthesis) {
-                try { window.speechSynthesis.cancel(); } catch(e){}
             }
         } catch(e){}
     };
@@ -477,7 +464,7 @@
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
 
-                    if (uid || window.luxoUserIsLoggedIn || hasActiveStoredSession()) {
+                    if (uid || window.luxoUserIsLoggedIn) {
                         let oldAvatarSnd = document.getElementById('luxo_avatar_audio_el');
                         if (oldAvatarSnd) {
                             window.luxoStopLoginAvatarAudio();

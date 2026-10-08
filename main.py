@@ -4174,6 +4174,12 @@ def conectar_db():
             auto_sync_usuarios.sincronizar_usuarios_db(db)
         except Exception as ex_sync:
             print("Notice auto_sync_usuarios init:", ex_sync)
+        try:
+            cur_bio = db.cursor()
+            cur_bio.execute("ALTER TABLE biometria_usuarios ADD COLUMN voz_preferida VARCHAR(50) DEFAULT 'jarvis'")
+            db.commit()
+        except Exception:
+            pass
     return db
 
 def rebuild_rag_cache():
@@ -6638,6 +6644,11 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
         page.clean()
         
+        # Limpiar también variables en memoria y storage del navegador
+        try:
+            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
+        except Exception: pass
+
         # Restaurar estado del botón de acceso y limpiar inputs
         try:
             txt_user.value = ""
