@@ -25107,23 +25107,21 @@ Ejemplo:
 
     async def on_click_login_huella(e):
         print("🔒 [FLET] Clic en Login Huella")
-        disparar_evento_biometrico(page, 'open_passkey_login')
         try:
             if hasattr(page, "run_js_code"):
-                await page.run_js_code("if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); } else { console.error('luxoActivarPasskeyLogin no encontrado'); }")
+                await page.run_js_code("if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); }")
             else:
-                ejecutar_js_flet(page, "if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); } else { console.error('luxoActivarPasskeyLogin no encontrado'); }")
+                ejecutar_js_flet(page, "if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); }")
         except Exception as ex:
             print("Error ejecutando JS Huella:", ex)
 
     async def on_click_login_facial(e):
         print("🔒 [FLET] Clic en Login Facial")
-        disparar_evento_biometrico(page, 'open_facial_login')
         try:
             if hasattr(page, "run_js_code"):
-                await page.run_js_code("if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); } else { console.error('luxoAbrirCamaraFacialLogin no encontrado'); }")
+                await page.run_js_code("if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); }")
             else:
-                ejecutar_js_flet(page, "if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); } else { console.error('luxoAbrirCamaraFacialLogin no encontrado'); }")
+                ejecutar_js_flet(page, "if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); }")
         except Exception as ex:
             print("Error ejecutando JS Facial:", ex)
 

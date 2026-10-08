@@ -507,15 +507,19 @@
                                 }
                             } else if (data.action === 'open_facial_login' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
-                                console.log("[LUXO BIOMETRIA] Disparando Reconocimiento Facial Login");
-                                if (window.luxoAbrirCamaraFacialLogin) {
-                                    window.luxoAbrirCamaraFacialLogin();
+                                if (!document.getElementById('luxo-facial-modal') && !window._luxoFacialActivo && !window._luxoUsuarioLogueado && !window.luxoUserId) {
+                                    console.log("[LUXO BIOMETRIA] Disparando Reconocimiento Facial Login");
+                                    if (window.luxoAbrirCamaraFacialLogin) {
+                                        window.luxoAbrirCamaraFacialLogin();
+                                    }
                                 }
                             } else if (data.action === 'open_passkey_login' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
-                                console.log("[LUXO BIOMETRIA] Disparando WebAuthn / Passkey Login");
-                                if (window.luxoActivarPasskeyLogin) {
-                                    window.luxoActivarPasskeyLogin();
+                                if (!document.getElementById('luxo-passkey-login-banner') && !window._luxoPasskeyActivo && !window._luxoUsuarioLogueado && !window.luxoUserId) {
+                                    console.log("[LUXO BIOMETRIA] Disparando WebAuthn / Passkey Login");
+                                    if (window.luxoActivarPasskeyLogin) {
+                                        window.luxoActivarPasskeyLogin();
+                                    }
                                 }
                             } else if (data.action === 'open_colab_face' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
@@ -940,6 +944,9 @@
     // ==============================================================================
 
     window.luxoAbrirCamaraFacialLogin = function() {
+        if (window._luxoFacialActivo || document.getElementById('luxo-facial-modal') || window._luxoUsuarioLogueado || window.luxoUserId) return;
+        window._luxoFacialActivo = true;
+
         const exist = document.getElementById('luxo-facial-modal');
         if (exist) exist.remove();
         
@@ -967,10 +974,13 @@
         let stream = null;
         function stopCam() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
 
-        document.getElementById('btn-close-face-login').onclick = function() {
+        function closeModal() {
             stopCam();
             modal.remove();
-        };
+            window._luxoFacialActivo = false;
+        }
+
+        document.getElementById('btn-close-face-login').onclick = closeModal;
 
         const setMsg = (msg, color) => {
             const el = document.getElementById('luxo-face-login-msg');
@@ -1009,6 +1019,7 @@
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'ok') {
+                    window._luxoUsuarioLogueado = true;
                     setMsg('✅ ¡Identidad Verificada! Bienvenido, ' + data.nombre, '#7CFC00');
                     stopCam();
                     try {
@@ -1017,7 +1028,8 @@
                     } catch(e){}
                     setTimeout(() => {
                         modal.remove();
-                    }, 1200);
+                        window._luxoFacialActivo = false;
+                    }, 800);
                 } else {
                     setMsg('❌ ' + (data.message || 'Rostro no reconocido.'), '#FF4500');
                 }
@@ -1029,16 +1041,10 @@
     };
 
     window.luxoActivarPasskeyLogin = async function() {
-        console.log("LUXO: [DIAGNÓSTICO INICIAL WEBAUTHN]");
-        console.log("LUXO: typeof window.luxoActivarPasskeyLogin =", typeof window.luxoActivarPasskeyLogin);
-        console.log("LUXO: window.isSecureContext =", window.isSecureContext);
-        console.log("LUXO: typeof window.PublicKeyCredential =", typeof window.PublicKeyCredential);
-        console.log("LUXO: typeof navigator.credentials =", typeof navigator.credentials);
-        if (navigator.credentials) {
-            console.log("LUXO: typeof navigator.credentials.get =", typeof navigator.credentials.get);
-            console.log("LUXO: typeof navigator.credentials.create =", typeof navigator.credentials.create);
-        }
+        if (window._luxoPasskeyActivo || document.getElementById('luxo-passkey-login-banner') || window._luxoUsuarioLogueado || window.luxoUserId) return;
+        window._luxoPasskeyActivo = true;
 
+        console.log("LUXO: [DIAGNÓSTICO INICIAL WEBAUTHN]");
         const exist = document.getElementById('luxo-passkey-login-banner');
         if (exist) exist.remove();
 
@@ -1057,14 +1063,14 @@
         if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
             console.warn("LUXO: [SEGURIDAD W3C] La página se está ejecutando en un origen no seguro (HTTP IP). WebAuthn exige HTTPS o localhost.");
             setTxt('⚠️ WebAuthn requiere HTTPS o localhost en celulares. Revisa la consola o activa chrome://flags/#unsafely-treat-insecure-origin-as-secure', '#FF8C00');
-            setTimeout(() => banner.remove(), 7000);
+            setTimeout(() => { banner.remove(); window._luxoPasskeyActivo = false; }, 7000);
             return;
         }
 
         if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.get) {
             console.error("LUXO: navigator.credentials o PublicKeyCredential no disponibles.");
             setTxt('⚠️ Tu navegador o dispositivo no tiene habilitado WebAuthn / Passkeys.', '#FF8C00');
-            setTimeout(() => banner.remove(), 4500);
+            setTimeout(() => { banner.remove(); window._luxoPasskeyActivo = false; }, 4500);
             return;
         }
 
@@ -1076,16 +1082,12 @@
 
             if (!challData.challenge) {
                 setTxt('❌ Error al obtener desafío del servidor.', '#FF4500');
-                setTimeout(() => banner.remove(), 3000);
+                setTimeout(() => { banner.remove(); window._luxoPasskeyActivo = false; }, 3000);
                 return;
             }
 
             const challenge = Uint8Array.from(atob(challData.challenge.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
             setTxt('👆 Toca el lector de huella o sensor biométrico...', '#00FFFF');
-
-            console.log("LUXO: navigator.credentials disponible");
-            console.log("LUXO: llamando navigator.credentials.get con rpId:", challData.rp_id || window.location.hostname);
-            console.log("LUXO: esperando autenticación del dispositivo...");
 
             const credential = await navigator.credentials.get({
                 publicKey: {
@@ -1113,13 +1115,15 @@
                 body: JSON.stringify({ 
                     credential_id: credIdUrl,
                     raw_id: credIdRaw,
-                    user_handle: userHandleStr
+                    user_handle: userHandleStr,
+                    device_token: window.luxoDeviceId || window.luxoSessionId || ''
                 })
             });
             const verData = await verResp.json();
             console.log("LUXO: respuesta de verificación passkey_verify:", verData);
 
             if (verData.status === 'ok') {
+                window._luxoUsuarioLogueado = true;
                 setTxt('✅ ¡Bienvenido, ' + verData.nombre + '!', '#7CFC00');
                 banner.style.borderColor = '#7CFC00';
                 banner.style.color = '#7CFC00';
@@ -1129,11 +1133,15 @@
                 } catch(e){}
                 setTimeout(() => {
                     banner.remove();
-                }, 1200);
+                    window._luxoPasskeyActivo = false;
+                }, 800);
             } else {
                 setTxt('❌ ' + (verData.message || 'Huella / Passkey no encontrada.'), '#FF4500');
                 banner.style.borderColor = '#FF4500';
-                setTimeout(() => banner.remove(), 3500);
+                setTimeout(() => {
+                    banner.remove();
+                    window._luxoPasskeyActivo = false;
+                }, 3500);
             }
         } catch(ex) {
             console.error("LUXO: [ERROR WEBAUTHN]:", ex);
@@ -1145,7 +1153,10 @@
             } else {
                 setTxt('⚠️ ' + ex.message, '#FF8C00');
             }
-            setTimeout(() => banner.remove(), 4500);
+            setTimeout(() => {
+                banner.remove();
+                window._luxoPasskeyActivo = false;
+            }, 3500);
         }
     };
 
