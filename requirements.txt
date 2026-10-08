@@ -13,3 +13,5 @@ pyaudio
 python-multipart
 gTTS
 edge-tts
+opencv-python-headless
+numpy

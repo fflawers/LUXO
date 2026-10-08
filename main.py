@@ -3552,7 +3552,9 @@ def configurar_rutas_fastapi(app):
                     ],
                     "authenticatorSelection": {
                         "authenticatorAttachment": "platform",
-                        "userVerification": "required"
+                        "requireResidentKey": True,
+                        "residentKey": "required",
+                        "userVerification": "preferred"
                     },
                     "timeout": 60000,
                     "attestation": "none"
