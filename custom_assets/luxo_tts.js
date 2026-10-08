@@ -1098,12 +1098,23 @@
 
             console.log("LUXO: [ÉXITO WEBAUTHN] Credencial obtenida del sensor biométrico:", credential);
             setTxt('⏳ Validando firma criptográfica...', '#FFD700');
-            const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+            const credIdUrl = credential.id || '';
+            const credIdRaw = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+            let userHandleStr = '';
+            if (credential.response && credential.response.userHandle) {
+                try {
+                    userHandleStr = new TextDecoder().decode(credential.response.userHandle);
+                } catch(e) {}
+            }
 
             const verResp = await fetch('/api/biometria/passkey_verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ credential_id: credId })
+                body: JSON.stringify({ 
+                    credential_id: credIdUrl,
+                    raw_id: credIdRaw,
+                    user_handle: userHandleStr
+                })
             });
             const verData = await verResp.json();
             console.log("LUXO: respuesta de verificación passkey_verify:", verData);

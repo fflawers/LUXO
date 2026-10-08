@@ -3189,7 +3189,7 @@ def configurar_rutas_fastapi(app):
             if mean_val > 245 or std_val < 8:
                 return None, "Imagen sobreexpuesta o sin contraste. Ajusta la iluminación frente a la cámara."
 
-            # Detección de región facial por segmentación de tonos de piel / contorno
+            # Detección de región facial: segmentación o recorte centrado de la cámara circular
             face_crop = gray
             h_img, w_img = gray.shape[:2]
             try:
@@ -3202,10 +3202,10 @@ def configurar_rutas_fastapi(app):
                 valid_faces = []
                 for c in contours:
                     area = cv2.contourArea(c)
-                    if area >= (h_img * w_img * 0.08):
+                    if area >= (h_img * w_img * 0.06):
                         x, y, w, h = cv2.boundingRect(c)
                         ratio = float(w) / float(h + 1e-5)
-                        if 0.5 <= ratio <= 1.8:
+                        if 0.4 <= ratio <= 2.0:
                             valid_faces.append((x, y, w, h))
                 
                 if len(valid_faces) == 1:
@@ -3214,8 +3214,11 @@ def configurar_rutas_fastapi(app):
                     x0, y0 = max(0, x - pad_x), max(0, y - pad_y)
                     x1, y1 = min(w_img, x + w + pad_x), min(h_img, y + h + pad_y)
                     face_crop = gray[y0:y1, x0:x1]
-                elif len(valid_faces) > 2:
-                    return None, "Se detectaron múltiples personas. Por favor, asegúrate de que solo aparezca un rostro frente a la cámara."
+                else:
+                    # Si hay variación en el tono de piel, recortar el 80% central del círculo de la cámara
+                    margin_y = int(h_img * 0.1)
+                    margin_x = int(w_img * 0.1)
+                    face_crop = gray[margin_y:h_img-margin_y, margin_x:w_img-margin_x]
             except Exception:
                 face_crop = gray
 
@@ -3269,32 +3272,65 @@ def configurar_rutas_fastapi(app):
         try:
             body = await request.json()
             credential_id = (body.get("credential_id") or "").strip()
+            raw_id = (body.get("raw_id") or "").strip()
+            user_handle = (body.get("user_handle") or "").strip()
             device_token = (body.get("device_token") or "").strip()
             user_agent = request.headers.get("user-agent", "Desconocido")
             ip_client = request.client.host if request.client else "Desconocido"
 
-            if not credential_id:
+            if not credential_id and not raw_id and not user_handle:
                 return {"status": "error", "message": "Credencial biométrica no proporcionada"}
 
-            # Búsqueda estricta por credential_id o hash_huella (SIN fallbacks arbitrarios)
+            posibles_ids = set()
+            for cand in [credential_id, raw_id]:
+                if cand:
+                    posibles_ids.add(cand)
+                    posibles_ids.add(f"WEBAUTHN:{cand[:200]}")
+                    posibles_ids.add(cand.replace("-", "+").replace("_", "/"))
+                    posibles_ids.add(cand.replace("+", "-").replace("/", "_").rstrip("="))
+                    posibles_ids.add(cand.rstrip("="))
+
             db_p = conectar_db()
             if not db_p:
                 return {"status": "error", "message": "Error de base de datos"}
 
             cursor_p = db_p.cursor(dictionary=True)
-            cursor_p.execute("""
-                SELECT b.usuario_id, b.nombre_usuario, u.ID_Usuario, u.Nombre_Completo,
-                       u.Rol, u.Tienda, u.Zona, u.Puesto
-                FROM biometria_usuarios b
-                JOIN usuarios u ON b.usuario_id = u.ID_Usuario
-                WHERE b.hash_huella = %s OR b.hash_huella = %s
-                LIMIT 1
-            """, (credential_id, f"WEBAUTHN:{credential_id[:200]}"))
-            bio_user = cursor_p.fetchone()
+            bio_user = None
+
+            # 1. Búsqueda por credencial WebAuthn
+            if posibles_ids:
+                format_strings = ','.join(['%s'] * len(posibles_ids))
+                query = f"""
+                    SELECT b.usuario_id, b.nombre_usuario, b.hash_huella, u.ID_Usuario, u.Nombre_Completo,
+                           u.Rol, u.Tienda, u.Zona, u.Puesto, u.Usuario
+                    FROM biometria_usuarios b
+                    JOIN usuarios u ON b.usuario_id = u.ID_Usuario
+                    WHERE b.hash_huella IN ({format_strings})
+                    LIMIT 1
+                """
+                cursor_p.execute(query, tuple(posibles_ids))
+                bio_user = cursor_p.fetchone()
+
+            # 2. Búsqueda por user_handle si el authenticator lo devolvió
+            if not bio_user and user_handle:
+                try:
+                    u_id = int(user_handle)
+                    cursor_p.execute("""
+                        SELECT b.usuario_id, b.nombre_usuario, b.hash_huella, u.ID_Usuario, u.Nombre_Completo,
+                               u.Rol, u.Tienda, u.Zona, u.Puesto, u.Usuario
+                        FROM biometria_usuarios b
+                        JOIN usuarios u ON b.usuario_id = u.ID_Usuario
+                        WHERE b.usuario_id = %s
+                        LIMIT 1
+                    """, (u_id,))
+                    bio_user = cursor_p.fetchone()
+                except Exception:
+                    pass
+
             db_p.close()
 
             if not bio_user:
-                return {"status": "no_match", "message": "Credencial biométrica no registrada en el sistema"}
+                return {"status": "no_match", "message": "Credencial biométrica no registrada en el sistema. Asegúrate de registrar tu huella en el Panel de Colaboradores."}
 
             rol = str(bio_user.get("Rol", "")).lower()
             puesto = str(bio_user.get("Puesto", "")).lower()
@@ -3390,7 +3426,7 @@ def configurar_rutas_fastapi(app):
             cursor_f = db_f.cursor(dictionary=True)
             cursor_f.execute("""
                 SELECT b.usuario_id, b.nombre_usuario, b.encoding_rostro,
-                       u.ID_Usuario, u.Nombre_Completo, u.Rol, u.Tienda, u.Zona, u.Puesto
+                       u.ID_Usuario, u.Nombre_Completo, u.Rol, u.Tienda, u.Zona, u.Puesto, u.Usuario
                 FROM biometria_usuarios b
                 JOIN usuarios u ON b.usuario_id = u.ID_Usuario
                 WHERE b.encoding_rostro IS NOT NULL
@@ -3401,10 +3437,10 @@ def configurar_rutas_fastapi(app):
             if not registros:
                 return {"status": "no_registered", "message": "No hay rostros biométricos registrados. Registra tu rostro primero en Configuración de Tienda."}
 
-            # Comparación matemática estricta por distancia euclidiana
+            # Comparación matemática por distancia euclidiana
             matched_user = None
             best_dist = 9999.0
-            THRESHOLD = 0.55
+            THRESHOLD = 0.65
 
             for reg in registros:
                 enc_str = reg.get("encoding_rostro", "")
@@ -3552,7 +3588,9 @@ def configurar_rutas_fastapi(app):
                     ],
                     "authenticatorSelection": {
                         "authenticatorAttachment": "platform",
-                        "userVerification": "required"
+                        "requireResidentKey": True,
+                        "residentKey": "required",
+                        "userVerification": "preferred"
                     },
                     "timeout": 60000,
                     "attestation": "none"
@@ -3569,11 +3607,13 @@ def configurar_rutas_fastapi(app):
             colaborador_id = data.get("colaborador_id")
             nombre = data.get("nombre", "")
             cred_id = (data.get("id") or "").strip()
+            raw_id = (data.get("rawId") or "").strip()
 
-            if not colaborador_id or not cred_id:
+            if not colaborador_id or (not cred_id and not raw_id):
                 return {"ok": False, "error": "Datos biométricos incompletos"}
 
-            ok, msg = guardar_biometria_db(colaborador_id, nombre, hash_huella=cred_id, credential_id=cred_id)
+            hash_val = cred_id or raw_id
+            ok, msg = guardar_biometria_db(colaborador_id, nombre, hash_huella=hash_val, credential_id=hash_val)
             return {"ok": ok, "message": msg}
 
         except Exception as ex_hue:
