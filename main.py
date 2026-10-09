@@ -9730,7 +9730,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
         u_id_str = str(user_info.get("id") or "")
         u_name_str = str(user_info.get("usuario") or "").lower().strip()
         if u_id_str:
-            ejecutar_js_flet(page, f"window.luxoUserId = '{u_id_str}'; window.luxoUsername = '{u_name_str}'; try {{ localStorage.setItem('logged_user_id', '{u_id_str}'); localStorage.setItem('logged_username', '{u_name_str}'); }} catch(e){{}}")
+            ejecutar_js_flet(page, f"window.luxoUserId = '{u_id_str}'; window.luxoUsername = '{u_name_str}'; window.luxoUserIsLoggedIn = true; try {{ window.luxoStopLoginAvatarAudio(); }} catch(e){{}} try {{ localStorage.setItem('logged_user_id', '{u_id_str}'); localStorage.setItem('logged_username', '{u_name_str}'); }} catch(e){{}}")
 
 
         # =================================

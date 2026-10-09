@@ -113,7 +113,8 @@
         if (force === true) {
             window.luxoUserIsLoggedIn = false;
         }
-        if (window.luxoUserIsLoggedIn) {
+        const uid = window.getLuxoUserId ? window.getLuxoUserId() : (window.luxoUserId || null);
+        if (window.luxoUserIsLoggedIn || uid) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
@@ -235,7 +236,8 @@
                 } catch(e){}
             }
             // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
-            if (window.luxoUserIsLoggedIn) {
+            const uid = window.getLuxoUserId ? window.getLuxoUserId() : (window.luxoUserId || null);
+            if (window.luxoUserIsLoggedIn || uid) {
                 window.luxoStopLoginAvatarAudio();
                 return;
             }
@@ -256,7 +258,7 @@
         } catch(e){}
     };
     try {
-        ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown', 'focus', 'pointerup', 'touchend'].forEach(function(evName) {
+        ['pointerdown', 'keydown'].forEach(function(evName) {
             window.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
         });
     } catch(e) {}
