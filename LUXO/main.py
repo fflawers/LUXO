@@ -20332,8 +20332,8 @@ Ejemplo:
                         return
                     cur_bit = db_bit.cursor(dictionary=True)
                     cur_bit.execute("""
-                        SELECT Nombre_Usuario, Empleado_Identificado, IP_Acceso, Dispositivo,
-                               DATE_FORMAT(Fecha_Hora, '%d/%m/%Y %H:%i:%s') as Fecha_Hora
+                        SELECT ID_Sesion, Nombre_Usuario, Empleado_Identificado, Metodo_Ingreso, Es_Gerente_Verificado,
+                               IP_Acceso, Dispositivo, DATE_FORMAT(Fecha_Hora, '%d/%m/%Y %H:%i:%s') as Fecha_Hora
                         FROM bitacora_sesiones_biometricas
                         ORDER BY Fecha_Hora DESC
                         LIMIT 200
@@ -20349,24 +20349,46 @@ Ejemplo:
                     status_text.value = f"Mostrando los últimos {len(registros)} ingresos de seguridad:"
 
                     for r in registros:
-                        nombre_emp = r.get("Empleado_Identificado", "") or r.get("Nombre_Usuario", "")
+                        nombre_emp = (r.get("Empleado_Identificado") or r.get("Nombre_Usuario") or "Usuario").strip()
+                        cuenta_usuario = (r.get("Nombre_Usuario") or "General").strip()
+                        metodo_ingreso = (r.get("Metodo_Ingreso") or "Contraseña").strip()
                         ip_val = r.get("IP_Acceso", "127.0.0.1")
                         disp_val = r.get("Dispositivo", "Localhost, Local / Desarrollo")
                         if not disp_val or disp_val == "Navegador Web":
                             disp_val = "Localhost, Local / Desarrollo"
                         fecha_val = r.get("Fecha_Hora", "")
 
+                        # Distintivo visual según método
+                        if "facial" in metodo_ingreso.lower():
+                            metodo_icon = "📸 Reconocimiento Facial"
+                            metodo_color = "#00FFFF"
+                        elif "huella" in metodo_ingreso.lower() or "passkey" in metodo_ingreso.lower():
+                            metodo_icon = "👆 Huella Dactilar"
+                            metodo_color = "#7CFC00"
+                        else:
+                            metodo_icon = "🔑 Contraseña"
+                            metodo_color = "#D8B4FE"
+
                         card = ft.Container(
                             content=ft.Column([
                                 ft.Row([
                                     ft.Text(f"📅 {fecha_val}", color="#aaaaaa", size=11),
-                                    ft.Text(f"👤 {nombre_emp}", color="white", weight="bold"),
+                                    ft.Container(
+                                        content=ft.Text(metodo_icon, color=metodo_color, size=11, weight="bold"),
+                                        bgcolor="#1e1e38",
+                                        padding=ft.Padding(8, 2, 8, 2),
+                                        border_radius=4
+                                    )
                                 ], alignment="spaceBetween"),
                                 ft.Row([
-                                    ft.Text(f"🌐 IP: {ip_val}", color="#00FFFF", size=12),
-                                    ft.Text(f"📍 {disp_val}", color="#D8B4FE", size=12),
+                                    ft.Text(f"👤 {nombre_emp}", color="white", weight="bold", size=13),
+                                    ft.Text(f"🏪 Cuenta: {cuenta_usuario}", color="#00FFFF", size=12),
                                 ], alignment="spaceBetween"),
-                            ], spacing=4),
+                                ft.Row([
+                                    ft.Text(f"🌐 IP: {ip_val}", color="#888888", size=11),
+                                    ft.Text(f"📍 {disp_val}", color="#aaaaaa", size=11),
+                                ], alignment="spaceBetween"),
+                            ], spacing=5),
                             bgcolor="#141424",
                             padding=15,
                             border_radius=8,
@@ -20383,12 +20405,13 @@ Ejemplo:
                         import csv
                         with open(filepath_temp, "w", encoding="utf-8-sig", newline="") as f_temp:
                             writer = csv.writer(f_temp)
-                            writer.writerow(["Fecha y Hora", "Empleado / Usuario", "Cuenta de Usuario", "IP de Acceso", "Dispositivo"])
+                            writer.writerow(["Fecha y Hora", "Colaborador Identificado", "Cuenta / Perfil", "Método de Ingreso", "IP de Acceso", "Dispositivo"])
                             for r in registros:
                                 writer.writerow([
                                     r.get("Fecha_Hora", ""),
                                     r.get("Empleado_Identificado", ""),
                                     r.get("Nombre_Usuario", ""),
+                                    r.get("Metodo_Ingreso", "Contraseña"),
                                     r.get("IP_Acceso", "127.0.0.1"),
                                     r.get("Dispositivo", "Navegador Web")
                                 ])
@@ -20408,7 +20431,7 @@ Ejemplo:
                     cur_exp = db_exp.cursor(dictionary=True)
                     cur_exp.execute("""
                         SELECT DATE_FORMAT(Fecha_Hora, '%d/%m/%Y %H:%i:%s') as Fecha_Hora,
-                               Empleado_Identificado, Nombre_Usuario, IP_Acceso, Dispositivo
+                               Empleado_Identificado, Nombre_Usuario, Metodo_Ingreso, IP_Acceso, Dispositivo
                         FROM bitacora_sesiones_biometricas
                         ORDER BY Fecha_Hora DESC
                     """)
@@ -20435,12 +20458,13 @@ Ejemplo:
 
                     with open(filepath_temp, "w", encoding="utf-8-sig", newline="") as f_temp:
                         writer = csv.writer(f_temp)
-                        writer.writerow(["Fecha y Hora", "Empleado / Usuario", "Cuenta de Usuario", "IP de Acceso", "Dispositivo"])
+                        writer.writerow(["Fecha y Hora", "Colaborador Identificado", "Cuenta / Perfil", "Método de Ingreso", "IP de Acceso", "Dispositivo"])
                         for r in filas:
                             writer.writerow([
                                 r.get("Fecha_Hora", ""),
                                 r.get("Empleado_Identificado", ""),
                                 r.get("Nombre_Usuario", ""),
+                                r.get("Metodo_Ingreso", "Contraseña"),
                                 r.get("IP_Acceso", "127.0.0.1"),
                                 r.get("Dispositivo", "Navegador Web")
                             ])
