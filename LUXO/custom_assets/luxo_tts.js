@@ -113,8 +113,7 @@
         if (force === true) {
             window.luxoUserIsLoggedIn = false;
         }
-        const uid = window.getLuxoUserId ? window.getLuxoUserId() : (window.luxoUserId || null);
-        if (window.luxoUserIsLoggedIn || uid) {
+        if (window.luxoUserIsLoggedIn) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
@@ -236,8 +235,7 @@
                 } catch(e){}
             }
             // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
-            const uid = window.getLuxoUserId ? window.getLuxoUserId() : (window.luxoUserId || null);
-            if (window.luxoUserIsLoggedIn || uid) {
+            if (window.luxoUserIsLoggedIn) {
                 window.luxoStopLoginAvatarAudio();
                 return;
             }

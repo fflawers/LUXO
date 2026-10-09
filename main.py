@@ -3173,8 +3173,8 @@ def configurar_rutas_fastapi(app):
 
     def _extraer_vector_facial(img_bytes) -> tuple:
         """
-        Extrae un vector biométrico discriminativo normalizado de 128 dimensiones a partir de las facciones de la imagen.
-        Utiliza ecualización adaptativa de iluminación CLAHE e histogramas de gradiente estructurales (Sobel) en 16 celdas.
+        Extrae un vector biométrico discriminativo normalizado de 128 dimensiones a partir del óvalo facial puro.
+        Aplica máscara anatómica elíptica para descartar 100% el fondo/paredes/ropa, normalización CLAHE y gradientes Sobel.
         Retorna: (vector_lista_floats, error_mensaje)
         """
         try:
@@ -3195,12 +3195,16 @@ def configurar_rutas_fastapi(app):
 
             gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-            # 2. Encuadre facial y redimensionado estándar 128x128
+            # 2. Encuadre facial centrado y redimensionado estándar 128x128
             cx, cy = int(w_orig * 0.08), int(h_orig * 0.08)
             face_crop = gray[cy:h_orig - cy, cx:w_orig - cx]
             face_resized = cv2.resize(face_crop, (128, 128), interpolation=cv2.INTER_AREA)
 
-            # 3. Normalización adaptativa de iluminación (CLAHE - Elimina sombras y homogeniza contraste)
+            # 3. Máscara elíptica anatómica (descarta 100% el fondo, paredes, lámparas y ropa exterior)
+            mask = np.zeros((128, 128), dtype=np.uint8)
+            cv2.ellipse(mask, (64, 64), (50, 60), 0, 0, 360, 255, -1)
+
+            # 4. Normalización adaptativa de iluminación (CLAHE)
             try:
                 clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
                 face_norm = clahe.apply(face_resized)
@@ -3209,12 +3213,15 @@ def configurar_rutas_fastapi(app):
                 g_std = float(np.std(face_resized)) + 1e-5
                 face_norm = ((face_resized - g_mean) / g_std * 50.0 + 128.0).clip(0, 255).astype(np.uint8)
 
-            # Validación de contraste mínimo de facciones
+            # Aislar únicamente el óvalo facial interno
+            face_masked = cv2.bitwise_and(face_norm, face_norm, mask=mask)
+
+            # Validación de contraste mínimo en facciones
             if float(np.std(face_norm)) < 8:
                 return None, "No se detectaron facciones o contraste suficiente. Ilumina tu rostro frente a la cámara."
 
-            # 4. Extracción de gradientes de facciones estructurales
-            face_float = face_norm.astype(np.float32)
+            # 5. Extracción de gradientes de facciones estructurales (Sobel)
+            face_float = face_masked.astype(np.float32)
             try:
                 gx = cv2.Sobel(face_float, cv2.CV_32F, 1, 0, ksize=3)
                 gy = cv2.Sobel(face_float, cv2.CV_32F, 0, 1, ksize=3)
@@ -3225,22 +3232,25 @@ def configurar_rutas_fastapi(app):
                 mag = np.sqrt(gx**2 + gy**2)
                 ang = np.arctan2(gy, gx)
 
-            # 16 celdas espaciales (4x4 de 32x32 px cada una)
+            mag = cv2.bitwise_and(mag, mag, mask=mask)
+
+            # 6. Histograma de orientaciones estructurales en 16 celdas espaciales (4x4 de 32x32 px)
             vector = []
             for r in range(4):
                 for c in range(4):
-                    blk_img = face_norm[r*32:(r+1)*32, c*32:(c+1)*32].astype(np.float32)
-                    blk_mag = mag[r*32:(r+1)*32, c*32:(c+1)*32]
-                    blk_ang = ang[r*32:(r+1)*32, c*32:(c+1)*32]
+                    cell_mag = mag[r*32:(r+1)*32, c*32:(c+1)*32]
+                    cell_ang = ang[r*32:(r+1)*32, c*32:(c+1)*32]
+                    cell_mask = mask[r*32:(r+1)*32, c*32:(c+1)*32]
 
-                    b_m = float(np.mean(blk_img)) / 255.0
-                    b_s = float(np.std(blk_img)) / 255.0
-
-                    hist, _ = np.histogram(blk_ang, bins=6, range=(-np.pi, np.pi), weights=blk_mag)
-                    h_norm = hist / (np.linalg.norm(hist) + 1e-6)
-
-                    # 8 características biométricas por celda * 16 celdas = 128 dimensiones
-                    vector.extend([b_m, b_s] + h_norm.tolist())
+                    val_pix = cell_mag[cell_mask > 0]
+                    val_ang = cell_ang[cell_mask > 0]
+                    if len(val_pix) > 0:
+                        hist, _ = np.histogram(val_ang, bins=8, range=(-np.pi, np.pi), weights=val_pix)
+                        h_sum = float(np.sum(hist)) + 1e-6
+                        hist_norm = (hist / h_sum).tolist()
+                        vector.extend(hist_norm)
+                    else:
+                        vector.extend([0.0] * 8)
 
             v_np = np.array(vector[:128], dtype=np.float32)
             v_centered = v_np - np.mean(v_np)
