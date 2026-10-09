@@ -171,21 +171,24 @@
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
+        window.luxoUserIsLoggedIn = true;
         try {
-            let snd = document.getElementById('luxo_avatar_audio_el');
-            if (snd) {
-                try {
-                    snd.pause();
-                    snd.currentTime = 0;
-                    snd.loop = false;
-                    snd.muted = true;
-                    snd.removeAttribute('src');
-                    snd.load();
-                } catch(e){}
-                if (snd.parentNode) {
-                    try { snd.parentNode.removeChild(snd); } catch(e){}
+            let audios = document.querySelectorAll('audio');
+            audios.forEach(function(snd) {
+                if (snd.id === 'luxo_avatar_audio_el' || (snd.src && snd.src.includes('saludo_login.mp3'))) {
+                    try {
+                        snd.pause();
+                        snd.currentTime = 0;
+                        snd.loop = false;
+                        snd.muted = true;
+                        snd.removeAttribute('src');
+                        snd.load();
+                    } catch(e){}
+                    if (snd.parentNode) {
+                        try { snd.parentNode.removeChild(snd); } catch(e){}
+                    }
                 }
-            }
+            });
         } catch(e){}
     };
 
@@ -1010,6 +1013,8 @@
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'ok') {
+                    window.luxoUserIsLoggedIn = true;
+                    if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio();
                     setMsg('✅ ¡Identidad Verificada! Bienvenido, ' + data.nombre, '#7CFC00');
                     stopCam();
                     try {
@@ -1111,6 +1116,8 @@
             console.log("LUXO: respuesta de verificación passkey_verify:", verData);
 
             if (verData.status === 'ok') {
+                window.luxoUserIsLoggedIn = true;
+                if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio();
                 setTxt('✅ ¡Bienvenido, ' + verData.nombre + '!', '#7CFC00');
                 banner.style.borderColor = '#7CFC00';
                 banner.style.color = '#7CFC00';

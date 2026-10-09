@@ -6913,15 +6913,8 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
 
     def cargar_chat(initial_view=None, desde_login=False):
         try:
-            js_stop = """
-            (function() {
-                try {
-                    var snd = document.getElementById('luxo_avatar_audio_el');
-                    if (snd) { snd.pause(); snd.currentTime = 0; snd.loop = false; }
-                } catch(e){}
-            })();
-            """
-            ejecutar_js_flet(page, js_stop)
+            detener_audio_avatar_nativo()
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio();")
         except Exception: pass
         page.clean()
         page.add(
