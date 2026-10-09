@@ -182,13 +182,25 @@
                         snd.loop = false;
                         snd.muted = true;
                         snd.removeAttribute('src');
+                        snd.src = '';
                         snd.load();
                     } catch(e){}
-                    if (snd.parentNode) {
-                        try { snd.parentNode.removeChild(snd); } catch(e){}
-                    }
+                    try {
+                        if (snd.parentNode) snd.parentNode.removeChild(snd);
+                    } catch(e){}
                 }
             });
+            let directEl = document.getElementById('luxo_avatar_audio_el');
+            if (directEl) {
+                try {
+                    directEl.pause();
+                    directEl.currentTime = 0;
+                    directEl.loop = false;
+                    directEl.muted = true;
+                    directEl.src = '';
+                    if (directEl.parentNode) directEl.parentNode.removeChild(directEl);
+                } catch(e){}
+            }
         } catch(e){}
     };
 
@@ -238,7 +250,8 @@
                 } catch(e){}
             }
             // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
-            if (window.luxoUserIsLoggedIn) {
+            const hasUserSess = (window.luxoUserIsLoggedIn === true) || (typeof window.getLuxoUserId === 'function' && Boolean(window.getLuxoUserId()));
+            if (hasUserSess) {
                 window.luxoStopLoginAvatarAudio();
                 return;
             }
@@ -467,7 +480,8 @@
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
 
-                    if (window.luxoUserIsLoggedIn) {
+                    const hasUserSess = (window.luxoUserIsLoggedIn === true) || Boolean(uid && !['unknown', '', 'null', 'undefined'].includes(String(uid).toLowerCase()));
+                    if (hasUserSess) {
                         let oldAvatarSnd = document.getElementById('luxo_avatar_audio_el');
                         if (oldAvatarSnd) {
                             window.luxoStopLoginAvatarAudio();

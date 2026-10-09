@@ -24919,7 +24919,7 @@ Ejemplo:
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     page.user_id = str(res["ID_Usuario"])
                     u_clean_login = str(res.get("Usuario") or "").lower().strip()
-                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
+                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
                     reproducir_saludo_login(res["Nombre_Completo"])
                     
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
@@ -25528,25 +25528,31 @@ Ejemplo:
                 if r_cand and "auto_user" not in r_cand:
                     last_view_saved = r_cand
 
-            # Control de expiración de sesión (30 minutos de inactividad máxima)
-            if uid_saved and last_act_str:
+            # Control estricto de expiración de sesión (30 minutos de inactividad máxima)
+            if uid_saved:
                 try:
                     import time
-                    last_act = int(last_act_str)
-                    if time.time() - last_act > 1800: # 1800 segundos = 30 minutos
+                    session_expired = True
+                    if last_act_str:
+                        last_act = int(last_act_str)
+                        if time.time() - last_act <= 1800: # 1800 segundos = 30 minutos
+                            session_expired = False
+                    
+                    if session_expired:
                         try:
                             await page.shared_preferences.remove("logged_user_id")
                             await page.shared_preferences.remove("last_activity_timestamp")
+                            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
                         except Exception: pass
                         uid_saved = None
-                        print("Sesión expirada automáticamente por inactividad (>30m)")
+                        print("Sesión expirada automáticamente por inactividad (>30m o sin marca reciente)")
                     else:
                         # Renovar la actividad para dar otros 30 minutos a partir de ahora
                         try:
                             await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
                         except Exception: pass
                 except Exception:
-                    pass
+                    uid_saved = None
                     
             if uid_saved:
                 detener_audio_avatar_nativo()
@@ -25577,7 +25583,7 @@ Ejemplo:
                         page._luxo_token = sess_token
                         u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
                         page.username = u_clean_login
-                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
+                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,
