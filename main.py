@@ -3221,7 +3221,7 @@ def configurar_rutas_fastapi(app):
                 return None, "No se detectaron facciones o contraste suficiente. Ilumina tu rostro frente a la cámara."
 
             # 5. Extracción de gradientes de facciones estructurales (Sobel)
-            face_float = face_masked.astype(np.float32)
+            face_float = face_norm.astype(np.float32)
             try:
                 gx = cv2.Sobel(face_float, cv2.CV_32F, 1, 0, ksize=3)
                 gy = cv2.Sobel(face_float, cv2.CV_32F, 0, 1, ksize=3)
@@ -3232,25 +3232,21 @@ def configurar_rutas_fastapi(app):
                 mag = np.sqrt(gx**2 + gy**2)
                 ang = np.arctan2(gy, gx)
 
-            mag = cv2.bitwise_and(mag, mag, mask=mask)
-
-            # 6. Histograma de orientaciones estructurales en 16 celdas espaciales (4x4 de 32x32 px)
+            # 16 celdas espaciales (4x4 de 32x32 px cada una)
             vector = []
             for r in range(4):
                 for c in range(4):
-                    cell_mag = mag[r*32:(r+1)*32, c*32:(c+1)*32]
-                    cell_ang = ang[r*32:(r+1)*32, c*32:(c+1)*32]
-                    cell_mask = mask[r*32:(r+1)*32, c*32:(c+1)*32]
+                    blk_img = face_norm[r*32:(r+1)*32, c*32:(c+1)*32].astype(np.float32)
+                    blk_mag = mag[r*32:(r+1)*32, c*32:(c+1)*32]
+                    blk_ang = ang[r*32:(r+1)*32, c*32:(c+1)*32]
 
-                    val_pix = cell_mag[cell_mask > 0]
-                    val_ang = cell_ang[cell_mask > 0]
-                    if len(val_pix) > 0:
-                        hist, _ = np.histogram(val_ang, bins=8, range=(-np.pi, np.pi), weights=val_pix)
-                        h_sum = float(np.sum(hist)) + 1e-6
-                        hist_norm = (hist / h_sum).tolist()
-                        vector.extend(hist_norm)
-                    else:
-                        vector.extend([0.0] * 8)
+                    b_m = float(np.mean(blk_img)) / 255.0
+                    b_s = float(np.std(blk_img)) / 255.0
+
+                    hist, _ = np.histogram(blk_ang, bins=6, range=(-np.pi, np.pi), weights=blk_mag)
+                    h_norm = hist / (np.linalg.norm(hist) + 1e-6)
+
+                    vector.extend([b_m, b_s] + h_norm.tolist())
 
             v_np = np.array(vector[:128], dtype=np.float32)
             v_centered = v_np - np.mean(v_np)
@@ -3448,7 +3444,8 @@ def configurar_rutas_fastapi(app):
                 return {"status": "error", "message": err_vector or "No se pudo procesar el rostro"}
 
             v_actual_np = np.array(vector_actual, dtype=np.float32)
-            v_act_norm = v_actual_np / (np.linalg.norm(v_actual_np) + 1e-8)
+            v_act_cent = v_actual_np - np.mean(v_actual_np)
+            v_act_norm = v_act_cent / (np.linalg.norm(v_act_cent) + 1e-8)
 
             # Buscar usuarios con encodings faciales registrados
             db_f = conectar_db()
@@ -3469,10 +3466,10 @@ def configurar_rutas_fastapi(app):
             if not registros:
                 return {"status": "no_registered", "message": "No hay rostros biométricos registrados. Registra tu rostro primero en Configuración de Tienda."}
 
-            # Comparación matemática estricta por Similitud Coseno (Mismo rostro >= 0.58, Muebles/Objetos < 0.40)
+            # Comparación matemática estricta por Similitud Coseno con centrado dinámico universal
             matched_user = None
             best_sim = -1.0
-            MIN_SIM_THRESHOLD = 0.58
+            MIN_SIM_THRESHOLD = 0.50
 
             for reg in registros:
                 enc_str = reg.get("encoding_rostro", "")
@@ -3480,7 +3477,8 @@ def configurar_rutas_fastapi(app):
                     continue
                 try:
                     enc_vec = np.array(_json.loads(enc_str), dtype=np.float32)
-                    enc_vec_norm = enc_vec / (np.linalg.norm(enc_vec) + 1e-8)
+                    enc_cent = enc_vec - np.mean(enc_vec)
+                    enc_vec_norm = enc_cent / (np.linalg.norm(enc_cent) + 1e-8)
                     sim = float(np.dot(v_act_norm, enc_vec_norm))
                     print(f"[FACIAL_LOGIN] Comparando '{reg.get('nombre_usuario')}': Sim={sim:.4f} (Umbral={MIN_SIM_THRESHOLD})")
                     if sim > best_sim and sim >= MIN_SIM_THRESHOLD:
