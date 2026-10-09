@@ -2216,7 +2216,12 @@ def configurar_rutas_fastapi(app):
                             const video = document.getElementById('luxo-cam-reg');
                             const canvas = document.getElementById('luxo-canvas-reg');
                             const ctx = canvas.getContext('2d');
-                            ctx.drawImage(video, 0, 0, 220, 220);
+                            const vW = video.videoWidth || 640;
+                            const vH = video.videoHeight || 480;
+                            const minDim = Math.min(vW, vH);
+                            const sx = (vW - minDim) / 2;
+                            const sy = (vH - minDim) / 2;
+                            ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, 220, 220);
                             const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
                             
                             document.getElementById('luxo-reg-msg').innerText = '⏳ Guardando e identificando rostro...';
@@ -24656,7 +24661,12 @@ Ejemplo:
         const video = document.getElementById('luxo-cam');
         const canvas = document.getElementById('luxo-canvas');
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, 220, 220);
+        const vW = video.videoWidth || 640;
+        const vH = video.videoHeight || 480;
+        const minDim = Math.min(vW, vH);
+        const sx = (vW - minDim) / 2;
+        const sy = (vH - minDim) / 2;
+        ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, 220, 220);
         const frameB64 = canvas.toDataURL('image/jpeg', 0.85);
         const dToken = localStorage.getItem('luxo_device_token') || '';
         document.getElementById('luxo-face-msg').innerText = '⏳ Analizando rostro...';
