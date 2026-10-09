@@ -7678,7 +7678,19 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "ir a facturacion": "facturacion",
                     "ir a facturas": "facturacion",
                     "ve facturacion": "facturacion",
-                    "ve facturas": "facturacion"
+                    "ve facturas": "facturacion",
+
+                    # Traductor de Mostrador
+                    "abrir traductor": "traductor",
+                    "abre traductor": "traductor",
+                    "ir a traductor": "traductor",
+                    "ve a traductor": "traductor",
+                    "ver traductor": "traductor",
+                    "traductor": "traductor",
+                    "traductos": "traductor",
+                    "interprete": "traductor",
+                    "abrir interprete": "traductor",
+                    "abre interprete": "traductor"
                 }
                 
                 # Ordenar por longitud descendente para emparejar frases compuestas largas primero
@@ -23196,6 +23208,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_traductor = ft.TextButton(
+            content=ft.Row([ft.Text("🌐", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Traductor 🌐", "Translator 🌐", "Traducteur 🌐", "Traduttore 🌐", "翻译 🌐"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("traductor", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_dashboard = None
         if es_admin():
             btn_dashboard = ft.TextButton(
@@ -23268,7 +23286,7 @@ Ejemplo:
                 except Exception:
                     pass
             all_btn_tuples = [
-                (btn_chat, "chat"), (btn_pendientes, "pendientes"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
+                (btn_chat, "chat"), (btn_traductor, "traductor"), (btn_pendientes, "pendientes"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
                 (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_catalogo_upc, "catalogo_upc"), (btn_garantias, "garantias"), 
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
@@ -23299,9 +23317,20 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos", "disa"]:
+                    if vista not in main_views_cache or vista in ["chat", "traductor", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos", "disa"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
+                        elif vista == "traductor":
+                            import importlib
+                            import traductor_view
+                            importlib.reload(traductor_view)
+                            main_views_cache["traductor"] = traductor_view.build_traductor_view(
+                                page,
+                                user_info=user_info,
+                                conectar_db_fn=conectar_db,
+                                mostrar_snack_fn=mostrar_snack,
+                                start_speak_fn=start_speak
+                            )
                         elif vista == "pendientes":
                             import importlib
                             import pendientes_view
@@ -23763,7 +23792,7 @@ Ejemplo:
             ventas_controls
         )
 
-        clientes_controls = [btn_crm, btn_garantias, btn_facturacion]
+        clientes_controls = [btn_traductor, btn_crm, btn_garantias, btn_facturacion]
         tile_clientes = crear_acordeon(
             ft.Text(tr("🤝 CLIENTES Y GARANTÍAS", "🤝 CLIENTS & WARRANTY", "🤝 CLIENTS & GARANTIE", "🤝 CLIENTI & GARANZIA", "🤝 客户 & 保修"), color="#00FFFF", weight="bold", size=12),
             clientes_controls
