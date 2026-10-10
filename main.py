@@ -2216,7 +2216,12 @@ def configurar_rutas_fastapi(app):
                             const video = document.getElementById('luxo-cam-reg');
                             const canvas = document.getElementById('luxo-canvas-reg');
                             const ctx = canvas.getContext('2d');
-                            ctx.drawImage(video, 0, 0, 220, 220);
+                            const vW = video.videoWidth || 640;
+                            const vH = video.videoHeight || 480;
+                            const minDim = Math.min(vW, vH);
+                            const sx = (vW - minDim) / 2;
+                            const sy = (vH - minDim) / 2;
+                            ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, 220, 220);
                             const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
                             
                             document.getElementById('luxo-reg-msg').innerText = '⏳ Guardando e identificando rostro...';
@@ -7673,7 +7678,19 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "ir a facturacion": "facturacion",
                     "ir a facturas": "facturacion",
                     "ve facturacion": "facturacion",
-                    "ve facturas": "facturacion"
+                    "ve facturas": "facturacion",
+
+                    # Traductor de Mostrador
+                    "abrir traductor": "traductor",
+                    "abre traductor": "traductor",
+                    "ir a traductor": "traductor",
+                    "ve a traductor": "traductor",
+                    "ver traductor": "traductor",
+                    "traductor": "traductor",
+                    "traductos": "traductor",
+                    "interprete": "traductor",
+                    "abrir interprete": "traductor",
+                    "abre interprete": "traductor"
                 }
                 
                 # Ordenar por longitud descendente para emparejar frases compuestas largas primero
@@ -23191,6 +23208,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_traductor = ft.TextButton(
+            content=ft.Row([ft.Text("🌐", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Traductor 🌐", "Translator 🌐", "Traducteur 🌐", "Traduttore 🌐", "翻译 🌐"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("traductor", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_dashboard = None
         if es_admin():
             btn_dashboard = ft.TextButton(
@@ -23263,7 +23286,7 @@ Ejemplo:
                 except Exception:
                     pass
             all_btn_tuples = [
-                (btn_chat, "chat"), (btn_pendientes, "pendientes"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
+                (btn_chat, "chat"), (btn_traductor, "traductor"), (btn_pendientes, "pendientes"), (btn_historial, "historial"), (btn_operacion_diaria, "operacion_diaria"), 
                 (btn_checklists, "checklists"), (btn_manuales, "manuales"), (btn_catalogo_upc, "catalogo_upc"), (btn_garantias, "garantias"), 
                 (btn_tareas, "tareas"), (btn_campanas, "campanas"), (btn_presupuesto, "presupuesto"), 
                 (btn_reto, "reto"), (btn_vendedores, "vendedores"), (btn_simulador, "simulador"), 
@@ -23294,9 +23317,20 @@ Ejemplo:
             def procesar_cambio():
                 try:
                     print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos", "disa"]:
+                    if vista not in main_views_cache or vista in ["chat", "traductor", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos", "disa"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
+                        elif vista == "traductor":
+                            import importlib
+                            import traductor_view
+                            importlib.reload(traductor_view)
+                            main_views_cache["traductor"] = traductor_view.build_traductor_view(
+                                page,
+                                user_info=user_info,
+                                conectar_db_fn=conectar_db,
+                                mostrar_snack_fn=mostrar_snack,
+                                start_speak_fn=start_speak
+                            )
                         elif vista == "pendientes":
                             import importlib
                             import pendientes_view
@@ -23758,7 +23792,7 @@ Ejemplo:
             ventas_controls
         )
 
-        clientes_controls = [btn_crm, btn_garantias, btn_facturacion]
+        clientes_controls = [btn_traductor, btn_crm, btn_garantias, btn_facturacion]
         tile_clientes = crear_acordeon(
             ft.Text(tr("🤝 CLIENTES Y GARANTÍAS", "🤝 CLIENTS & WARRANTY", "🤝 CLIENTS & GARANTIE", "🤝 CLIENTI & GARANZIA", "🤝 客户 & 保修"), color="#00FFFF", weight="bold", size=12),
             clientes_controls
@@ -24656,7 +24690,12 @@ Ejemplo:
         const video = document.getElementById('luxo-cam');
         const canvas = document.getElementById('luxo-canvas');
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, 220, 220);
+        const vW = video.videoWidth || 640;
+        const vH = video.videoHeight || 480;
+        const minDim = Math.min(vW, vH);
+        const sx = (vW - minDim) / 2;
+        const sy = (vH - minDim) / 2;
+        ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, 220, 220);
         const frameB64 = canvas.toDataURL('image/jpeg', 0.85);
         const dToken = localStorage.getItem('luxo_device_token') || '';
         document.getElementById('luxo-face-msg').innerText = '⏳ Analizando rostro...';
@@ -24909,7 +24948,7 @@ Ejemplo:
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     page.user_id = str(res["ID_Usuario"])
                     u_clean_login = str(res.get("Usuario") or "").lower().strip()
-                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
+                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
                     reproducir_saludo_login(res["Nombre_Completo"])
                     
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
@@ -25518,25 +25557,31 @@ Ejemplo:
                 if r_cand and "auto_user" not in r_cand:
                     last_view_saved = r_cand
 
-            # Control de expiración de sesión (30 minutos de inactividad máxima)
-            if uid_saved and last_act_str:
+            # Control estricto de expiración de sesión (30 minutos de inactividad máxima)
+            if uid_saved:
                 try:
                     import time
-                    last_act = int(last_act_str)
-                    if time.time() - last_act > 1800: # 1800 segundos = 30 minutos
+                    session_expired = True
+                    if last_act_str:
+                        last_act = int(last_act_str)
+                        if time.time() - last_act <= 1800: # 1800 segundos = 30 minutos
+                            session_expired = False
+                    
+                    if session_expired:
                         try:
                             await page.shared_preferences.remove("logged_user_id")
                             await page.shared_preferences.remove("last_activity_timestamp")
+                            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
                         except Exception: pass
                         uid_saved = None
-                        print("Sesión expirada automáticamente por inactividad (>30m)")
+                        print("Sesión expirada automáticamente por inactividad (>30m o sin marca reciente)")
                     else:
                         # Renovar la actividad para dar otros 30 minutos a partir de ahora
                         try:
                             await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
                         except Exception: pass
                 except Exception:
-                    pass
+                    uid_saved = None
                     
             if uid_saved:
                 detener_audio_avatar_nativo()
@@ -25567,7 +25612,7 @@ Ejemplo:
                         page._luxo_token = sess_token
                         u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
                         page.username = u_clean_login
-                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
+                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,

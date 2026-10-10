@@ -182,13 +182,25 @@
                         snd.loop = false;
                         snd.muted = true;
                         snd.removeAttribute('src');
+                        snd.src = '';
                         snd.load();
                     } catch(e){}
-                    if (snd.parentNode) {
-                        try { snd.parentNode.removeChild(snd); } catch(e){}
-                    }
+                    try {
+                        if (snd.parentNode) snd.parentNode.removeChild(snd);
+                    } catch(e){}
                 }
             });
+            let directEl = document.getElementById('luxo_avatar_audio_el');
+            if (directEl) {
+                try {
+                    directEl.pause();
+                    directEl.currentTime = 0;
+                    directEl.loop = false;
+                    directEl.muted = true;
+                    directEl.src = '';
+                    if (directEl.parentNode) directEl.parentNode.removeChild(directEl);
+                } catch(e){}
+            }
         } catch(e){}
     };
 
@@ -238,7 +250,8 @@
                 } catch(e){}
             }
             // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
-            if (window.luxoUserIsLoggedIn) {
+            const hasUserSess = (window.luxoUserIsLoggedIn === true) || (typeof window.getLuxoUserId === 'function' && Boolean(window.getLuxoUserId()));
+            if (hasUserSess) {
                 window.luxoStopLoginAvatarAudio();
                 return;
             }
@@ -467,7 +480,8 @@
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
 
-                    if (window.luxoUserIsLoggedIn) {
+                    const hasUserSess = (window.luxoUserIsLoggedIn === true) || Boolean(uid && !['unknown', '', 'null', 'undefined'].includes(String(uid).toLowerCase()));
+                    if (hasUserSess) {
                         let oldAvatarSnd = document.getElementById('luxo_avatar_audio_el');
                         if (oldAvatarSnd) {
                             window.luxoStopLoginAvatarAudio();
@@ -996,8 +1010,12 @@
             const video = document.getElementById('luxo-cam-login');
             const canvas = document.getElementById('luxo-canvas-login');
             if (!video || !canvas) return;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, 220, 220);
+            const vW = video.videoWidth || 640;
+            const vH = video.videoHeight || 480;
+            const minDim = Math.min(vW, vH);
+            const sx = (vW - minDim) / 2;
+            const sy = (vH - minDim) / 2;
+            ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, 220, 220);
             const frameB64 = canvas.toDataURL('image/jpeg', 0.85);
 
             setMsg('⏳ Analizando vector facial...', '#FFD700');
@@ -1201,7 +1219,12 @@
             const canvas = document.getElementById('luxo-canvas-reg');
             if (!video || !canvas) return;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, 220, 220);
+            const vW = video.videoWidth || 640;
+            const vH = video.videoHeight || 480;
+            const minDim = Math.min(vW, vH);
+            const sx = (vW - minDim) / 2;
+            const sy = (vH - minDim) / 2;
+            ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, 220, 220);
             const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
             
             document.getElementById('luxo-reg-msg').innerText = '⏳ Guardando vector biométrico facial...';
