@@ -101,9 +101,21 @@
 
     function hasActiveStoredSession() {
         try {
-            let u = localStorage.getItem('logged_user_id') || sessionStorage.getItem('logged_user_id');
-            if (u && !['unknown', '', 'null', 'undefined'].includes(String(u).toLowerCase())) {
+            if (window.luxoUserId && !['unknown', '', 'null', 'undefined', '1'].includes(String(window.luxoUserId).toLowerCase())) {
                 return true;
+            }
+            let direct = localStorage.getItem('logged_user_id') || sessionStorage.getItem('logged_user_id');
+            if (direct && !['unknown', '', 'null', 'undefined', '1'].includes(String(direct).toLowerCase())) {
+                return true;
+            }
+            for (let i = 0; i < localStorage.length; i++) {
+                let k = localStorage.key(i);
+                if (k && k.includes('logged_user_id')) {
+                    let v = localStorage.getItem(k);
+                    if (v && !['unknown', '', 'null', 'undefined', '1', '""', "''"].includes(String(v).toLowerCase())) {
+                        return true;
+                    }
+                }
             }
         } catch(e){}
         return false;
@@ -254,13 +266,13 @@
                 } catch(e){}
             }
             // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
-            const hasUserSess = (window.luxoUserIsLoggedIn === true) || (typeof window.getLuxoUserId === 'function' && Boolean(window.getLuxoUserId()));
+            const hasUserSess = (window.luxoUserIsLoggedIn === true) || hasActiveStoredSession() || (typeof window.getLuxoUserId === 'function' && Boolean(window.getLuxoUserId()));
             if (hasUserSess) {
                 window.luxoStopLoginAvatarAudio();
                 return;
             }
             // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar en el primer gesto
-            if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted) {
+            if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted && !hasActiveStoredSession()) {
                 let snd = document.getElementById('luxo_avatar_audio_el');
                 if (snd) {
                     if (snd.paused) {

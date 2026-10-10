@@ -25588,13 +25588,21 @@ Ejemplo:
                     
             if uid_saved:
                 detener_audio_avatar_nativo()
-                db_r = conectar_db()
-                if db_r:
-                    cur_r = db_r.cursor(dictionary=True)
-                    cur_r.execute("SELECT ID_Usuario, Nombre_Completo, Rol, Tienda, Zona, Region, Usuario FROM usuarios WHERE ID_Usuario = %s", (uid_saved,))
-                    user_data = cur_r.fetchone()
-                    db_r.close()
-                    if user_data:
+                def _get_user_db(uid_val):
+                    try:
+                        db_conn = conectar_db()
+                        if db_conn:
+                            cur_conn = db_conn.cursor(dictionary=True)
+                            cur_conn.execute("SELECT ID_Usuario, Nombre_Completo, Rol, Tienda, Zona, Region, Usuario FROM usuarios WHERE ID_Usuario = %s", (uid_val,))
+                            res_u = cur_conn.fetchone()
+                            db_conn.close()
+                            return res_u
+                    except Exception as ex_db_u:
+                        print("Notice DB get user error:", ex_db_u)
+                    return None
+
+                user_data = await asyncio.to_thread(_get_user_db, uid_saved)
+                if user_data:
                         user_info["id"] = user_data["ID_Usuario"]
                         user_info["usuario"] = user_data.get("Usuario") or ""
                         user_info["nombre"] = user_data["Nombre_Completo"]
