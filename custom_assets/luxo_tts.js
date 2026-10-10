@@ -1346,6 +1346,112 @@
         }
     };
 
+    // --------------------------------------------------------------------------
+    // MÓDULO INDEPENDIENTE TRADUCTOR DE MOSTRADOR LUXO (2 TOQUES / CONTINUO)
+    // --------------------------------------------------------------------------
+    window._luxoTradRecorders = { 'vendedor': null, 'cliente': null };
+    window._luxoTradStreams = { 'vendedor': null, 'cliente': null };
+    window._luxoTradChunks = { 'vendedor': [], 'cliente': [] };
+    window._luxoTradRecording = { 'vendedor': false, 'cliente': false };
+
+    window.luxoStartTraductorMic = function(source, sessionId) {
+        console.log('[TRADUCTOR JS] Iniciar grabación continua para:', source, sessionId);
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('⚠️ Tu navegador o dispositivo no permite acceso directo al micrófono.');
+            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
+            return;
+        }
+
+        // Si la otra fuente estaba grabando, detenerla
+        ['vendedor', 'cliente'].forEach(function(s) {
+            if (s !== source && window._luxoTradRecording[s]) {
+                window.luxoStopTraductorMic(s, sessionId);
+            }
+        });
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            window._luxoTradStreams[source] = stream;
+            window._luxoTradChunks[source] = [];
+
+            let mimeType = 'audio/webm';
+            if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+            }
+
+            let mr = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+            window._luxoTradRecorders[source] = mr;
+            window._luxoTradRecording[source] = true;
+
+            mr.ondataavailable = function(e) {
+                if (e.data && e.data.size > 0) {
+                    window._luxoTradChunks[source].push(e.data);
+                }
+            };
+
+            mr.onstop = function() {
+                window._luxoTradRecording[source] = false;
+                if (window._luxoTradStreams[source]) {
+                    try {
+                        window._luxoTradStreams[source].getTracks().forEach(function(t) { t.stop(); });
+                    } catch(e){}
+                    window._luxoTradStreams[source] = null;
+                }
+
+                let chunks = window._luxoTradChunks[source] || [];
+                if (chunks.length > 0) {
+                    const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+                    const fd = new FormData();
+                    fd.append('file', blob, 'traductor_rec.webm');
+                    fd.append('source', source);
+                    fd.append('session_id', sessionId || '');
+
+                    fetch('/api/traductor/audio_upload', {
+                        method: 'POST',
+                        body: fd
+                    }).then(function(res) {
+                        return res.json();
+                    }).then(function(data) {
+                        console.log('[TRADUCTOR UPLOAD EXITOSO]', data);
+                    }).catch(function(err) {
+                        console.log('[TRADUCTOR UPLOAD ERROR]', err);
+                        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
+                    });
+                } else {
+                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
+                }
+            };
+
+            mr.start();
+            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=recording', { method: 'POST' });
+
+        }).catch(function(err) {
+            console.log('[TRADUCTOR MIC PERMISSION ERROR]', err);
+            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
+            if (err.name === 'NotAllowedError') {
+                alert('⚠️ Permite el acceso al micrófono en los ajustes de tu navegador para poder hablar.');
+            }
+        });
+    };
+
+    window.luxoStopTraductorMic = function(source, sessionId) {
+        console.log('[TRADUCTOR JS] Detener grabación para:', source, sessionId);
+        let mr = window._luxoTradRecorders[source];
+        if (mr && mr.state === 'recording') {
+            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=processing', { method: 'POST' });
+            try { mr.stop(); } catch(e){}
+        } else {
+            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
+        }
+    };
+
+    window.luxoPlayTraductorAudio = function(audioUrl) {
+        if (!audioUrl) return;
+        try {
+            let a = new Audio(audioUrl);
+            a.play().catch(function(e) { console.log('[TRADUCTOR AUDIO AUTOPLAY]', e); });
+        } catch(e) {}
+    };
+
     // Reconciliación periódica ligera (cada 2s) sin provocar reflow de layout
     setInterval(evaluarVisibilidadSimulador, 2000);
     window.addEventListener('hashchange', evaluarVisibilidadSimulador);
