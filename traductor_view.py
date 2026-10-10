@@ -1,5 +1,6 @@
 # ==============================================================================
 # LUXO - MÓDULO INDEPENDIENTE DE TRADUCTOR DE MOSTRADOR (ÓPTICA & LENTES DE SOL)
+# SISTEMA DE MICRÓFONO DE 2 TOQUES (START / STOP MANUAL SIN LÍMITE DE TIEMPO)
 # ==============================================================================
 import flet as ft
 import threading
@@ -204,7 +205,7 @@ def reproducir_audio_traduccion_async(texto: str, idioma: str, genero: str = "fe
     threading.Thread(target=_worker, daemon=True).start()
 
 def registrar_rutas_fastapi_traductor():
-    """Registra rutas de FastAPI dinámicamente para recibir dictado de audio y texto del traductor."""
+    """Registra rutas de FastAPI dinámicamente para recibir dictado de audio y estados del traductor."""
     try:
         import gc, fastapi
         apps = [obj for obj in gc.get_objects() if isinstance(obj, fastapi.FastAPI)]
@@ -219,6 +220,28 @@ def registrar_rutas_fastapi_traductor():
 
         from fastapi import Request
         import tempfile, requests
+
+        @app.api_route("/api/traductor/mic_state", methods=["GET", "POST"])
+        async def api_traductor_mic_state(request: Request = None, session_id: str = "", source: str = "vendedor", state: str = "idle"):
+            try:
+                if request:
+                    qp = request.query_params
+                    session_id = session_id or qp.get("session_id", "")
+                    source = source or qp.get("source", "vendedor")
+                    state = state or qp.get("state", "idle")
+
+                sess_handler = TRADUCTOR_SESSIONS.get(session_id)
+                if not sess_handler and TRADUCTOR_SESSIONS:
+                    sess_handler = list(TRADUCTOR_SESSIONS.values())[-1]
+
+                if sess_handler:
+                    set_visual_fn = sess_handler.get("set_visual")
+                    if set_visual_fn:
+                        set_visual_fn(source, state)
+
+                return {"status": "ok", "state": state}
+            except Exception as ex:
+                return {"status": "error", "detail": str(ex)}
 
         @app.api_route("/api/traductor/speech_input", methods=["GET", "POST"])
         async def api_traductor_speech_input(request: Request = None, session_id: str = "", source: str = "vendedor", text: str = ""):
@@ -243,40 +266,23 @@ def registrar_rutas_fastapi_traductor():
                     sess_handler = list(TRADUCTOR_SESSIONS.values())[-1]
 
                 if sess_handler:
-                    # Siempre apagar el indicador de grabación visual
-                    reset_fn = sess_handler.get("reset_visual")
-                    if reset_fn: reset_fn()
+                    set_visual_fn = sess_handler.get("set_visual")
+                    if set_visual_fn:
+                        set_visual_fn(source, "processing")
 
                     if txt_clean:
                         fn = sess_handler.get("procesar_vendedor" if source == "vendedor" else "procesar_cliente")
                         if fn:
                             threading.Thread(target=fn, args=(txt_clean,), daemon=True).start()
                             return {"status": "ok", "processed": txt_clean}
+                    else:
+                        if set_visual_fn:
+                            set_visual_fn(source, "idle")
 
                 return {"status": "ok"}
             except Exception as e:
                 print("Error en /api/traductor/speech_input:", e)
                 return {"status": "error", "detail": str(e)}
-
-        @app.api_route("/api/traductor/mic_stop", methods=["GET", "POST"])
-        async def api_traductor_mic_stop(request: Request = None, session_id: str = "", source: str = "vendedor"):
-            try:
-                if request:
-                    qp = request.query_params
-                    session_id = session_id or qp.get("session_id", "")
-                    source = source or qp.get("source", "vendedor")
-
-                sess_handler = TRADUCTOR_SESSIONS.get(session_id)
-                if not sess_handler and TRADUCTOR_SESSIONS:
-                    sess_handler = list(TRADUCTOR_SESSIONS.values())[-1]
-
-                if sess_handler:
-                    reset_fn = sess_handler.get("reset_visual")
-                    if reset_fn: reset_fn()
-
-                return {"status": "stopped"}
-            except Exception as ex:
-                return {"status": "error", "detail": str(ex)}
 
         @app.post("/api/traductor/audio_upload")
         async def api_traductor_audio_upload(request: Request):
@@ -290,16 +296,21 @@ def registrar_rutas_fastapi_traductor():
                 if not sess_handler and TRADUCTOR_SESSIONS:
                     sess_handler = list(TRADUCTOR_SESSIONS.values())[-1]
 
-                # Reset visual de inmediato para que el botón no se quede rojo
+                # Mostrar visualmente que está procesando
                 if sess_handler:
-                    reset_fn = sess_handler.get("reset_visual")
-                    if reset_fn: reset_fn()
+                    set_visual_fn = sess_handler.get("set_visual")
+                    if set_visual_fn:
+                        set_visual_fn(source, "processing")
 
                 if not audio_file:
+                    if sess_handler and sess_handler.get("set_visual"):
+                        sess_handler["set_visual"](source, "idle")
                     return {"status": "no_audio"}
 
                 audio_bytes = await audio_file.read()
                 if not audio_bytes:
+                    if sess_handler and sess_handler.get("set_visual"):
+                        sess_handler["set_visual"](source, "idle")
                     return {"status": "empty_audio"}
 
                 is_webm = audio_bytes.startswith(b"\x1a\x45\xdf\xa3") or b"webm" in audio_bytes[:100]
@@ -319,11 +330,12 @@ def registrar_rutas_fastapi_traductor():
                         with open(temp_path, "rb") as f:
                             files = {"file": (f"traductor_rec{ext}", f, mime)}
                             data = {"model": "whisper-large-v3", "response_format": "verbose_json"}
-                            res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=15)
+                            res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=25)
                         if res_w.status_code == 200:
                             w_data = res_w.json()
                             texto_transcrito = w_data.get("text", "").strip()
                             idioma_detectado = w_data.get("language", "auto")
+                            print(f"🎙️ [TRADUCTOR WHISPER] Transcrito exitoso: '{texto_transcrito}' ({idioma_detectado})")
                 finally:
                     try: os.unlink(temp_path)
                     except: pass
@@ -333,6 +345,10 @@ def registrar_rutas_fastapi_traductor():
                     if fn:
                         threading.Thread(target=fn, args=(texto_transcrito,), daemon=True).start()
                         return {"status": "ok", "text": texto_transcrito, "language": idioma_detectado}
+
+                # Si no hubo audio o falló, regresar a idle
+                if sess_handler and sess_handler.get("set_visual"):
+                    sess_handler["set_visual"](source, "idle")
 
                 return {"status": "transcription_finished"}
             except Exception as e_aud:
@@ -363,7 +379,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     status_indicator = ft.Text("Listo para traducir", color="#00FFFF", size=13, weight="bold")
 
     txt_input_vendedor = ft.TextField(
-        hint_text="Escribe o habla en español...",
+        hint_text="Escribe o toca el micro para hablar...",
         hint_style=ft.TextStyle(color="#666677", size=13),
         color="white",
         bgcolor="#0e0e18",
@@ -375,7 +391,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     )
 
     txt_input_cliente = ft.TextField(
-        hint_text="Type or speak in any foreign language...",
+        hint_text="Type or tap the mic to speak...",
         hint_style=ft.TextStyle(color="#666677", size=13),
         color="white",
         bgcolor="#0e0e18",
@@ -430,78 +446,8 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
         try: page.update()
         except: pass
 
-    def procesar_traduccion_vendedor_texto(texto_directo=None):
-        set_mic_vendedor_visual(False)
-        texto = texto_directo if (isinstance(texto_directo, str) and texto_directo.strip()) else txt_input_vendedor.value
-        if not texto or not str(texto).strip():
-            return
-        txt_input_vendedor.value = ""
-        status_indicator.value = "Traduciendo al cliente..."
-        status_indicator.color = "#FFD700"
-        try: page.update()
-        except: pass
-
-        def _task():
-            res = detectar_idioma_y_traducir_ia(texto)
-            if res:
-                idioma_dest = res.get("destino", idioma_cliente_actual[0])
-                trad = res.get("texto_traducido", "")
-                flag_dest = VOCES_NATIVAS_EXTRANJERAS.get(idioma_dest[:2].lower(), {}).get("name", idioma_dest.upper())
-                agregar_burbuja_traduccion(
-                    f"Vendedor (🇲🇽 Español ➔ {flag_dest})",
-                    texto,
-                    trad,
-                    "#00FFFF",
-                    "👤",
-                    lang_code=idioma_dest,
-                    gender=vendedor_genero[0]
-                )
-                reproducir_audio_traduccion_async(trad, idioma_dest, genero=vendedor_genero[0], start_speak_fn=start_speak_fn, page=page)
-            status_indicator.value = "Listo para traducir"
-            status_indicator.color = "#00FFFF"
-            try: page.update()
-            except: pass
-
-        threading.Thread(target=_task, daemon=True).start()
-
-    def procesar_traduccion_cliente_texto(texto_directo=None):
-        set_mic_cliente_visual(False)
-        texto = texto_directo if (isinstance(texto_directo, str) and texto_directo.strip()) else txt_input_cliente.value
-        if not texto or not str(texto).strip():
-            return
-        txt_input_cliente.value = ""
-        status_indicator.value = "Traduciendo al español..."
-        status_indicator.color = "#FFD700"
-        try: page.update()
-        except: pass
-
-        def _task():
-            res = detectar_idioma_y_traducir_ia(texto)
-            if res:
-                idioma_orig = res.get("origen", "en")
-                idioma_cliente_actual[0] = idioma_orig
-                trad = res.get("texto_traducido", "")
-                gen_cliente = res.get("genero_detectado", "female")
-                flag_orig = VOCES_NATIVAS_EXTRANJERAS.get(idioma_orig[:2].lower(), {}).get("name", idioma_orig.upper())
-                agregar_burbuja_traduccion(
-                    f"Cliente ({flag_orig} ➔ 🇲🇽 Vendedor)",
-                    texto,
-                    trad,
-                    "#D8B4FE",
-                    "🕶️",
-                    lang_code="es",
-                    gender=gen_cliente
-                )
-                reproducir_audio_traduccion_async(trad, "es", genero=gen_cliente, start_speak_fn=start_speak_fn, page=page)
-            status_indicator.value = "Listo para traducir"
-            status_indicator.color = "#00FFFF"
-            try: page.update()
-            except: pass
-
-        threading.Thread(target=_task, daemon=True).start()
-
     # =========================================================================
-    # BOTONES DE MICRÓFONO
+    # BOTONES DE MICRÓFONO DE 2 TOQUES (START / STOP MANUAL)
     # =========================================================================
 
     btn_mic_vendedor = ft.Container(
@@ -510,10 +456,10 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
             ft.Text("Hablar", color="#00FFFF", weight="bold", size=13)
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
         bgcolor="#002244",
-        padding=ft.Padding(10, 8, 12, 8),
+        padding=ft.Padding(12, 8, 14, 8),
         border_radius=10,
         border=ft.Border.all(1.5, "#00FFFF"),
-        tooltip="Presiona para hablar en español por el micrófono",
+        tooltip="1er toque: Iniciar grabación. 2do toque: Cortar y traducir.",
     )
 
     btn_mic_cliente = ft.Container(
@@ -522,157 +468,179 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
             ft.Text("Speak", color="#D8B4FE", weight="bold", size=13)
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
         bgcolor="#2E0854",
-        padding=ft.Padding(10, 8, 12, 8),
+        padding=ft.Padding(12, 8, 14, 8),
         border_radius=10,
         border=ft.Border.all(1.5, "#D8B4FE"),
-        tooltip="Click to speak in your native language",
+        tooltip="1st tap: Start speaking. 2nd tap: Finish and translate.",
     )
 
-    def set_mic_vendedor_visual(activo: bool):
-        grabando_estado["vendedor"] = activo
-        if activo:
-            btn_mic_vendedor.bgcolor = "#B71C1C"
-            btn_mic_vendedor.border = ft.Border.all(2, "#FF5252")
-            btn_mic_vendedor.content.controls[0].name = ft.Icons.MIC_EXTERNAL_ON_ROUNDED
-            btn_mic_vendedor.content.controls[0].color = "white"
-            btn_mic_vendedor.content.controls[1].value = "Escuchando..."
-            btn_mic_vendedor.content.controls[1].color = "white"
-            status_indicator.value = "🎙️ Escuchando vendedor en español..."
-            status_indicator.color = "#FF5252"
-        else:
-            btn_mic_vendedor.bgcolor = "#002244"
-            btn_mic_vendedor.border = ft.Border.all(1.5, "#00FFFF")
-            btn_mic_vendedor.content.controls[0].name = ft.Icons.MIC_ROUNDED
-            btn_mic_vendedor.content.controls[0].color = "#00FFFF"
-            btn_mic_vendedor.content.controls[1].value = "Hablar"
-            btn_mic_vendedor.content.controls[1].color = "#00FFFF"
-            status_indicator.value = "Listo para traducir"
-            status_indicator.color = "#00FFFF"
-        try:
-            btn_mic_vendedor.update()
-            status_indicator.update()
+    def set_visual_estado(source: str, state: str):
+        """Actualiza el estado visual exacto del botón según los toques."""
+        if source == "vendedor":
+            if state == "recording":
+                grabando_estado["vendedor"] = True
+                btn_mic_vendedor.bgcolor = "#B71C1C"
+                btn_mic_vendedor.border = ft.Border.all(2, "#FF5252")
+                btn_mic_vendedor.content.controls[0].name = ft.Icons.STOP_CIRCLE_ROUNDED
+                btn_mic_vendedor.content.controls[0].color = "white"
+                btn_mic_vendedor.content.controls[1].value = "🔴 Detener"
+                btn_mic_vendedor.content.controls[1].color = "white"
+                status_indicator.value = "🎙️ Grabando vendedor... (Toca Detener para traducir)"
+                status_indicator.color = "#FF5252"
+            elif state == "processing":
+                grabando_estado["vendedor"] = False
+                btn_mic_vendedor.bgcolor = "#F57F17"
+                btn_mic_vendedor.border = ft.Border.all(2, "#FFD54F")
+                btn_mic_vendedor.content.controls[0].name = ft.Icons.HOURGLASS_TOP_ROUNDED
+                btn_mic_vendedor.content.controls[0].color = "white"
+                btn_mic_vendedor.content.controls[1].value = "⏳ Traduciendo..."
+                btn_mic_vendedor.content.controls[1].color = "white"
+                status_indicator.value = "⏳ Traduciendo y sintetizando voz..."
+                status_indicator.color = "#FFD54F"
+            else: # idle
+                grabando_estado["vendedor"] = False
+                btn_mic_vendedor.bgcolor = "#002244"
+                btn_mic_vendedor.border = ft.Border.all(1.5, "#00FFFF")
+                btn_mic_vendedor.content.controls[0].name = ft.Icons.MIC_ROUNDED
+                btn_mic_vendedor.content.controls[0].color = "#00FFFF"
+                btn_mic_vendedor.content.controls[1].value = "Hablar"
+                btn_mic_vendedor.content.controls[1].color = "#00FFFF"
+                status_indicator.value = "Listo para traducir"
+                status_indicator.color = "#00FFFF"
+            try:
+                btn_mic_vendedor.update()
+                status_indicator.update()
+            except: pass
+
+        elif source == "cliente":
+            if state == "recording":
+                grabando_estado["cliente"] = True
+                btn_mic_cliente.bgcolor = "#B71C1C"
+                btn_mic_cliente.border = ft.Border.all(2, "#FF5252")
+                btn_mic_cliente.content.controls[0].name = ft.Icons.STOP_CIRCLE_ROUNDED
+                btn_mic_cliente.content.controls[0].color = "white"
+                btn_mic_cliente.content.controls[1].value = "🔴 Finish"
+                btn_mic_cliente.content.controls[1].color = "white"
+                status_indicator.value = "🎙️ Recording client... (Tap Finish to translate)"
+                status_indicator.color = "#FF5252"
+            elif state == "processing":
+                grabando_estado["cliente"] = False
+                btn_mic_cliente.bgcolor = "#F57F17"
+                btn_mic_cliente.border = ft.Border.all(2, "#FFD54F")
+                btn_mic_cliente.content.controls[0].name = ft.Icons.HOURGLASS_TOP_ROUNDED
+                btn_mic_cliente.content.controls[0].color = "white"
+                btn_mic_cliente.content.controls[1].value = "⏳ Translating..."
+                btn_mic_cliente.content.controls[1].color = "white"
+                status_indicator.value = "⏳ Translating client message..."
+                status_indicator.color = "#FFD54F"
+            else: # idle
+                grabando_estado["cliente"] = False
+                btn_mic_cliente.bgcolor = "#2E0854"
+                btn_mic_cliente.border = ft.Border.all(1.5, "#D8B4FE")
+                btn_mic_cliente.content.controls[0].name = ft.Icons.MIC_ROUNDED
+                btn_mic_cliente.content.controls[0].color = "#D8B4FE"
+                btn_mic_cliente.content.controls[1].value = "Speak"
+                btn_mic_cliente.content.controls[1].color = "#D8B4FE"
+                status_indicator.value = "Listo para traducir"
+                status_indicator.color = "#00FFFF"
+            try:
+                btn_mic_cliente.update()
+                status_indicator.update()
+            except: pass
+
+    def procesar_traduccion_vendedor_texto(texto_directo=None):
+        set_visual_estado("vendedor", "processing")
+        texto = texto_directo if (isinstance(texto_directo, str) and texto_directo.strip()) else txt_input_vendedor.value
+        if not texto or not str(texto).strip():
+            set_visual_estado("vendedor", "idle")
+            return
+        txt_input_vendedor.value = ""
+        try: page.update()
         except: pass
 
-    def set_mic_cliente_visual(activo: bool):
-        grabando_estado["cliente"] = activo
-        if activo:
-            btn_mic_cliente.bgcolor = "#B71C1C"
-            btn_mic_cliente.border = ft.Border.all(2, "#FF5252")
-            btn_mic_cliente.content.controls[0].name = ft.Icons.MIC_EXTERNAL_ON_ROUNDED
-            btn_mic_cliente.content.controls[0].color = "white"
-            btn_mic_cliente.content.controls[1].value = "Listening..."
-            btn_mic_cliente.content.controls[1].color = "white"
-            status_indicator.value = "🎙️ Listening to client voice..."
-            status_indicator.color = "#FF5252"
-        else:
-            btn_mic_cliente.bgcolor = "#2E0854"
-            btn_mic_cliente.border = ft.Border.all(1.5, "#D8B4FE")
-            btn_mic_cliente.content.controls[0].name = ft.Icons.MIC_ROUNDED
-            btn_mic_cliente.content.controls[0].color = "#D8B4FE"
-            btn_mic_cliente.content.controls[1].value = "Speak"
-            btn_mic_cliente.content.controls[1].color = "#D8B4FE"
-            status_indicator.value = "Listo para traducir"
-            status_indicator.color = "#00FFFF"
-        try:
-            btn_mic_cliente.update()
-            status_indicator.update()
+        def _task():
+            try:
+                res = detectar_idioma_y_traducir_ia(texto)
+                if res:
+                    idioma_dest = res.get("destino", idioma_cliente_actual[0])
+                    trad = res.get("texto_traducido", "")
+                    flag_dest = VOCES_NATIVAS_EXTRANJERAS.get(idioma_dest[:2].lower(), {}).get("name", idioma_dest.upper())
+                    agregar_burbuja_traduccion(
+                        f"Vendedor (🇲🇽 Español ➔ {flag_dest})",
+                        texto,
+                        trad,
+                        "#00FFFF",
+                        "👤",
+                        lang_code=idioma_dest,
+                        gender=vendedor_genero[0]
+                    )
+                    reproducir_audio_traduccion_async(trad, idioma_dest, genero=vendedor_genero[0], start_speak_fn=start_speak_fn, page=page)
+            finally:
+                set_visual_estado("vendedor", "idle")
+
+        threading.Thread(target=_task, daemon=True).start()
+
+    def procesar_traduccion_cliente_texto(texto_directo=None):
+        set_visual_estado("cliente", "processing")
+        texto = texto_directo if (isinstance(texto_directo, str) and texto_directo.strip()) else txt_input_cliente.value
+        if not texto or not str(texto).strip():
+            set_visual_estado("cliente", "idle")
+            return
+        txt_input_cliente.value = ""
+        try: page.update()
         except: pass
 
-    def reset_todos_los_mics():
-        set_mic_vendedor_visual(False)
-        set_mic_cliente_visual(False)
+        def _task():
+            try:
+                res = detectar_idioma_y_traducir_ia(texto)
+                if res:
+                    idioma_orig = res.get("origen", "en")
+                    idioma_cliente_actual[0] = idioma_orig
+                    trad = res.get("texto_traducido", "")
+                    gen_cliente = res.get("genero_detectado", "female")
+                    flag_orig = VOCES_NATIVAS_EXTRANJERAS.get(idioma_orig[:2].lower(), {}).get("name", idioma_orig.upper())
+                    agregar_burbuja_traduccion(
+                        f"Cliente ({flag_orig} ➔ 🇲🇽 Vendedor)",
+                        texto,
+                        trad,
+                        "#D8B4FE",
+                        "🕶️",
+                        lang_code="es",
+                        gender=gen_cliente
+                    )
+                    reproducir_audio_traduccion_async(trad, "es", genero=gen_cliente, start_speak_fn=start_speak_fn, page=page)
+            finally:
+                set_visual_estado("cliente", "idle")
 
-    # Registrar session handlers con reset visual incluido
+        threading.Thread(target=_task, daemon=True).start()
+
+    # Registrar sesión activa en memoria persistente
     TRADUCTOR_SESSIONS[session_token] = {
         "procesar_vendedor": procesar_traduccion_vendedor_texto,
         "procesar_cliente": procesar_traduccion_cliente_texto,
-        "reset_visual": reset_todos_los_mics,
+        "set_visual": set_visual_estado,
         "page": page
     }
 
+    # Control de toques interactivos
     def on_mic_vendedor_click(e):
-        if grabando_estado["vendedor"]:
-            set_mic_vendedor_visual(False)
-            if getattr(page, "web", False):
-                try:
-                    page.launch_url("javascript:if(window.luxoStopTraductorMic) window.luxoStopTraductorMic(); void(0);")
-                except: pass
-            return
-
-        set_mic_vendedor_visual(True)
-
         if getattr(page, "web", False):
-            js_call = f"""
-            (function() {{
-                if (window.luxoStartTraductorMic) {{
-                    window.luxoStartTraductorMic('vendedor', '{session_token}');
-                }}
-            }})();
-            """
-            try:
-                page.launch_url(f"javascript:{js_call}")
-            except Exception as ex_m:
-                print("Notice launch mic vendedor:", ex_m)
+            page.launch_url(f"javascript:window.luxoToggleTraductorMic('vendedor', '{session_token}'); void(0);")
         else:
-            def _local_speech_vendedor():
-                try:
-                    import speech_recognition as sr
-                    r = sr.Recognizer()
-                    r.pause_threshold = 1.0
-                    with sr.Microphone() as source:
-                        r.adjust_for_ambient_noise(source, duration=0.6)
-                        audio = r.listen(source, timeout=6, phrase_time_limit=15)
-                        txt = r.recognize_google(audio, language="es-MX")
-                        if txt:
-                            procesar_traduccion_vendedor_texto(txt)
-                except Exception as ex_sr:
-                    print("Notice mic local vendedor:", ex_sr)
-                finally:
-                    set_mic_vendedor_visual(False)
-
-            threading.Thread(target=_local_speech_vendedor, daemon=True).start()
+            # En escritorio nativo
+            if grabando_estado["vendedor"]:
+                set_visual_estado("vendedor", "idle")
+            else:
+                set_visual_estado("vendedor", "recording")
 
     def on_mic_cliente_click(e):
-        if grabando_estado["cliente"]:
-            set_mic_cliente_visual(False)
-            if getattr(page, "web", False):
-                try:
-                    page.launch_url("javascript:if(window.luxoStopTraductorMic) window.luxoStopTraductorMic(); void(0);")
-                except: pass
-            return
-
-        set_mic_cliente_visual(True)
-
         if getattr(page, "web", False):
-            js_call = f"""
-            (function() {{
-                if (window.luxoStartTraductorMic) {{
-                    window.luxoStartTraductorMic('cliente', '{session_token}');
-                }}
-            }})();
-            """
-            try:
-                page.launch_url(f"javascript:{js_call}")
-            except Exception as ex_mc:
-                print("Notice launch mic cliente:", ex_mc)
+            page.launch_url(f"javascript:window.luxoToggleTraductorMic('cliente', '{session_token}'); void(0);")
         else:
-            def _local_speech_cliente():
-                try:
-                    import speech_recognition as sr
-                    r = sr.Recognizer()
-                    r.pause_threshold = 1.2
-                    with sr.Microphone() as source:
-                        r.adjust_for_ambient_noise(source, duration=0.6)
-                        audio = r.listen(source, timeout=6, phrase_time_limit=15)
-                        txt = r.recognize_google(audio, language=idioma_cliente_actual[0])
-                        if txt:
-                            procesar_traduccion_cliente_texto(txt)
-                except Exception as ex_cl:
-                    print("Notice mic local cliente:", ex_cl)
-                finally:
-                    set_mic_cliente_visual(False)
-
-            threading.Thread(target=_local_speech_cliente, daemon=True).start()
+            if grabando_estado["cliente"]:
+                set_visual_estado("cliente", "idle")
+            else:
+                set_visual_estado("cliente", "recording")
 
     btn_mic_vendedor.on_click = on_mic_vendedor_click
     btn_mic_cliente.on_click = on_mic_cliente_click
@@ -704,8 +672,8 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
         chat_list.controls.clear()
         agregar_burbuja_traduccion(
             "LUXO Sistema",
-            "Traductor de mostrador listo. Puedes hablar o escribir.",
-            "Counter interpreter ready. You can speak or type in any language.",
+            "Traductor de mostrador listo. Toca 'Hablar' para empezar y toca de nuevo para cortar y traducir.",
+            "Counter interpreter ready. Tap 'Speak' to start and tap again to finish and translate.",
             "#00FFFF",
             "✨",
             lang_code="en"
@@ -750,7 +718,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
         content=ft.Column([
             ft.Row([
                 ft.Text("🌍 LADO CLIENTE (Cualquier Idioma)", color="#D8B4FE", weight="bold", size=14),
-                ft.Text("✨ Auto-Detección de Idioma y Tono", size=11, color="#aaaaaa")
+                ft.Text("✨ Auto-Detección y Voz Nativa", size=11, color="#aaaaaa")
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Row([
                 txt_input_cliente,
@@ -770,143 +738,108 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
         border=ft.Border.all(1.5, "#D8B4FE")
     )
 
-    # Inyección de código JavaScript para captura de voz de mostrador en el navegador
+    # Inyección garantizada de captura de audio continua de 2 toques
     js_init_traductor_audio = """
     (function() {
-        if (window._luxoTraductorInjected) return;
-        window._luxoTraductorInjected = true;
+        window._luxoTradRecording = { 'vendedor': false, 'cliente': false };
+        window._luxoTradRecorders = { 'vendedor': null, 'cliente': null };
+        window._luxoTradStreams = { 'vendedor': null, 'cliente': null };
+        window._luxoTradChunks = { 'vendedor': [], 'cliente': [] };
 
-        let _tradMediaRecorder = null;
-        let _tradAudioChunks = [];
-        let _tradAudioStream = null;
-        let _tradActiveSource = null;
-        let _tradActiveSession = null;
-        let _tradTimer = null;
-        let _tradSpeechRec = null;
-
-        window.luxoStartTraductorMic = function(source, sessionId) {
-            _tradActiveSource = source || 'vendedor';
-            _tradActiveSession = sessionId || '';
-
-            // 1. Si es vendedor (español), usar WebSpeech API si está soportado
-            let SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (source === 'vendedor' && SR) {
-                try {
-                    if (_tradSpeechRec) {
-                        try { _tradSpeechRec.abort(); } catch(e){}
-                        _tradSpeechRec = null;
-                    }
-                    let rec = new SR();
-                    rec.lang = 'es-MX';
-                    rec.interimResults = false;
-                    rec.continuous = false;
-                    _tradSpeechRec = rec;
-
-                    let gotResult = false;
-                    rec.onresult = function(ev) {
-                        gotResult = true;
-                        let txt = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
-                        if (txt) {
-                            fetch('/api/traductor/speech_input?source=vendedor&session_id=' + encodeURIComponent(_tradActiveSession) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
-                        }
-                    };
-
-                    rec.onend = function() {
-                        _tradSpeechRec = null;
-                        if (!gotResult) {
-                            fetch('/api/traductor/mic_stop?source=vendedor&session_id=' + encodeURIComponent(_tradActiveSession), { method: 'POST' });
-                        }
-                    };
-
-                    rec.onerror = function(ev) {
-                        console.log('[TRADUCTOR SR ERROR]', ev.error);
-                        _tradSpeechRec = null;
-                        if (ev.error !== 'no-speech') {
-                            iniciarMediaRecorderTraductor(source, sessionId);
-                        } else {
-                            fetch('/api/traductor/mic_stop?source=vendedor&session_id=' + encodeURIComponent(_tradActiveSession), { method: 'POST' });
-                        }
-                    };
-
-                    rec.start();
-                    return;
-                } catch(e) {
-                    console.log('[TRADUCTOR SR EXCEPTION]', e);
-                }
+        window.luxoToggleTraductorMic = function(source, sessionId) {
+            console.log('[TRADUCTOR TOGGLE MIC]', source, 'Grabando actual:', window._luxoTradRecording[source]);
+            if (window._luxoTradRecording[source]) {
+                // Segundo toque: Detener y enviar
+                window.luxoStopTraductorMic(source, sessionId);
+            } else {
+                // Primer toque: Iniciar grabación continua sin límite de tiempo
+                window.luxoStartTraductorMic(source, sessionId);
             }
-
-            // 2. Para cliente extranjero (cualquier idioma) o fallback, usar MediaRecorder (Whisper auto-detect)
-            iniciarMediaRecorderTraductor(source, sessionId);
         };
 
-        function iniciarMediaRecorderTraductor(source, sessionId) {
+        window.luxoStartTraductorMic = function(source, sessionId) {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 alert('⚠️ Micrófono no soportado en este navegador.');
-                fetch('/api/traductor/mic_stop?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId), { method: 'POST' });
+                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
                 return;
             }
 
+            // Apagar la otra grabación si estaba activa
+            ['vendedor', 'cliente'].forEach(function(s) {
+                if (s !== source && window._luxoTradRecording[s]) {
+                    window.luxoStopTraductorMic(s, sessionId);
+                }
+            });
+
             navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
-                _tradAudioStream = stream;
-                _tradAudioChunks = [];
+                window._luxoTradStreams[source] = stream;
+                window._luxoTradChunks[source] = [];
+
                 let mimeType = 'audio/webm';
                 if (!MediaRecorder.isTypeSupported('audio/webm')) {
                     mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
                 }
 
-                _tradMediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
-                _tradMediaRecorder.ondataavailable = function(e) {
-                    if (e.data && e.data.size > 0) _tradAudioChunks.push(e.data);
+                let mr = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+                window._luxoTradRecorders[source] = mr;
+                window._luxoTradRecording[source] = true;
+
+                mr.ondataavailable = function(e) {
+                    if (e.data && e.data.size > 0) {
+                        window._luxoTradChunks[source].push(e.data);
+                    }
                 };
 
-                _tradMediaRecorder.onstop = function() {
-                    if (_tradAudioStream) {
-                        _tradAudioStream.getTracks().forEach(function(t) { t.stop(); });
-                        _tradAudioStream = null;
+                mr.onstop = function() {
+                    window._luxoTradRecording[source] = false;
+                    if (window._luxoTradStreams[source]) {
+                        window._luxoTradStreams[source].getTracks().forEach(function(t) { t.stop(); });
+                        window._luxoTradStreams[source] = null;
                     }
-                    if (_tradAudioChunks.length > 0) {
-                        const blob = new Blob(_tradAudioChunks, { type: mimeType || 'audio/webm' });
+
+                    let chunks = window._luxoTradChunks[source] || [];
+                    if (chunks.length > 0) {
+                        const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
                         const fd = new FormData();
                         fd.append('file', blob, 'traductor_rec.webm');
-                        fd.append('source', _tradActiveSource || 'cliente');
-                        fd.append('session_id', _tradActiveSession || '');
+                        fd.append('source', source);
+                        fd.append('session_id', sessionId || '');
 
                         fetch('/api/traductor/audio_upload', {
                             method: 'POST',
                             body: fd
+                        }).then(function(res) {
+                            return res.json();
+                        }).then(function(data) {
+                            console.log('[TRADUCTOR UPLOAD EXITOSO]', data);
                         }).catch(function(err) {
-                            console.log('[TRADUCTOR UPLOAD ERR]', err);
-                            fetch('/api/traductor/mic_stop?source=' + encodeURIComponent(_tradActiveSource) + '&session_id=' + encodeURIComponent(_tradActiveSession), { method: 'POST' });
+                            console.log('[TRADUCTOR UPLOAD ERROR]', err);
+                            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
                         });
                     } else {
-                        fetch('/api/traductor/mic_stop?source=' + encodeURIComponent(_tradActiveSource) + '&session_id=' + encodeURIComponent(_tradActiveSession), { method: 'POST' });
+                        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
                     }
                 };
 
-                _tradMediaRecorder.start();
-
-                // Parar automáticamente a los 5 segundos de grabación si no se detuvo antes
-                if (_tradTimer) clearTimeout(_tradTimer);
-                _tradTimer = setTimeout(function() {
-                    window.luxoStopTraductorMic();
-                }, 5500);
+                mr.start();
+                // Notificar a Python que está grabando (pone botón en rojo)
+                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=recording', { method: 'POST' });
 
             }).catch(function(err) {
-                console.log('[TRADUCTOR MIC ERR]', err);
-                fetch('/api/traductor/mic_stop?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId), { method: 'POST' });
+                console.log('[TRADUCTOR MIC PERMISSION ERROR]', err);
+                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
                 if (err.name === 'NotAllowedError') {
-                    alert('⚠️ Permite el acceso al micrófono en tu navegador para usar el traductor.');
+                    alert('⚠️ Permite el acceso al micrófono en tu navegador para hablar.');
                 }
             });
-        }
+        };
 
-        window.luxoStopTraductorMic = function() {
-            if (_tradTimer) clearTimeout(_tradTimer);
-            if (_tradSpeechRec) {
-                try { _tradSpeechRec.stop(); } catch(e){}
-            }
-            if (_tradMediaRecorder && _tradMediaRecorder.state === 'recording') {
-                try { _tradMediaRecorder.stop(); } catch(e){}
+        window.luxoStopTraductorMic = function(source, sessionId) {
+            let mr = window._luxoTradRecorders[source];
+            if (mr && mr.state === 'recording') {
+                // Notificar a Python que está procesando (pone botón en amarillo)
+                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=processing', { method: 'POST' });
+                try { mr.stop(); } catch(e){}
             }
         };
     })();
@@ -925,7 +858,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
             status_indicator,
             btn_limpiar
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-        ft.Text("Traducción inteligente bidireccional por voz y texto con auto-detección de idioma y pronunciación nativa.", size=12, color="#888899"),
+        ft.Text("Traducción inteligente bidireccional por voz con sistema de 2 toques (Toca para hablar, toca para traducir sin límite de tiempo).", size=12, color="#888899"),
         ft.Divider(height=10, color="#222233"),
         ft.Container(
             content=chat_list,
