@@ -113,7 +113,7 @@
         if (force === true) {
             window.luxoUserIsLoggedIn = false;
         }
-        if (window.luxoUserIsLoggedIn) {
+        if (window.luxoUserIsLoggedIn || (!force && hasActiveStoredSession())) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
