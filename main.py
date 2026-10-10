@@ -25512,11 +25512,11 @@ Ejemplo:
                             page.shared_preferences.get("last_active_view"),
                             return_exceptions=True
                         ),
-                        timeout=0.8
+                        timeout=3.5
                     )
-                    uid_saved = pref_results[0] if not isinstance(pref_results[0], Exception) else None
-                    last_act_str = pref_results[1] if not isinstance(pref_results[1], Exception) else None
-                    last_view_saved = pref_results[2] if not isinstance(pref_results[2], Exception) else None
+                    uid_saved = pref_results[0] if (len(pref_results) > 0 and not isinstance(pref_results[0], Exception)) else None
+                    last_act_str = pref_results[1] if (len(pref_results) > 1 and not isinstance(pref_results[1], Exception)) else None
+                    last_view_saved = pref_results[2] if (len(pref_results) > 2 and not isinstance(pref_results[2], Exception)) else None
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
@@ -25561,10 +25561,13 @@ Ejemplo:
             if uid_saved:
                 try:
                     import time
-                    session_expired = True
+                    session_expired = False
                     if last_act_str:
-                        last_act = int(last_act_str)
-                        if time.time() - last_act <= 1800: # 1800 segundos = 30 minutos
+                        try:
+                            last_act = int(last_act_str)
+                            if time.time() - last_act > 1800: # Superó 30 minutos reales
+                                session_expired = True
+                        except Exception:
                             session_expired = False
                     
                     if session_expired:
@@ -25574,14 +25577,14 @@ Ejemplo:
                             ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
                         except Exception: pass
                         uid_saved = None
-                        print("Sesión expirada automáticamente por inactividad (>30m o sin marca reciente)")
+                        print("Sesión expirada automáticamente por inactividad (>30m)")
                     else:
-                        # Renovar la actividad para dar otros 30 minutos a partir de ahora
+                        # Sesión válida y activa: renovar marca de tiempo
                         try:
                             await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
                         except Exception: pass
                 except Exception:
-                    uid_saved = None
+                    pass
                     
             if uid_saved:
                 detener_audio_avatar_nativo()

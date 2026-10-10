@@ -154,17 +154,21 @@
         }
     };
 
-    // Auto-activación al cargar el DOM si no se ha iniciado sesión
+    // Auto-activación al cargar el DOM si no se ha iniciado sesión ni hay sesión activa
     try {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() {
-                if (!window.luxoUserIsLoggedIn) {
+                if (!window.luxoUserIsLoggedIn && !hasActiveStoredSession()) {
                     window.luxoPlayLoginAvatarAudio();
+                } else if (hasActiveStoredSession()) {
+                    window.luxoStopLoginAvatarAudio();
                 }
             });
         } else {
-            if (!window.luxoUserIsLoggedIn) {
+            if (!window.luxoUserIsLoggedIn && !hasActiveStoredSession()) {
                 window.luxoPlayLoginAvatarAudio();
+            } else if (hasActiveStoredSession()) {
+                window.luxoStopLoginAvatarAudio();
             }
         }
     } catch(e){}
