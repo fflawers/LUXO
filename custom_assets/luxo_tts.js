@@ -196,15 +196,52 @@
         } catch(e){}
     };
 
-    // Interceptor INMEDIATO al hacer clic en ACCEDER o presionar Enter (corta el audio al instante con 0ms de latencia)
+    // Interceptor INMEDIATO al hacer clic en ACCEDER, Huella o Face ID (0ms de latencia)
     try {
+        function _obtenerTextoElementoYPadres(el, maxDepth = 4) {
+            let combined = '';
+            let curr = el;
+            let depth = 0;
+            while (curr && depth < maxDepth) {
+                let txt = (curr.innerText || curr.textContent || '').trim();
+                let tt = (curr.getAttribute && curr.getAttribute('tooltip')) || '';
+                let al = (curr.getAttribute && curr.getAttribute('aria-label')) || '';
+                let ti = (curr.getAttribute && curr.getAttribute('title')) || '';
+                combined += ` ${txt} ${tt} ${al} ${ti}`;
+                curr = curr.parentElement;
+                depth++;
+            }
+            return combined.toLowerCase();
+        }
+
         document.addEventListener('click', function(e) {
             let t = e.target;
-            if (t && (t.innerText === 'ACCEDER' || (t.textContent && t.textContent.trim().toUpperCase() === 'ACCEDER') || (t.getAttribute && t.getAttribute('tooltip') === 'ACCEDER'))) {
+            if (!t) return;
+            let combined = _obtenerTextoElementoYPadres(t);
+
+            // 1. Acceder (corta el audio del avatar inmediatamente)
+            if (combined.includes('acceder')) {
                 window.luxoUserIsLoggedIn = true;
                 window.luxoStopLoginAvatarAudio();
             }
+
+            // 2. Huella / Passkey instantáneo (0ms sin esperar WebSocket/polling)
+            if (!window.luxoUserIsLoggedIn && (combined.includes('huella') || combined.includes('passkey'))) {
+                console.log("[LUXO BIOMETRIA] Clic directo detectado: Abriendo Huella / Passkey instantáneamente (0ms)");
+                if (window.luxoActivarPasskeyLogin) {
+                    window.luxoActivarPasskeyLogin();
+                }
+            }
+
+            // 3. Face ID instantáneo (0ms sin esperar WebSocket/polling)
+            if (!window.luxoUserIsLoggedIn && (combined.includes('face id') || combined.includes('reconocimiento facial') || combined.includes('facial'))) {
+                console.log("[LUXO BIOMETRIA] Clic directo detectado: Abriendo Face ID instantáneamente (0ms)");
+                if (window.luxoAbrirCamaraFacialLogin) {
+                    window.luxoAbrirCamaraFacialLogin();
+                }
+            }
         }, true);
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 window.luxoStopLoginAvatarAudio();
@@ -988,7 +1025,7 @@
             if (el) { el.innerText = msg; el.style.color = color || '#00FFFF'; }
         };
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } } })
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } })
         .then(s => {
             stream = s;
             const vid = document.getElementById('luxo-cam-login');
