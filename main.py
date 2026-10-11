@@ -25120,7 +25120,7 @@ Ejemplo:
         try:
             if audio_is_muted[0]:
                 return
-            ejecutar_js_flet(page, "if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(); }")
+            ejecutar_js_flet(page, "if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
         except Exception as ex_nat:
             print("Notice reproducir audio avatar nativo:", ex_nat)
 
@@ -25165,7 +25165,7 @@ Ejemplo:
     def desmutear_avatar_logout():
         has_interacted_audio[0] = True
         audio_is_muted[0] = False
-        ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(); }")
+        ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
         if btn_audio:
             try:
                 btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
@@ -25652,7 +25652,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
-        ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false;")
+        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
         reproducir_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)
