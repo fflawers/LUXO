@@ -281,19 +281,23 @@ def reproducir_audio_traduccion_async(texto: str, idioma: str, genero: str = "fe
 
     threading.Thread(target=_worker, daemon=True).start()
 
-def registrar_rutas_fastapi_traductor():
-    """Registra rutas de FastAPI dinamicamente para recibir dictado de audio y estados del traductor."""
+def registrar_rutas_fastapi_traductor(app=None):
+    """Registra rutas de FastAPI dinamicamente con prioridad maxima al inicio de la tabla de ruteo."""
     try:
         import gc, fastapi
-        apps = [obj for obj in gc.get_objects() if isinstance(obj, fastapi.FastAPI)]
-        if not apps:
-            return
-        app = apps[0]
-
-        # Verificar si ya estan registradas
-        for r in app.router.routes:
-            if getattr(r, "path", None) == "/api/traductor/speech_input":
+        if not app:
+            apps = [obj for obj in gc.get_objects() if isinstance(obj, fastapi.FastAPI)]
+            if not apps:
                 return
+            app = apps[0]
+
+        # Verificar si ya estan registradas y asegurar que esten al principio
+        rutas_existentes = [getattr(r, "path", None) for r in app.router.routes]
+        if "/api/traductor/speech_input" in rutas_existentes and "/api/traductor/audio_upload" in rutas_existentes:
+            trad_routes = [r for r in app.router.routes if str(getattr(r, "path", "")).startswith("/api/traductor")]
+            other_routes = [r for r in app.router.routes if not str(getattr(r, "path", "")).startswith("/api/traductor")]
+            app.router.routes = trad_routes + other_routes
+            return
 
         from fastapi import Request
         import tempfile
@@ -373,7 +377,6 @@ def registrar_rutas_fastapi_traductor():
                 if not sess_handler and TRADUCTOR_SESSIONS:
                     sess_handler = list(TRADUCTOR_SESSIONS.values())[-1]
 
-                # Mostrar visualmente que esta procesando
                 if sess_handler:
                     set_visual_fn = sess_handler.get("set_visual")
                     if set_visual_fn:
@@ -390,9 +393,17 @@ def registrar_rutas_fastapi_traductor():
                         sess_handler["set_visual"](source, "idle")
                     return {"status": "empty_audio"}
 
-                is_webm = audio_bytes.startswith(b"\x1a\x45\xdf\xa3") or b"webm" in audio_bytes[:100]
-                ext = ".webm" if is_webm else ".wav"
-                mime = "audio/webm" if is_webm else "audio/wav"
+                # Deteccion inteligente de formato contenedor
+                if audio_bytes.startswith(b"\x1a\x45\xdf\xa3") or b"webm" in audio_bytes[:100]:
+                    ext, mime = ".webm", "audio/webm"
+                elif b"ftyp" in audio_bytes[:30] or b"mp4" in audio_bytes[:30] or audio_bytes.startswith(b"\x00\x00\x00"):
+                    ext, mime = ".mp4", "audio/mp4"
+                elif audio_bytes.startswith(b"RIFF"):
+                    ext, mime = ".wav", "audio/wav"
+                elif audio_bytes.startswith(b"OggS"):
+                    ext, mime = ".ogg", "audio/ogg"
+                else:
+                    ext, mime = ".webm", "audio/webm"
 
                 with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
                     tmp.write(audio_bytes)
@@ -408,12 +419,12 @@ def registrar_rutas_fastapi_traductor():
                             with open(temp_path, "rb") as f:
                                 files = {"file": (f"traductor_rec{ext}", f, mime)}
                                 data = {"model": "whisper-large-v3", "response_format": "verbose_json"}
-                                res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=25)
+                                res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=12)
                             if res_w.status_code == 200:
                                 w_data = res_w.json()
                                 texto_transcrito = w_data.get("text", "").strip()
                                 idioma_detectado = w_data.get("language", "auto")
-                                print(f"🎙️ [TRADUCTOR WHISPER] Transcrito exitoso: '{texto_transcrito}' ({idioma_detectado})")
+                                print(f"[TRADUCTOR WHISPER] Transcrito exitoso: '{texto_transcrito}' ({idioma_detectado})")
                                 if texto_transcrito:
                                     break
                         except Exception as ex_w:
@@ -435,7 +446,15 @@ def registrar_rutas_fastapi_traductor():
                 return {"status": "transcription_finished"}
             except Exception as e_aud:
                 print("Error en /api/traductor/audio_upload:", e_aud)
+                if sess_handler and sess_handler.get("set_visual"):
+                    sess_handler["set_visual"](source, "idle")
                 return {"status": "error", "detail": str(e_aud)}
+
+        # REORDENAR RUTAS: Ponerlas al principio de app.router.routes para que precedan a app.mount("/", ...)
+        trad_routes = [r for r in app.router.routes if str(getattr(r, "path", "")).startswith("/api/traductor")]
+        other_routes = [r for r in app.router.routes if not str(getattr(r, "path", "")).startswith("/api/traductor")]
+        app.router.routes = trad_routes + other_routes
+        print(f"Rutas de traductor registradas y priorizadas en FastAPI: {len(trad_routes)} endpoints.")
 
     except Exception as ex_reg:
         print("Notice registrar_rutas_fastapi_traductor:", ex_reg)
@@ -558,7 +577,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     )
 
     def set_visual_estado(source: str, state: str):
-        """Actualiza el estado visual exacto del boton segun los toques."""
+        """Actualiza el estado visual exacto del boton segun los toques con auto-watchdog."""
         if source == "vendedor":
             if state == "recording":
                 grabando_estado["vendedor"] = True
@@ -580,6 +599,17 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                 btn_mic_vendedor.content.controls[1].color = "white"
                 status_indicator.value = "Traduciendo y sintetizando voz..."
                 status_indicator.color = "#FFD54F"
+
+                # WATCHDOG DE SEGURIDAD (Max 10 segundos)
+                def _watchdog_vendedor():
+                    time.sleep(10)
+                    try:
+                        if "Traduciendo" in str(btn_mic_vendedor.content.controls[1].value):
+                            print("[WATCHDOG] Recuperando boton vendedor de processing a idle")
+                            set_visual_estado("vendedor", "idle")
+                    except Exception: pass
+                threading.Thread(target=_watchdog_vendedor, daemon=True).start()
+
             else: # idle
                 grabando_estado["vendedor"] = False
                 btn_mic_vendedor.bgcolor = "#002244"
@@ -617,6 +647,17 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                 btn_mic_cliente.content.controls[1].color = "white"
                 status_indicator.value = "Translating client message..."
                 status_indicator.color = "#FFD54F"
+
+                # WATCHDOG DE SEGURIDAD (Max 10 segundos)
+                def _watchdog_cliente():
+                    time.sleep(10)
+                    try:
+                        if "Translating" in str(btn_mic_cliente.content.controls[1].value):
+                            print("[WATCHDOG] Recuperando boton cliente de processing a idle")
+                            set_visual_estado("cliente", "idle")
+                    except Exception: pass
+                threading.Thread(target=_watchdog_cliente, daemon=True).start()
+
             else: # idle
                 grabando_estado["cliente"] = False
                 btn_mic_cliente.bgcolor = "#2E0854"

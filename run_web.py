@@ -37,6 +37,11 @@ if __name__ == "__main__":
     from fastapi.staticfiles import StaticFiles
     app = FastAPI(title="LUXO Web Server")
     configurar_rutas_fastapi(app)
+    try:
+        import traductor_view
+        traductor_view.registrar_rutas_fastapi_traductor(app)
+    except Exception as e_tr:
+        print("Notice traductor startup routes:", e_tr)
 
     flet_asgi_app = ft.app(
         target=main, 
