@@ -340,7 +340,7 @@ def crear_dialogo_calendario_semanal(page, user_id, user_states, on_fecha_selecc
 def sincronizar_baselines_domingo(s_state):
     if isinstance(s_state, dict) and "DOMINGO" in s_state:
         dom_data = s_state["DOMINGO"]
-        fields = ["vta_ly", "atv_dia", "aur_dia", "atv_mtd", "aur_mtd"]
+        fields = ["atv_mtd", "aur_mtd"]
         for field in fields:
             val = dom_data.get(field)
             if val is not None:
@@ -2906,24 +2906,12 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 elif e.control.data == "vta_ly":
                     val_num = float(v) if v else 0.0
                     data["vta_ly"] = val_num
-                    if d_name == "DOMINGO":
-                        for day_other in DIAS:
-                            if day_other in s_state:
-                                s_state[day_other]["vta_ly"] = val_num
                 elif e.control.data == "atv_dia":
                     val_num = float(v) if v else 0.0
                     data["atv_dia"] = val_num
-                    if d_name == "DOMINGO":
-                        for day_other in DIAS:
-                            if day_other in s_state:
-                                s_state[day_other]["atv_dia"] = val_num
                 elif e.control.data == "aur_dia":
                     val_num = float(v) if v else 0.0
                     data["aur_dia"] = val_num
-                    if d_name == "DOMINGO":
-                        for day_other in DIAS:
-                            if day_other in s_state:
-                                s_state[day_other]["aur_dia"] = val_num
                 elif e.control.data == "atv_mtd":
                     val_num = float(v) if v else 0.0
                     data["atv_mtd"] = val_num
