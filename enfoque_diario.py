@@ -608,6 +608,8 @@ def cargar_estado_persistente(user_id):
                     if "global_meta" in payload:
                         saved_meta = payload["global_meta"]
                         for k, v in saved_meta.items():
+                            if k in ["tienda", "num_tienda"] and g_meta.get(k):
+                                continue
                             g_meta[k] = v
                     if "historico_semanal_state" in payload:
                         user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
@@ -640,6 +642,8 @@ def cargar_estado_persistente(user_id):
                                     user_states[user_id]["store_state"][d].update(payload["store_state"][d])
                         if "global_meta" in payload:
                             for k, v in payload["global_meta"].items():
+                                if k in ["tienda", "num_tienda"] and g_meta.get(k):
+                                    continue
                                 g_meta[k] = v
                         if "historico_semanal_state" in payload:
                             user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
@@ -2637,17 +2641,34 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     # Sincronizar dinámicamente tienda y número de tienda según el usuario en sesión
     if isinstance(session_user, dict):
-        s_tienda = session_user.get("tienda")
-        s_usuario = str(session_user.get("usuario", "")).lower()
-        if s_tienda and s_tienda != "Tienda Luxo":
+        s_tienda = str(session_user.get("tienda") or "").strip()
+        s_usuario = str(session_user.get("usuario", "")).strip().lower()
+        # Resolver número de tienda primero
+        if s_usuario.startswith("sgh") and len(s_usuario) > 3:
+            cand_num = s_usuario.replace("sgh", "")
+            g_meta["num_tienda"] = cand_num
+            if cand_num in MAPEO_TIENDAS_SGH:
+                g_meta["tienda"] = MAPEO_TIENDAS_SGH[cand_num]
+        elif s_tienda and s_tienda in MAPEO_TIENDAS_SGH:
+            g_meta["num_tienda"] = s_tienda
+            g_meta["tienda"] = MAPEO_TIENDAS_SGH[s_tienda]
+        elif s_tienda and s_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
+            g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[s_tienda.upper()]
+            g_meta["tienda"] = MAPEO_TIENDAS_SGH.get(g_meta["num_tienda"], s_tienda)
+        elif s_tienda and s_tienda != "Tienda Luxo":
             g_meta["tienda"] = s_tienda
-            if s_usuario.startswith("sgh") and len(s_usuario) > 3:
-                g_meta["num_tienda"] = s_usuario.replace("sgh", "")
-            elif s_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
-                g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[s_tienda.upper()]
 
     # Cargar estado guardado en MySQL/JSON para la tienda y usuario específicos
     cargar_estado_persistente(user_id)
+
+    # Post-validación: asegurar que tienda y num_tienda estén mutuamente sincronizados
+    if str(g_meta.get("num_tienda")) in MAPEO_TIENDAS_SGH:
+        g_meta["tienda"] = MAPEO_TIENDAS_SGH[str(g_meta["num_tienda"])]
+    elif str(g_meta.get("tienda")) in MAPEO_TIENDAS_SGH:
+        g_meta["num_tienda"] = str(g_meta["tienda"])
+        g_meta["tienda"] = MAPEO_TIENDAS_SGH[str(g_meta["num_tienda"])]
+    elif g_meta.get("tienda") and str(g_meta["tienda"]).upper() in MAPEO_NOMBRE_A_NUMERO_SGH and not g_meta.get("num_tienda"):
+        g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[str(g_meta["tienda"]).upper()]
     s_state = user_states[user_id]["store_state"]
     h_state = user_states[user_id]["historico_semanal_state"]
     
@@ -4522,20 +4543,33 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             es_admin = True
 
     if not es_admin and session_user and isinstance(session_user, dict):
-        u_tienda = session_user.get("tienda") or session_user.get("Tienda")
-        u_user = session_user.get("usuario") or session_user.get("Usuario") or ""
+        u_tienda = str(session_user.get("tienda") or session_user.get("Tienda") or "").strip()
+        u_user = str(session_user.get("usuario") or session_user.get("Usuario") or "").strip()
         num_code = u_user.lower().replace("sgh", "").strip()
-        if u_tienda and u_tienda != "Tienda Luxo":
+
+        if num_code and num_code in MAPEO_TIENDAS_SGH:
+            g_meta["num_tienda"] = num_code
+            g_meta["tienda"] = MAPEO_TIENDAS_SGH[num_code]
+        elif u_tienda and u_tienda in MAPEO_TIENDAS_SGH:
+            g_meta["num_tienda"] = u_tienda
+            g_meta["tienda"] = MAPEO_TIENDAS_SGH[u_tienda]
+        elif u_tienda and u_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
+            g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[u_tienda.upper()]
+            g_meta["tienda"] = MAPEO_TIENDAS_SGH.get(g_meta["num_tienda"], u_tienda)
+        elif u_tienda and u_tienda != "Tienda Luxo":
             g_meta["tienda"] = u_tienda
-            if num_code and num_code.isdigit():
-                g_meta["num_tienda"] = num_code
-            elif num_code in MAPEO_TIENDAS_SGH:
-                g_meta["num_tienda"] = num_code
-            elif u_tienda.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
-                g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[u_tienda.upper()]
 
     # Cargar inmediatamente el estado persistente guardado desde MySQL para la tienda real del usuario
     cargar_estado_persistente(user_id)
+
+    # Post-validación: asegurar que tienda y num_tienda estén mutuamente sincronizados con nombre oficial
+    if str(g_meta.get("num_tienda")) in MAPEO_TIENDAS_SGH:
+        g_meta["tienda"] = MAPEO_TIENDAS_SGH[str(g_meta["num_tienda"])]
+    elif str(g_meta.get("tienda")) in MAPEO_TIENDAS_SGH:
+        g_meta["num_tienda"] = str(g_meta["tienda"])
+        g_meta["tienda"] = MAPEO_TIENDAS_SGH[str(g_meta["num_tienda"])]
+    elif g_meta.get("tienda") and str(g_meta["tienda"]).upper() in MAPEO_NOMBRE_A_NUMERO_SGH and not g_meta.get("num_tienda"):
+        g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[str(g_meta["tienda"]).upper()]
 
     # Sincronizar colaboradores iniciales
     sincronizar_colaboradores_db(session_user, g_meta["tienda"])
@@ -4717,7 +4751,15 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     )
 
     # 3. Desplegable NOMBRE DE TIENDA (16 Tiendas Oficiales)
-    options_tiendas = [ft.dropdown.Option(v) for v in MAPEO_TIENDAS_SGH.values()]
+    tienda_val = g_meta.get("tienda")
+    if not tienda_val and g_meta.get("num_tienda") in MAPEO_TIENDAS_SGH:
+        tienda_val = MAPEO_TIENDAS_SGH[g_meta["num_tienda"]]
+        g_meta["tienda"] = tienda_val
+
+    store_names = list(MAPEO_TIENDAS_SGH.values())
+    if tienda_val and tienda_val not in store_names:
+        store_names.append(tienda_val)
+    options_tiendas = [ft.dropdown.Option(v) for v in store_names]
 
     def on_store_select_change(e):
         selected_tienda = e.control.value
@@ -4738,7 +4780,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 page.update()
 
     dd_tienda = ft.Dropdown(
-        value=g_meta["tienda"],
+        value=tienda_val,
         options=options_tiendas,
         disabled=not es_admin,
         width=135 if is_mob_view else 150,

@@ -2,6 +2,7 @@ import flet as ft
 import os
 import glob
 import urllib.parse
+import threading
 import ciclicos_service as cs
 
 def seleccionar_archivo_nativo(titulo="Seleccionar archivo Excel"):
@@ -69,18 +70,12 @@ def buscar_excel_reciente(patron="*.xlsx"):
     return ""
 
 def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A540", user_role="admin", seleccionar_archivo_async=None):
-    # Asegurar que existan las tablas en MySQL y purgar historial mayor a 6 meses
-    try:
-        cs.crear_tablas_ciclicos_if_not_exists()
-    except Exception as ex_db:
-        print("Notice db ciclicos init:", ex_db)
-
     # Estado local de la vista
     resultado_conciliacion = {"value": None}
 
-    # Auto-detectar archivos recientes en Downloads como sugerencia inicial
-    auto_escaneo = buscar_excel_reciente("*Libro*.xlsx") or buscar_excel_reciente("*escaneo*.xlsx")
-    auto_sap = buscar_excel_reciente("*StockSummary*.xlsx") or buscar_excel_reciente("*SAP*.xlsx")
+    # Inicializar campos de Texto para Rutas de Archivos
+    auto_escaneo = ""
+    auto_sap = ""
 
     # Campos de Texto para Rutas de Archivos
     txt_escaneo_path = ft.TextField(
@@ -98,6 +93,29 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
         expand=True,
         dense=True
     )
+
+    def _async_bg_init():
+        try:
+            cs.crear_tablas_ciclicos_if_not_exists()
+        except Exception:
+            pass
+        try:
+            ae = buscar_excel_reciente("*Libro*.xlsx") or buscar_excel_reciente("*escaneo*.xlsx")
+            asap = buscar_excel_reciente("*StockSummary*.xlsx") or buscar_excel_reciente("*SAP*.xlsx")
+            changed = False
+            if ae and not txt_escaneo_path.value:
+                txt_escaneo_path.value = ae
+                changed = True
+            if asap and not txt_sap_path.value:
+                txt_sap_path.value = asap
+                changed = True
+            if changed and page:
+                try: page.update()
+                except Exception: pass
+        except Exception:
+            pass
+
+    threading.Thread(target=_async_bg_init, daemon=True).start()
 
     # Funciones de búsqueda usando la MISMA función seleccionar_archivo_async de Gestión de Manuales
     def buscar_escaneo_click(e):

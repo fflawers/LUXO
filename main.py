@@ -906,6 +906,11 @@ def configurar_rutas_fastapi(app):
     except Exception as e:
         print("Error starting RAG cache thread:", e)
     try:
+        import traductor_view
+        traductor_view.registrar_rutas_fastapi_traductor(app)
+    except Exception as e_tr:
+        print("Notice traductor fastapi routes init:", e_tr)
+    try:
         from fastapi.staticfiles import StaticFiles
         from fastapi.responses import FileResponse
         app.mount("/temp_audio", StaticFiles(directory=os.path.join(ASSETS_PATH, "temp_audio")), name="temp_audio")
@@ -23316,8 +23321,7 @@ Ejemplo:
                 
             def procesar_cambio():
                 try:
-                    print(f"📌 [DEBUG] Cambiando vista a: '{vista}'")
-                    if vista not in main_views_cache or vista in ["chat", "traductor", "pendientes", "enfoque_diario", "enfoque_semanal", "parroquiales_minutas", "polar", "crm", "operacion_diaria", "vendedores", "presupuesto", "weekly", "meta_semanal", "fedex", "facturacion", "ciclicos", "panamericano", "descuentos", "disa"]:
+                    if vista not in main_views_cache or vista in ["chat"]:
                         if vista == "chat":
                             main_views_cache["chat"] = build_chat_view()
                         elif vista == "traductor":
