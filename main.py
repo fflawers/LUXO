@@ -1009,7 +1009,7 @@ def configurar_rutas_fastapi(app):
 
     @app.get("/api/download_enfoque_pdf/{day}")
     @app.get("/print_enfoque/{day}")
-    def print_enfoque_pdf_route(day: str, user_id: str = "invitado"):
+    def print_enfoque_pdf_route(day: str, user_id: str = "invitado", download: int = 0):
         try:
             import urllib.parse
             import enfoque_diario
@@ -1019,12 +1019,13 @@ def configurar_rutas_fastapi(app):
             if pdf_path and os.path.exists(pdf_path) and str(pdf_path).lower().endswith(".pdf"):
                 from fastapi.responses import FileResponse
                 filename = f"Enfoque_Diario_{clean_d_name}_SGH_2026.pdf"
+                disp = "attachment" if int(download or 0) == 1 else "inline"
                 return FileResponse(
                     path=pdf_path,
                     filename=filename,
                     media_type="application/pdf",
                     headers={
-                        "Content-Disposition": f'inline; filename="{filename}"',
+                        "Content-Disposition": f'{disp}; filename="{filename}"',
                         "Cache-Control": "no-cache, no-store, must-revalidate"
                     }
                 )

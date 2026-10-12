@@ -1739,9 +1739,17 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
 
         # 1. Estampar datos Día
         semana_str = str(g_meta.get("semana", "37"))
-        t_nombre = str(g_meta.get("tienda", "SGH")).strip()
-        t_num = str(g_meta.get("tienda_num", "3645")).strip()
-        tienda_str = f"{t_nombre} (#{t_num})" if t_num else t_nombre
+        t_num = str(g_meta.get("num_tienda") or g_meta.get("tienda_num") or "").strip()
+        t_nombre = str(g_meta.get("tienda") or "").strip()
+        if not t_nombre or t_nombre == "SGH" or t_nombre == "Tienda Luxo":
+            if t_num in MAPEO_TIENDAS_SGH:
+                t_nombre = MAPEO_TIENDAS_SGH[t_num]
+            else:
+                t_nombre = "SGH"
+        elif not t_num and t_nombre.upper() in MAPEO_NOMBRE_A_NUMERO_SGH:
+            t_num = MAPEO_NOMBRE_A_NUMERO_SGH[t_nombre.upper()]
+
+        tienda_str = f"{t_nombre} (#{t_num})" if (t_num and t_num not in t_nombre) else t_nombre
 
         clear_and_write(p_dia, fitz.Rect(255, 33, 290, 44), semana_str, fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(338, 33, 372, 44), dia_base, fontsize=7.5, fill=None, align_center=True)
@@ -1852,11 +1860,101 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         clear_and_write(p_dia, fitz.Rect(315, y_t, 343, y_t2), f"{tot_kid_val}" if tot_kid_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(344, y_t, 372, y_t2), f"{tot_ck_val}" if tot_ck_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
 
+        # TOTAL DEL DÍA (Resultados generales y de cierre)
+        vta_neta_dia_val = float(c.get('venta_neta_dia') or d_data.get('venta_neta_dia', 0.0) or 0.0)
+        vta_unids_dia_val = int(c.get('venta_unidades_dia') or d_data.get('venta_unidades_dia', 0) or 0)
+        conv_dia_val = float(c.get('conversion_dia', 0.0) or 0.0)
+        crec_conv_val = float(c.get('crecimiento_conversion', 0.0) or 0.0)
+        wea_pct_val = float(c.get('wearables_pct', 0.0) or 0.0)
+        kids_pct_val = float(c.get('kids_pct', 0.0) or 0.0)
+        ck_pct_val = float(c.get('carekits_pct', 0.0) or 0.0)
+        tot_unids = int(c.get('total_unidades', 0) or 0)
+
+        # Fila 36: TOTAL DEL DÍA
+        clear_and_write(p_dia, fitz.Rect(104, 565, 134, 577), f"${m_dia:,.2f}" if m_dia > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(135, 565, 170, 577), f"${vta_neta_dia_val:,.2f}" if vta_neta_dia_val > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(171, 565, 201, 577), f"{tot_unids}" if tot_unids > 0 else "", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(202, 565, 226, 577), f"{vta_unids_dia_val}" if vta_unids_dia_val > 0 else "", fontsize=6.5, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(227, 565, 255, 577), f"{conv_dia_val*100:.1f}%" if conv_dia_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(256, 565, 314, 577), f"{crec_conv_val*100:+.1f}%" if crec_conv_val != 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(315, 565, 342, 577), f"{wea_pct_val*100:.1f}%" if wea_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(343, 565, 372, 577), f"{kids_pct_val*100:.1f}%" if kids_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(373, 565, 410, 577), f"{ck_pct_val*100:.1f}%" if ck_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+
+        # Filas 40 a 47: Colaboradores al Cierre
+        cierre_colabs = d_data.get("colaboradores", [])
+        tot_cierre_inter_d = 0
+        tot_cierre_conv_d = 0
+        tot_cierre_vta_d = 0.0
+        tot_cierre_ana_d = 0
+        tot_cierre_demos_d = 0
+        tot_cierre_wea_d = 0
+        tot_cierre_kids_d = 0
+        tot_cierre_ck_d = 0
+
+        for idx in range(8):
+            y_c = 612.7 + idx * 14.5
+            y_c2 = y_c + 13.0
+            if idx < len(cierre_colabs) and cierre_colabs[idx].get("nombre", "").strip():
+                cc = cierre_colabs[idx]
+                c_nom_c = str(cc.get('nombre', '') or '')
+                c_hrs_c = float(cc.get('horas', 0.0) or 0.0)
+                c_inter = int(cc.get('interacciones', 0) or 0)
+                c_conv = int(cc.get('convertidos', 0) or 0)
+                c_conv_pct = (c_conv / c_inter * 100.0) if c_inter > 0 else 0.0
+                c_vta_c = float(cc.get('vta_cierre', 0.0) or 0.0)
+                c_ana_c = int(cc.get('ana_cierre', 0) or 0)
+                c_wea_d = int(cc.get('wea_demos', 0) or 0)
+                c_wea_c = int(cc.get('wea_cierre', 0) or 0)
+                c_wea_conv_pct = (c_wea_c / c_wea_d * 100.0) if c_wea_d > 0 else 0.0
+                c_kid_c = int(cc.get('kid_cierre', 0) or 0)
+                c_ck_c = int(cc.get('ck_cierre', 0) or 0)
+
+                tot_cierre_inter_d += c_inter
+                tot_cierre_conv_d += c_conv
+                tot_cierre_vta_d += c_vta_c
+                tot_cierre_ana_d += c_ana_c
+                tot_cierre_demos_d += c_wea_d
+                tot_cierre_wea_d += c_wea_c
+                tot_cierre_kids_d += c_kid_c
+                tot_cierre_ck_d += c_ck_c
+
+                clear_and_write(p_dia, fitz.Rect(48, y_c, 104, y_c2), c_nom_c, fontsize=6.0, fill=None)
+                clear_and_write(p_dia, fitz.Rect(105, y_c, 136, y_c2), f"{c_hrs_c:.1f}" if c_hrs_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(137, y_c, 168, y_c2), f"{c_inter}" if c_inter > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(169, y_c, 198, y_c2), f"{c_conv}" if c_conv > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(199, y_c, 227, y_c2), f"{c_conv_pct:.1f}%" if c_inter > 0 else "", fontsize=5.8, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(228, y_c, 255, y_c2), f"${c_vta_c:,.2f}" if c_vta_c > 0 else "", fontsize=5.0, fill=None, align_right=True)
+                clear_and_write(p_dia, fitz.Rect(256, y_c, 279, y_c2), f"{c_ana_c}" if c_ana_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(280, y_c, 314, y_c2), f"{c_wea_d}" if c_wea_d > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(315, y_c, 344, y_c2), f"{c_wea_c}" if c_wea_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(345, y_c, 373, y_c2), f"{c_wea_conv_pct:.1f}%" if c_wea_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(374, y_c, 404, y_c2), f"{c_kid_c}" if c_kid_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(405, y_c, 435, y_c2), f"{c_ck_c}" if c_ck_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+            else:
+                for r_x0, r_x1 in [(48,104), (105,136), (137,168), (169,198), (199,227), (228,255), (256,279), (280,314), (315,344), (345,373), (374,404), (405,435)]:
+                    clear_and_write(p_dia, fitz.Rect(r_x0, y_c, r_x1, y_c2), "", fill=None)
+
+        # Fila 48: Totales al Cierre (y=728)
+        y_tc1, y_tc2 = 728.0, 735.0
+        tot_cierre_conv_gen = (tot_cierre_conv_d / tot_cierre_inter_d * 100.0) if tot_cierre_inter_d > 0 else 0.0
+        tot_cierre_wea_gen = (tot_cierre_wea_d / tot_cierre_demos_d * 100.0) if tot_cierre_demos_d > 0 else 0.0
+        clear_and_write(p_dia, fitz.Rect(105, y_tc1, 136, y_tc2), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(137, y_tc1, 168, y_tc2), f"{tot_cierre_inter_d}" if tot_cierre_inter_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(169, y_tc1, 198, y_tc2), f"{tot_cierre_conv_d}" if tot_cierre_conv_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(199, y_tc1, 227, y_tc2), f"{tot_cierre_conv_gen:.1f}%" if tot_cierre_inter_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(228, y_tc1, 255, y_tc2), f"${tot_cierre_vta_d:,.2f}" if tot_cierre_vta_d > 0 else "", fontsize=5.0, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(256, y_tc1, 279, y_tc2), f"{tot_cierre_ana_d}" if tot_cierre_ana_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(280, y_tc1, 314, y_tc2), f"{tot_cierre_demos_d}" if tot_cierre_demos_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(315, y_tc1, 344, y_tc2), f"{tot_cierre_wea_d}" if tot_cierre_wea_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(345, y_tc1, 373, y_tc2), f"{tot_cierre_wea_gen:.1f}%" if tot_cierre_demos_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(374, y_tc1, 404, y_tc2), f"{tot_cierre_kids_d}" if tot_cierre_kids_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(405, y_tc1, 435, y_tc2), f"{tot_cierre_ck_d}" if tot_cierre_ck_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+
         # 2. Estampar Plan de Acción
         clear_and_write(p_plan, fitz.Rect(425, 68, 470, 80), semana_str, fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_plan, fitz.Rect(508, 68, 560, 80), dia_base, fontsize=7.5, fill=None, align_center=True)
 
-        tot_unids = int(c.get('total_unidades', 0) or 0)
         u_prod_val = float(c.get('u_prod', 0.0) or 0.0)
 
         clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=7.5, fill=None, align_center=True)
@@ -1865,6 +1963,49 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${vta_prod:,.0f}" if vta_prod > 0 else "", fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{u_prod_val:.2f}" if u_prod_val > 0 else "", fontsize=7.5, fill=None, align_center=True)
         clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_hrs_val):,.2f} / hr" if (tot_hrs_val > 0 and m_dia > 0) else "", fontsize=7.5, fill=None, align_center=True)
+
+        # CHECKBOXES DEL PLAN DE ACCIÓN (Nuestros Estándares, No Negociables, Secretos, Journey)
+        def draw_pdf_check(page, rect, checked):
+            if checked:
+                # Fondo verde suave y palomita limpia
+                page.draw_rect(rect, color=(0.06, 0.72, 0.50), fill=(0.89, 0.97, 0.92), width=1.0)
+                # Dibujar marca de cotejo (✔) dentro de la casilla
+                cx = rect.x0 + rect.width / 2.0
+                cy = rect.y0 + rect.height / 2.0
+                p1 = fitz.Point(rect.x0 + 2.5, cy)
+                p2 = fitz.Point(rect.x0 + rect.width * 0.42, rect.y1 - 2.5)
+                p3 = fitz.Point(rect.x1 - 2.5, rect.y0 + 3.0)
+                page.draw_line(p1, p2, color=(0.06, 0.60, 0.40), width=1.8)
+                page.draw_line(p2, p3, color=(0.06, 0.60, 0.40), width=1.8)
+
+        # Estándares (Columna izquierda y=250..310)
+        c_est = d_data.get("checks_estandares", {}) if isinstance(d_data.get("checks_estandares"), dict) else {}
+        draw_pdf_check(p_plan, fitz.Rect(279.6, 250.3, 295.6, 264.7), c_est.get("limpieza", False))
+        draw_pdf_check(p_plan, fitz.Rect(279.3, 272.7, 295.3, 287.1), c_est.get("imagen", False))
+        draw_pdf_check(p_plan, fitz.Rect(279.6, 295.5, 295.7, 309.9), c_est.get("reunion", False))
+
+        # Secretos (Columna izquierda y=408..507)
+        c_sec = d_data.get("checks_secretos", {}) if isinstance(d_data.get("checks_secretos"), dict) else {}
+        draw_pdf_check(p_plan, fitz.Rect(280.6, 408.2, 299.4, 422.6), c_sec.get("pulir", False))
+        draw_pdf_check(p_plan, fitz.Rect(280.4, 430.1, 299.3, 444.4), c_sec.get("pontelos", False))
+        draw_pdf_check(p_plan, fitz.Rect(280.7, 451.8, 299.6, 466.2), c_sec.get("diviertete", False))
+        draw_pdf_check(p_plan, fitz.Rect(280.4, 471.8, 299.3, 486.1), c_sec.get("cuidalos", False))
+        draw_pdf_check(p_plan, fitz.Rect(280.4, 493.0, 299.4, 507.4), c_sec.get("ajuste", False))
+
+        # No Negociables (Columna derecha y=248..330)
+        c_noneg = d_data.get("checks_no_negociables", {}) if isinstance(d_data.get("checks_no_negociables"), dict) else {}
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 248.0, 545.0, 262.0), c_noneg.get("registro", False))
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 269.0, 545.0, 283.0), c_noneg.get("sin_celular", False))
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 290.0, 545.0, 304.0), c_noneg.get("fuera_caja", False))
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 312.0, 545.0, 326.0), c_noneg.get("seguimiento", False))
+
+        # Customer Journey (Columna derecha y=408..507)
+        c_jrn = d_data.get("checks_journey", {}) if isinstance(d_data.get("checks_journey"), dict) else {}
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 408.0, 545.0, 422.0), c_jrn.get("relacion", False))
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 430.0, 545.0, 444.0), c_jrn.get("confianza", False))
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 452.0, 545.0, 466.0), c_jrn.get("interactua", False))
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 474.0, 545.0, 488.0), c_jrn.get("descubre", False))
+        draw_pdf_check(p_plan, fitz.Rect(530.0, 495.0, 545.0, 509.0), c_jrn.get("ve_mas_alla", False))
 
         # SMART (Líneas perfectamente alineadas)
         clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), str(d_data.get("smart_especifico") or ""), fontsize=6.0, fill=None)
@@ -2715,8 +2856,17 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 actions=[
                     ft.ElevatedButton(
                         content=ft.Row([
+                            ft.Icon(ft.Icons.DOWNLOAD_FOR_OFFLINE_ROUNDED, color="white", size=16),
+                            ft.Text("💾 Guardar / Descargar PDF (Celular)", color="white", weight="bold", size=12)
+                        ], spacing=6),
+                        style=ft.ButtonStyle(bgcolor="#3B82F6", shape=ft.RoundedRectangleBorder(radius=8)),
+                        url=f"{pdf_url}&download=1" if "?" in pdf_url else f"{pdf_url}?download=1",
+                        on_click=cerrar_dialogo
+                    ),
+                    ft.ElevatedButton(
+                        content=ft.Row([
                             ft.Icon(ft.Icons.OPEN_IN_NEW_ROUNDED, color="white", size=16),
-                            ft.Text("⬇️ Abrir / Descargar PDF en Navegador", color="white", weight="bold", size=12)
+                            ft.Text("⬇️ Abrir / Ver PDF en Navegador", color="white", weight="bold", size=12)
                         ], spacing=6),
                         style=ft.ButtonStyle(bgcolor="#10B981", shape=ft.RoundedRectangleBorder(radius=8)),
                         url=pdf_url,
