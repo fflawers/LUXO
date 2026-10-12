@@ -1007,17 +1007,21 @@ def configurar_rutas_fastapi(app):
                 }
             )
 
+    @app.get("/dl_enfoque/{day}")
+    def dl_enfoque_direct_route(day: str, user_id: str = "invitado"):
+        return print_enfoque_pdf_route(day=day, user_id=user_id, download=1)
+
     @app.get("/api/download_enfoque_pdf/{day}")
     @app.get("/print_enfoque/{day}")
     def print_enfoque_pdf_route(day: str, user_id: str = "invitado", download: int = 0):
         try:
             import urllib.parse
             import enfoque_diario
+            from fastapi.responses import FileResponse, HTMLResponse
             day = urllib.parse.unquote(day)
             clean_d_name = enfoque_diario.sanitize_filename(day)
             pdf_path = enfoque_diario.generar_pdf_enfoque_file(day, user_id)
             if pdf_path and os.path.exists(pdf_path) and str(pdf_path).lower().endswith(".pdf"):
-                from fastapi.responses import FileResponse
                 filename = f"Enfoque_Diario_{clean_d_name}_SGH_2026.pdf"
                 disp = "attachment" if int(download or 0) == 1 else "inline"
                 return FileResponse(
@@ -1030,7 +1034,6 @@ def configurar_rutas_fastapi(app):
                     }
                 )
             else:
-                from fastapi.responses import HTMLResponse
                 html_code = enfoque_diario.generar_html_impresion(day, user_id)
                 return HTMLResponse(content=html_code)
         except Exception as ex:

@@ -27,11 +27,64 @@ except ImportError:
 
 BASE_PATH = os.path.dirname(__file__)
 
+import sqlite3
 import mysql.connector
 from dotenv import load_dotenv
 load_dotenv()
 
 _ENFOQUE_DB_POOL = None
+_TABLA_VERIFICADA = False
+
+def asegurar_tabla_enfoque_db(conn):
+    global _TABLA_VERIFICADA
+    if _TABLA_VERIFICADA:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS enfoque_diario_guardado (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(100),
+                tienda_id VARCHAR(50),
+                semana VARCHAR(50),
+                estado_json LONGTEXT,
+                fecha_actualizacion DATETIME,
+                INDEX idx_tienda_semana (tienda_id, semana),
+                INDEX idx_user_semana (user_id, semana)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        conn.commit()
+        try:
+            cur.execute("ALTER TABLE enfoque_diario_guardado MODIFY COLUMN tienda_id VARCHAR(50);")
+            conn.commit()
+        except Exception:
+            pass
+        cur.close()
+        _TABLA_VERIFICADA = True
+    except Exception as ex:
+        print("Notice asegurar_tabla_enfoque_db:", ex)
+
+def asegurar_sqlite_db():
+    try:
+        db_path = os.path.join(BASE_PATH, "enfoque_diario_local.db")
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS enfoque_diario_guardado (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                tienda_id TEXT,
+                semana TEXT,
+                estado_json TEXT,
+                fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_td_sem ON enfoque_diario_guardado (tienda_id, semana)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_usr_sem ON enfoque_diario_guardado (user_id, semana)")
+        conn.commit()
+        conn.close()
+    except Exception as ex:
+        print("Notice asegurar_sqlite_db:", ex)
 
 def get_enfoque_db_pool():
     global _ENFOQUE_DB_POOL
@@ -53,23 +106,28 @@ def get_enfoque_db_pool():
     return _ENFOQUE_DB_POOL if _ENFOQUE_DB_POOL else None
 
 def conectar_db():
+    conn = None
     pool = get_enfoque_db_pool()
     if pool:
         try:
-            return pool.get_connection()
+            conn = pool.get_connection()
         except Exception:
             pass
-    try:
-        return mysql.connector.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', 'los4valtierra'),
-            database=os.getenv('DB_NAME', 'sgh_portal'),
-            port=int(os.getenv('DB_PORT', 3306))
-        )
-    except Exception as ex:
-        print("Notice conectar_db in enfoque_diario:", ex)
-        return None
+    if not conn:
+        try:
+            conn = mysql.connector.connect(
+                host=os.getenv('DB_HOST', 'localhost'),
+                user=os.getenv('DB_USER', 'root'),
+                password=os.getenv('DB_PASSWORD', 'los4valtierra'),
+                database=os.getenv('DB_NAME', 'sgh_portal'),
+                port=int(os.getenv('DB_PORT', 3306))
+            )
+        except Exception as ex:
+            print("Notice conectar_db in enfoque_diario:", ex)
+            conn = None
+    if conn:
+        asegurar_tabla_enfoque_db(conn)
+    return conn
 
 
 # --- ESTADO GLOBAL Y MATRIZ DE DATOS ---
@@ -451,24 +509,64 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
         with open(sf_user, "w", encoding="utf-8") as f:
             f.write(json_str)
 
-        try:
-            t_int = int(tienda_id) if tienda_id else 0
-        except Exception:
-            t_int = 0
-
-        if t_int > 0:
-            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{t_int}.json")
+        t_str = str(tienda_id or "").strip()
+        if t_str and t_str != "0":
+            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{t_str}.json")
             with open(sf_tienda, "w", encoding="utf-8") as f:
                 f.write(json_str)
 
+        # 1. Guardar siempre en SQLite local (persistencia ultrarrápida y local)
+        try:
+            asegurar_sqlite_db()
+            db_path = os.path.join(BASE_PATH, "enfoque_diario_local.db")
+            conn_sq = sqlite3.connect(db_path)
+            cur_sq = conn_sq.cursor()
+            if t_str and t_str != "0":
+                cur_sq.execute(
+                    "SELECT id FROM enfoque_diario_guardado WHERE tienda_id=? AND semana=? ORDER BY id DESC LIMIT 1",
+                    (t_str, str(sem_str))
+                )
+                ex_sq = cur_sq.fetchone()
+                if ex_sq:
+                    cur_sq.execute(
+                        "UPDATE enfoque_diario_guardado SET estado_json=?, user_id=?, fecha_actualizacion=CURRENT_TIMESTAMP WHERE id=?",
+                        (json_str, str(user_id), ex_sq[0])
+                    )
+                else:
+                    cur_sq.execute(
+                        "INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json) VALUES (?, ?, ?, ?)",
+                        (str(user_id), t_str, str(sem_str), json_str)
+                    )
+            else:
+                cur_sq.execute(
+                    "SELECT id FROM enfoque_diario_guardado WHERE user_id=? AND semana=? ORDER BY id DESC LIMIT 1",
+                    (str(user_id), str(sem_str))
+                )
+                ex_sq = cur_sq.fetchone()
+                if ex_sq:
+                    cur_sq.execute(
+                        "UPDATE enfoque_diario_guardado SET estado_json=?, fecha_actualizacion=CURRENT_TIMESTAMP WHERE id=?",
+                        (json_str, ex_sq[0])
+                    )
+                else:
+                    cur_sq.execute(
+                        "INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json) VALUES (?, ?, ?, ?)",
+                        (str(user_id), "0", str(sem_str), json_str)
+                    )
+            conn_sq.commit()
+            conn_sq.close()
+        except Exception as ex_sq:
+            print(f"Notice SQLite save enfoque_diario: {ex_sq}")
+
+        # 2. Guardar en MySQL / Base de datos centralizada en Render
         db = conectar_db()
         if db:
             try:
                 cursor = db.cursor()
-                if t_int > 0:
+                if t_str and t_str != "0":
                     cursor.execute(
                         "SELECT id FROM enfoque_diario_guardado WHERE tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
-                        (t_int, str(sem_str))
+                        (t_str, str(sem_str))
                     )
                     existing = cursor.fetchone()
                     if existing:
@@ -479,7 +577,7 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
                     else:
                         cursor.execute(
                             "INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json, fecha_actualizacion) VALUES (%s, %s, %s, %s, NOW())",
-                            (str(user_id), t_int, str(sem_str), json_str)
+                            (str(user_id), t_str, str(sem_str), json_str)
                         )
                 else:
                     cursor.execute(
@@ -495,7 +593,7 @@ def _async_save_worker(user_id, payload, sem_str, tienda_id):
                     else:
                         cursor.execute(
                             "INSERT INTO enfoque_diario_guardado (user_id, tienda_id, semana, estado_json, fecha_actualizacion) VALUES (%s, %s, %s, %s, NOW())",
-                            (str(user_id), 0, str(sem_str), json_str)
+                            (str(user_id), "0", str(sem_str), json_str)
                         )
                 db.commit()
             except Exception as ex_db:
@@ -540,8 +638,7 @@ def guardar_estado_persistente(user_id, debounce_seconds=0.6):
                         "monthly_targets": user_states[user_id].get("monthly_targets", {}),
                         "active_tab": user_states[user_id].get("active_tab", ["DOMINGO"])
                     }
-                    try: tienda_id = int(g_meta.get("num_tienda", 0))
-                    except Exception: tienda_id = 0
+                    tienda_id = str(g_meta.get("num_tienda") or g_meta.get("tienda_num") or "0").strip()
 
                     _async_save_worker(user_id, payload, sem_str, tienda_id)
                 except Exception as ex:
@@ -573,23 +670,41 @@ def cargar_estado_persistente(user_id):
         g_meta = user_states[user_id]["global_meta"]
         cur_sem_default = get_current_sgh_week_str()
         sem_str = str(g_meta.get("semana") or cur_sem_default)
-        try: tienda_id = int(g_meta.get("num_tienda", 0))
-        except Exception: tienda_id = 0
+        tienda_id = str(g_meta.get("num_tienda") or g_meta.get("tienda_num") or "").strip()
 
+        def aplicar_payload(payload):
+            if "store_state" in payload:
+                def_s = default_store_state()
+                for d in DIAS:
+                    user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
+                    if d in payload["store_state"]:
+                        user_states[user_id]["store_state"][d].update(payload["store_state"][d])
+            if "global_meta" in payload:
+                saved_meta = payload["global_meta"]
+                for k, v in saved_meta.items():
+                    if k in ["tienda", "num_tienda"] and g_meta.get(k):
+                        continue
+                    g_meta[k] = v
+            if "historico_semanal_state" in payload:
+                user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
+            if "monthly_targets" in payload:
+                user_states[user_id]["monthly_targets"].update(payload["monthly_targets"])
+            if "active_tab" in payload:
+                user_states[user_id]["active_tab"] = payload["active_tab"]
+
+        # 1. Buscar en MySQL (Persistencia entre despliegues de Render)
         db = conectar_db()
         if db:
             try:
                 cursor = db.cursor(dictionary=True)
                 row = None
-                # 1. Buscar coincidencia exacta por tienda_id y semana
-                if tienda_id > 0:
+                if tienda_id and tienda_id != "0":
                     cursor.execute(
                         "SELECT estado_json FROM enfoque_diario_guardado WHERE tienda_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
                         (tienda_id, sem_str)
                     )
                     row = cursor.fetchone()
 
-                # 2. Buscar coincidencia exacta por user_id y semana
                 if not row:
                     cursor.execute(
                         "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=%s AND semana=%s ORDER BY id DESC LIMIT 1",
@@ -599,24 +714,7 @@ def cargar_estado_persistente(user_id):
 
                 if row and row.get("estado_json"):
                     payload = json.loads(row["estado_json"])
-                    if "store_state" in payload:
-                        def_s = default_store_state()
-                        for d in DIAS:
-                            user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
-                            if d in payload["store_state"]:
-                                user_states[user_id]["store_state"][d].update(payload["store_state"][d])
-                    if "global_meta" in payload:
-                        saved_meta = payload["global_meta"]
-                        for k, v in saved_meta.items():
-                            if k in ["tienda", "num_tienda"] and g_meta.get(k):
-                                continue
-                            g_meta[k] = v
-                    if "historico_semanal_state" in payload:
-                        user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
-                    if "monthly_targets" in payload:
-                        user_states[user_id]["monthly_targets"].update(payload["monthly_targets"])
-                    if "active_tab" in payload:
-                        user_states[user_id]["active_tab"] = payload["active_tab"]
+                    aplicar_payload(payload)
                     loaded = True
                     print(f"✅ Estado de Enfoque Diario para tienda {tienda_id} (semana {sem_str}) cargado desde MySQL.")
             except Exception as ex_db:
@@ -625,32 +723,46 @@ def cargar_estado_persistente(user_id):
                 try: db.close()
                 except: pass
 
+        # 2. Si no cargó desde MySQL, buscar en SQLite local
         if not loaded:
-            # Fallback a archivos JSON locales persistidos en disco
+            try:
+                db_path = os.path.join(BASE_PATH, "enfoque_diario_local.db")
+                if os.path.exists(db_path):
+                    conn_sq = sqlite3.connect(db_path)
+                    cur_sq = conn_sq.cursor()
+                    row_sq = None
+                    if tienda_id and tienda_id != "0":
+                        cur_sq.execute(
+                            "SELECT estado_json FROM enfoque_diario_guardado WHERE tienda_id=? AND semana=? ORDER BY id DESC LIMIT 1",
+                            (tienda_id, sem_str)
+                        )
+                        row_sq = cur_sq.fetchone()
+                    if not row_sq:
+                        cur_sq.execute(
+                            "SELECT estado_json FROM enfoque_diario_guardado WHERE user_id=? AND semana=? ORDER BY id DESC LIMIT 1",
+                            (str(user_id), sem_str)
+                        )
+                        row_sq = cur_sq.fetchone()
+                    conn_sq.close()
+
+                    if row_sq and row_sq[0]:
+                        payload = json.loads(row_sq[0])
+                        aplicar_payload(payload)
+                        loaded = True
+                        print(f"✅ Estado de Enfoque Diario para tienda {tienda_id} cargado desde SQLite local.")
+            except Exception as ex_sq:
+                print(f"Notice SQLite load enfoque_diario: {ex_sq}")
+
+        # 3. Fallback a archivos JSON locales persistidos en disco
+        if not loaded:
             sf_user = get_state_file(user_id)
-            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{tienda_id}.json") if tienda_id > 0 else None
+            sf_tienda = os.path.join(BASE_PATH, f"enfoque_diario_state_tienda_{tienda_id}.json") if (tienda_id and tienda_id != "0") else None
             for path_cand in [sf_user, sf_tienda]:
                 if path_cand and os.path.exists(path_cand):
                     try:
                         with open(path_cand, "r", encoding="utf-8") as f_json:
                             payload = json.load(f_json)
-                        if "store_state" in payload:
-                            def_s = default_store_state()
-                            for d in DIAS:
-                                user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
-                                if d in payload["store_state"]:
-                                    user_states[user_id]["store_state"][d].update(payload["store_state"][d])
-                        if "global_meta" in payload:
-                            for k, v in payload["global_meta"].items():
-                                if k in ["tienda", "num_tienda"] and g_meta.get(k):
-                                    continue
-                                g_meta[k] = v
-                        if "historico_semanal_state" in payload:
-                            user_states[user_id]["historico_semanal_state"].update(payload["historico_semanal_state"])
-                        if "monthly_targets" in payload:
-                            user_states[user_id]["monthly_targets"].update(payload["monthly_targets"])
-                        if "active_tab" in payload:
-                            user_states[user_id]["active_tab"] = payload["active_tab"]
+                        aplicar_payload(payload)
                         loaded = True
                         print(f"✅ Estado de Enfoque Diario cargado desde JSON local: {path_cand}")
                         break
@@ -1870,19 +1982,21 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         ck_pct_val = float(c.get('carekits_pct', 0.0) or 0.0)
         tot_unids = int(c.get('total_unidades', 0) or 0)
 
-        # Fila 36: TOTAL DEL DÍA
-        clear_and_write(p_dia, fitz.Rect(104, 565, 134, 577), f"${m_dia:,.2f}" if m_dia > 0 else "", fontsize=5.8, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(135, 565, 170, 577), f"${vta_neta_dia_val:,.2f}" if vta_neta_dia_val > 0 else "", fontsize=5.8, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(171, 565, 201, 577), f"{tot_unids}" if tot_unids > 0 else "", fontsize=6.5, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(202, 565, 226, 577), f"{vta_unids_dia_val}" if vta_unids_dia_val > 0 else "", fontsize=6.5, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(227, 565, 255, 577), f"{conv_dia_val*100:.1f}%" if conv_dia_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(256, 565, 314, 577), f"{crec_conv_val*100:+.1f}%" if crec_conv_val != 0 else "", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(315, 565, 342, 577), f"{wea_pct_val*100:.1f}%" if wea_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(343, 565, 372, 577), f"{kids_pct_val*100:.1f}%" if kids_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(373, 565, 410, 577), f"{ck_pct_val*100:.1f}%" if ck_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        # Fila 36: TOTAL DEL DÍA (Cálculos de ¿Cómo vamos? con coordenadas calibradas en celda verde)
+        yt0, yt1 = 570.2, 578.6
+        clear_and_write(p_dia, fitz.Rect(105.4, yt0, 135.6, yt1), f"${m_dia:,.2f}" if m_dia > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(135.7, yt0, 167.7, yt1), f"${vta_neta_dia_val:,.2f}" if vta_neta_dia_val > 0 else "", fontsize=5.8, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(167.7, yt0, 196.7, yt1), f"{tot_unids}" if tot_unids > 0 else "", fontsize=6.2, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(196.8, yt0, 225.8, yt1), f"{vta_unids_dia_val}" if vta_unids_dia_val > 0 else "", fontsize=6.2, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(225.8, yt0, 254.9, yt1), f"{conv_dia_val*100:.1f}%" if conv_dia_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(254.9, yt0, 313.5, yt1), f"{crec_conv_val*100:+.1f}%" if crec_conv_val != 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(313.5, yt0, 342.5, yt1), f"{wea_pct_val*100:.1f}%" if wea_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(342.5, yt0, 371.6, yt1), f"{kids_pct_val*100:.1f}%" if kids_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(371.6, yt0, 400.6, yt1), f"{ck_pct_val*100:.1f}%" if ck_pct_val > 0 else "", fontsize=6.0, fill=None, align_center=True)
 
-        # Filas 40 a 47: Colaboradores al Cierre
+        # Filas 40 a 48: Colaboradores al Cierre (Bandas calibradas al píxel)
         cierre_colabs = d_data.get("colaboradores", [])
+        y_c_bands = [606.9, 621.5, 636.0, 650.5, 665.0, 679.5, 694.1, 708.6, 723.1, 737.5]
         tot_cierre_inter_d = 0
         tot_cierre_conv_d = 0
         tot_cierre_vta_d = 0.0
@@ -1893,8 +2007,7 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         tot_cierre_ck_d = 0
 
         for idx in range(8):
-            y_c = 612.7 + idx * 14.5
-            y_c2 = y_c + 13.0
+            y_c, y_c2 = y_c_bands[idx], y_c_bands[idx + 1]
             if idx < len(cierre_colabs) and cierre_colabs[idx].get("nombre", "").strip():
                 cc = cierre_colabs[idx]
                 c_nom_c = str(cc.get('nombre', '') or '')
@@ -1919,37 +2032,37 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
                 tot_cierre_kids_d += c_kid_c
                 tot_cierre_ck_d += c_ck_c
 
-                clear_and_write(p_dia, fitz.Rect(48, y_c, 104, y_c2), c_nom_c, fontsize=6.0, fill=None)
-                clear_and_write(p_dia, fitz.Rect(105, y_c, 136, y_c2), f"{c_hrs_c:.1f}" if c_hrs_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(137, y_c, 168, y_c2), f"{c_inter}" if c_inter > 0 else "", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(169, y_c, 198, y_c2), f"{c_conv}" if c_conv > 0 else "", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(199, y_c, 227, y_c2), f"{c_conv_pct:.1f}%" if c_inter > 0 else "", fontsize=5.8, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(228, y_c, 255, y_c2), f"${c_vta_c:,.2f}" if c_vta_c > 0 else "", fontsize=5.0, fill=None, align_right=True)
-                clear_and_write(p_dia, fitz.Rect(256, y_c, 279, y_c2), f"{c_ana_c}" if c_ana_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(280, y_c, 314, y_c2), f"{c_wea_d}" if c_wea_d > 0 else "", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(315, y_c, 344, y_c2), f"{c_wea_c}" if c_wea_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(345, y_c, 373, y_c2), f"{c_wea_conv_pct:.1f}%" if c_wea_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(374, y_c, 404, y_c2), f"{c_kid_c}" if c_kid_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
-                clear_and_write(p_dia, fitz.Rect(405, y_c, 435, y_c2), f"{c_ck_c}" if c_ck_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(47.3, y_c, 105.5, y_c2), c_nom_c, fontsize=6.0, fill=None)
+                clear_and_write(p_dia, fitz.Rect(105.5, y_c, 135.7, y_c2), f"{c_hrs_c:.1f}" if c_hrs_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(135.7, y_c, 167.8, y_c2), f"{c_inter}" if c_inter > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(167.8, y_c, 196.8, y_c2), f"{c_conv}" if c_conv > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(196.8, y_c, 225.9, y_c2), f"{c_conv_pct:.1f}%" if c_inter > 0 else "", fontsize=5.8, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(225.9, y_c, 254.9, y_c2), f"${c_vta_c:,.2f}" if c_vta_c > 0 else "", fontsize=5.0, fill=None, align_right=True)
+                clear_and_write(p_dia, fitz.Rect(254.9, y_c, 277.9, y_c2), f"{c_ana_c}" if c_ana_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(277.9, y_c, 313.5, y_c2), f"{c_wea_d}" if c_wea_d > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(313.5, y_c, 342.5, y_c2), f"{c_wea_c}" if c_wea_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(342.5, y_c, 371.6, y_c2), f"{c_wea_conv_pct:.1f}%" if c_wea_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(371.6, y_c, 400.6, y_c2), f"{c_kid_c}" if c_kid_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
+                clear_and_write(p_dia, fitz.Rect(400.6, y_c, 434.0, y_c2), f"{c_ck_c}" if c_ck_c > 0 else "", fontsize=6.0, fill=None, align_center=True)
             else:
-                for r_x0, r_x1 in [(48,104), (105,136), (137,168), (169,198), (199,227), (228,255), (256,279), (280,314), (315,344), (345,373), (374,404), (405,435)]:
+                for r_x0, r_x1 in [(47.3,105.5), (105.5,135.7), (135.7,167.8), (167.8,196.8), (196.8,225.9), (225.9,254.9), (254.9,277.9), (277.9,313.5), (313.5,342.5), (342.5,371.6), (371.6,400.6), (400.6,434.0)]:
                     clear_and_write(p_dia, fitz.Rect(r_x0, y_c, r_x1, y_c2), "", fill=None)
 
-        # Fila 48: Totales al Cierre (y=728)
-        y_tc1, y_tc2 = 728.0, 735.0
+        # Fila 48: Totales al Cierre (Banda 8: y=723.1 .. 737.5)
+        y_tc1, y_tc2 = y_c_bands[8], y_c_bands[9]
         tot_cierre_conv_gen = (tot_cierre_conv_d / tot_cierre_inter_d * 100.0) if tot_cierre_inter_d > 0 else 0.0
         tot_cierre_wea_gen = (tot_cierre_wea_d / tot_cierre_demos_d * 100.0) if tot_cierre_demos_d > 0 else 0.0
-        clear_and_write(p_dia, fitz.Rect(105, y_tc1, 136, y_tc2), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(137, y_tc1, 168, y_tc2), f"{tot_cierre_inter_d}" if tot_cierre_inter_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(169, y_tc1, 198, y_tc2), f"{tot_cierre_conv_d}" if tot_cierre_conv_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(199, y_tc1, 227, y_tc2), f"{tot_cierre_conv_gen:.1f}%" if tot_cierre_inter_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(228, y_tc1, 255, y_tc2), f"${tot_cierre_vta_d:,.2f}" if tot_cierre_vta_d > 0 else "", fontsize=5.0, fill=None, align_right=True)
-        clear_and_write(p_dia, fitz.Rect(256, y_tc1, 279, y_tc2), f"{tot_cierre_ana_d}" if tot_cierre_ana_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(280, y_tc1, 314, y_tc2), f"{tot_cierre_demos_d}" if tot_cierre_demos_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(315, y_tc1, 344, y_tc2), f"{tot_cierre_wea_d}" if tot_cierre_wea_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(345, y_tc1, 373, y_tc2), f"{tot_cierre_wea_gen:.1f}%" if tot_cierre_demos_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(374, y_tc1, 404, y_tc2), f"{tot_cierre_kids_d}" if tot_cierre_kids_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
-        clear_and_write(p_dia, fitz.Rect(405, y_tc1, 435, y_tc2), f"{tot_cierre_ck_d}" if tot_cierre_ck_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(105.5, y_tc1, 135.7, y_tc2), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(135.7, y_tc1, 167.8, y_tc2), f"{tot_cierre_inter_d}" if tot_cierre_inter_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(167.8, y_tc1, 196.8, y_tc2), f"{tot_cierre_conv_d}" if tot_cierre_conv_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(196.8, y_tc1, 225.9, y_tc2), f"{tot_cierre_conv_gen:.1f}%" if tot_cierre_inter_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(225.9, y_tc1, 254.9, y_tc2), f"${tot_cierre_vta_d:,.2f}" if tot_cierre_vta_d > 0 else "", fontsize=5.0, fill=None, align_right=True)
+        clear_and_write(p_dia, fitz.Rect(254.9, y_tc1, 277.9, y_tc2), f"{tot_cierre_ana_d}" if tot_cierre_ana_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(277.9, y_tc1, 313.5, y_tc2), f"{tot_cierre_demos_d}" if tot_cierre_demos_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(313.5, y_tc1, 342.5, y_tc2), f"{tot_cierre_wea_d}" if tot_cierre_wea_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(342.5, y_tc1, 371.6, y_tc2), f"{tot_cierre_wea_gen:.1f}%" if tot_cierre_demos_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(371.6, y_tc1, 400.6, y_tc2), f"{tot_cierre_kids_d}" if tot_cierre_kids_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
+        clear_and_write(p_dia, fitz.Rect(400.6, y_tc1, 434.0, y_tc2), f"{tot_cierre_ck_d}" if tot_cierre_ck_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
 
         # 2. Estampar Plan de Acción
         clear_and_write(p_plan, fitz.Rect(425, 68, 470, 80), semana_str, fontsize=7.5, fill=None, align_center=True)
@@ -1965,26 +2078,33 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_hrs_val):,.2f} / hr" if (tot_hrs_val > 0 and m_dia > 0) else "", fontsize=7.5, fill=None, align_center=True)
 
         # CHECKBOXES DEL PLAN DE ACCIÓN (Nuestros Estándares, No Negociables, Secretos, Journey)
-        def draw_pdf_check(page, rect, checked):
-            if checked:
-                # Fondo verde suave y palomita limpia
-                page.draw_rect(rect, color=(0.06, 0.72, 0.50), fill=(0.89, 0.97, 0.92), width=1.0)
-                # Dibujar marca de cotejo (✔) dentro de la casilla
-                cx = rect.x0 + rect.width / 2.0
-                cy = rect.y0 + rect.height / 2.0
-                p1 = fitz.Point(rect.x0 + 2.5, cy)
-                p2 = fitz.Point(rect.x0 + rect.width * 0.42, rect.y1 - 2.5)
-                p3 = fitz.Point(rect.x1 - 2.5, rect.y0 + 3.0)
-                page.draw_line(p1, p2, color=(0.06, 0.60, 0.40), width=1.8)
-                page.draw_line(p2, p3, color=(0.06, 0.60, 0.40), width=1.8)
+        def es_marcado(val):
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, (int, float)):
+                return val > 0
+            if isinstance(val, str):
+                return val.strip().lower() in ("true", "1", "t", "yes", "si", "on")
+            return bool(val)
 
-        # Estándares (Columna izquierda y=250..310)
+        def draw_pdf_check(page, rect, checked):
+            if es_marcado(checked):
+                # Casilla con marco verde fino y marca de cotejo perfecta
+                in_rect = fitz.Rect(rect.x0 + 1.0, rect.y0 + 1.0, rect.x1 - 1.0, rect.y1 - 1.0)
+                page.draw_rect(in_rect, color=(0.06, 0.72, 0.50), fill=(0.89, 0.97, 0.92), width=0.8, overlay=True)
+                p1 = fitz.Point(in_rect.x0 + 2.5, in_rect.y0 + in_rect.height * 0.52)
+                p2 = fitz.Point(in_rect.x0 + in_rect.width * 0.40, in_rect.y1 - 2.8)
+                p3 = fitz.Point(in_rect.x1 - 2.5, in_rect.y0 + 3.0)
+                page.draw_line(p1, p2, color=(0.05, 0.55, 0.35), width=2.0, overlay=True)
+                page.draw_line(p2, p3, color=(0.05, 0.55, 0.35), width=2.0, overlay=True)
+
+        # Estándares (Columna izquierda: 3 casillas calibradas)
         c_est = d_data.get("checks_estandares", {}) if isinstance(d_data.get("checks_estandares"), dict) else {}
         draw_pdf_check(p_plan, fitz.Rect(279.6, 250.3, 295.6, 264.7), c_est.get("limpieza", False))
         draw_pdf_check(p_plan, fitz.Rect(279.3, 272.7, 295.3, 287.1), c_est.get("imagen", False))
         draw_pdf_check(p_plan, fitz.Rect(279.6, 295.5, 295.7, 309.9), c_est.get("reunion", False))
 
-        # Secretos (Columna izquierda y=408..507)
+        # Secretos (Columna izquierda: 5 casillas calibradas)
         c_sec = d_data.get("checks_secretos", {}) if isinstance(d_data.get("checks_secretos"), dict) else {}
         draw_pdf_check(p_plan, fitz.Rect(280.6, 408.2, 299.4, 422.6), c_sec.get("pulir", False))
         draw_pdf_check(p_plan, fitz.Rect(280.4, 430.1, 299.3, 444.4), c_sec.get("pontelos", False))
@@ -1992,20 +2112,20 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         draw_pdf_check(p_plan, fitz.Rect(280.4, 471.8, 299.3, 486.1), c_sec.get("cuidalos", False))
         draw_pdf_check(p_plan, fitz.Rect(280.4, 493.0, 299.4, 507.4), c_sec.get("ajuste", False))
 
-        # No Negociables (Columna derecha y=248..330)
+        # No Negociables (Columna derecha: 4 casillas calibradas x=548.0..563.0)
         c_noneg = d_data.get("checks_no_negociables", {}) if isinstance(d_data.get("checks_no_negociables"), dict) else {}
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 248.0, 545.0, 262.0), c_noneg.get("registro", False))
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 269.0, 545.0, 283.0), c_noneg.get("sin_celular", False))
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 290.0, 545.0, 304.0), c_noneg.get("fuera_caja", False))
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 312.0, 545.0, 326.0), c_noneg.get("seguimiento", False))
+        draw_pdf_check(p_plan, fitz.Rect(548.0, 250.6, 563.0, 264.6), c_noneg.get("registro", False))
+        draw_pdf_check(p_plan, fitz.Rect(548.0, 270.1, 563.0, 284.1), c_noneg.get("sin_celular", False))
+        draw_pdf_check(p_plan, fitz.Rect(548.0, 292.2, 563.0, 306.2), c_noneg.get("fuera_caja", False))
+        draw_pdf_check(p_plan, fitz.Rect(548.0, 314.2, 563.0, 328.2), c_noneg.get("seguimiento", False))
 
-        # Customer Journey (Columna derecha y=408..507)
+        # Customer Journey (Columna derecha: 5 casillas calibradas x=486.0..503.0)
         c_jrn = d_data.get("checks_journey", {}) if isinstance(d_data.get("checks_journey"), dict) else {}
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 408.0, 545.0, 422.0), c_jrn.get("relacion", False))
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 430.0, 545.0, 444.0), c_jrn.get("confianza", False))
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 452.0, 545.0, 466.0), c_jrn.get("interactua", False))
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 474.0, 545.0, 488.0), c_jrn.get("descubre", False))
-        draw_pdf_check(p_plan, fitz.Rect(530.0, 495.0, 545.0, 509.0), c_jrn.get("ve_mas_alla", False))
+        draw_pdf_check(p_plan, fitz.Rect(486.0, 449.8, 503.0, 464.6), c_jrn.get("relacion", False))
+        draw_pdf_check(p_plan, fitz.Rect(486.0, 471.8, 503.0, 486.7), c_jrn.get("confianza", False))
+        draw_pdf_check(p_plan, fitz.Rect(486.0, 493.9, 503.0, 507.8), c_jrn.get("interactua", False))
+        draw_pdf_check(p_plan, fitz.Rect(486.0, 516.0, 503.0, 530.4), c_jrn.get("descubre", False))
+        draw_pdf_check(p_plan, fitz.Rect(486.0, 537.1, 503.0, 549.6), c_jrn.get("ve_mas_alla", False))
 
         # SMART (Líneas perfectamente alineadas)
         clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), str(d_data.get("smart_especifico") or ""), fontsize=6.0, fill=None)
@@ -2447,24 +2567,59 @@ def generar_html_impresion(d_name, user_id):
                 </tr>
             </tbody>
         </table>
+        """
 
+        # Checkboxes de Plan de Acción para vista HTML
+        c_est = d_data.get("checks_estandares", {}) if isinstance(d_data.get("checks_estandares"), dict) else {}
+        c_noneg = d_data.get("checks_no_negociables", {}) if isinstance(d_data.get("checks_no_negociables"), dict) else {}
+        c_sec = d_data.get("checks_secretos", {}) if isinstance(d_data.get("checks_secretos"), dict) else {}
+        c_jrn = d_data.get("checks_journey", {}) if isinstance(d_data.get("checks_journey"), dict) else {}
+
+        def badge_chk(v):
+            return '<span style="color:#059669; font-weight:bold; background:#e6f4ea; padding:1px 6px; border-radius:4px; font-size:9.5px;">✔ CUMPLIDO</span>' if es_marcado(v) else '<span style="color:#6b7280; background:#f3f4f6; padding:1px 6px; border-radius:4px; font-size:9.5px;">⬜ PENDIENTE</span>'
+
+        body_html += f"""
         <div class="grid-2col">
             <!-- ESTÁNDARES & NO NEGOCIABLES -->
             <div>
                 <div class="sec-title">NUESTROS ESTÁNDARES</div>
                 <table class="excel-table">
-                    <tr><td class="td-lbl">1. LIMPIEZA DE LA TIENDA</td><td style="text-align:left; font-size:9px;">Barre, limpia y desinfecta. Tienda impecable, aparadores y espejos.</td></tr>
-                    <tr><td class="td-lbl">2. IMAGEN PERSONAL</td><td style="text-align:left; font-size:9px;">Embajadores de la marca, imagen alineada a valores Sunglass Hut.</td></tr>
-                    <tr><td class="td-lbl">3. REÚNETE CON EL EQUIPO</td><td style="text-align:left; font-size:9px;">Junta matutina: metas del día, avances y acciones clave.</td></tr>
+                    <tr><td class="td-lbl">1. LIMPIEZA DE LA TIENDA</td><td style="text-align:left; font-size:9px;">Barre, limpia y desinfecta. Tienda impecable, aparadores y espejos.</td><td style="width:90px; text-align:center;">{badge_chk(c_est.get("limpieza"))}</td></tr>
+                    <tr><td class="td-lbl">2. IMAGEN PERSONAL</td><td style="text-align:left; font-size:9px;">Embajadores de la marca, imagen alineada a valores Sunglass Hut.</td><td style="width:90px; text-align:center;">{badge_chk(c_est.get("imagen"))}</td></tr>
+                    <tr><td class="td-lbl">3. REÚNETE CON EL EQUIPO</td><td style="text-align:left; font-size:9px;">Junta matutina: metas del día, avances y acciones clave.</td><td style="width:90px; text-align:center;">{badge_chk(c_est.get("reunion"))}</td></tr>
                 </table>
             </div>
             <div>
                 <div class="sec-title">NUESTROS NO NEGOCIABLES</div>
                 <table class="excel-table">
-                    <tr><td class="td-lbl">1. ENTRADA Y SALIDA</td><td style="text-align:left; font-size:9px;">Registrar puntualidad exacta; impacta en la productividad.</td></tr>
-                    <tr><td class="td-lbl">2. SIN CELULARES</td><td style="text-align:left; font-size:9px;">Evitar uso de teléfono personal en piso de venta.</td></tr>
-                    <tr><td class="td-lbl">3. FUERA DE CAJA / ZONAS</td><td style="text-align:left; font-size:9px;">Mantente en piso atrayendo clientes y respetando tu zona.</td></tr>
-                    <tr><td class="td-lbl">4. SEGUIMIENTO CONTINUO</td><td style="text-align:left; font-size:9px;">Monitorear Store Dashboard y reaccionar oportunamente.</td></tr>
+                    <tr><td class="td-lbl">1. ENTRADA Y SALIDA</td><td style="text-align:left; font-size:9px;">Registrar puntualidad exacta; impacta en la productividad.</td><td style="width:90px; text-align:center;">{badge_chk(c_noneg.get("registro"))}</td></tr>
+                    <tr><td class="td-lbl">2. SIN CELULARES</td><td style="text-align:left; font-size:9px;">Evitar uso de teléfono personal en piso de venta.</td><td style="width:90px; text-align:center;">{badge_chk(c_noneg.get("sin_celular"))}</td></tr>
+                    <tr><td class="td-lbl">3. FUERA DE CAJA / ZONAS</td><td style="text-align:left; font-size:9px;">Mantente en piso atrayendo clientes y respetando tu zona.</td><td style="width:90px; text-align:center;">{badge_chk(c_noneg.get("fuera_caja"))}</td></tr>
+                    <tr><td class="td-lbl">4. SEGUIMIENTO CONTINUO</td><td style="text-align:left; font-size:9px;">Monitorear Store Dashboard y reaccionar oportunamente.</td><td style="width:90px; text-align:center;">{badge_chk(c_noneg.get("seguimiento"))}</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid-2col">
+            <!-- SECRETOS & CUSTOMER JOURNEY -->
+            <div>
+                <div class="sec-title">LOS 5 SECRETOS SGH</div>
+                <table class="excel-table">
+                    <tr><td class="td-lbl">1. PULIR Y PRESENTAR</td><td style="text-align:left; font-size:9px;">Limpia y entrega cada gafa con orgullo.</td><td style="width:90px; text-align:center;">{badge_chk(c_sec.get("pulir"))}</td></tr>
+                    <tr><td class="td-lbl">2. PÓNTELOS</td><td style="text-align:left; font-size:9px;">Invita al cliente a probárselos frente al espejo.</td><td style="width:90px; text-align:center;">{badge_chk(c_sec.get("pontelos"))}</td></tr>
+                    <tr><td class="td-lbl">3. DIVIÉRTETE</td><td style="text-align:left; font-size:9px;">Crea una experiencia memorable y dinámica.</td><td style="width:90px; text-align:center;">{badge_chk(c_sec.get("diviertete"))}</td></tr>
+                    <tr><td class="td-lbl">4. CUÍDALOS</td><td style="text-align:left; font-size:9px;">Ofrece kit de limpieza y estuches de protección.</td><td style="width:90px; text-align:center;">{badge_chk(c_sec.get("cuidalos"))}</td></tr>
+                    <tr><td class="td-lbl">5. AJUSTE PERFECTO</td><td style="text-align:left; font-size:9px;">Verifica la comodidad y ajuste en rostro.</td><td style="width:90px; text-align:center;">{badge_chk(c_sec.get("ajuste"))}</td></tr>
+                </table>
+            </div>
+            <div>
+                <div class="sec-title">CUSTOMER JOURNEY</div>
+                <table class="excel-table">
+                    <tr><td class="td-lbl">1. RELACIÓN</td><td style="text-align:left; font-size:9px;">Conecta y construye relación desde el saludo inicial.</td><td style="width:90px; text-align:center;">{badge_chk(c_jrn.get("relacion"))}</td></tr>
+                    <tr><td class="td-lbl">2. CONFIANZA</td><td style="text-align:left; font-size:9px;">Genera confianza demostrando conocimiento experto.</td><td style="width:90px; text-align:center;">{badge_chk(c_jrn.get("confianza"))}</td></tr>
+                    <tr><td class="td-lbl">3. INTERACTÚA</td><td style="text-align:left; font-size:9px;">Conoce e interactúa probando diferentes modelos.</td><td style="width:90px; text-align:center;">{badge_chk(c_jrn.get("interactua"))}</td></tr>
+                    <tr><td class="td-lbl">4. DESCUBRE</td><td style="text-align:left; font-size:9px;">Descubre necesidades de estilo y uso diario.</td><td style="width:90px; text-align:center;">{badge_chk(c_jrn.get("descubre"))}</td></tr>
+                    <tr><td class="td-lbl">5. VE MÁS ALLÁ</td><td style="text-align:left; font-size:9px;">Supera expectativas con accesorios y garantía.</td><td style="width:90px; text-align:center;">{badge_chk(c_jrn.get("ve_mas_alla"))}</td></tr>
                 </table>
             </div>
         </div>
@@ -2756,11 +2911,31 @@ def generar_html_impresion(d_name, user_id):
         <div>
             <strong style="color:#d4a373; font-size:13px;">SUNGLASS HUT &bull; ENFOQUE DIARIO 2026</strong> &bull; Hoja Oficial ({target_sheet})
         </div>
-        <div style="display:flex; gap:10px;">
-            <button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-            <a class="btn btn-outline" href="/api/download_excel/{target_sheet}?user_id={user_id}">📥 Descargar Excel (.xlsx)</a>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a class="btn" style="background:#10B981; color:#fff;" href="/dl_enfoque/{target_sheet}?user_id={user_id}" download>📥 Descargar PDF</a>
+            <button class="btn btn-outline" onclick="compartirReporte()">📤 Compartir</button>
+            <button class="btn" onclick="window.print()">🖨️ Imprimir</button>
+            <a class="btn btn-outline" href="/api/download_excel/{target_sheet}?user_id={user_id}">📊 Excel (.xlsx)</a>
         </div>
     </div>
+
+    <script>
+    function compartirReporte() {{
+        if (navigator.share) {{
+            navigator.share({{
+                title: document.title,
+                text: 'Reporte Oficial Enfoque Diario 2026 - ' + document.title,
+                url: window.location.href
+            }}).catch(function(err) {{}});
+        }} else {{
+            navigator.clipboard.writeText(window.location.href).then(function() {{
+                alert('¡Enlace del reporte copiado al portapapeles! Puedes pegarlo en WhatsApp o Correo.');
+            }}).catch(function() {{
+                alert('Enlace: ' + window.location.href);
+            }});
+        }}
+    }}
+    </script>
 
     <div class="excel-sheet">
         {body_html}
@@ -2917,7 +3092,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         try:
             sheet_target = map_to_excel_sheet(curr_tab)
             btn_download_excel.url = f"/api/download_excel/{sheet_target}?user_id={user_id}"
-            btn_download_pdf.url = f"/print_enfoque/{sheet_target}?user_id={user_id}"
+            btn_download_pdf.url = f"/dl_enfoque/{sheet_target}?user_id={user_id}"
             btn_download_excel.content = ft.Text(f"📊 Exportar Excel ({sheet_target})", color="white", weight="bold", size=11)
             btn_download_pdf.content = ft.Text(f"🖨️ PDF ({sheet_target})", color="white", weight="bold", size=11)
 
@@ -4948,7 +5123,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             bgcolor="#10B981",
             shape=ft.RoundedRectangleBorder(radius=8)
         ),
-        url=f"/print_enfoque/DOMINGO?user_id={user_id}"
+        url=f"/dl_enfoque/DOMINGO?user_id={user_id}"
     )
 
     # Master Refresh Button 🔄 (Flat Neon Green Outline Style)
