@@ -1904,31 +1904,39 @@ def configurar_rutas_fastapi(app):
 
                                     if (vId === 'jarvis' || vId === 'yarvis') {
                                         u.lang = "es-ES";
-                                        u.pitch = 0.55;
-                                        u.rate = 0.90;
-                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
-                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                        u.rate = 0.92;
+                                        if (maleVoices.length > 0) {
+                                            u.voice = maleVoices[0];
+                                            u.pitch = 0.85;
+                                        } else {
+                                            if (esVoices.length > 0) u.voice = esVoices[0];
+                                            u.pitch = 0.95;
+                                        }
                                     } else if (vId === 'jorge' || vId === 'alonso') {
                                         u.lang = "es-MX";
-                                        u.pitch = 0.65;
                                         u.rate = 0.92;
-                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
-                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                        if (maleVoices.length > 0) {
+                                            u.voice = maleVoices[0];
+                                            u.pitch = 0.85;
+                                        } else {
+                                            if (esVoices.length > 0) u.voice = esVoices[0];
+                                            u.pitch = 0.95;
+                                        }
                                     } else if (vId === 'luxo_avatar' || vId === 'barbara') {
                                         u.lang = "es-MX";
-                                        u.pitch = 1.35;
-                                        u.rate = 1.10;
+                                        u.pitch = 1.10;
+                                        u.rate = 1.02;
                                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                                         else if (esVoices.length > 0) u.voice = esVoices[0];
                                     } else if (vId === 'helena' || vId === 'sabina') {
                                         u.lang = "es-MX";
-                                        u.pitch = 1.15;
-                                        u.rate = 1.02;
+                                        u.pitch = 1.05;
+                                        u.rate = 1.00;
                                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                                         else if (esVoices.length > 0) u.voice = esVoices[0];
                                     } else {
                                         u.lang = "es-MX";
-                                        u.pitch = (voiceGender === 'female') ? 1.20 : ((voiceGender === 'male') ? 0.65 : 1.0);
+                                        u.pitch = (voiceGender === 'female') ? 1.05 : ((voiceGender === 'male') ? 0.90 : 1.0);
                                         u.rate = 1.0;
                                         if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
                                         else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
@@ -24798,12 +24806,23 @@ Ejemplo:
             tienda_u = (user_info.get("tienda") or "").strip()
 
             is_store = False
-            if (usuario_u.lower().startswith("sgh") or nombre_u.lower().startswith("tienda ")) and (nombre_u.lower().startswith("tienda ") or "tienda" in nombre_u.lower()):
+            u_rol = str(user_info.get("rol") or "").lower().strip()
+            if (
+                usuario_u.lower().startswith("sgh")
+                or u_rol in ["tienda", "sucursal"]
+                or "tienda" in usuario_u.lower()
+                or "tienda" in nombre_u.lower()
+                or bool(tienda_u)
+            ):
                 is_store = True
 
             if is_store:
                 import re
-                nombre_tienda = nombre_u[7:].strip() if nombre_u.lower().startswith("tienda ") else nombre_u
+                nombre_tienda = nombre_u
+                if nombre_tienda.lower().startswith("tienda "):
+                    nombre_tienda = nombre_tienda[7:].strip()
+                elif nombre_tienda.lower().startswith("sucursal "):
+                    nombre_tienda = nombre_tienda[9:].strip()
                 if not nombre_tienda and tienda_u:
                     nombre_tienda = tienda_u
 

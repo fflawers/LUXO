@@ -219,10 +219,21 @@
             if (!t) return;
             let combined = _obtenerTextoElementoYPadres(t);
 
-            // 1. Acceder (corta el audio del avatar inmediatamente)
+            // 1. Acceder (corta el audio del avatar inmediatamente y pre-desbloquea reproductor)
             if (combined.includes('acceder')) {
                 window.luxoUserIsLoggedIn = true;
                 window.luxoStopLoginAvatarAudio();
+                try {
+                    let a = document.getElementById("luxo_global_tts_player");
+                    if (!a) {
+                        a = document.createElement("audio");
+                        a.id = "luxo_global_tts_player";
+                        (document.body || document.documentElement).appendChild(a);
+                    }
+                    a.muted = false;
+                    let p = a.play();
+                    if (p !== undefined) p.catch(function(){});
+                } catch(e){}
             }
 
             // 2. Huella / Passkey instantáneo (0ms sin esperar WebSocket/polling)
@@ -368,31 +379,39 @@
 
                     if (vId === 'jarvis' || vId === 'yarvis') {
                         u.lang = "es-ES";
-                        u.pitch = 0.55;
-                        u.rate = 0.90;
-                        if (maleVoices.length > 0) u.voice = maleVoices[0];
-                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                        u.rate = 0.92;
+                        if (maleVoices.length > 0) {
+                            u.voice = maleVoices[0];
+                            u.pitch = 0.85;
+                        } else {
+                            if (esVoices.length > 0) u.voice = esVoices[0];
+                            u.pitch = 0.95;
+                        }
                     } else if (vId === 'jorge' || vId === 'alonso') {
                         u.lang = "es-MX";
-                        u.pitch = 0.65;
                         u.rate = 0.92;
-                        if (maleVoices.length > 0) u.voice = maleVoices[0];
-                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                        if (maleVoices.length > 0) {
+                            u.voice = maleVoices[0];
+                            u.pitch = 0.85;
+                        } else {
+                            if (esVoices.length > 0) u.voice = esVoices[0];
+                            u.pitch = 0.95;
+                        }
                     } else if (vId === 'luxo_avatar' || vId === 'barbara') {
                         u.lang = "es-MX";
-                        u.pitch = 1.35;
-                        u.rate = 1.10;
+                        u.pitch = 1.10;
+                        u.rate = 1.02;
                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else if (vId === 'helena' || vId === 'sabina') {
                         u.lang = "es-MX";
-                        u.pitch = 1.15;
-                        u.rate = 1.02;
+                        u.pitch = 1.05;
+                        u.rate = 1.00;
                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else {
                         u.lang = "es-MX";
-                        u.pitch = (voiceGender === 'female') ? 1.20 : 0.70;
+                        u.pitch = (voiceGender === 'female') ? 1.05 : 0.90;
                         u.rate = 1.0;
                         if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
                         else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];

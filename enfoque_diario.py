@@ -3127,7 +3127,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         cell_padding = ft.Padding(3, 1, 3, 1) if is_mobile else ft.Padding(4, 2, 4, 2)
 
         def make_green_calc(key, val_str, width=None, expand=None):
-            t_obj = ft.Text(val_str, size=cell_font_size, weight="bold", color="#00FF88", no_wrap=True)
+            t_obj = ft.Text(val_str, size=cell_font_size, weight="bold", color="#00FF88", no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS)
             green_txts[key] = t_obj
             return ft.Container(
                 content=t_obj,
@@ -3172,6 +3172,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 _set_txt(f"colab_ck_{idx}", str(r['meta_ck']))
                 
                 # CÓMO VAMOS green cells
+                nom_c = data["colaboradores"][idx].get("nombre") or ""
+                _set_txt(f"colab_cv_nom_{idx}", nom_c)
                 _set_txt(f"colab_cv_hrs_{idx}", f"{r['horas']:.1f}")
                 _set_txt(f"colab_conv_cierre_{idx}", f"{r['conversion_cierre']*100:.1f}%")
                 _set_txt(f"colab_conv_wea_{idx}", f"{r['conversion_wea']*100:.1f}%")
@@ -3777,7 +3779,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             r_calc = calc["colab_rows"][idx]
             cv_colab_rows.append(
                 ft.Row([
-                    make_white_input(c["nombre"], f"colab_nom_{idx}", width=w_c_nom),
+                    make_green_calc(f"colab_cv_nom_{idx}", c.get("nombre") or "", width=w_c_nom),
                     make_green_calc(f"colab_cv_hrs_{idx}", f"{r_calc['horas']:.1f}", width=w_c_hrs),
                     make_white_input(c.get("interacciones", 0), f"colab_int_{idx}", width=w_c_int),
                     make_white_input(c.get("convertidos", 0), f"colab_conv_{idx}", width=w_c_cnv),
