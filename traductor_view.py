@@ -561,6 +561,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
         padding=ft.Padding(12, 8, 14, 8),
         border_radius=10,
         border=ft.Border.all(1.5, "#00FFFF"),
+        ink=True,
         tooltip="1er toque: Iniciar grabacion. 2do toque: Cortar y traducir.",
     )
 
@@ -573,6 +574,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
         padding=ft.Padding(12, 8, 14, 8),
         border_radius=10,
         border=ft.Border.all(1.5, "#D8B4FE"),
+        ink=True,
         tooltip="1st tap: Start speaking. 2nd tap: Finish and translate.",
     )
 

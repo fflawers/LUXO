@@ -289,8 +289,8 @@
                     }
                 } catch(e){}
             }
-            // Si el usuario YA tiene sesión o está autenticado, DESTRUIR el audio del avatar
-            const hasUserSess = (window.luxoUserIsLoggedIn === true) || (typeof window.getLuxoUserId === 'function' && Boolean(window.getLuxoUserId()));
+            // Si el usuario YA tiene sesión activa confirmada, detener el audio del avatar
+            const hasUserSess = (window.luxoUserIsLoggedIn === true);
             if (hasUserSess) {
                 window.luxoStopLoginAvatarAudio();
                 return;
@@ -379,42 +379,46 @@
 
                     if (vId === 'jarvis' || vId === 'yarvis') {
                         u.lang = "es-ES";
-                        u.rate = 0.92;
+                        u.rate = 0.94;
+                        u.pitch = 0.88;
                         if (maleVoices.length > 0) {
                             u.voice = maleVoices[0];
-                            u.pitch = 0.85;
-                        } else {
-                            if (esVoices.length > 0) u.voice = esVoices[0];
-                            u.pitch = 0.95;
+                        } else if (esVoices.length > 0) {
+                            u.voice = esVoices[0];
                         }
                     } else if (vId === 'jorge' || vId === 'alonso') {
                         u.lang = "es-MX";
-                        u.rate = 0.92;
+                        u.rate = 0.95;
+                        u.pitch = 0.90;
                         if (maleVoices.length > 0) {
                             u.voice = maleVoices[0];
-                            u.pitch = 0.85;
-                        } else {
-                            if (esVoices.length > 0) u.voice = esVoices[0];
-                            u.pitch = 0.95;
+                        } else if (esVoices.length > 0) {
+                            u.voice = esVoices[0];
                         }
-                    } else if (vId === 'luxo_avatar' || vId === 'barbara') {
+                    } else if (vId === 'luxo_avatar') {
                         u.lang = "es-MX";
-                        u.pitch = 1.10;
-                        u.rate = 1.02;
+                        u.pitch = 0.92;
+                        u.rate = 0.96;
+                        if (maleVoices.length > 0) u.voice = maleVoices[0];
+                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                    } else if (vId === 'barbara') {
+                        u.lang = "es-MX";
+                        u.pitch = 0.98;
+                        u.rate = 0.98;
                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else if (vId === 'helena' || vId === 'sabina') {
                         u.lang = "es-MX";
-                        u.pitch = 1.05;
-                        u.rate = 1.00;
+                        u.pitch = 0.96;
+                        u.rate = 0.98;
                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else {
                         u.lang = "es-MX";
-                        u.pitch = (voiceGender === 'female') ? 1.05 : 0.90;
-                        u.rate = 1.0;
-                        if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
-                        else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
+                        u.pitch = (voiceGender === 'female') ? 0.98 : 0.90;
+                        u.rate = 0.96;
+                        if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
+                        else if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     }
 
@@ -529,7 +533,7 @@
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
 
-                    const hasUserSess = (window.luxoUserIsLoggedIn === true) || Boolean(uid && !['unknown', '', 'null', 'undefined'].includes(String(uid).toLowerCase()));
+                    const hasUserSess = (window.luxoUserIsLoggedIn === true);
                     if (hasUserSess) {
                         let oldAvatarSnd = document.getElementById('luxo_avatar_audio_el');
                         if (oldAvatarSnd) {
@@ -1384,12 +1388,16 @@
     // MÓDULO INDEPENDIENTE TRADUCTOR DE MOSTRADOR LUXO (2 TOQUES / CONTINUO)
     // --------------------------------------------------------------------------
     window._luxoTradRecording = { 'vendedor': false, 'cliente': false };
+    window._luxoTradMediaRecorder = { 'vendedor': null, 'cliente': null };
+    window._luxoTradAudioStream = { 'vendedor': null, 'cliente': null };
+    window._luxoTradChunks = { 'vendedor': [], 'cliente': [] };
     window._luxoTradSR = { 'vendedor': null, 'cliente': null };
     window._luxoTradText = { 'vendedor': '', 'cliente': '' };
 
     window.luxoStartTraductorMic = function(source, sessionId) {
-        console.log('[TRADUCTOR JS] Iniciar escucha continua para:', source, sessionId);
+        console.log('[TRADUCTOR JS] Iniciar grabacion continua para:', source, sessionId);
         window._luxoTradText[source] = '';
+        window._luxoTradChunks[source] = [];
 
         // Detener la otra vía si estuviera activa
         ['vendedor', 'cliente'].forEach(function(s) {
@@ -1398,98 +1406,169 @@
             }
         });
 
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
-        if (!SR) {
-            alert('⚠️ Tu navegador no soporta reconocimiento de voz nativo. Por favor usa Google Chrome, Edge o Safari.');
-            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
-            return;
+        window._luxoTradRecording[source] = true;
+        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=recording', { method: 'POST' }).catch(function(){});
+
+        // 1. Iniciar MediaRecorder nativo (Audio directo a Whisper - 100% compatible)
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+                if (!window._luxoTradRecording[source]) {
+                    stream.getTracks().forEach(function(t) { t.stop(); });
+                    return;
+                }
+                window._luxoTradAudioStream[source] = stream;
+                window._luxoTradChunks[source] = [];
+
+                let mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported('audio/webm') && MediaRecorder.isTypeSupported('audio/mp4')) {
+                    mimeType = 'audio/mp4';
+                } else if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                    mimeType = '';
+                }
+
+                const options = mimeType ? { mimeType: mimeType } : {};
+                const mr = new MediaRecorder(stream, options);
+                window._luxoTradMediaRecorder[source] = mr;
+
+                mr.ondataavailable = function(e) {
+                    if (e.data && e.data.size > 0) {
+                        window._luxoTradChunks[source].push(e.data);
+                    }
+                };
+
+                mr.onstart = function() {
+                    console.log('[TRADUCTOR MR] Grabacion de audio iniciada para:', source);
+                };
+
+                mr.start(250); // recolectar fragmentos cada 250ms
+            }).catch(function(err) {
+                console.log('[TRADUCTOR MR ERROR]', err);
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
+                    window._luxoTradRecording[source] = false;
+                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
+                }
+            });
         }
 
+        // 2. Reconocimiento WebSpeech opcional en paralelo para texto rápido
         try {
-            const rec = new SR();
-            rec.continuous = true;
-            rec.interimResults = false;
-            rec.maxAlternatives = 1;
-            rec.lang = (source === 'vendedor') ? 'es-MX' : 'en-US';
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || (window.top && (window.top.SpeechRecognition || window.top.webkitSpeechRecognition));
+            if (SR) {
+                const rec = new SR();
+                rec.continuous = true;
+                rec.interimResults = false;
+                rec.maxAlternatives = 1;
+                rec.lang = (source === 'vendedor') ? 'es-MX' : 'en-US';
 
-            rec.onstart = function() {
-                console.log('[TRADUCTOR JS] Micrófono activado escuchando:', source);
-                window._luxoTradRecording[source] = true;
-                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=recording', { method: 'POST' });
-            };
-
-            rec.onresult = function(ev) {
-                let txt = '';
-                for (let i = ev.resultIndex; i < ev.results.length; ++i) {
-                    if (ev.results[i].isFinal) {
-                        txt += ev.results[i][0].transcript + ' ';
+                rec.onresult = function(ev) {
+                    let txt = '';
+                    for (let i = ev.resultIndex; i < ev.results.length; ++i) {
+                        if (ev.results[i].isFinal) {
+                            txt += ev.results[i][0].transcript + ' ';
+                        }
                     }
-                }
-                if (txt.trim()) {
-                    window._luxoTradText[source] = (window._luxoTradText[source] + ' ' + txt).trim();
-                    console.log('[TRADUCTOR SPEECH NATIVO]', source, ':', window._luxoTradText[source]);
-                }
-            };
+                    if (txt.trim()) {
+                        window._luxoTradText[source] = (window._luxoTradText[source] + ' ' + txt).trim();
+                        console.log('[TRADUCTOR SPEECH NATIVO]', source, ':', window._luxoTradText[source]);
+                    }
+                };
 
-            rec.onerror = function(err) {
-                console.log('[TRADUCTOR SR ERROR]', err);
-                if (err.error === 'not-allowed') {
-                    alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
-                }
-                window._luxoTradRecording[source] = false;
-                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
-            };
+                rec.onerror = function(err) {
+                    console.log('[TRADUCTOR SR ERROR]', err);
+                };
 
-            rec.onend = function() {
-                console.log('[TRADUCTOR SR ONEND]', source);
-                // Si el usuario aún no tocó para detener, reiniciar escucha continua
-                if (window._luxoTradRecording[source]) {
-                    try { rec.start(); } catch(e){}
-                }
-            };
-
-            window._luxoTradSR[source] = rec;
-            rec.start();
+                window._luxoTradSR[source] = rec;
+                try { rec.start(); } catch(eStart){}
+            }
         } catch(eSR) {
-            console.log('[TRADUCTOR SR INIT ERROR]', eSR);
-            window._luxoTradRecording[source] = false;
-            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
+            console.log('[TRADUCTOR SR INIT]', eSR);
         }
     };
 
     window.luxoStopTraductorMic = function(source, sessionId) {
-        console.log('[TRADUCTOR JS] Detener grabación para:', source, sessionId);
+        console.log('[TRADUCTOR JS] Detener grabacion para:', source, sessionId);
         window._luxoTradRecording[source] = false;
 
+        // Detener WebSpeech si estaba activo
         if (window._luxoTradSR && window._luxoTradSR[source]) {
             try { window._luxoTradSR[source].stop(); } catch(e){}
             window._luxoTradSR[source] = null;
         }
 
-        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=processing', { method: 'POST' });
+        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=processing', { method: 'POST' }).catch(function(){});
 
-        // Dar un breve margen (300ms) para que el último bloque de texto se asiente
-        setTimeout(function() {
+        // Detener MediaRecorder y despachar audio
+        const mr = window._luxoTradMediaRecorder[source];
+        const stream = window._luxoTradAudioStream[source];
+
+        if (mr && mr.state === 'recording') {
+            mr.onstop = function() {
+                if (stream) {
+                    stream.getTracks().forEach(function(t) { t.stop(); });
+                    window._luxoTradAudioStream[source] = null;
+                }
+                window._luxoTradMediaRecorder[source] = null;
+
+                const chunks = window._luxoTradChunks[source] || [];
+                const recognizedText = (window._luxoTradText[source] || '').trim();
+
+                if (chunks.length > 0) {
+                    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+                    const formData = new FormData();
+                    formData.append('file', audioBlob, 'traductor_' + source + '.webm');
+                    formData.append('session_id', sessionId);
+                    formData.append('source', source);
+
+                    fetch('/api/traductor/audio_upload', {
+                        method: 'POST',
+                        body: formData
+                    }).then(function(res) {
+                        return res.json();
+                    }).then(function(data) {
+                        console.log('[TRADUCTOR AUDIO UPLOAD RESULT]:', data);
+                    }).catch(function(err) {
+                        console.log('[TRADUCTOR UPLOAD ERROR]:', err);
+                        // Fallback a texto si WebSpeech tenia algo
+                        if (recognizedText.length > 0) {
+                            fetch('/api/traductor/speech_input', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ session_id: sessionId, source: source, text: recognizedText })
+                            }).catch(function(){});
+                        } else {
+                            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
+                        }
+                    });
+                } else if (recognizedText.length > 0) {
+                    fetch('/api/traductor/speech_input', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: sessionId, source: source, text: recognizedText })
+                    }).catch(function(){});
+                } else {
+                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
+                }
+            };
+            try { mr.stop(); } catch(eStop){
+                if (stream) stream.getTracks().forEach(function(t) { t.stop(); });
+            }
+        } else {
+            if (stream) {
+                stream.getTracks().forEach(function(t) { t.stop(); });
+                window._luxoTradAudioStream[source] = null;
+            }
             const recognizedText = (window._luxoTradText[source] || '').trim();
-            console.log('[TRADUCTOR JS] Texto final a enviar a traducir:', recognizedText);
-
             if (recognizedText.length > 0) {
                 fetch('/api/traductor/speech_input', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session_id: sessionId, source: source, text: recognizedText })
-                }).then(function(res) {
-                    return res.json();
-                }).then(function(data) {
-                    console.log('[TRADUCTOR RESULTADO BACKEND]:', data);
-                }).catch(function(err) {
-                    console.log('[TRADUCTOR POST ERROR]:', err);
-                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
-                });
+                }).catch(function(){});
             } else {
-                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' });
+                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
             }
-        }, 350);
+        }
     };
 
     window.luxoPlayTraductorAudio = function(audioUrl) {
@@ -1500,10 +1579,58 @@
         } catch(e) {}
     };
 
-    // Reconciliación periódica ligera (cada 2s) sin provocar reflow de layout
-    setInterval(evaluarVisibilidadSimulador, 2000);
-    window.addEventListener('hashchange', evaluarVisibilidadSimulador);
-    window.addEventListener('popstate', evaluarVisibilidadSimulador);
+    // =========================================================================
+    // GESTIÓN DE SUSPENSIÓN Y RECONEXIÓN ROBUSTA EN IPAD / TABLETS / MÓVILES
+    // =========================================================================
+    (function() {
+        let _bgSuspendedTimestamp = 0;
+
+        window.addEventListener('pageshow', function(event) {
+            if (event && event.persisted) {
+                console.log('[LUXO MOBILE] Restaurado de BFCache suspendido. Reconectando...');
+                window.location.reload();
+            }
+        });
+
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                _bgSuspendedTimestamp = Date.now();
+            } else {
+                if (_bgSuspendedTimestamp > 0) {
+                    const diffMs = Date.now() - _bgSuspendedTimestamp;
+                    _bgSuspendedTimestamp = 0;
+                    if (diffMs > 15000) {
+                        console.log('[LUXO MOBILE] Retorno tras suspension prolongada (' + Math.round(diffMs/1000) + 's). Reconectando limpiamente...');
+                        window.location.reload();
+                    }
+                }
+            }
+        });
+
+        let _lastInteractionPing = 0;
+        function renovarActividadUsuario() {
+            const now = Date.now();
+            if (now - _lastInteractionPing > 120000) {
+                _lastInteractionPing = now;
+                try {
+                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
+                    const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                    if (uid && uid !== 'unknown') {
+                        fetch('/api/user_activity', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_id: uid, session_id: sid }),
+                            keepalive: true
+                        }).catch(function(){});
+                    }
+                } catch(e){}
+            }
+        }
+
+        ['pointerdown', 'keydown', 'click', 'touchstart'].forEach(function(ev) {
+            window.addEventListener(ev, renovarActividadUsuario, { passive: true, capture: true });
+        });
+    })();
 })();
 
 

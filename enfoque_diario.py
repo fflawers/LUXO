@@ -1597,9 +1597,18 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             semana_str = str(g_meta.get("semana", "30"))
             tienda_str = f"{g_meta.get('tienda', '')} (#{g_meta.get('num_tienda', '')})".strip() if g_meta.get('tienda') else "SGH"
 
-            # Header
-            clear_and_write(p_sem, fitz.Rect(380, 52, 420, 65), semana_str, fontsize=8, fill=C_WHITE, align_center=True)
-            clear_and_write(p_sem, fitz.Rect(440, 52, 530, 65), tienda_str, fontsize=8, fill=C_WHITE, align_center=True)
+            # Header: Limpiar y dibujar subrayados exactos de Semana y Tienda
+            p_sem.draw_rect(fitz.Rect(370, 54, 548, 68), color=C_WHITE, fill=C_WHITE, overlay=True)
+            p_sem.draw_line(fitz.Point(380, 66), fitz.Point(415, 66), color=(0,0,0), width=0.6, overlay=True)
+            p_sem.draw_line(fitz.Point(435, 66), fitz.Point(545, 66), color=(0,0,0), width=0.6, overlay=True)
+
+            w_sem = fitz.get_text_length(semana_str, fontname="helv", fontsize=8.5)
+            x_sem = 380 + (35 - w_sem) / 2
+            p_sem.insert_text(fitz.Point(x_sem, 63.5), semana_str, fontsize=8.5, fontname="helv", color=(0,0,0))
+
+            w_tie = fitz.get_text_length(tienda_str, fontname="helv", fontsize=8.5)
+            x_tie = 435 + (110 - w_tie) / 2
+            p_sem.insert_text(fitz.Point(x_tie, 63.5), tienda_str, fontsize=8.5, fontname="helv", color=(0,0,0))
 
             # Top Cards
             # Col 1: Metas
@@ -1623,6 +1632,28 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             clear_and_write(p_sem, fitz.Rect(387.1, 91.0, 444.7, 97.3), f"${comply_sem:,.2f}" if comply_sem > 0 else "", fontsize=5.2, fill=C_WHITE, align_center=True)
             clear_and_write(p_sem, fitz.Rect(387.1, 129.1, 444.7, 135.7), f"${atv_sem:,.2f}" if atv_sem > 0 else "", fontsize=5.2, fill=C_WHITE, align_center=True)
             clear_and_write(p_sem, fitz.Rect(387.1, 142.8, 444.7, 159.4), f"${aur_sem:,.2f}" if aur_sem > 0 else "", fontsize=5.2, fill=C_WHITE, align_center=True)
+
+            # Reforzar líneas nítidas de Top Cards
+            for y_tc in [90.8, 97.3, 110.8, 120.0, 129.1]:
+                p_sem.draw_line(fitz.Point(71.5, y_tc), fitz.Point(134.8, y_tc), color=(0,0,0), width=0.5, overlay=True)
+                p_sem.draw_line(fitz.Point(171.0, y_tc), fitz.Point(252.8, y_tc), color=(0,0,0), width=0.5, overlay=True)
+            for y_nn in [90.8, 97.3, 110.8, 120.0]:
+                p_sem.draw_line(fitz.Point(279.5, y_nn), fitz.Point(357.5, y_nn), color=(0,0,0), width=0.5, overlay=True)
+            for x_tc in [71.5, 104.0, 134.8]:
+                p_sem.draw_line(fitz.Point(x_tc, 90.8), fitz.Point(x_tc, 129.1), color=(0,0,0), width=0.5, overlay=True)
+            for x_tc in [171.0, 209.1, 252.8]:
+                p_sem.draw_line(fitz.Point(x_tc, 90.8), fitz.Point(x_tc, 129.1), color=(0,0,0), width=0.5, overlay=True)
+            for x_tc in [279.5, 305.4, 331.9, 357.5]:
+                p_sem.draw_line(fitz.Point(x_tc, 90.8), fitz.Point(x_tc, 120.0), color=(0,0,0), width=0.5, overlay=True)
+            # Col 4 borders
+            for y_c4 in [90.8, 97.3]:
+                p_sem.draw_line(fitz.Point(386.7, y_c4), fitz.Point(444.7, y_c4), color=(0,0,0), width=0.5, overlay=True)
+            for x_c4 in [386.7, 444.7]:
+                p_sem.draw_line(fitz.Point(x_c4, 90.8), fitz.Point(x_c4, 97.3), color=(0,0,0), width=0.5, overlay=True)
+            for y_c4 in [129.1, 135.8, 142.6, 159.6]:
+                p_sem.draw_line(fitz.Point(386.7, y_c4), fitz.Point(444.7, y_c4), color=(0,0,0), width=0.5, overlay=True)
+            for x_c4 in [386.7, 444.7]:
+                p_sem.draw_line(fitz.Point(x_c4, 129.1), fitz.Point(x_c4, 159.6), color=(0,0,0), width=0.5, overlay=True)
 
             # Metas por Colaborador
             colabs_list = s_state.get("DOMINGO", {}).get("colaboradores", [])
@@ -1700,6 +1731,12 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             clear_and_write(p_sem, fitz.Rect(279.5, yt1, 305.4, yt2), f"{tot_colab_kids}", fontsize=5.8, fill=C_WHITE, align_center=True)
             clear_and_write(p_sem, fitz.Rect(305.4, yt1, 331.9, yt2), f"{tot_colab_carekits}", fontsize=5.8, fill=C_WHITE, align_center=True)
 
+            # Redibujar bordes nítidos de Tabla 1 (Colaboradores)
+            for y_t1 in y_colab_starts + [211.5, 218.0]:
+                p_sem.draw_line(fitz.Point(51.0, y_t1), fitz.Point(332.0, y_t1), color=(0,0,0), width=0.6, overlay=True)
+            for x_t1 in [51.0, 134.7, 170.9, 209.1, 252.8, 279.5, 305.4, 332.0]:
+                p_sem.draw_line(fitz.Point(x_t1, 159.6), fitz.Point(x_t1, 218.0), color=(0,0,0), width=0.6, overlay=True)
+
             # Cierre Semanal Calculations
             tot_cierre_hrs = 0.0
             tot_cierre_inter = 0
@@ -1776,10 +1813,19 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             clear_and_write(p_sem, fitz.Rect(357.5, y_tot1, 386.7, y_tot2), f"{kids_pct_real:.1f}%", fontsize=5.5, fill=C_WHITE, align_center=True)
             clear_and_write(p_sem, fitz.Rect(386.7, y_tot1, 414.0, y_tot2), f"{ck_pct_real:.1f}%", fontsize=5.5, fill=C_GREEN_CELL, align_center=True)
 
-            # Table 3: SEGUIMIENTO CIERRE POR COLABORADOR (8 rows + TOTAL)
+            # Redibujar bordes nítidos de Tabla 2 (Total de Semana)
+            for y_t2 in [235.7, 244.8, 251.6]:
+                p_sem.draw_line(fitz.Point(51.0, y_t2), fitz.Point(414.0, y_t2), color=(0,0,0), width=0.6, overlay=True)
+            for x_t2 in [51.0, 104.0, 134.7, 170.9, 209.1, 252.8, 279.5, 331.9, 357.5, 386.7, 414.0]:
+                p_sem.draw_line(fitz.Point(x_t2, 235.7), fitz.Point(x_t2, 251.6), color=(0,0,0), width=0.6, overlay=True)
+
+            # Table 3: SEGUIMIENTO CIERRE POR COLABORADOR (8 filas calibradas exactamente con la plantilla)
+            y_cierre_starts = [285.3, 294.7, 304.2, 313.7, 323.2, 332.6, 342.1, 351.6]
+            y_cierre_ends   = [294.7, 304.2, 313.7, 323.2, 332.6, 342.1, 351.6, 361.1]
+
             for idx in range(8):
-                y1 = 285.3 + idx * 9.47
-                y2 = y1 + 9.0
+                y1 = y_cierre_starts[idx]
+                y2 = y_cierre_ends[idx]
                 if idx < len(cierre_colabs_data):
                     cd = cierre_colabs_data[idx]
                     clear_and_write(p_sem, fitz.Rect(51.0, y1, 104.0, y2), cd["nombre"], fontsize=5.5, fill=C_WHITE)
@@ -1822,6 +1868,12 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
             clear_and_write(p_sem, fitz.Rect(357.5, yt1, 386.7, yt2), f"{tot_wea_conv_gen:.1f}%", fontsize=5.8, fill=C_GREEN_CELL, align_center=True)
             clear_and_write(p_sem, fitz.Rect(386.7, yt1, 414.0, yt2), f"{tot_cierre_kids}", fontsize=5.8, fill=C_WHITE, align_center=True)
             clear_and_write(p_sem, fitz.Rect(414.0, yt1, 444.6, yt2), f"{tot_cierre_ck}", fontsize=5.8, fill=C_WHITE, align_center=True)
+
+            # Redibujar bordes nítidos de Tabla 3 (Cierre por Colaborador)
+            for y_t3 in y_cierre_starts + [361.1, 367.8]:
+                p_sem.draw_line(fitz.Point(51.0, y_t3), fitz.Point(444.6, y_t3), color=(0,0,0), width=0.6, overlay=True)
+            for x_t3 in [51.0, 104.0, 134.7, 170.9, 209.1, 252.8, 279.5, 305.4, 331.9, 357.5, 386.7, 414.0, 444.6]:
+                p_sem.draw_line(fitz.Point(x_t3, 264.5), fitz.Point(x_t3, 367.8), color=(0,0,0), width=0.6, overlay=True)
 
             doc_sem.save(out_pdf_path)
             doc_sem.close()
@@ -3092,9 +3144,9 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         try:
             sheet_target = map_to_excel_sheet(curr_tab)
             btn_download_excel.url = f"/api/download_excel/{sheet_target}?user_id={user_id}"
-            btn_download_pdf.url = f"/dl_enfoque/{sheet_target}?user_id={user_id}"
+            btn_download_pdf.url = f"/print_enfoque/{sheet_target}?user_id={user_id}"
             btn_download_excel.content = ft.Text(f"📊 Exportar Excel ({sheet_target})", color="white", weight="bold", size=11)
-            btn_download_pdf.content = ft.Text(f"🖨️ PDF ({sheet_target})", color="white", weight="bold", size=11)
+            btn_download_pdf.content = ft.Text(f"🖨️ PDF / Imprimir ({sheet_target})", color="white", weight="bold", size=11)
 
             btn_download_excel.update()
             btn_download_pdf.update()
@@ -5125,7 +5177,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             bgcolor="#10B981",
             shape=ft.RoundedRectangleBorder(radius=8)
         ),
-        url=f"/dl_enfoque/DOMINGO?user_id={user_id}"
+        url=f"/print_enfoque/DOMINGO?user_id={user_id}"
     )
 
     # Master Refresh Button 🔄 (Flat Neon Green Outline Style)

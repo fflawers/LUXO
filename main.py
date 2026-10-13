@@ -833,7 +833,7 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
         VOICE_EDGE_SPECS = {
             "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
             "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
-            "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+2%", "pitch": "+35Hz"},
+            "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
             "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
             "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
             "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
@@ -1088,7 +1088,7 @@ def configurar_rutas_fastapi(app):
             VOICE_EDGE_SPECS = {
                 "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
                 "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
-                "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+2%", "pitch": "+35Hz"},
+                "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
                 "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
@@ -1904,42 +1904,46 @@ def configurar_rutas_fastapi(app):
 
                                     if (vId === 'jarvis' || vId === 'yarvis') {
                                         u.lang = "es-ES";
-                                        u.rate = 0.92;
+                                        u.rate = 0.94;
+                                        u.pitch = 0.88;
                                         if (maleVoices.length > 0) {
                                             u.voice = maleVoices[0];
-                                            u.pitch = 0.85;
-                                        } else {
-                                            if (esVoices.length > 0) u.voice = esVoices[0];
-                                            u.pitch = 0.95;
+                                        } else if (esVoices.length > 0) {
+                                            u.voice = esVoices[0];
                                         }
                                     } else if (vId === 'jorge' || vId === 'alonso') {
                                         u.lang = "es-MX";
-                                        u.rate = 0.92;
+                                        u.rate = 0.95;
+                                        u.pitch = 0.90;
                                         if (maleVoices.length > 0) {
                                             u.voice = maleVoices[0];
-                                            u.pitch = 0.85;
-                                        } else {
-                                            if (esVoices.length > 0) u.voice = esVoices[0];
-                                            u.pitch = 0.95;
+                                        } else if (esVoices.length > 0) {
+                                            u.voice = esVoices[0];
                                         }
-                                    } else if (vId === 'luxo_avatar' || vId === 'barbara') {
+                                    } else if (vId === 'luxo_avatar') {
                                         u.lang = "es-MX";
-                                        u.pitch = 1.10;
-                                        u.rate = 1.02;
+                                        u.pitch = 0.92;
+                                        u.rate = 0.96;
+                                        if (maleVoices.length > 0) u.voice = maleVoices[0];
+                                        else if (esVoices.length > 0) u.voice = esVoices[0];
+                                    } else if (vId === 'barbara') {
+                                        u.lang = "es-MX";
+                                        u.pitch = 0.98;
+                                        u.rate = 0.98;
                                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                                         else if (esVoices.length > 0) u.voice = esVoices[0];
                                     } else if (vId === 'helena' || vId === 'sabina') {
                                         u.lang = "es-MX";
-                                        u.pitch = 1.05;
-                                        u.rate = 1.00;
+                                        u.pitch = 0.96;
+                                        u.rate = 0.98;
                                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                                         else if (esVoices.length > 0) u.voice = esVoices[0];
                                     } else {
                                         u.lang = "es-MX";
-                                        u.pitch = (voiceGender === 'female') ? 1.05 : ((voiceGender === 'male') ? 0.90 : 1.0);
-                                        u.rate = 1.0;
-                                        if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
-                                        else if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        u.pitch = (voiceGender === 'female') ? 0.98 : 0.90;
+                                        u.rate = 0.96;
+                                        if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
+                                        else if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
                                         else if (esVoices.length > 0) u.voice = esVoices[0];
                                     }
 
@@ -3713,8 +3717,28 @@ def configurar_rutas_fastapi(app):
         except Exception as ex_gv:
             return {"ok": False, "error": str(ex_gv)}
 
-    our_routes = app.router.routes[-11:]
-    del app.router.routes[-11:]
+    @app.post("/api/user_activity")
+    async def api_user_activity(request: Request):
+        try:
+            import time as _t_act
+            data = {}
+            try: data = await request.json()
+            except Exception: pass
+            u_id = str(data.get("user_id") or request.query_params.get("user_id") or "")
+            s_id = str(data.get("session_id") or request.query_params.get("session_id") or "")
+            now_ts = str(int(_t_act.time()))
+            for k in [s_id, u_id]:
+                if k and k in active_sessions:
+                    sess = active_sessions[k]
+                    p = sess.get("page")
+                    if p and hasattr(p, "shared_preferences") and p.shared_preferences:
+                        p.run_task(p.shared_preferences.set("last_activity_timestamp", now_ts))
+            return {"status": "ok"}
+        except Exception:
+            return {"status": "ok"}
+
+    our_routes = app.router.routes[-12:]
+    del app.router.routes[-12:]
     app.router.routes = our_routes + app.router.routes
 
 
@@ -21566,7 +21590,7 @@ Ejemplo:
                     width=105 if is_mobile else 130,
                     height=32,
                     text_size=10 if is_mobile else 11,
-                    content_padding=ft.padding.symmetric(horizontal=4, vertical=2),
+                    content_padding=ft.padding.Padding(4, 2, 4, 2),
                     border_color="#333344",
                     focused_border_color="#D8B4FE",
                     border_radius=8,
@@ -23281,8 +23305,8 @@ Ejemplo:
                     except: pass
                 page.run_task(_hide_sim_w)
             try:
-                # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu o sale del simulador
-                if desde_menu_manual or str(vista) not in ["capacitacion_ia", "simulador"]:
+                # Silenciar cualquier lectura de audio o TTS UNICAMENTE cuando el usuario cambia de modulo MANUALMENTE desde el menu
+                if desde_menu_manual:
                     stop_current_speak()
             except Exception:
                 pass
@@ -23293,7 +23317,9 @@ Ejemplo:
             if hasattr(page, "shared_preferences") and page.shared_preferences:
                 async def _save_v_sp():
                     try:
+                        import time as _t_sp
                         await page.shared_preferences.set("last_active_view", str(vista))
+                        await page.shared_preferences.set("last_activity_timestamp", str(int(_t_sp.time())))
                     except Exception:
                         pass
                 page.run_task(_save_v_sp)
@@ -24858,8 +24884,19 @@ Ejemplo:
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
 
-            # Determinar voz del usuario o colaborador
-            v_pref = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
+            # Determinar voz del usuario o colaborador desde preferencias guardadas
+            v_pref = voice_id
+            if not v_pref:
+                try:
+                    if hasattr(page, "client_storage") and page.client_storage and page.client_storage.contains_key("user_voice_preference"):
+                        v_pref = page.client_storage.get("user_voice_preference")
+                except Exception:
+                    pass
+            if not v_pref and user_voice_pref and user_voice_pref[0]:
+                v_pref = user_voice_pref[0]
+            if not v_pref:
+                v_pref = "jarvis"
+
             if user_voice_pref and v_pref:
                 user_voice_pref[0] = v_pref
 
@@ -25592,7 +25629,7 @@ Ejemplo:
                     if last_act_str:
                         try:
                             last_act = int(last_act_str)
-                            if time.time() - last_act > 1800: # Superó 30 minutos reales
+                            if time.time() - last_act > 10800: # Superó 3 horas reales
                                 session_expired = True
                         except Exception:
                             session_expired = False
@@ -25604,7 +25641,7 @@ Ejemplo:
                             ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
                         except Exception: pass
                         uid_saved = None
-                        print("Sesión expirada automáticamente por inactividad (>30m)")
+                        print("Sesión expirada automáticamente por inactividad (>3h)")
                     else:
                         # Sesión válida y activa: renovar marca de tiempo
                         try:
@@ -25690,11 +25727,11 @@ Ejemplo:
                     last_act_str = await page.shared_preferences.get("last_activity_timestamp")
                     if last_act_str:
                         last_act = int(last_act_str)
-                        if time.time() - last_act > 1800:
+                        if time.time() - last_act > 10800:
                             # Inactividad superada.
                             await page.shared_preferences.remove("logged_user_id")
                             await page.shared_preferences.remove("last_activity_timestamp")
-                            print("Sesión expirada EN VIVO por inactividad (>30m)")
+                            print("Sesión expirada EN VIVO por inactividad (>3h)")
                             # Lanzar recarga en cliente para forzar pantalla de login
                             try:
                                 await page.launch_url("javascript:window.location.reload();")
