@@ -22034,19 +22034,27 @@ Ejemplo:
                 for d in dias_semana:
                     inputs_vly[d].value = "0"
 
-                # Cargar vendedores desde DB de esa tienda si existen
-                v_db_names = obtener_vendedores_tienda(uid)
-                if v_db_names:
-                    vendedores_list.clear()
-                    for n_name in v_db_names:
-                        vendedores_list.append(crear_vendedor_item(n_name, "6"))
-                    num_vendedores_input.value = str(len(v_db_names))
-                    refrescar_vendedores_container()
-                else:
+                # Cargar vendedores desde DB de esa tienda si existen de forma segura
+                try:
+                    v_db_names = obtener_vendedores_tienda(uid)
+                    if v_db_names:
+                        vendedores_list.clear()
+                        for n_name in v_db_names:
+                            vendedores_list.append(crear_vendedor_item(n_name, "6"))
+                        num_vendedores_input.value = str(len(v_db_names))
+                        refrescar_vendedores_container()
+                    else:
+                        inicializar_vendedores_default(3)
+                        num_vendedores_input.value = "3"
+                except Exception as ex_v_init:
+                    print("Notice init vendedores:", ex_v_init)
                     inicializar_vendedores_default(3)
                     num_vendedores_input.value = "3"
 
-                recalcular_todo()
+                try:
+                    recalcular_todo()
+                except Exception:
+                    pass
                 
                 try:
                     db = conectar_db()
@@ -23447,7 +23455,17 @@ Ejemplo:
                         elif vista == "facturacion":
                             main_views_cache["facturacion"] = build_facturacion_view()
                         elif vista == "meta_semanal":
-                            main_views_cache["meta_semanal"] = build_meta_semanal_view()
+                            try:
+                                main_views_cache["meta_semanal"] = build_meta_semanal_view()
+                            except Exception as ex_ms:
+                                print("Error construyendo vista meta_semanal:", ex_ms)
+                                import traceback
+                                traceback.print_exc()
+                                # Fallback seguro para que la pantalla abra de inmediato sin atorarse
+                                main_views_cache["meta_semanal"] = ft.Column([
+                                    ft.Text("🎯 METAS Y MÉTRICAS", size=24, color="#D8B4FE", weight="bold"),
+                                    ft.Text("Cargando módulo de metas...", color="#aaaaaa"),
+                                ], scroll=ft.ScrollMode.AUTO, expand=True)
                         elif vista == "weekly":
                             main_views_cache["weekly"] = build_weekly_view()
                         elif vista == "enfoque_diario":
@@ -24884,19 +24902,8 @@ Ejemplo:
 
             mostrar_snack(f"✨ ¡Bienvenid@, {display_name}!", color="#00FFFF")
 
-            # Determinar voz del usuario o colaborador desde preferencias guardadas
-            v_pref = voice_id
-            if not v_pref:
-                try:
-                    if hasattr(page, "client_storage") and page.client_storage and page.client_storage.contains_key("user_voice_preference"):
-                        v_pref = page.client_storage.get("user_voice_preference")
-                except Exception:
-                    pass
-            if not v_pref and user_voice_pref and user_voice_pref[0]:
-                v_pref = user_voice_pref[0]
-            if not v_pref:
-                v_pref = "jarvis"
-
+            # Determinar voz del usuario o colaborador directamente de memoria reactiva
+            v_pref = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
             if user_voice_pref and v_pref:
                 user_voice_pref[0] = v_pref
 
