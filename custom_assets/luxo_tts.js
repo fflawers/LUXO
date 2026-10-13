@@ -1107,11 +1107,11 @@
     };
 
     window.luxoActivarPasskeyLogin = async function() {
-        if (document.getElementById('luxo-passkey-login-banner')) return;
-
         console.log("LUXO: [DIAGNÓSTICO INICIAL WEBAUTHN]");
         const exist = document.getElementById('luxo-passkey-login-banner');
-        if (exist) exist.remove();
+        if (exist) {
+            try { exist.remove(); } catch(e){}
+        }
 
         const banner = document.createElement('div');
         banner.id = 'luxo-passkey-login-banner';
@@ -1127,15 +1127,15 @@
 
         if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
             console.warn("LUXO: [SEGURIDAD W3C] La página se está ejecutando en un origen no seguro (HTTP IP). WebAuthn exige HTTPS o localhost.");
-            setTxt('⚠️ WebAuthn requiere HTTPS o localhost en celulares. Revisa la consola o activa chrome://flags/#unsafely-treat-insecure-origin-as-secure', '#FF8C00');
-            setTimeout(() => { banner.remove(); window._luxoPasskeyActivo = false; }, 7000);
+            setTxt('⚠️ WebAuthn requiere HTTPS o localhost en celulares.', '#FF8C00');
+            setTimeout(() => { try { banner.remove(); } catch(e){} window._luxoPasskeyActivo = false; }, 4000);
             return;
         }
 
         if (!window.PublicKeyCredential || !navigator.credentials || !navigator.credentials.get) {
             console.error("LUXO: navigator.credentials o PublicKeyCredential no disponibles.");
             setTxt('⚠️ Tu navegador o dispositivo no tiene habilitado WebAuthn / Passkeys.', '#FF8C00');
-            setTimeout(() => { banner.remove(); window._luxoPasskeyActivo = false; }, 4500);
+            setTimeout(() => { try { banner.remove(); } catch(e){} window._luxoPasskeyActivo = false; }, 4000);
             return;
         }
 

@@ -20976,7 +20976,7 @@ Ejemplo:
             # --- ESTADOS Y CONFIGURACIÓN ---
             meta_id_holder = [None]
             active_subtab = ["diarias"] # Default "diarias" (Hoja Domingo)
-            target_user_id = [user_info["id"]]
+            target_user_id = [user_info.get("id") or user_info.get("ID_Usuario") or 1]
             # Variables de tienda activa en consulta
             current_store_name_holder = ["MI TIENDA"]
             tienda_label_diarias = ft.Text("🏬 Tienda en consulta: ", color="#00FFFF", size=14, weight="bold")
@@ -21110,10 +21110,12 @@ Ejemplo:
                             ], spacing=10)
                         ], spacing=8),
                         bgcolor="#1e1b4b",
-                        padding=10,
-                        border_radius=8,
                         border=ft.Border.all(1, "#9D50BB")
                     )
+                    current_store_name_holder[0] = tiendas_opciones[0].text
+                    actualizar_titulos_tienda()
+            else:
+                target_user_id[0] = user_info.get("id", 1)
                 current_store_name_holder[0] = user_info.get("tienda") or user_info.get("nombre") or "Mi Tienda"
                 actualizar_titulos_tienda()
 
@@ -21595,9 +21597,10 @@ Ejemplo:
                     focused_border_color="#D8B4FE",
                     border_radius=8,
                     bgcolor="#0e0e1a",
-                    tooltip="Voz de bienvenida e IA para este colaborador",
-                    on_change=on_change_voz_colab
+                    tooltip="Voz de bienvenida e IA para este colaborador"
                 )
+                voz_colab_dd.on_select = on_change_voz_colab
+                voz_colab_dd.on_change = on_change_voz_colab
 
                 btn_bio_rostro = ft.IconButton(icon=ft.Icons.CAMERA_ALT_ROUNDED, tooltip="Registrar Rostro (Face ID)", icon_color="#00FFFF", icon_size=18 if is_mobile else 20, on_click=registrar_rostro_vend_click)
                 btn_bio_huella = ft.IconButton(icon=ft.Icons.FINGERPRINT_ROUNDED, tooltip="Registrar Huella / Passkey", icon_color="#D8B4FE", icon_size=18 if is_mobile else 20, on_click=registrar_huella_vend_click)
@@ -23784,6 +23787,13 @@ Ejemplo:
                 if hasattr(page, "shared_preferences") and page.shared_preferences:
                     page.run_task(page.shared_preferences.set, "user_voice_preference", v_val)
             except Exception: pass
+            try:
+                u_id_val = user_info.get("id") or user_info.get("ID_Usuario")
+                u_nom_val = user_info.get("nombre") or user_info.get("usuario") or ""
+                if u_id_val:
+                    guardar_biometria_db(u_id_val, u_nom_val, voz_preferida=v_val)
+            except Exception as ex_sv:
+                print("Notice guardar voz db:", ex_sv)
             reproducir_muestra_voz(v_val)
 
         voice_dropdown = EmojiDropdown(
@@ -25020,7 +25030,24 @@ Ejemplo:
                     page.user_id = str(res["ID_Usuario"])
                     u_clean_login = str(res.get("Usuario") or "").lower().strip()
                     ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
-                    reproducir_saludo_login(res["Nombre_Completo"])
+                    # Obtener voz preferida guardada del usuario en base de datos
+                    voz_usuario_db = None
+                    try:
+                        cursor.execute("SELECT voz_preferida FROM biometria_usuarios WHERE usuario_id = %s AND voz_preferida IS NOT NULL AND voz_preferida != '' ORDER BY id DESC LIMIT 1", (res["ID_Usuario"],))
+                        row_v_pref = cursor.fetchone()
+                        if row_v_pref:
+                            if isinstance(row_v_pref, dict) and row_v_pref.get("voz_preferida"):
+                                voz_usuario_db = row_v_pref["voz_preferida"]
+                            elif isinstance(row_v_pref, (list, tuple)) and row_v_pref[0]:
+                                voz_usuario_db = row_v_pref[0]
+                    except Exception as ex_vdb:
+                        print("Notice consulta voz login:", ex_vdb)
+
+                    if voz_usuario_db:
+                        user_voice_pref[0] = voz_usuario_db
+                        user_info["voz_preferida"] = voz_usuario_db
+
+                    reproducir_saludo_login(res["Nombre_Completo"], voice_id=voz_usuario_db)
                     
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
@@ -25414,27 +25441,23 @@ Ejemplo:
         ]
     )
 
-    async def on_click_login_huella(e):
+    def on_click_login_huella(e):
         print("🔒 [FLET] Clic en Login Huella")
         disparar_evento_biometrico(page, 'open_passkey_login')
+        ejecutar_js_flet(page, "if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); }")
         try:
-            if hasattr(page, "run_js_code"):
-                await page.run_js_code("if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); }")
-            else:
-                ejecutar_js_flet(page, "if (window.luxoActivarPasskeyLogin) { window.luxoActivarPasskeyLogin(); }")
-        except Exception as ex:
-            print("Error ejecutando JS Huella:", ex)
+            page.launch_url("javascript:void((function(){ if(window.luxoActivarPasskeyLogin) window.luxoActivarPasskeyLogin(); })());", web_popup_window_name="_self")
+        except Exception:
+            pass
 
-    async def on_click_login_facial(e):
+    def on_click_login_facial(e):
         print("🔒 [FLET] Clic en Login Facial")
         disparar_evento_biometrico(page, 'open_facial_login')
+        ejecutar_js_flet(page, "if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); }")
         try:
-            if hasattr(page, "run_js_code"):
-                await page.run_js_code("if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); }")
-            else:
-                ejecutar_js_flet(page, "if (window.luxoAbrirCamaraFacialLogin) { window.luxoAbrirCamaraFacialLogin(); }")
-        except Exception as ex:
-            print("Error ejecutando JS Facial:", ex)
+            page.launch_url("javascript:void((function(){ if(window.luxoAbrirCamaraFacialLogin) window.luxoAbrirCamaraFacialLogin(); })());", web_popup_window_name="_self")
+        except Exception:
+            pass
 
     btn_login_huella = ft.Container(
         content=ft.Row([
