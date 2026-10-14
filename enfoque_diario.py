@@ -470,10 +470,10 @@ def default_store_state():
             "logros_hoy": "",
             "oportunidades_manana": "",
             "ritmo_venta_hoy": "",
-            "checks_estandares": {"limpieza": False, "imagen": False, "reunion": False},
-            "checks_no_negociables": {"registro": False, "sin_celular": False, "fuera_caja": False, "seguimiento": False},
-            "checks_secretos": {"pulir": False, "pontelos": False, "diviertete": False, "cuidalos": False, "ajuste": False},
-            "checks_journey": {"relacion": False, "confianza": False, "interactua": False, "descubre": False, "ve_mas_alla": False},
+            "checks_estandares": {"limpieza": True, "imagen": True, "reunion": True},
+            "checks_no_negociables": {"registro": True, "sin_celular": True, "fuera_caja": True, "seguimiento": True},
+            "checks_secretos": {"pulir": True, "pontelos": True, "diviertete": True, "cuidalos": True, "ajuste": True},
+            "checks_journey": {"relacion": True, "confianza": True, "interactua": True, "descubre": True, "ve_mas_alla": True},
             "plan_accion": [
                 {"colaborador": "", "compromiso": ""} for _ in range(3)
             ]
@@ -3863,6 +3863,16 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             ], spacing=cv_sp)
         )
 
+        cv_total_container = ft.Container(
+            content=ft.Row([ft.Column([cv_hdr_ui, cv_row_ui], spacing=cv_sp)], scroll=ft.ScrollMode.AUTO),
+            padding=ft.padding.only(bottom=14 if is_mobile else 4)
+        )
+
+        cv_colab_container = ft.Container(
+            content=ft.Row([ft.Column(cv_colab_rows, spacing=cv_sp)], scroll=ft.ScrollMode.AUTO),
+            padding=ft.padding.only(bottom=14 if is_mobile else 4)
+        )
+
         card_como_vamos = ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -3871,10 +3881,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 ], spacing=4),
                 ft.Divider(height=6, color="#374151"),
                 ft.Text("TOTAL DEL DÍA", weight="bold", color="#F59E0B", size=10),
-                ft.Row([ft.Column([cv_hdr_ui, cv_row_ui], spacing=cv_sp)], scroll=ft.ScrollMode.ADAPTIVE),
+                cv_total_container,
                 ft.Divider(height=6, color="#374151"),
                 ft.Text("RESULTADOS POR COLABORADOR AL CIERRE", weight="bold", color="#F59E0B", size=10),
-                ft.Row([ft.Column(cv_colab_rows, spacing=cv_sp)], scroll=ft.ScrollMode.ADAPTIVE),
+                cv_colab_container,
             ]),
             bgcolor="#0B0E17",
             padding=10,
@@ -3899,10 +3909,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         smart_text_fields = {}
 
         data.setdefault("ritmo_venta_hoy", "")
-        data.setdefault("checks_estandares", {"limpieza": False, "imagen": False, "reunion": False})
-        data.setdefault("checks_no_negociables", {"registro": False, "sin_celular": False, "fuera_caja": False, "seguimiento": False})
-        data.setdefault("checks_secretos", {"pulir": False, "pontelos": False, "diviertete": False, "cuidalos": False, "ajuste": False})
-        data.setdefault("checks_journey", {"relacion": False, "confianza": False, "interactua": False, "descubre": False, "ve_mas_alla": False})
+        data.setdefault("checks_estandares", {"limpieza": True, "imagen": True, "reunion": True})
+        data.setdefault("checks_no_negociables", {"registro": True, "sin_celular": True, "fuera_caja": True, "seguimiento": True})
+        data.setdefault("checks_secretos", {"pulir": True, "pontelos": True, "diviertete": True, "cuidalos": True, "ajuste": True})
+        data.setdefault("checks_journey", {"relacion": True, "confianza": True, "interactua": True, "descubre": True, "ve_mas_alla": True})
 
         def on_ritmo_change(e):
             data["ritmo_venta_hoy"] = e.control.value
@@ -4056,9 +4066,9 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         # Tarjeta 2: NUESTROS ESTÁNDARES
         chk_est = data.get("checks_estandares", {})
         items_estandares = [
-            ("limpieza", "🧹 LIMPIEZA DE LA TIENDA", "Barre, limpia y desinfecta. Asegúrate de que la tienda luzca impecable. Pon especial atención al piso de ventas, aparadores, espejos, mobiliario, baño y almacén.", ft.Icons.CLEANING_SERVICES_ROUNDED, "#00FFFF", chk_est.get("limpieza", False)),
-            ("imagen", "👔 IMAGEN PERSONAL", "Somos embajadores de la marca, por lo que nuestra imagen debe reflejar los valores de Sunglass Hut.", ft.Icons.CHECKROOM_ROUNDED, "#3B82F6", chk_est.get("imagen", False)),
-            ("reunion", "👥 REÚNETE CON EL EQUIPO", "La junta matutina es clave para tener un gran día. Comunica cómo vamos en la semana/mes, la meta del día y acciones clave para alcanzarla.", ft.Icons.GROUPS_ROUNDED, "#10B981", chk_est.get("reunion", False)),
+            ("limpieza", "🧹 LIMPIEZA DE LA TIENDA", "Barre, limpia y desinfecta. Asegúrate de que la tienda luzca impecable. Pon especial atención al piso de ventas, aparadores, espejos, mobiliario, baño y almacén.", ft.Icons.CLEANING_SERVICES_ROUNDED, "#00FFFF", chk_est.get("limpieza", True)),
+            ("imagen", "👔 IMAGEN PERSONAL", "Somos embajadores de la marca, por lo que nuestra imagen debe reflejar los valores de Sunglass Hut.", ft.Icons.CHECKROOM_ROUNDED, "#3B82F6", chk_est.get("imagen", True)),
+            ("reunion", "👥 REÚNETE CON EL EQUIPO", "La junta matutina es clave para tener un gran día. Comunica cómo vamos en la semana/mes, la meta del día y acciones clave para alcanzarla.", ft.Icons.GROUPS_ROUNDED, "#10B981", chk_est.get("reunion", True)),
         ]
         col_estandares = ft.Column([
             ft.Row([
@@ -4072,10 +4082,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         # Tarjeta 3: NUESTROS NO NEGOCIABLES
         chk_no_neg = data.get("checks_no_negociables", {})
         items_no_neg = [
-            ("registro", "⏰ RECORDATORIO DE ENTRADA Y SALIDA", "Al iniciar el día, registrar entrada y al finalizar, salida. La precisión impacta directamente en los indicadores de productividad.", ft.Icons.TIMER_ROUNDED, "#FFB703", chk_no_neg.get("registro", False)),
-            ("sin_celular", "📵 SIN USO DE TELÉFONOS CELULARES", "Evita el uso del teléfono personal durante la jornada laboral. Navegación y mensajes deben realizarse fuera del horario de trabajo.", ft.Icons.PHONELINK_ERASE_ROUNDED, "#EF4444", chk_no_neg.get("sin_celular", False)),
-            ("fuera_caja", "📍 FUERA DE LA CAJA Y RESPETA TU ZONA", "A menos que cobres en caja, evita estar tras el mostrador. Respeta tu zona asignada y utiliza tu energía para atraer clientes.", ft.Icons.PERSON_PIN_CIRCLE_ROUNDED, "#F59E0B", chk_no_neg.get("fuera_caja", False)),
-            ("seguimiento", "📈 EL SEGUIMIENTO ES FUNDAMENTAL", "Monitorea resultados durante todo el día en el Store Dashboard para impulsar el desempeño y reaccionar oportunamente.", ft.Icons.INSIGHTS_ROUNDED, "#EC4899", chk_no_neg.get("seguimiento", False)),
+            ("registro", "⏰ RECORDATORIO DE ENTRADA Y SALIDA", "Al iniciar el día, registrar entrada y al finalizar, salida. La precisión impacta directamente en los indicadores de productividad.", ft.Icons.TIMER_ROUNDED, "#FFB703", chk_no_neg.get("registro", True)),
+            ("sin_celular", "📵 SIN USO DE TELÉFONOS CELULARES", "Evita el uso del teléfono personal durante la jornada laboral. Navegación y mensajes deben realizarse fuera del horario de trabajo.", ft.Icons.PHONELINK_ERASE_ROUNDED, "#EF4444", chk_no_neg.get("sin_celular", True)),
+            ("fuera_caja", "📍 FUERA DE LA CAJA Y RESPETA TU ZONA", "A menos que cobres en caja, evita estar tras el mostrador. Respeta tu zona asignada y utiliza tu energía para atraer clientes.", ft.Icons.PERSON_PIN_CIRCLE_ROUNDED, "#F59E0B", chk_no_neg.get("fuera_caja", True)),
+            ("seguimiento", "📈 EL SEGUIMIENTO ES FUNDAMENTAL", "Monitorea resultados durante todo el día en el Store Dashboard para impulsar el desempeño y reaccionar oportunamente.", ft.Icons.INSIGHTS_ROUNDED, "#EC4899", chk_no_neg.get("seguimiento", True)),
         ]
         col_no_neg = ft.Column([
             ft.Row([
@@ -4141,11 +4151,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         # Tarjeta 4: Los 5 Secretos / Brandies SGH
         chk_sec = data.get("checks_secretos", {})
         secretos_items = [
-            ("pulir", "✨ 1. PULIR ES PODER", "Ofrece limpiar sus lentes al iniciar la conversación para crear conexión y experiencia positiva.", ft.Icons.AUTO_AWESOME_ROUNDED, "#00FFFF", chk_sec.get("pulir", False)),
-            ("pontelos", "🕶️ 2. PÓNTELOS", "Invítalo a probar diferentes modelos en la bandeja de exhibición hasta encontrar el ideal.", ft.Icons.VISIBILITY_ROUNDED, "#E040FB", chk_sec.get("pontelos", False)),
-            ("diviertete", "🎉 3. DIVIÉRTETE MÁS", "Muestra 3 o 4 opciones adicionales para aumentar posibilidades de venta múltiple.", ft.Icons.CELEBRATION_ROUNDED, "#FFD700", chk_sec.get("diviertete", False)),
-            ("cuidalos", "🧼 4. CUÍDALOS", "Enseña al cliente cómo cuidar sus lentes. Ofrece estuche, solución limpiadora y carekits.", ft.Icons.SHIELD_ROUNDED, "#10B981", chk_sec.get("cuidalos", False)),
-            ("ajuste", "📐 5. AJUSTE PERFECTO", "Ajusta los armazones a la medida exacta del cliente para máxima comodidad y satisfacción.", ft.Icons.SQUARE_FOOT_ROUNDED, "#3B82F6", chk_sec.get("ajuste", False)),
+            ("pulir", "✨ 1. PULIR ES PODER", "Ofrece limpiar sus lentes al iniciar la conversación para crear conexión y experiencia positiva.", ft.Icons.AUTO_AWESOME_ROUNDED, "#00FFFF", chk_sec.get("pulir", True)),
+            ("pontelos", "🕶️ 2. PÓNTELOS", "Invítalo a probar diferentes modelos en la bandeja de exhibición hasta encontrar el ideal.", ft.Icons.VISIBILITY_ROUNDED, "#E040FB", chk_sec.get("pontelos", True)),
+            ("diviertete", "🎉 3. DIVIÉRTETE MÁS", "Muestra 3 o 4 opciones adicionales para aumentar posibilidades de venta múltiple.", ft.Icons.CELEBRATION_ROUNDED, "#FFD700", chk_sec.get("diviertete", True)),
+            ("cuidalos", "🧼 4. CUÍDALOS", "Enseña al cliente cómo cuidar sus lentes. Ofrece estuche, solución limpiadora y carekits.", ft.Icons.SHIELD_ROUNDED, "#10B981", chk_sec.get("cuidalos", True)),
+            ("ajuste", "📐 5. AJUSTE PERFECTO", "Ajusta los armazones a la medida exacta del cliente para máxima comodidad y satisfacción.", ft.Icons.SQUARE_FOOT_ROUNDED, "#3B82F6", chk_sec.get("ajuste", True)),
         ]
 
         card_secretos = ft.Container(
@@ -4169,11 +4179,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         # Tarjeta 5: Customer Journey
         chk_jrn = data.get("checks_journey", {})
         journey_items = [
-            ("relacion", "🤝 1. Empieza una relación", "Bienvenida cálida, observa, adapta el acercamiento y presenta novedades.", ft.Icons.HANDSHAKE_ROUNDED, "#00FFFF", chk_jrn.get("relacion", False)),
-            ("confianza", "🛡️ 2. Gánate su confianza", "Escucha activa, preguntas abiertas sobre estilo de vida y conocimiento de producto.", ft.Icons.VERIFIED_USER_ROUNDED, "#E040FB", chk_jrn.get("confianza", False)),
-            ("interactua", "💬 3. Interactúa y relaciona", "Conecta necesidades con beneficios clave y soluciones tangibles.", ft.Icons.CHAT_BUBBLE_ROUNDED, "#FFD700", chk_jrn.get("interactua", False)),
-            ("descubre", "🔍 4. Descubre y aprende", "Muestra opciones, realiza venta adicional (Cross Selling) y ofrece Care Kits.", ft.Icons.TRAVEL_EXPLORE_ROUNDED, "#10B981", chk_jrn.get("descubre", False)),
-            ("ve_mas_alla", "🚀 5. Ve más allá", "Cierre perfecto, garantía, registro de lealtad y despedida memorable.", ft.Icons.ROCKET_LAUNCH_ROUNDED, "#3B82F6", chk_jrn.get("ve_mas_alla", False)),
+            ("relacion", "🤝 1. Empieza una relación", "Bienvenida cálida, observa, adapta el acercamiento y presenta novedades.", ft.Icons.HANDSHAKE_ROUNDED, "#00FFFF", chk_jrn.get("relacion", True)),
+            ("confianza", "🛡️ 2. Gánate su confianza", "Escucha activa, preguntas abiertas sobre estilo de vida y conocimiento de producto.", ft.Icons.VERIFIED_USER_ROUNDED, "#E040FB", chk_jrn.get("confianza", True)),
+            ("interactua", "💬 3. Interactúa y relaciona", "Conecta necesidades con beneficios clave y soluciones tangibles.", ft.Icons.CHAT_BUBBLE_ROUNDED, "#FFD700", chk_jrn.get("interactua", True)),
+            ("descubre", "🔍 4. Descubre y aprende", "Muestra opciones, realiza venta adicional (Cross Selling) y ofrece Care Kits.", ft.Icons.TRAVEL_EXPLORE_ROUNDED, "#10B981", chk_jrn.get("descubre", True)),
+            ("ve_mas_alla", "🚀 5. Ve más allá", "Cierre perfecto, garantía, registro de lealtad y despedida memorable.", ft.Icons.ROCKET_LAUNCH_ROUNDED, "#3B82F6", chk_jrn.get("ve_mas_alla", True)),
         ]
 
         card_journey = ft.Container(
@@ -4889,8 +4899,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         btn = ft.Container(
             content=ft.Text(label, color="white" if is_sel else "#CCCCCC", size=11, weight="bold"),
             bgcolor=col_base if is_sel else "#111827",
-            padding=ft.Padding(12, 8, 12, 8),
-            border_radius=8,
+            padding=ft.Padding(14, 10, 14, 10),
+            border_radius=10,
             border=ft.Border.all(1.5, col_base if is_sel else "#374151"),
             on_click=lambda e, tid=t_id: select_tab(tid),
             ink=True
@@ -4898,7 +4908,10 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         tab_buttons.append((btn, t_id))
         tab_row_controls.append(btn)
 
-    tab_navigation_bar = ft.Row(tab_row_controls, scroll=ft.ScrollMode.AUTO, spacing=6)
+    tab_navigation_bar = ft.Container(
+        content=ft.Row(tab_row_controls, scroll=ft.ScrollMode.AUTO, spacing=8),
+        padding=ft.padding.symmetric(vertical=6, horizontal=2)
+    )
 
     # --- BARRA SUPERIOR CON BOTÓN PDF Y CAMPOS DE ENCABEZADO ---
     # --- VERIFICACIÓN DE ROL Y USUARIO ---
