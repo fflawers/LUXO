@@ -3423,6 +3423,9 @@ def configurar_rutas_fastapi(app):
                         _nombre_bio = nombre_identificado_h
                         _voz_bio = voz_colab_h
                         async def trigger_login_huella():
+                            try:
+                                ejecutar_js_flet(page_s, f"window.luxoUserId = '{bio_user['ID_Usuario']}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{bio_user['ID_Usuario']}'); }} catch(e){{}}")
+                            except Exception: pass
                             cargar_chat_fn()
                             if saludo_fn:
                                 saludo_fn(_nombre_bio, _voz_bio)
@@ -3576,6 +3579,9 @@ def configurar_rutas_fastapi(app):
                             _nombre_facial = nombre_identificado_f
                             _voz_facial = voz_colab_f
                             async def trigger_login_facial():
+                                try:
+                                    ejecutar_js_flet(page_s, f"window.luxoUserId = '{matched_user['ID_Usuario']}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{matched_user['ID_Usuario']}'); }} catch(e){{}}")
+                                except Exception: pass
                                 cargar_chat_fn()
                                 if saludo_fn:
                                     saludo_fn(_nombre_facial, _voz_facial)
@@ -4017,6 +4023,13 @@ def reproducir_saludo_login(nombre_usuario, voice_id="jarvis"):
             v_spec = {
                 "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
                 "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
+                "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
+                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
+                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
+                "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
             }.get(voice_id, {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"})
             
             import hashlib, asyncio, edge_tts
@@ -24935,6 +24948,8 @@ Ejemplo:
 
             def _disparar_audio_saludo():
                 try:
+                    detener_audio_avatar_nativo()
+                    ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); }")
                     start_speak(saludo_final, voice_id=v_pref, voice_gender=g_pref)
                 except Exception as ex_sp:
                     print("Notice audio saludo login:", ex_sp)
@@ -25033,7 +25048,7 @@ Ejemplo:
                     # Obtener voz preferida guardada del usuario en base de datos
                     voz_usuario_db = None
                     try:
-                        cursor.execute("SELECT voz_preferida FROM biometria_usuarios WHERE usuario_id = %s AND voz_preferida IS NOT NULL AND voz_preferida != '' ORDER BY id DESC LIMIT 1", (res["ID_Usuario"],))
+                        cursor.execute("SELECT voz_preferida FROM biometria_usuarios WHERE (usuario_id = %s OR LOWER(TRIM(nombre_usuario)) = %s) AND voz_preferida IS NOT NULL AND voz_preferida != '' ORDER BY id DESC LIMIT 1", (res["ID_Usuario"], u_clean_login))
                         row_v_pref = cursor.fetchone()
                         if row_v_pref:
                             if isinstance(row_v_pref, dict) and row_v_pref.get("voz_preferida"):
@@ -25043,11 +25058,11 @@ Ejemplo:
                     except Exception as ex_vdb:
                         print("Notice consulta voz login:", ex_vdb)
 
-                    if voz_usuario_db:
-                        user_voice_pref[0] = voz_usuario_db
-                        user_info["voz_preferida"] = voz_usuario_db
+                    voz_efectiva = voz_usuario_db or user_voice_pref[0] or "jarvis"
+                    user_voice_pref[0] = voz_efectiva
+                    user_info["voz_preferida"] = voz_efectiva
 
-                    reproducir_saludo_login(res["Nombre_Completo"], voice_id=voz_usuario_db)
+                    reproducir_saludo_login(res["Nombre_Completo"], voice_id=voz_efectiva)
                     
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
