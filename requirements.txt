@@ -12,7 +12,7 @@ SpeechRecognition
 pyaudio
 python-multipart
 gTTS
-edge-tts
+edge-tts>=7.3.1
 opencv-python-headless
 numpy
 pillow

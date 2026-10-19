@@ -859,6 +859,17 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
         t = threading.Thread(target=_do_run)
         t.start()
         t.join(timeout=12.0)
+
+        # Si edge-tts no pudo generar el archivo (ej. error 403 o timeout de red), usar gTTS como respaldo inmediato
+        if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+            try:
+                from gtts import gTTS
+                tld_lang = "com.mx" if v_actual in ["helena", "jorge", "barbara", "estandar", "luxo_avatar", "alonso"] else "es"
+                tts = gTTS(text=clean_text, lang="es", tld=tld_lang, slow=False)
+                tts.save(filepath)
+                print(f"[LUXO TTS BACKEND] Fallback exitoso con gTTS: {filepath}")
+            except Exception as ex_gtts:
+                print("Error gtts fallback:", ex_gtts)
     
     if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
         f_size = os.path.getsize(filepath)
