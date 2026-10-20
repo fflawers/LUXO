@@ -831,14 +831,14 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
     
     if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
         VOICE_EDGE_SPECS = {
-            "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
-            "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+            "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
+            "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
             "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
-            "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
+            "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
             "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
-            "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
-            "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
-            "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
+            "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"},
+            "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+0%", "pitch": "+0Hz"},
+            "alonso": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
             "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
         }
         spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
@@ -1097,14 +1097,14 @@ def configurar_rutas_fastapi(app):
         
         if not os.path.exists(filepath):
             VOICE_EDGE_SPECS = {
-                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
-                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
+                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
-                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
-                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
+                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
             }
             spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
@@ -1856,7 +1856,8 @@ def configurar_rutas_fastapi(app):
                     }
                     _luxoInitVoices();
 
-                    window.luxoStopTts = function() {
+                    if (!window._luxoAudioEngineLoaded) {
+                        window.luxoStopTts = function() {
                         if (window._currentLuxoAudio) {
                             try {
                                 window._currentLuxoAudio.pause();
@@ -2162,6 +2163,9 @@ def configurar_rutas_fastapi(app):
                             } catch(e) {}
                         }, 500);
                     }
+                    }
+
+                    window.luxoTriggerCameraNative = function(userId, acceptFilter, captureMode) {
                         let input = document.getElementById("luxo_global_file_input");
                         if (!input) {
                             input = document.createElement("input");
@@ -4032,16 +4036,16 @@ def reproducir_saludo_login(nombre_usuario, voice_id="jarvis"):
             temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
             os.makedirs(temp_audio_dir, exist_ok=True)
             v_spec = {
-                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
-                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
+                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
-                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
-                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
+                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
                 "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
-            }.get(voice_id, {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"})
+            }.get(voice_id, {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"})
             
             import hashlib, asyncio, edge_tts
             h = hashlib.md5(f"{saludo_text}_{voice_id}".encode("utf-8")).hexdigest()

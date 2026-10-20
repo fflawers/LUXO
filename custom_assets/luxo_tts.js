@@ -341,8 +341,8 @@
     window.luxoSpeakWebSpeech = function(text, voiceId, voiceGender, failedAudioUrl) {
         try {
             if (!('speechSynthesis' in window)) return;
-            if (voiceId === 'luxo_avatar' || (failedAudioUrl && failedAudioUrl.includes('saludo_login'))) {
-                console.log('[LUXO TTS] Omitiendo WebSpeech para audio del avatar original.');
+            if (voiceId === 'luxo_avatar' || failedAudioUrl) {
+                console.log('[LUXO TTS] Omitiendo WebSpeech para audio neural generado.');
                 return;
             }
             window.speechSynthesis.cancel();
@@ -376,6 +376,8 @@
                 try {
                     const u = new SpeechSynthesisUtterance(cleanText);
                     u.volume = 1.0;
+                    u.pitch = 1.0;
+                    u.rate = 1.0;
                     const vId = (voiceId || '').toLowerCase();
                     const voices = window.speechSynthesis.getVoices() || [];
                     const esVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
@@ -384,44 +386,22 @@
 
                     if (vId === 'jarvis' || vId === 'yarvis') {
                         u.lang = "es-ES";
-                        u.rate = 0.94;
-                        u.pitch = 0.88;
-                        if (maleVoices.length > 0) {
-                            u.voice = maleVoices[0];
-                        } else if (esVoices.length > 0) {
-                            u.voice = esVoices[0];
-                        }
+                        if (maleVoices.length > 0) u.voice = maleVoices[0];
+                        else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else if (vId === 'jorge' || vId === 'alonso') {
                         u.lang = "es-MX";
-                        u.rate = 0.95;
-                        u.pitch = 0.90;
-                        if (maleVoices.length > 0) {
-                            u.voice = maleVoices[0];
-                        } else if (esVoices.length > 0) {
-                            u.voice = esVoices[0];
-                        }
-                    } else if (vId === 'luxo_avatar') {
-                        u.lang = "es-MX";
-                        u.pitch = 0.92;
-                        u.rate = 0.96;
                         if (maleVoices.length > 0) u.voice = maleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else if (vId === 'barbara') {
                         u.lang = "es-MX";
-                        u.pitch = 0.98;
-                        u.rate = 0.98;
                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else if (vId === 'helena' || vId === 'sabina') {
                         u.lang = "es-MX";
-                        u.pitch = 0.96;
-                        u.rate = 0.98;
                         if (femaleVoices.length > 0) u.voice = femaleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
                     } else {
                         u.lang = "es-MX";
-                        u.pitch = (voiceGender === 'female') ? 0.98 : 0.90;
-                        u.rate = 0.96;
                         if (voiceGender === 'female' && femaleVoices.length > 0) u.voice = femaleVoices[0];
                         else if (voiceGender === 'male' && maleVoices.length > 0) u.voice = maleVoices[0];
                         else if (esVoices.length > 0) u.voice = esVoices[0];
@@ -436,6 +416,9 @@
     };
 
     // 7. Reproducir Audio Principal con Telemetría
+    let lastPlayedAudioUrl = '';
+    let lastPlayedAudioTime = 0;
+
     window.luxoPlayDirect = function(audioUrl, text, voiceId, voiceGender, id) {
         let playId = id || ('direct_' + Date.now());
         lastHandledTtsId = playId;
@@ -446,17 +429,27 @@
         if (id) {
             lastHandledTtsId = id;
         }
-        window.luxoStopTts();
         if (audioUrl) {
+            let fullUrl = audioUrl;
+            if (fullUrl.startsWith('/')) {
+                fullUrl = window.location.origin + fullUrl;
+            }
+            let now = Date.now();
+            let el = getOrCreateAudioElement();
+            if (lastPlayedAudioUrl === fullUrl && (now - lastPlayedAudioTime < 6000) && el && !el.paused && el.currentTime > 0) {
+                console.log("[LUXO TTS] Audio idéntico ya en reproducción activa, ignorando duplicado.");
+                return;
+            }
+            lastPlayedAudioUrl = fullUrl;
+            lastPlayedAudioTime = now;
+
+            window.luxoStopTts();
+
             function tryPlayAudio(retriesLeft) {
                 try {
-                    let el = getOrCreateAudioElement();
-                    el.muted = false;
-                    el.volume = 1.0;
-                    let fullUrl = audioUrl;
-                    if (fullUrl.startsWith('/')) {
-                        fullUrl = window.location.origin + fullUrl;
-                    }
+                    let audioEl = getOrCreateAudioElement();
+                    audioEl.muted = false;
+                    audioEl.volume = 1.0;
                     
                     console.log("[LUXO TTS] DIAGNOSTICO DE REPRODUCCION:", {
                         audioUrl_recibido: audioUrl,
@@ -465,20 +458,20 @@
                         voiceId: voiceId,
                         voiceGender: voiceGender,
                         texto_longitud: (text || '').length,
-                        audio_muted: el.muted,
-                        audio_volume: el.volume,
-                        audio_src: el.src,
-                        audio_readyState: el.readyState,
-                        audio_networkState: el.networkState,
-                        audio_paused: el.paused,
-                        audio_currentTime: el.currentTime,
-                        audio_error: el.error,
+                        audio_muted: audioEl.muted,
+                        audio_volume: audioEl.volume,
+                        audio_src: audioEl.src,
+                        audio_readyState: audioEl.readyState,
+                        audio_networkState: audioEl.networkState,
+                        audio_paused: audioEl.paused,
+                        audio_currentTime: audioEl.currentTime,
+                        audio_error: audioEl.error,
                         document_visibilityState: document.visibilityState,
                         retriesLeft: retriesLeft
                     });
 
-                    el.src = fullUrl;
-                    let playPromise = el.play();
+                    audioEl.src = fullUrl;
+                    let playPromise = audioEl.play();
                     if (playPromise !== undefined) {
                         playPromise.then(function() {
                             console.log("[LUXO TTS SUCCESS] audio.play() iniciado exitosamente:", fullUrl);
@@ -487,15 +480,15 @@
                                 err_name: err.name,
                                 err_message: err.message,
                                 es_bloqueo_autoplay: (err.name === 'NotAllowedError'),
-                                audio_src: el.src,
-                                audio_muted: el.muted,
-                                audio_volume: el.volume,
-                                audio_readyState: el.readyState,
-                                audio_networkState: el.networkState,
+                                audio_src: audioEl.src,
+                                audio_muted: audioEl.muted,
+                                audio_volume: audioEl.volume,
+                                audio_readyState: audioEl.readyState,
+                                audio_networkState: audioEl.networkState,
                                 document_visibilityState: document.visibilityState,
                                 retriesLeft: retriesLeft
                             });
-                            // Si la reproducción fue abortada por una nueva solicitud de audio, no disparar WebSpeech
+                            // Si la reproducción fue abortada por una nueva solicitud de audio, no hacer nada
                             if (err.name === 'AbortError') {
                                 console.log("[LUXO TTS] Play abortado de forma controlada por cambio de audio.");
                                 return;
@@ -503,8 +496,7 @@
                             if (retriesLeft > 0) {
                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                             } else {
-                                console.warn("[LUXO TTS FALLBACK] Activando WebSpeech como respaldo tras fallos en HTML5 Audio");
-                                window.luxoSpeakWebSpeech(text, voiceId, voiceGender, fullUrl);
+                                console.warn("[LUXO TTS] Autoplay bloqueado por política del navegador; esperando interacción de usuario.");
                             }
                         });
                     }
@@ -512,13 +504,12 @@
                     console.error("[LUXO TTS EXCEPTION] Excepcion sincrona en tryPlayAudio:", err);
                     if (retriesLeft > 0) {
                         setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
-                    } else {
-                        window.luxoSpeakWebSpeech(text, voiceId, voiceGender, audioUrl);
                     }
                 }
             }
             tryPlayAudio(5);
         } else if (text) {
+            window.luxoStopTts();
             console.log("[LUXO TTS] Sin audioUrl, ejecutando WebSpeech directamente");
             window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
         }
