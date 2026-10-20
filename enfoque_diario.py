@@ -3865,12 +3865,12 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         cv_total_container = ft.Container(
             content=ft.Row([ft.Column([cv_hdr_ui, cv_row_ui], spacing=cv_sp)], scroll=ft.ScrollMode.AUTO),
-            padding=ft.padding.only(bottom=14 if is_mobile else 4)
+            padding=ft.Padding(0, 0, 0, 14 if is_mobile else 4)
         )
 
         cv_colab_container = ft.Container(
             content=ft.Row([ft.Column(cv_colab_rows, spacing=cv_sp)], scroll=ft.ScrollMode.AUTO),
-            padding=ft.padding.only(bottom=14 if is_mobile else 4)
+            padding=ft.Padding(0, 0, 0, 14 if is_mobile else 4)
         )
 
         card_como_vamos = ft.Container(
@@ -4910,7 +4910,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     tab_navigation_bar = ft.Container(
         content=ft.Row(tab_row_controls, scroll=ft.ScrollMode.AUTO, spacing=8),
-        padding=ft.padding.symmetric(vertical=6, horizontal=2)
+        padding=ft.Padding(2, 6, 2, 6)
     )
 
     # --- BARRA SUPERIOR CON BOTÓN PDF Y CAMPOS DE ENCABEZADO ---

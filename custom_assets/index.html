@@ -613,10 +613,10 @@
           } catch(e) {}
           isPollingCommand = false;
         }
-        const delay = document.hidden ? 3000 : 1200;
+        const delay = document.hidden ? 4000 : 2000;
         setTimeout(safePollLoop, delay);
       }
-      setTimeout(safePollLoop, 1500);
+      setTimeout(safePollLoop, 2000);
       console.log("Bucle de consulta de comandos registrado exitosamente!");
       
       // Iniciar la escucha continua en segundo plano
@@ -625,7 +625,7 @@
   </script>
 
 
-<script src="/custom_assets/luxo_tts.js?v=20261019_v41"></script>
+<script src="/custom_assets/luxo_tts.js?v=20261019_v45"></script>
 </body>
 </html>
 

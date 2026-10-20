@@ -1169,10 +1169,11 @@ def configurar_rutas_fastapi(app):
         response_data = {"action": "none"}
         if evt and evt.get("id") != last_id:
             response_data = evt
-            # Consumir eventos biométricos de un solo uso para que no se repitan
-            if evt.get("action") in ["open_facial_login", "open_passkey_login", "open_colab_face", "open_colab_huella"]:
-                if "global" in GLOBAL_WEB_TTS_EVENTS and GLOBAL_WEB_TTS_EVENTS["global"].get("id") == evt.get("id"):
-                    del GLOBAL_WEB_TTS_EVENTS["global"]
+            # Consumir eventos de un solo uso para que no se repitan en bucle
+            if evt.get("action") in ["speak", "stop", "open_facial_login", "open_passkey_login", "open_colab_face", "open_colab_huella"]:
+                for target_k in [token, str(user_id).strip(), str(username).strip().lower(), "global"]:
+                    if target_k and target_k in GLOBAL_WEB_TTS_EVENTS and GLOBAL_WEB_TTS_EVENTS[target_k].get("id") == evt.get("id"):
+                        del GLOBAL_WEB_TTS_EVENTS[target_k]
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}'")
         
         sim_st = None
@@ -1728,26 +1729,6 @@ def configurar_rutas_fastapi(app):
 
                     window.addEventListener('hashchange', evaluarVisibilidadSimulador);
                     window.addEventListener('popstate', evaluarVisibilidadSimulador);
-
-                    async function pollSimStateLive() {
-                        try {
-                            const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
-                            const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
-                            const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
-                            const did = window.getLuxoDeviceId ? window.getLuxoDeviceId() : '';
-                            const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&device_id=' + encodeURIComponent(did) + '&_t=' + Date.now(), { cache: 'no-store' });
-                            if (res.ok) {
-                                const data = await res.json();
-                                if (typeof data.sim_visible !== 'undefined') {
-                                    window._simPollVisible = (data.sim_visible === true);
-                                    if (data.sim_mode) window._simCurrentMode = data.sim_mode;
-                                    evaluarVisibilidadSimulador();
-                                }
-                            }
-                        } catch(e){}
-                        setTimeout(pollSimStateLive, 800);
-                    }
-                    setTimeout(pollSimStateLive, 1000);
                 })();
                 </script>
                 """
@@ -5132,6 +5113,7 @@ def main(page: ft.Page):
     _w = page.width or 400
     _ua_scope = str(getattr(page, "client_user_agent", "") or "").lower()
     is_mobile = (_w < 700) or any(k in _ua_scope for k in ["android", "iphone", "ipad", "ipod", "mobile"])
+    page.web = True
 
     def reproducir_audio_local(url, text="", voice_id="jarvis", voice_gender="male"):
         if not url and not text:
@@ -6020,11 +6002,8 @@ def main(page: ft.Page):
                 # Despachar a navegador y eventos de sesión aislada con texto fonético
                 reproducir_audio_local(audio_url, text=texto_fonetico, voice_id=v_actual, voice_gender=g_actual)
 
-                # 3. Si es escritorio local Windows (no web), reproducir también en hardware local
-                if not getattr(page, "web", False) and audio_url:
-                    fp = os.path.join(ASSETS_PATH, "temp_audio", os.path.basename(audio_url))
-                    if os.path.exists(fp):
-                        reproducir_audio_mp3_local(fp)
+                # En servidor web multidispositivo, el audio se reproduce exclusivamente por el navegador web
+                # para evitar doble salida de audio y eco en la PC local.
 
             except Exception as e:
                 print("ERROR STARTING SPEAK CLIENT:", e)
@@ -7005,8 +6984,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         )
         try: page.update()
         except: pass
-        try: page.launch_url(f"javascript:window.luxoUserId = '{user_info.get('id', '1')}'; void(0);")
-        except: pass
+        ejecutar_js_flet(page, f"window.luxoUserId = '{user_info.get('id', '1')}';")
         # En cargar_chat ya no emitimos saludo de audio duplicado para evitar interrupciones
         page.clean()
 
@@ -24883,6 +24861,13 @@ Ejemplo:
 
     def reproducir_saludo_login(nombre_completo, voice_id=None):
         try:
+            import time
+            now_saludo = time.time()
+            if hasattr(page, "_last_saludo_time") and (now_saludo - page._last_saludo_time < 8.0):
+                print(f"Notice: Saludo de login ya emitido recientemente (<8s), omitiendo duplicado.")
+                return
+            page._last_saludo_time = now_saludo
+
             nombre_u = (nombre_completo or "").strip()
             usuario_u = (user_info.get("usuario") or "").strip()
             tienda_u = (user_info.get("tienda") or "").strip()
@@ -25244,13 +25229,13 @@ Ejemplo:
         try:
             if audio_is_muted[0]:
                 return
-            ejecutar_js_flet(page, "if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
         except Exception as ex_nat:
             print("Notice reproducir audio avatar nativo:", ex_nat)
 
     def detener_audio_avatar_nativo():
         try:
-            ejecutar_js_flet(page, "if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); }")
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); } let audios = document.querySelectorAll('audio'); audios.forEach(function(a){ if(a.id === 'luxo_avatar_audio_el' || (a.src && a.src.includes('saludo_login'))){ try{ a.pause(); a.currentTime = 0; a.muted = true; a.src = ''; }catch(e){} } });")
         except Exception as ex_stop:
             print("Notice detener audio avatar nativo:", ex_stop)
 
@@ -25751,6 +25736,7 @@ Ejemplo:
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,
+                            "user_voice_pref": user_voice_pref,
                             "cargar_chat": cargar_chat,
                             "active_file_callback": active_file_callback
                         }
@@ -25759,7 +25745,35 @@ Ejemplo:
                         active_sessions[str(user_id_key)] = sess_dict
                         if page.username:
                             active_sessions[page.username] = sess_dict
+
+                        # Determinar voz preferida para saludo al restaurar sesión
+                        voz_usuario_db = None
+                        try:
+                            def _get_voz_pref_db(u_id_val, u_clean_val):
+                                db_conn = conectar_db()
+                                if db_conn:
+                                    try:
+                                        c_v = db_conn.cursor(dictionary=True) if hasattr(db_conn, 'cursor') else None
+                                        if c_v:
+                                            c_v.execute("SELECT voz_preferida FROM biometria_usuarios WHERE (usuario_id = %s OR LOWER(TRIM(nombre_usuario)) = %s) AND voz_preferida IS NOT NULL AND voz_preferida != '' ORDER BY id DESC LIMIT 1", (u_id_val, u_clean_val))
+                                            row_v = c_v.fetchone()
+                                            c_v.close()
+                                            if row_v and row_v.get("voz_preferida"):
+                                                return row_v["voz_preferida"]
+                                    finally:
+                                        db_conn.close()
+                                return None
+                            voz_usuario_db = await asyncio.to_thread(_get_voz_pref_db, user_data["ID_Usuario"], u_clean_login)
+                        except Exception:
+                            pass
+
+                        voz_efectiva = voz_usuario_db or (user_voice_pref[0] if user_voice_pref else "jarvis")
+                        if user_voice_pref:
+                            user_voice_pref[0] = voz_efectiva
+                        user_info["voz_preferida"] = voz_efectiva
+
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
+                        reproducir_saludo_login(user_data["Nombre_Completo"], voice_id=voz_efectiva)
                         cargar_chat(initial_view=last_view_saved)
                         return # Termina sin mostrar login
         except Exception as ex_r:

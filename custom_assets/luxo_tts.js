@@ -104,7 +104,7 @@
             window.luxoUserIsLoggedIn = false;
             window._luxoAvatarAudioMuted = false;
         }
-        if (window.luxoUserIsLoggedIn || (window.getLuxoUserId && window.getLuxoUserId())) {
+        if (window.luxoUserIsLoggedIn === true) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
@@ -140,7 +140,7 @@
             let p = snd.play();
             if (p !== undefined) {
                 p.then(function() {
-                    console.log('[LUXO AVATAR] Audio reproduciéndose (reproducción única).');
+                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente en inicio de sesión.');
                 }).catch(function(err) {
                     console.log('[LUXO AVATAR] Autoplay esperando interacción del usuario.');
                 });
@@ -150,19 +150,20 @@
         }
     };
 
-    // Auto-activación al cargar el DOM si no se ha iniciado sesión y no hay sesión guardada
+    // Auto-activación al cargar el DOM si no se ha iniciado sesión
     try {
-        const _hasSavedSess = Boolean(window.getLuxoUserId && window.getLuxoUserId());
-        if (!_hasSavedSess && !window.luxoUserIsLoggedIn) {
+        if (!window.luxoUserIsLoggedIn) {
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', function() {
-                    if (!window.luxoUserIsLoggedIn && !Boolean(window.getLuxoUserId && window.getLuxoUserId())) {
+                    if (!window.luxoUserIsLoggedIn) {
                         window.luxoPlayLoginAvatarAudio();
                     }
                 });
             } else {
                 window.luxoPlayLoginAvatarAudio();
             }
+            setTimeout(function() { if (!window.luxoUserIsLoggedIn) window.luxoPlayLoginAvatarAudio(); }, 500);
+            setTimeout(function() { if (!window.luxoUserIsLoggedIn) window.luxoPlayLoginAvatarAudio(); }, 1200);
         }
     } catch(e){}
 
@@ -294,18 +295,17 @@
                 } catch(e){}
             }
             // Si el usuario YA tiene sesión activa confirmada, detener el audio del avatar
-            const hasUserSess = (window.luxoUserIsLoggedIn === true || Boolean(window.getLuxoUserId && window.getLuxoUserId()));
-            if (hasUserSess) {
+            if (window.luxoUserIsLoggedIn === true) {
                 window.luxoStopLoginAvatarAudio();
                 return;
             }
-            // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar solo en el primer gesto y una sola vez
-            if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted && !window._luxoAvatarAudioStartedOnce) {
-                window._luxoAvatarAudioStartedOnce = true;
+            // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar o reanudar
+            if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted) {
                 let snd = document.getElementById('luxo_avatar_audio_el');
                 if (snd) {
-                    if (snd.paused) {
+                    if (snd.paused && !snd.ended) {
                         snd.muted = false;
+                        snd.volume = 1.0;
                         let p = snd.play();
                         if (p !== undefined) {
                             p.catch(function(){});
@@ -416,6 +416,8 @@
     };
 
     // 7. Reproducir Audio Principal con Telemetría
+    let lastHandledTtsId = null;
+    let playedAudioIds = new Set();
     let lastPlayedAudioUrl = '';
     let lastPlayedAudioTime = 0;
 
@@ -427,6 +429,12 @@
 
     window.luxoPlayTts = function(text, audioUrl, id, voiceId, voiceGender) {
         if (id) {
+            if (playedAudioIds.has(id)) {
+                console.log("[LUXO TTS] Evento TTS ya reproducido (id=" + id + "), ignorando.");
+                return;
+            }
+            playedAudioIds.add(id);
+            if (playedAudioIds.size > 200) playedAudioIds.clear();
             lastHandledTtsId = id;
         }
         if (audioUrl) {
@@ -435,9 +443,13 @@
                 fullUrl = window.location.origin + fullUrl;
             }
             let now = Date.now();
-            let el = getOrCreateAudioElement();
-            if (lastPlayedAudioUrl === fullUrl && (now - lastPlayedAudioTime < 6000) && el && !el.paused && el.currentTime > 0) {
-                console.log("[LUXO TTS] Audio idéntico ya en reproducción activa, ignorando duplicado.");
+            let existingAudio = document.getElementById("luxo_global_tts_player");
+            if (existingAudio && !existingAudio.paused && existingAudio.currentTime > 0 && !existingAudio.ended && (now - lastPlayedAudioTime < 5000)) {
+                console.log("[LUXO TTS] Audio actualmente en reproducción activa, ignorando llamada duplicada.");
+                return;
+            }
+            if (lastPlayedAudioUrl === fullUrl && (now - lastPlayedAudioTime < 6000)) {
+                console.log("[LUXO TTS] Audio idéntico ya reproducido recientemente (<6s), ignorando repetición.");
                 return;
             }
             lastPlayedAudioUrl = fullUrl;
@@ -516,7 +528,6 @@
     };
 
     // 8. Bucle de Polling HTTP Inteligente para entrega de eventos TTS (0% CPU impact)
-    let lastHandledTtsId = null;
     let isTtsPolling = false;
     if (!window._luxoTtsIntervalStarted) {
         window._luxoTtsIntervalStarted = true;
@@ -541,7 +552,14 @@
                     if (res && res.ok) {
                         const data = await res.json();
                         if (typeof data.sim_visible !== 'undefined') {
-                            window.showSimuladorMicBtn(data.sim_visible, data.sim_mode || 'chat');
+                            window._simPollVisible = (data.sim_visible === true);
+                            if (data.sim_mode) window._simCurrentMode = data.sim_mode;
+                            if (typeof window.showSimuladorMicBtn === 'function') {
+                                window.showSimuladorMicBtn(data.sim_visible, data.sim_mode || 'chat');
+                            }
+                            if (typeof window.evaluarVisibilidadSimulador === 'function') {
+                                window.evaluarVisibilidadSimulador();
+                            }
                         }
                         if (data && data.action && data.action !== 'none') {
                             if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
@@ -598,11 +616,11 @@
                 } catch(e) {}
                 isTtsPolling = false;
             }
-            const nextDelay = document.hidden ? 2500 : 700;
+            const nextDelay = document.hidden ? 3500 : 1400;
             setTimeout(smartTtsPollLoop, nextDelay);
         }
         
-        setTimeout(smartTtsPollLoop, 800);
+        setTimeout(smartTtsPollLoop, 1200);
     }
 
     // ==============================================================================
