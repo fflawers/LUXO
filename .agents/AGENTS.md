@@ -1,8 +1,14 @@
 # Reglas del Proyecto LUXO
 
-## 🔒 Regla Estricta de No Interferencia de Código
-**ESTÁ ESTRICTAMENTE PROHIBIDO MODIFICAR, REFACTORIZAR O TOCAR CUALQUIER FUNCIÓN O ARCHIVO QUE NO ESTÉ SIENDO SOLICITADO EXPLÍCITAMENTE POR EL USUARIO.**
-Cualquier cambio futuro debe limitarse de forma quirúrgica y exclusiva a la función o sección puntual requerida, manteniendo el resto del código 100% intacto para garantizar la estabilidad absoluta del sistema.
+## 🔒 Regla Estricta de No Interferencia de Código y Protocolo de Aprobación
+1. **PROHIBIDO MODIFICAR CÓDIGO SIN INDICACIÓN DIRECTA:** Está estrictamente prohibido modificar, refactorizar o tocar cualquier función o archivo que no esté siendo solicitado explícitamente por el usuario.
+2. **PROTOCOLO OBLIGATORIO DE PLAN PREVIO:** Si se requiere mover o modificar algo en el código, es obligatorio presentar primero un plan explicativo que detalle:
+   - Qué se va a hacer exactamente.
+   - Por qué es necesario.
+   - Qué archivos y líneas puntuales se intervendrán de forma quirúrgica.
+   - Cuánto tiempo tardará la ejecución.
+3. **AUTORIZACIÓN REQUERIDA:** No se tocará ni una sola línea de código hasta que el usuario revise el plan y dé su confirmación y autorización expresa ("sí", "adelante", etc.).
+4. **INTEGRIDAD QUIRÚRGICA:** Cualquier cambio autorizado debe limitarse de forma quirúrgica y exclusiva a la función o sección puntual requerida, manteniendo el resto del código 100% intacto para garantizar la estabilidad absoluta del sistema.
 
 ## 🛑 Módulos Intocables de Voz
 Las siguientes funciones y componentes son de máxima importancia para el sistema LUXO y **NUNCA DEBEN SER MODIFICADOS NI ALTERADOS** en ninguna tarea futura, a menos que el usuario lo solicite de forma explícita:

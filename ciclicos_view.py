@@ -463,8 +463,8 @@ def build_ciclicos_view(page: ft.Page, store_code="A540", store_name="Tienda A54
                 container_tablas.controls = tables_list
 
                 # REGLA EXPLICITA 2 & 3: GUARDADO AUTOMATICO E INMEDIATO EN BASE DE DATOS
-                marca_val = txt_marca.value.strip() or "General"
-                coment_val = txt_comentarios.value.strip()
+                marca_val = (txt_marca.value or "").strip() or "General"
+                coment_val = (txt_comentarios.value or "").strip()
                 
                 ok, msg_or_id = cs.guardar_ciclico_db(
                     codigo_tienda=store_code,

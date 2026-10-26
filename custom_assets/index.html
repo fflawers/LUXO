@@ -12,8 +12,17 @@
       });
     }
   </script>
+  <script>
+    window.addEventListener('webglcontextlost', function(e) {
+      try { e.preventDefault(); } catch(err){}
+      console.warn('WebGL context lost handled gracefully.');
+    }, true);
+  </script>
 
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Flet application.">
 
@@ -40,7 +49,7 @@
       routeUrlStrategy: "path",
       canvasKitBaseUrl: "/canvaskit/",
       pyodideUrl: "/pyodide/pyodide.js",
-      webRenderer: "auto",
+      webRenderer: "canvaskit",
       fontFallbackBaseUrl: "assets/fonts/", // for Noto Emoji, use Google CDN
       appPackageUrl: "app.tar.gz"
     }
@@ -140,6 +149,28 @@
 
         to {
           transform: scale(10)
+        }
+      }
+
+      /* Ocultar barras de scroll visuales en celulares y tablets/iPads manteniendo desplazamiento táctil */
+      @media (hover: none), (pointer: coarse), (max-width: 1200px) {
+        * {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+        *::-webkit-scrollbar {
+          display: none !important;
+          width: 0px !important;
+          height: 0px !important;
+          background: transparent !important;
+        }
+        *::-webkit-scrollbar-thumb {
+          display: none !important;
+          background: transparent !important;
+        }
+        *::-webkit-scrollbar-track {
+          display: none !important;
+          background: transparent !important;
         }
       }
     </style>
@@ -625,7 +656,44 @@
   </script>
 
 
-<script src="/custom_assets/luxo_tts.js?v=20261019_v45"></script>
+<audio id="luxo_avatar_audio_el" src="/custom_assets/saludo_login.mp3" preload="auto" playsinline></audio>
+<script>
+  (function() {
+    function unlockAvatarAudio(e) {
+      if (window.luxoUserIsLoggedIn === true) return;
+      var snd = document.getElementById('luxo_avatar_audio_el');
+      if (!snd) return;
+      var target = e ? e.target : null;
+      var txt = target ? ((target.innerText || target.textContent || '') + '').trim() : '';
+      if (txt === '🔊' || txt === '🔇') {
+        if (!snd.paused && snd.currentTime > 0) {
+          snd.pause();
+        } else {
+          snd.muted = false;
+          snd.volume = 1.0;
+          snd.play().catch(function(){});
+        }
+        return;
+      }
+      if (snd.paused) {
+        snd.muted = false;
+        snd.volume = 1.0;
+        var p = snd.play();
+        if (p !== undefined) {
+          p.then(function() {
+            ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
+              document.removeEventListener(ev, unlockAvatarAudio, true);
+            });
+          }).catch(function(){});
+        }
+      }
+    }
+    ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
+      document.addEventListener(ev, unlockAvatarAudio, true);
+    });
+  })();
+</script>
+<script src="/custom_assets/luxo_tts.js?v=20261024_v65"></script>
 </body>
 </html>
 

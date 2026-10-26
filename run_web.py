@@ -36,6 +36,17 @@ if __name__ == "__main__":
     from fastapi import FastAPI
     from fastapi.staticfiles import StaticFiles
     app = FastAPI(title="LUXO Web Server")
+    
+    @app.middleware("http")
+    async def add_no_cache_headers(request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if (path.endswith(".js") or path.endswith(".html") or path == "" or path == "/") and not path.endswith(".mp4") and not path.endswith(".mp3"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
     configurar_rutas_fastapi(app)
     try:
         import traductor_view
@@ -48,6 +59,7 @@ if __name__ == "__main__":
         assets_dir="custom_assets",
         upload_dir="uploads", 
         view=ft.AppView.WEB_BROWSER,
+        web_renderer=ft.WebRenderer.CANVAS_KIT,
         export_asgi_app=True
     )
     os.makedirs("custom_assets/temp_pdfs", exist_ok=True)
@@ -64,9 +76,9 @@ if __name__ == "__main__":
         app, 
         host="0.0.0.0", 
         port=puerto, 
-        ws_ping_interval=20.0, 
-        ws_ping_timeout=20.0, 
-        timeout_keep_alive=60, 
+        ws_ping_interval=None, 
+        ws_ping_timeout=None, 
+        timeout_keep_alive=300, 
         **ssl_args
     )
 

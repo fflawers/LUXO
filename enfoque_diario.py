@@ -661,12 +661,14 @@ def get_current_sgh_week_str():
     except Exception:
         return "34"
 
-def cargar_estado_persistente(user_id):
+def cargar_estado_persistente(user_id, force=False):
     user_id = str(user_id)
+    if user_id not in user_states:
+        return
+    if not force and user_states[user_id].get("_loaded_once", False):
+        return
     loaded = False
     try:
-        if user_id not in user_states:
-            return
         g_meta = user_states[user_id]["global_meta"]
         cur_sem_default = get_current_sgh_week_str()
         sem_str = str(g_meta.get("semana") or cur_sem_default)
@@ -775,6 +777,8 @@ def cargar_estado_persistente(user_id):
                 user_states[user_id]["store_state"][d] = copy.deepcopy(def_s[d])
     except Exception as ex:
         print(f"Error al cargar estado de enfoque diario para {user_id}:", ex)
+    finally:
+        user_states[user_id]["_loaded_once"] = True
 
 def guardar_semana_historico(user_id):
     if user_id not in user_states: return
@@ -1039,25 +1043,19 @@ def calcular_dia(d_name, user_id):
     tot_ck_cierre = sum(r["ck_cierre"] for r in colab_rows)
     
     tot_unidades_cierre = tot_ana_cierre + tot_wea_cierre
-    venta_neta_dia = data.get("venta_neta_dia", 0.0) or tot_vta_cierre
-    venta_unidades_dia = data.get("venta_unidades_dia", 0) or tot_unidades_cierre
+    venta_neta_dia = tot_vta_cierre
+    venta_unidades_dia = tot_unidades_cierre
+    data["venta_neta_dia"] = venta_neta_dia
+    data["venta_unidades_dia"] = venta_unidades_dia
     
     conversion_dia = (tot_convertidos / tot_interacciones) if tot_interacciones > 0 else 0.0
     crecimiento_conversion = conversion_dia - conv
     
-    # User overrideable Wearables/Kids %
-    def get_pct_override(key, default_calc):
-        val = data.get(key, "")
-        if val != "":
-            try: return float(val) / 100.0 if "%" not in str(val) else float(str(val).replace("%","")) / 100.0
-            except ValueError: return default_calc
-        return default_calc
-        
     calc_wearables_pct = (tot_wea_cierre / venta_unidades_dia) if venta_unidades_dia > 0 else 0.0
     calc_kids_pct = (tot_kid_cierre / venta_unidades_dia) if venta_unidades_dia > 0 else 0.0
     
-    cv_wearables_pct = get_pct_override("cv_wearables_pct", calc_wearables_pct)
-    cv_kids_pct = get_pct_override("cv_kids_pct", calc_kids_pct)
+    cv_wearables_pct = calc_wearables_pct if calc_wearables_pct > 0 else 0.0
+    cv_kids_pct = calc_kids_pct if calc_kids_pct > 0 else 0.0
     
     cv_carekits_pct = (tot_ck_cierre / venta_unidades_dia) if venta_unidades_dia > 0 else 0.0
     
@@ -3043,6 +3041,18 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     # Sincronización asíncrona de colaboradores para NO bloquear el cambio de pestaña
     threading.Thread(target=sincronizar_colaboradores_db, args=(session_user, g_meta["tienda"], user_id), daemon=True).start()
 
+    pw = getattr(page, "width", None) or 1200
+    ua = str(getattr(page, "platform", "") or "").lower()
+    cua = str(getattr(page, "client_user_agent", "") or "").lower()
+    is_touch = (
+        (pw < 1150) or
+        any(k in ua for k in ["android", "ios", "iphone", "ipad", "ipod", "mobile", "tablet"]) or
+        any(k in cua for k in ["android", "ios", "iphone", "ipad", "ipod", "mobile", "tablet"]) or
+        getattr(page, "platform", None) in [ft.PagePlatform.IOS, ft.PagePlatform.ANDROID]
+    )
+    scroll_mode_main = ft.ScrollMode.HIDDEN if is_touch else ft.ScrollMode.AUTO
+    scroll_mode_table = ft.ScrollMode.HIDDEN if is_touch else ft.ScrollMode.AUTO
+
     def generar_pdf_enfoque(target_day=None):
         if not REPORTLAB_AVAILABLE:
             snack = ft.SnackBar(ft.Text("❌ La librería ReportLab no está instalada para generar PDF.", color="white"), bgcolor="red")
@@ -3173,7 +3183,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         data = s_state[d_name]
         green_txts = {}
         white_input_fields = {}
-        is_mobile = (page.width < 800) if (page and getattr(page, "width", None)) else False
+        is_mobile = is_touch or ((page.width < 800) if (page and getattr(page, "width", None)) else False)
         cell_font_size = 10 if is_mobile else 11
         cell_height = 28 if is_mobile else 32
         cell_padding = ft.Padding(3, 1, 3, 1) if is_mobile else ft.Padding(4, 2, 4, 2)
@@ -3238,12 +3248,15 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             _set_txt("tot_colab_ck", str(sum(r["meta_ck"] for r in c["colab_rows"])))
 
             # Global CÓMO VAMOS
-            _set_txt("tot_cv_meta", f"${c['meta_diaria']:,.2f}")
+            _set_txt("tot_cv_meta", f"${c['meta_diaria']:,.0f}")
+            _set_txt("tot_cv_vta_neta", f"${c['venta_neta_dia']:,.0f}")
             _set_txt("tot_cv_meta_unidades", str(c["total_unidades"]))
+            _set_txt("tot_cv_venta_unidades", str(c["venta_unidades_dia"]))
             _set_txt("tot_cv_conversion", f"{c['conversion_dia']*100:.1f}%")
             _set_txt("tot_cv_crecimiento", f"{c['crecimiento_conversion']*100:.1f}%")
             _set_txt("tot_cv_wearables_pct", f"{c['wearables_pct']*100:.1f}%")
             _set_txt("tot_cv_kids_pct", f"{c['kids_pct']*100:.1f}%")
+            _set_txt("tot_cv_carekits_pct", f"{c['carekits_pct']*100:.1f}%")
 
             # Sumas columna CÓMO VAMOS
             _set_txt("sum_cv_interacciones", str(c["tot_interacciones"]))
@@ -3674,7 +3687,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 ft.Row(row_b_peso, spacing=horarios_sp),
                 ft.Row(row_b_meta, spacing=horarios_sp)
             ], spacing=horarios_sp)
-        ], scroll=ft.ScrollMode.ADAPTIVE)
+        ], scroll=scroll_mode_table)
 
         card_horarios = ft.Container(
             content=ft.Column([
@@ -3742,7 +3755,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         scrollable_colabs_table = ft.Row([
             ft.Column(colab_rows_ui, spacing=colab_sp)
-        ], scroll=ft.ScrollMode.ADAPTIVE)
+        ], scroll=scroll_mode_table)
 
         card_colabs = ft.Container(
             content=ft.Column([
@@ -3775,25 +3788,25 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         cv_hdr_ui = ft.Row([
             ft.Container(ft.Text("META", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_m),
-            ft.Container(ft.Text("VTA NETA" if is_mobile else "VTA NETA (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_v),
+            ft.Container(ft.Text("VTA NETA" if is_mobile else "VTA NETA (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_v),
             ft.Container(ft.Text("M.UNID", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_mu),
-            ft.Container(ft.Text("V.UNID" if is_mobile else "V.UNID (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_vu),
+            ft.Container(ft.Text("V.UNID" if is_mobile else "V.UNID (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_vu),
             ft.Container(ft.Text("CONV" if is_mobile else "CONV (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_cnv),
             ft.Container(ft.Text("CREC" if is_mobile else "CREC (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_crc),
-            ft.Container(ft.Text("WEA %" if is_mobile else "WEA% (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_wea),
-            ft.Container(ft.Text("KIDS %" if is_mobile else "KIDS% (⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 11), width=w_cv_kid),
+            ft.Container(ft.Text("WEA %" if is_mobile else "WEA% (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_wea),
+            ft.Container(ft.Text("KIDS %" if is_mobile else "KIDS% (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_kid),
             ft.Container(ft.Text("CK %" if is_mobile else "CK% (🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 11), width=w_cv_ck),
         ], spacing=cv_sp)
         
         cv_row_ui = ft.Row([
             make_green_calc("tot_cv_meta", f"${calc['meta_diaria']:,.0f}", width=w_cv_m),
-            make_white_input(data.get("venta_neta_dia", 0.0), "venta_neta_dia", width=w_cv_v),
+            make_green_calc("tot_cv_vta_neta", f"${calc['venta_neta_dia']:,.0f}", width=w_cv_v),
             make_green_calc("tot_cv_meta_unidades", str(calc["total_unidades"]), width=w_cv_mu),
-            make_white_input(data.get("venta_unidades_dia", 0), "venta_unidades_dia", width=w_cv_vu),
+            make_green_calc("tot_cv_venta_unidades", str(calc["venta_unidades_dia"]), width=w_cv_vu),
             make_green_calc("tot_cv_conversion", f"{calc['conversion_dia']*100:.1f}%", width=w_cv_cnv),
             make_green_calc("tot_cv_crecimiento", f"{calc['crecimiento_conversion']*100:.1f}%", width=w_cv_crc),
-            make_white_input(f"{calc['wearables_pct']*100:.1f}%", "cv_wearables_pct", width=w_cv_wea),
-            make_white_input(f"{calc['kids_pct']*100:.1f}%", "cv_kids_pct", width=w_cv_kid),
+            make_green_calc("tot_cv_wearables_pct", f"{calc['wearables_pct']*100:.1f}%", width=w_cv_wea),
+            make_green_calc("tot_cv_kids_pct", f"{calc['kids_pct']*100:.1f}%", width=w_cv_kid),
             make_green_calc("tot_cv_carekits_pct", f"{calc['carekits_pct']*100:.1f}%", width=w_cv_ck),
         ], spacing=cv_sp)
 
@@ -3811,19 +3824,31 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         w_c_kid = 34 if is_mobile else 50
         w_c_ck = 34 if is_mobile else 50
 
+        def make_cv_hdr_cell(txt, w, col="#00FFFF"):
+            return ft.Container(
+                content=ft.Text(txt, weight="bold", color=col, size=9 if is_mobile else 10),
+                width=w,
+                height=cell_height,
+                bgcolor="#161E2E",
+                border=ft.Border.all(1, "#253346"),
+                border_radius=4,
+                alignment=ft.alignment.Alignment(0, 0),
+                padding=cell_padding
+            )
+
         cv_colab_hdr = ft.Row([
-            ft.Container(ft.Text("COLAB.", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_nom),
-            ft.Container(ft.Text("HRS", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_hrs),
-            ft.Container(ft.Text("INT." if is_mobile else "INT.(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_int),
-            ft.Container(ft.Text("CONV" if is_mobile else "CONV(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_cnv),
-            ft.Container(ft.Text("CNV %" if is_mobile else "CNV%(🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 10), width=w_c_cpct),
-            ft.Container(ft.Text("V.CIE" if is_mobile else "V.CIE(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_vcie),
-            ft.Container(ft.Text("ANÁL" if is_mobile else "ANÁL(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_ana),
-            ft.Container(ft.Text("DEMO" if is_mobile else "DEMO(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_dem),
-            ft.Container(ft.Text("U.WEA" if is_mobile else "U.WEA(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_uwea),
-            ft.Container(ft.Text("C.WEA" if is_mobile else "C.WEA(🟩)", weight="bold", color="#00FF88", size=9 if is_mobile else 10), width=w_c_cwea),
-            ft.Container(ft.Text("KID" if is_mobile else "KID(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_kid),
-            ft.Container(ft.Text("CK" if is_mobile else "CK(⚪)", weight="bold", color="#00FFFF", size=9 if is_mobile else 10), width=w_c_ck),
+            make_cv_hdr_cell("COLAB.", w_c_nom),
+            make_cv_hdr_cell("HRS", w_c_hrs),
+            make_cv_hdr_cell("INT." if is_mobile else "INT.(⚪)", w_c_int),
+            make_cv_hdr_cell("CONV" if is_mobile else "CONV(⚪)", w_c_cnv),
+            make_cv_hdr_cell("CNV %" if is_mobile else "CNV%(🟩)", w_c_cpct, col="#00FF88"),
+            make_cv_hdr_cell("V.CIE" if is_mobile else "V.CIE(⚪)", w_c_vcie),
+            make_cv_hdr_cell("ANÁL" if is_mobile else "ANÁL(⚪)", w_c_ana),
+            make_cv_hdr_cell("DEMO" if is_mobile else "DEMO(⚪)", w_c_dem),
+            make_cv_hdr_cell("U.WEA" if is_mobile else "U.WEA(⚪)", w_c_uwea),
+            make_cv_hdr_cell("C.WEA" if is_mobile else "C.WEA(🟩)", w_c_cwea, col="#00FF88"),
+            make_cv_hdr_cell("KID" if is_mobile else "KID(⚪)", w_c_kid),
+            make_cv_hdr_cell("CK" if is_mobile else "CK(⚪)", w_c_ck),
         ], spacing=cv_sp)
 
         cv_colab_rows = [cv_colab_hdr]
@@ -3848,30 +3873,44 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         cv_colab_rows.append(
             ft.Row([
-                ft.Container(ft.Text("TOTALES", weight="bold", color="white", size=9 if is_mobile else 10), width=w_c_nom),
+                ft.Container(content=ft.Text("TOTALES", weight="bold", color="white", size=9 if is_mobile else 10), width=w_c_nom, height=cell_height, alignment=ft.alignment.Alignment(0, 0)),
                 make_green_calc("sum_cv_horas", f"{calc['tot_horas']:.1f}", width=w_c_hrs),
                 make_green_calc("sum_cv_interacciones", str(calc["tot_interacciones"]), width=w_c_int),
                 make_green_calc("sum_cv_convertidos", str(calc["tot_convertidos"]), width=w_c_cnv),
-                ft.Container(width=w_c_cpct), # Espacio para conversion global
+                ft.Container(width=w_c_cpct, height=cell_height), # Espacio para conversion global
                 make_green_calc("sum_cv_vta_cierre", f"${calc['tot_vta_cierre']:,.0f}", width=w_c_vcie),
                 make_green_calc("sum_cv_ana_cierre", str(calc["tot_ana_cierre"]), width=w_c_ana),
                 make_green_calc("sum_cv_wea_demos", str(calc["tot_wea_demos"]), width=w_c_dem),
                 make_green_calc("sum_cv_wea_cierre", str(calc["tot_wea_cierre"]), width=w_c_uwea),
-                ft.Container(width=w_c_cwea), # Espacio conv wea global
+                ft.Container(width=w_c_cwea, height=cell_height), # Espacio conv wea global
                 make_green_calc("sum_cv_kid_cierre", str(calc["tot_kid_cierre"]), width=w_c_kid),
                 make_green_calc("sum_cv_ck_cierre", str(calc["tot_ck_cierre"]), width=w_c_ck),
             ], spacing=cv_sp)
         )
 
-        cv_total_container = ft.Container(
-            content=ft.Row([ft.Column([cv_hdr_ui, cv_row_ui], spacing=cv_sp)], scroll=ft.ScrollMode.AUTO),
-            padding=ft.Padding(0, 0, 0, 14 if is_mobile else 4)
-        )
+        scrollable_cv_total = ft.Row([
+            ft.Column([cv_hdr_ui, cv_row_ui], spacing=cv_sp)
+        ], scroll=scroll_mode_table)
 
-        cv_colab_container = ft.Container(
-            content=ft.Row([ft.Column(cv_colab_rows, spacing=cv_sp)], scroll=ft.ScrollMode.AUTO),
-            padding=ft.Padding(0, 0, 0, 14 if is_mobile else 4)
-        )
+        scrollable_cv_colab = ft.Row([
+            ft.Column(cv_colab_rows, spacing=cv_sp)
+        ], scroll=ft.ScrollMode.AUTO)
+
+        async def scroll_cv_left(e):
+            try:
+                await scrollable_cv_colab.scroll_to(delta=-220, duration=250, curve=ft.AnimationCurve.EASE_OUT)
+            except Exception:
+                try:
+                    if page: page.run_task(scrollable_cv_colab.scroll_to, delta=-220, duration=250, curve=ft.AnimationCurve.EASE_OUT)
+                except Exception: pass
+
+        async def scroll_cv_right(e):
+            try:
+                await scrollable_cv_colab.scroll_to(delta=220, duration=250, curve=ft.AnimationCurve.EASE_OUT)
+            except Exception:
+                try:
+                    if page: page.run_task(scrollable_cv_colab.scroll_to, delta=220, duration=250, curve=ft.AnimationCurve.EASE_OUT)
+                except Exception: pass
 
         card_como_vamos = ft.Container(
             content=ft.Column([
@@ -3881,10 +3920,36 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 ], spacing=4),
                 ft.Divider(height=6, color="#374151"),
                 ft.Text("TOTAL DEL DÍA", weight="bold", color="#F59E0B", size=10),
-                cv_total_container,
+                scrollable_cv_total,
                 ft.Divider(height=6, color="#374151"),
-                ft.Text("RESULTADOS POR COLABORADOR AL CIERRE", weight="bold", color="#F59E0B", size=10),
-                cv_colab_container,
+                ft.Row([
+                    ft.Text("RESULTADOS POR COLABORADOR AL CIERRE", weight="bold", color="#F59E0B", size=10),
+                    ft.Row([
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.ARROW_BACK_IOS_NEW_ROUNDED, color="#00FFFF", size=11),
+                                ft.Text("Inicio", color="#00FFFF", size=9, weight="bold")
+                            ], spacing=2),
+                            bgcolor="#161E2E",
+                            border=ft.Border.all(1, "#00FFFF"),
+                            border_radius=6,
+                            padding=ft.Padding(6, 3, 6, 3),
+                            on_click=scroll_cv_left,
+                        ),
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Text("Ver más", color="#F59E0B", size=9, weight="bold"),
+                                ft.Icon(ft.Icons.ARROW_FORWARD_IOS_ROUNDED, color="#F59E0B", size=11)
+                            ], spacing=2),
+                            bgcolor="#161E2E",
+                            border=ft.Border.all(1, "#F59E0B"),
+                            border_radius=6,
+                            padding=ft.Padding(6, 3, 6, 3),
+                            on_click=scroll_cv_right,
+                        ),
+                    ], spacing=6)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                scrollable_cv_colab,
             ]),
             bgcolor="#0B0E17",
             padding=10,
@@ -3900,12 +3965,12 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             card_colabs,
             ft.Container(height=8),
             card_como_vamos
-        ], scroll=ft.ScrollMode.AUTO)
+        ])
 
     # --- INTERFAZ PLAN DE ACCIÓN ---
     def build_plan_accion_ui(d_name):
         data = s_state[d_name]
-        is_mobile_w = (page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False
+        is_mobile_w = is_touch or ((page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False)
         smart_text_fields = {}
 
         data.setdefault("ritmo_venta_hoy", "")
@@ -4396,11 +4461,11 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             card_enfoque_texto,
             ft.Container(height=6),
             card_logros_texto
-        ], scroll=ft.ScrollMode.AUTO, expand=True)
+        ])
 
     # --- INTERFAZ RESUMEN SEMANAL (RÉPLICA EXACTA DE HOJA EXCEL SGH DE 3 SECCIONES) ---
     def build_semanal_ui():
-        is_mobile_w = (page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False
+        is_mobile_w = is_touch or ((page.width < 800) if (page and hasattr(page, 'width') and isinstance(page.width, (int, float))) else False)
 
         # Valores por defecto en h_state (semanal)
         h_state.setdefault("meta_conversion", 0.0)
@@ -4660,7 +4725,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Text("DISTRIBUCIÓN DE METAS POR COLABORADOR (SEMANAL)", color="white", weight="bold", size=13)
                 ], spacing=6),
                 ft.Divider(height=8, color="#374151"),
-                ft.Row([tabla_colabs_content], scroll=ft.ScrollMode.AUTO)
+                ft.Row([tabla_colabs_content], scroll=scroll_mode_table)
             ]),
             bgcolor="#0B0E17", padding=14, border_radius=12, border=ft.Border.all(1.5, "#A100F2")
         )
@@ -4817,7 +4882,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         ], spacing=6)
 
         tabla_cierre_content = ft.Column([
-            ft.Row([ex_header], scroll=ft.ScrollMode.AUTO),
+            ft.Row([ex_header], scroll=scroll_mode_table),
             ft.Divider(height=10, color="#374151"),
             tabla_cierre_header,
             ft.Column(rows_cierre_colabs, spacing=6),
@@ -4832,7 +4897,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Text(f"SEGUIMIENTO DE RESULTADOS AL CIERRE SEMANAL - SEMANA {g_meta['semana']} ({g_meta['tienda']})", color="white", weight="bold", size=13)
                 ], spacing=6),
                 ft.Divider(height=8, color="#374151"),
-                ft.Row([tabla_cierre_content], scroll=ft.ScrollMode.AUTO)
+                ft.Row([tabla_cierre_content], scroll=scroll_mode_table)
             ]),
             bgcolor="#0B0E17", padding=14, border_radius=12, border=ft.Border.all(1.5, "#00FFFF")
         )
@@ -4909,7 +4974,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         tab_row_controls.append(btn)
 
     tab_navigation_bar = ft.Container(
-        content=ft.Row(tab_row_controls, scroll=ft.ScrollMode.AUTO, spacing=8),
+        content=ft.Row(tab_row_controls, scroll=scroll_mode_table, spacing=8),
         padding=ft.Padding(2, 6, 2, 6)
     )
 
@@ -4939,9 +5004,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         elif u_tienda and u_tienda != "Tienda Luxo":
             g_meta["tienda"] = u_tienda
 
-    # Cargar inmediatamente el estado persistente guardado desde MySQL para la tienda real del usuario
-    cargar_estado_persistente(user_id)
-
     # Post-validación: asegurar que tienda y num_tienda estén mutuamente sincronizados con nombre oficial
     if str(g_meta.get("num_tienda")) in MAPEO_TIENDAS_SGH:
         g_meta["tienda"] = MAPEO_TIENDAS_SGH[str(g_meta["num_tienda"])]
@@ -4950,9 +5012,6 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         g_meta["tienda"] = MAPEO_TIENDAS_SGH[str(g_meta["num_tienda"])]
     elif g_meta.get("tienda") and str(g_meta["tienda"]).upper() in MAPEO_NOMBRE_A_NUMERO_SGH and not g_meta.get("num_tienda"):
         g_meta["num_tienda"] = MAPEO_NOMBRE_A_NUMERO_SGH[str(g_meta["tienda"]).upper()]
-
-    # Sincronizar colaboradores iniciales
-    sincronizar_colaboradores_db(session_user, g_meta["tienda"])
 
     # 0. Selector de Año (2025, 2026, 2027, 2028)
     g_meta.setdefault("anio", "2026")
@@ -5294,4 +5353,4 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         tab_navigation_bar,
         ft.Container(height=6),
         tab_content_container
-    ], scroll=ft.ScrollMode.AUTO)
+    ], scroll=scroll_mode_main)

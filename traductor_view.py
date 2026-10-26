@@ -25,7 +25,7 @@ VOCES_LUXO_MASCULINAS = ["jarvis", "jorge", "alonso"]
 
 # Mapeo de voces nativas de alta fidelidad para clientes extranjeros segun genero
 VOCES_NATIVAS_EXTRANJERAS = {
-    "en": {"female": "en-US-JennyNeural", "male": "en-US-GuyNeural", "name": "Ingles US/UK"},
+    "en": {"female": "en-US-AriaNeural", "male": "en-US-ChristopherNeural", "name": "Ingles US/UK"},
     "fr": {"female": "fr-FR-DeniseNeural", "male": "fr-FR-HenriNeural", "name": "Frances FR"},
     "de": {"female": "de-DE-KatjaNeural", "male": "de-DE-ConradNeural", "name": "Aleman DE"},
     "it": {"female": "it-IT-ElsaNeural", "male": "it-IT-DiegoNeural", "name": "Italiano IT"},
@@ -112,26 +112,28 @@ def detectar_idioma_y_traducir_ia(texto: str) -> dict:
     txt_clean = texto.strip()
 
     prompt_traduccion = (
-        "Eres el sistema oficial de traduccion simultanea para mostrador de una boutique de lentes de sol y optica de lujo (LUXO).\n"
-        "Tu tarea es traducir de forma 100% precisa, natural y elegante el siguiente texto.\n\n"
-        f"TEXTO A PROCESAR:\n\"{txt_clean}\"\n\n"
-        "REGLAS ESTRICTAS:\n"
-        "1. Identifica el idioma del texto de entrada (codigo ISO de 2 letras: 'es', 'en', 'fr', 'de', 'it', 'pt', 'zh', 'ja', 'ko', 'ru', 'ar', etc.).\n"
-        "2. Si el texto esta en ESPANOL ('es'), traducelo al INGLES ('en') o al idioma activo del cliente extranjero.\n"
-        "3. Si el texto esta en CUALQUIER IDIOMA EXTRANJERO, traducelo al ESPANOL ('es') para el vendedor.\n"
-        "4. Terminologia optica: Utiliza el vocabulario tecnico exacto de lentes de sol (micas polarizadas, proteccion UV400, armazon de acetato, varillas, puente, micas degradadas, antirreflejante, titanio, bisagras flex, etc.).\n"
-        "5. Cero anadidos: NO agregues notas explicativas, NO agregues introducciones ni saludos extra.\n"
-        "6. Estima el genero probable del hablante por las palabras o entonacion ('female' o 'male', por defecto 'female' si no es concluyente).\n\n"
-        "Responde UNICAMENTE un objeto JSON valido con la siguiente estructura exacta:\n"
+        "Eres un traductor simultaneo profesional en mostrador.\n"
+        "Tu trabajo es EXCLUSIVAMENTE traducir el texto dado de forma literal, precisa y concisa.\n"
+        "ESTRICTAMENTE PROHIBIDO:\n"
+        "- NO actues como asistente ni como vendedor ni como chatbot.\n"
+        "- NO agregues saludos que el usuario no dijo.\n"
+        "- NO agregues frases de cortesia ni bienvenidas ni explicaciones.\n"
+        "- Si el usuario dijo 'Hola', la traduccion DEBE SER UNICAMENTE 'Hello' o 'Hi'.\n\n"
+        f"TEXTO A TRADUCIR:\n\"{txt_clean}\"\n\n"
+        "REGLAS:\n"
+        "1. Si el texto esta en ESPANOL ('es'), traducelo al INGLES ('en') o al idioma activo del cliente.\n"
+        "2. Si el texto esta en CUALQUIER OTRO IDIOMA, traducelo al ESPANOL ('es') para el vendedor.\n"
+        "3. Usa terminologia optica precisa si el texto menciona lentes, armazones o micas.\n\n"
+        "Responde UNICAMENTE en formato JSON valido con este formato exacto:\n"
         "{\n"
         '    "idioma_origen": "codigo_iso",\n'
         '    "idioma_destino": "codigo_iso",\n'
-        '    "traduccion": "texto traducido limpio",\n'
+        '    "traduccion": "texto traducido exacto sin anadidos",\n'
         '    "genero_hablante": "female" o "male"\n'
         "}"
     )
 
-    # Metodo 1: Groq API ultra-rapida (Qwen 3.8 / GPT-OSS) - respuesta en ~500ms
+    # Metodo 1: Groq API ultra-rapida (Qwen 3.8 / GPT-OSS) - respuesta en ~300ms
     groq_keys = get_groq_api_keys_traductor()
     for gkey in groq_keys:
         for modelo in ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
@@ -141,10 +143,10 @@ def detectar_idioma_y_traducir_ia(texto: str) -> dict:
                 payload = {
                     "model": modelo,
                     "messages": [{"role": "user", "content": prompt_traduccion}],
-                    "temperature": 0.2,
+                    "temperature": 0.1,
                     "response_format": {"type": "json_object"}
                 }
-                r = requests.post(url_groq, headers=headers, json=payload, timeout=6)
+                r = requests.post(url_groq, headers=headers, json=payload, timeout=5)
                 if r.status_code == 200:
                     data_raw = r.json()["choices"][0]["message"]["content"]
                     d = json.loads(data_raw)
@@ -160,14 +162,14 @@ def detectar_idioma_y_traducir_ia(texto: str) -> dict:
             except Exception:
                 pass
 
-    # Metodo 2: Gemini 3.8 Flash REST
+    # Metodo 2: Gemini Flash REST
     gemini_key = get_gemini_api_key_traductor()
     if gemini_key:
-        for mod in ["gemini-3.8-flash", "gemini-flash-latest"]:
+        for mod in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-flash-latest"]:
             try:
                 url_gem = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:generateContent?key={gemini_key}"
                 payload_gem = {"contents": [{"parts": [{"text": prompt_traduccion}]}]}
-                rm = requests.post(url_gem, json=payload_gem, timeout=7)
+                rm = requests.post(url_gem, json=payload_gem, timeout=5)
                 if rm.status_code == 200:
                     raw_txt = rm.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                     if "```json" in raw_txt:
@@ -187,7 +189,7 @@ def detectar_idioma_y_traducir_ia(texto: str) -> dict:
             except Exception:
                 pass
 
-    # Metodo 3: Fallback inteligente de respaldo con reglas opticas
+    # Metodo 3: Fallback literal estricto (cero añadidos)
     es_probable_espanol = any(w in txt_clean.lower() for w in [
         "hola", "lentes", "sol", "precio", "cuanto", "gracias", "armazon", "armazones", "mica", "micas",
         "polarizado", "polarizadas", "tienen", "buenas", "tardes", "dias", "que", "quiero", "busco", "oferta"
@@ -196,33 +198,49 @@ def detectar_idioma_y_traducir_ia(texto: str) -> dict:
     dest = "en" if orig == "es" else "es"
 
     fallback_trans = ""
-    lower_t = txt_clean.lower()
+    lower_t = txt_clean.lower().strip(" .!¡?¿")
     if orig == "es":
-        if "lentes de sol" in lower_t:
-            fallback_trans = "Sunglasses with UV protection available."
+        if lower_t in ["hola", "buenas", "hola buenas"]:
+            fallback_trans = "Hello"
+        elif lower_t in ["buenos dias", "buen dia"]:
+            fallback_trans = "Good morning"
+        elif lower_t in ["buenas tardes"]:
+            fallback_trans = "Good afternoon"
+        elif lower_t in ["buenas noches"]:
+            fallback_trans = "Good evening"
+        elif lower_t in ["gracias", "muchas gracias"]:
+            fallback_trans = "Thank you"
+        elif lower_t in ["de nada"]:
+            fallback_trans = "You are welcome"
+        elif "lentes de sol" in lower_t:
+            fallback_trans = "Sunglasses"
         elif "polarizad" in lower_t:
-            fallback_trans = "Polarized sunglasses with anti-reflective coating."
-        elif "hola" in lower_t or "buenas" in lower_t:
-            fallback_trans = "Hello, welcome to LUXO optics boutique. How can I help you?"
+            fallback_trans = "Polarized lenses"
         elif "precio" in lower_t or "cuanto" in lower_t:
-            fallback_trans = "The price depends on the polarized lens and frame model."
-        elif "gracias" in lower_t:
-            fallback_trans = "You are welcome. Have a wonderful day!"
+            fallback_trans = "How much is it?"
         else:
-            fallback_trans = f"Translated: {txt_clean}"
+            fallback_trans = txt_clean
     else:
-        if "sunglasses" in lower_t:
-            fallback_trans = "Lentes de sol con proteccion UV disponibles."
+        if lower_t in ["hello", "hi", "hey"]:
+            fallback_trans = "Hola"
+        elif lower_t in ["good morning"]:
+            fallback_trans = "Buenos días"
+        elif lower_t in ["good afternoon"]:
+            fallback_trans = "Buenas tardes"
+        elif lower_t in ["good evening"]:
+            fallback_trans = "Buenas noches"
+        elif lower_t in ["thank you", "thanks"]:
+            fallback_trans = "Gracias"
+        elif lower_t in ["you are welcome", "you're welcome"]:
+            fallback_trans = "De nada"
+        elif "sunglasses" in lower_t:
+            fallback_trans = "Lentes de sol"
         elif "polarized" in lower_t:
-            fallback_trans = "Lentes de sol polarizados con tratamiento antirreflejante."
-        elif "hello" in lower_t or "hi" in lower_t:
-            fallback_trans = "Hola, bienvenido a la boutique de optica LUXO. En que le puedo servir?"
-        elif "price" in lower_t or "how much" in lower_t:
-            fallback_trans = "El precio depende del armazon y el tipo de micas polarizadas."
-        elif "thank" in lower_t:
-            fallback_trans = "De nada! Que tenga un excelente dia."
+            fallback_trans = "Micas polarizadas"
+        elif "how much" in lower_t or "price" in lower_t:
+            fallback_trans = "¿Cuánto cuesta?"
         else:
-            fallback_trans = f"Traduccion: {txt_clean}"
+            fallback_trans = txt_clean
 
     return {
         "origen": orig,
@@ -232,6 +250,44 @@ def detectar_idioma_y_traducir_ia(texto: str) -> dict:
         "genero_detectado": "female"
     }
 
+def generar_audio_traduccion_sync(texto: str, idioma: str, genero: str = "female") -> str:
+    """Sintetiza de forma ultra-rapida el audio de traduccion y retorna la URL web."""
+    if not texto or not texto.strip():
+        return ""
+    try:
+        lang_key = idioma[:2].lower() if idioma else "es"
+        v_spec = VOCES_NATIVAS_EXTRANJERAS.get(lang_key, VOCES_NATIVAS_EXTRANJERAS.get("es", {}))
+        voice_name = v_spec.get(genero, v_spec.get("female", "es-MX-DaliaNeural"))
+        rate_val = "-10%" if lang_key in ["en", "de"] else "-8%"
+
+        import hashlib, edge_tts
+        temp_dir = os.path.join(os.getcwd(), "custom_assets", "temp_audio")
+        os.makedirs(temp_dir, exist_ok=True)
+        h = hashlib.md5(f"{texto}_{voice_name}_{rate_val}".encode("utf-8")).hexdigest()
+        filename = f"trans_{h}.mp3"
+        fp = os.path.join(temp_dir, filename)
+
+        if not os.path.exists(fp) or os.path.getsize(fp) == 0:
+            def _run_worker():
+                async def _save():
+                    comm = edge_tts.Communicate(texto, voice_name, rate=rate_val)
+                    await comm.save(fp)
+                new_loop = asyncio.new_event_loop()
+                try:
+                    new_loop.run_until_complete(_save())
+                finally:
+                    new_loop.close()
+
+            th = threading.Thread(target=_run_worker)
+            th.start()
+            th.join(timeout=4.0)
+
+        if os.path.exists(fp) and os.path.getsize(fp) > 0:
+            return f"/custom_assets/temp_audio/{filename}"
+    except Exception as ex_gen:
+        print("Notice generar_audio_traduccion_sync:", ex_gen)
+    return ""
+
 def reproducir_audio_traduccion_async(texto: str, idioma: str, genero: str = "female", start_speak_fn=None, page=None):
     """Sintetiza y reproduce el audio de la traduccion en segundo plano de forma 100% aislada."""
     def _worker():
@@ -239,30 +295,27 @@ def reproducir_audio_traduccion_async(texto: str, idioma: str, genero: str = "fe
             if not texto or not texto.strip():
                 return
 
-            lang_key = idioma[:2].lower() if idioma else "es"
-            v_spec = VOCES_NATIVAS_EXTRANJERAS.get(lang_key, VOCES_NATIVAS_EXTRANJERAS.get("es", {}))
-            voice_name = v_spec.get(genero, v_spec.get("female", "es-MX-DaliaNeural"))
-
-            import hashlib, edge_tts
-            temp_dir = os.path.join(os.getcwd(), "custom_assets", "temp_audio")
-            os.makedirs(temp_dir, exist_ok=True)
-            h = hashlib.md5(f"{texto}_{voice_name}".encode("utf-8")).hexdigest()
-            filename = f"trans_{h}.mp3"
-            fp = os.path.join(temp_dir, filename)
-
-            if not os.path.exists(fp) or os.path.getsize(fp) == 0:
-                async def _gen():
-                    comm = edge_tts.Communicate(texto, voice_name)
-                    await comm.save(fp)
-                try:
-                    asyncio.run(_gen())
-                except Exception as ex_gen:
-                    print("Notice edge-tts generation:", ex_gen)
-
-            if os.path.exists(fp) and os.path.getsize(fp) > 0:
-                audio_web_url = f"/custom_assets/temp_audio/{filename}"
+            audio_web_url = generar_audio_traduccion_sync(texto, idioma, genero)
+            if audio_web_url:
+                fp = os.path.join(os.getcwd(), audio_web_url.lstrip("/"))
                 if page and getattr(page, "web", False):
-                    ejecutar_js_traductor(page, f"if(window.luxoPlayTraductorAudio) window.luxoPlayTraductorAudio('{audio_web_url}');")
+                    try:
+                        import sys, time
+                        if 'main' in sys.modules and hasattr(sys.modules['main'], 'GLOBAL_WEB_TTS_EVENTS'):
+                            events_dict = sys.modules['main'].GLOBAL_WEB_TTS_EVENTS
+                            evt_id = f"trad_play_{int(time.time()*1000)}"
+                            evt_data = {
+                                "action": "play_traductor_audio",
+                                "audio_url": audio_web_url,
+                                "id": evt_id,
+                                "timestamp": time.time()
+                            }
+                            tok = getattr(page, "_luxo_token", None) or getattr(page, "session_id", None)
+                            if tok: events_dict[str(tok)] = evt_data
+                            events_dict["global"] = evt_data
+                            print(f"[TRADUCTOR PLAY DISPATCH] {audio_web_url} (id: {evt_id})")
+                    except Exception as ex_w:
+                        print("Notice web play dispatch:", ex_w)
                 else:
                     try:
                         import ctypes
@@ -271,7 +324,7 @@ def reproducir_audio_traduccion_async(texto: str, idioma: str, genero: str = "fe
                         mci(f'open "{os.path.abspath(fp)}" type mpegvideo alias luxo_trans_audio', None, 0, 0)
                         mci("play luxo_trans_audio", None, 0, 0)
                     except Exception:
-                        if start_speak_fn and lang_key == "es":
+                        if start_speak_fn and idioma[:2].lower() == "es":
                             try:
                                 v_luxo = random.choice(VOCES_LUXO_FEMENINAS if genero == "female" else VOCES_LUXO_MASCULINAS)
                                 start_speak_fn(texto, voice_id=v_luxo, voice_gender=genero)
@@ -301,6 +354,11 @@ def registrar_rutas_fastapi_traductor(app=None):
 
         from fastapi import Request
         import tempfile
+
+        @app.get("/api/traductor/status")
+        @app.get("/api/traductor/view_state")
+        def api_traductor_status():
+            return {"active": bool(TRADUCTOR_SESSIONS), "count": len(TRADUCTOR_SESSIONS)}
 
         @app.api_route("/api/traductor/mic_state", methods=["GET", "POST"])
         async def api_traductor_mic_state(request: Request = None, session_id: str = "", source: str = "vendedor", state: str = "idle"):
@@ -354,8 +412,15 @@ def registrar_rutas_fastapi_traductor(app=None):
                     if txt_clean:
                         fn = sess_handler.get("procesar_vendedor" if source == "vendedor" else "procesar_cliente")
                         if fn:
-                            threading.Thread(target=fn, args=(txt_clean,), daemon=True).start()
-                            return {"status": "ok", "processed": txt_clean}
+                            res_proc = fn(txt_clean)
+                            audio_url = (res_proc or {}).get("audio_url", "")
+                            trad_txt = (res_proc or {}).get("traduccion", "")
+                            return {
+                                "status": "ok",
+                                "text": txt_clean,
+                                "translated": trad_txt,
+                                "audio_url": audio_url
+                            }
                     else:
                         if set_visual_fn:
                             set_visual_fn(source, "idle")
@@ -436,8 +501,16 @@ def registrar_rutas_fastapi_traductor(app=None):
                 if texto_transcrito and sess_handler:
                     fn = sess_handler.get("procesar_vendedor" if source == "vendedor" else "procesar_cliente")
                     if fn:
-                        threading.Thread(target=fn, args=(texto_transcrito,), daemon=True).start()
-                        return {"status": "ok", "text": texto_transcrito, "language": idioma_detectado}
+                        res_proc = fn(texto_transcrito)
+                        audio_url = (res_proc or {}).get("audio_url", "")
+                        trad_txt = (res_proc or {}).get("traduccion", "")
+                        return {
+                            "status": "ok",
+                            "text": texto_transcrito,
+                            "translated": trad_txt,
+                            "language": idioma_detectado,
+                            "audio_url": audio_url
+                        }
 
                 # Si no hubo audio o fallo, regresar a idle
                 if sess_handler and sess_handler.get("set_visual"):
@@ -676,17 +749,37 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                 page.update()
             except: pass
 
+    def disparar_evento_traductor(pg, action: str, src: str, sid: str):
+        try:
+            import sys, time
+            if 'main' in sys.modules and hasattr(sys.modules['main'], 'GLOBAL_WEB_TTS_EVENTS'):
+                events_dict = sys.modules['main'].GLOBAL_WEB_TTS_EVENTS
+                evt_id = f"trad_evt_{int(time.time()*1000)}"
+                evt_data = {
+                    "action": action,
+                    "source": src,
+                    "session_id": sid,
+                    "id": evt_id,
+                    "timestamp": time.time()
+                }
+                tok = getattr(pg, "_luxo_token", None) or getattr(pg, "session_id", None) or sid
+                if tok: events_dict[str(tok)] = evt_data
+                events_dict["global"] = evt_data
+                print(f"[TRADUCTOR EVENT DISPATCH] {action} {src} (id: {evt_id})")
+        except Exception as ex_d:
+            print("Notice disparar_evento_traductor:", ex_d)
+
     def procesar_traduccion_vendedor_texto(texto_directo=None):
         set_visual_estado("vendedor", "processing")
         texto = texto_directo if (isinstance(texto_directo, str) and texto_directo.strip()) else txt_input_vendedor.value
         if not texto or not str(texto).strip():
             set_visual_estado("vendedor", "idle")
-            return
+            return None
         txt_input_vendedor.value = ""
         try: page.update()
         except: pass
 
-        def _task():
+        def _do_work():
             try:
                 res = detectar_idioma_y_traducir_ia(texto)
                 if res:
@@ -702,23 +795,33 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                         lang_code=idioma_dest,
                         gender=vendedor_genero[0]
                     )
-                    reproducir_audio_traduccion_async(trad, idioma_dest, genero=vendedor_genero[0], start_speak_fn=start_speak_fn, page=page)
+                    audio_url = generar_audio_traduccion_sync(trad, idioma_dest, genero=vendedor_genero[0])
+                    if not (page and getattr(page, "web", False)) and audio_url:
+                        reproducir_audio_traduccion_async(trad, idioma_dest, genero=vendedor_genero[0], start_speak_fn=start_speak_fn, page=page)
+                    return {"traduccion": trad, "audio_url": audio_url, "destino": idioma_dest}
+            except Exception as ex_v:
+                print("Notice procesar_traduccion_vendedor_texto:", ex_v)
             finally:
                 set_visual_estado("vendedor", "idle")
+            return None
 
-        threading.Thread(target=_task, daemon=True).start()
+        if texto_directo is not None:
+            return _do_work()
+        else:
+            threading.Thread(target=_do_work, daemon=True).start()
+            return None
 
     def procesar_traduccion_cliente_texto(texto_directo=None):
         set_visual_estado("cliente", "processing")
         texto = texto_directo if (isinstance(texto_directo, str) and texto_directo.strip()) else txt_input_cliente.value
         if not texto or not str(texto).strip():
             set_visual_estado("cliente", "idle")
-            return
+            return None
         txt_input_cliente.value = ""
         try: page.update()
         except: pass
 
-        def _task():
+        def _do_work():
             try:
                 res = detectar_idioma_y_traducir_ia(texto)
                 if res:
@@ -736,11 +839,21 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                         lang_code="es",
                         gender=gen_cliente
                     )
-                    reproducir_audio_traduccion_async(trad, "es", genero=gen_cliente, start_speak_fn=start_speak_fn, page=page)
+                    audio_url = generar_audio_traduccion_sync(trad, "es", genero=gen_cliente)
+                    if not (page and getattr(page, "web", False)) and audio_url:
+                        reproducir_audio_traduccion_async(trad, "es", genero=gen_cliente, start_speak_fn=start_speak_fn, page=page)
+                    return {"traduccion": trad, "audio_url": audio_url, "origen": idioma_orig}
+            except Exception as ex_c:
+                print("Notice procesar_traduccion_cliente_texto:", ex_c)
             finally:
                 set_visual_estado("cliente", "idle")
+            return None
 
-        threading.Thread(target=_task, daemon=True).start()
+        if texto_directo is not None:
+            return _do_work()
+        else:
+            threading.Thread(target=_do_work, daemon=True).start()
+            return None
 
     # Registrar sesion activa en memoria persistente
     TRADUCTOR_SESSIONS[session_token] = {
@@ -753,26 +866,26 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     # Control de toques interactivos (Sistema de 2 toques)
     def on_mic_vendedor_click(e):
         if grabando_estado["vendedor"]:
-            # Segundo toque: Detener grabacion y enviar a procesar
             set_visual_estado("vendedor", "processing")
+            disparar_evento_traductor(page, "stop_traductor_mic", "vendedor", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStopTraductorMic) window.luxoStopTraductorMic('vendedor', '{session_token}');")
         else:
-            # Primer toque: Iniciar grabacion continua sin limite de tiempo
             set_visual_estado("vendedor", "recording")
             if grabando_estado["cliente"]:
                 set_visual_estado("cliente", "idle")
+            disparar_evento_traductor(page, "start_traductor_mic", "vendedor", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStartTraductorMic) window.luxoStartTraductorMic('vendedor', '{session_token}');")
 
     def on_mic_cliente_click(e):
         if grabando_estado["cliente"]:
-            # Segundo toque: Detener grabacion y enviar a procesar
             set_visual_estado("cliente", "processing")
+            disparar_evento_traductor(page, "stop_traductor_mic", "cliente", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStopTraductorMic) window.luxoStopTraductorMic('cliente', '{session_token}');")
         else:
-            # Primer toque: Iniciar grabacion continua sin limite de tiempo
             set_visual_estado("cliente", "recording")
             if grabando_estado["vendedor"]:
                 set_visual_estado("vendedor", "idle")
+            disparar_evento_traductor(page, "start_traductor_mic", "cliente", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStartTraductorMic) window.luxoStartTraductorMic('cliente', '{session_token}');")
 
     btn_mic_vendedor.on_click = on_mic_vendedor_click

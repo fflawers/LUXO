@@ -97,52 +97,112 @@
     window._lastInteractionTime = Date.now();
     window._luxoAvatarAudioActive = false;
     window._luxoAvatarAudioMuted = false;
-    window.luxoUserIsLoggedIn = false;
+    window._saludoAvatarReproducido = false;
+
+    window._checkLuxoHasActiveSession = function() {
+        try {
+            let sActive = sessionStorage.getItem('luxo_session_active');
+            if (sActive === '1' || sActive === 'true') {
+                return true;
+            }
+        } catch(e) {}
+        return false;
+    };
+
+    window.luxoAgregarListenersUnmute = function() {
+        try {
+            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart'].forEach(function(evName) {
+                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                window.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
+                document.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
+            });
+        } catch(e){}
+    };
+
+    window.luxoRemoverListenersUnmute = function() {
+        try {
+            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart'].forEach(function(evName) {
+                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+            });
+        } catch(e){}
+    };
+
+    window.luxoUserIsLoggedIn = window._checkLuxoHasActiveSession();
+    if (window.luxoUserIsLoggedIn) {
+        window._saludoAvatarReproducido = true;
+        window._luxoAvatarAudioMuted = true;
+    }
 
     window.luxoPlayLoginAvatarAudio = function(force) {
         if (force === true) {
             window.luxoUserIsLoggedIn = false;
             window._luxoAvatarAudioMuted = false;
+            window._saludoAvatarReproducido = false;
+            try {
+                localStorage.removeItem('luxo_session_active');
+                sessionStorage.removeItem('luxo_session_active');
+            } catch(e){}
+            if (typeof window.luxoAgregarListenersUnmute === 'function') {
+                window.luxoAgregarListenersUnmute();
+            }
+        } else {
+            // Reproducción automática o pasiva: si hay sesión activa, el saludo de login NUNCA debe sonar
+            if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
+                window.luxoUserIsLoggedIn = true;
+                window._saludoAvatarReproducido = true;
+                window._luxoAvatarAudioMuted = true;
+                window.luxoStopLoginAvatarAudio();
+                return;
+            }
         }
+
         if (window.luxoUserIsLoggedIn === true) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
-        window._luxoAvatarAudioActive = true;
         if (window._luxoAvatarAudioMuted) return;
 
         try {
             let snd = document.getElementById('luxo_avatar_audio_el');
-            if (snd) {
-                // Si ya está reproduciéndose activamente, no interrumpir ni recargar
-                if (!snd.paused && snd.currentTime > 0) {
-                    return;
-                }
-                if (!snd.src || !snd.src.includes('saludo_login')) {
-                    snd.src = '/custom_assets/saludo_login.mp3';
-                }
-                snd.loop = false; // Una sola reproducción controlada (sin bucle infinito)
-                snd.volume = 1.0;
-                snd.muted = false;
-            } else {
+            let targetSrc = window.location.origin + '/custom_assets/saludo_login.mp3';
+            if (!snd) {
                 snd = document.createElement('audio');
                 snd.id = 'luxo_avatar_audio_el';
                 snd.preload = 'auto';
-                snd.src = '/custom_assets/saludo_login.mp3';
-                snd.loop = false; // Una sola reproducción controlada (sin bucle infinito)
-                snd.volume = 1.0;
-                snd.muted = false;
+                snd.setAttribute('playsinline', '');
                 (document.body || document.documentElement).appendChild(snd);
+            }
+            if (!snd.src || !snd.src.includes('saludo_login.mp3')) {
+                snd.src = targetSrc;
+            }
+            // Si ya está reproduciéndose activamente, no reiniciar
+            if (!snd.paused && snd.currentTime > 0) {
+                window._luxoAvatarAudioActive = true;
+                return;
+            }
+            snd.loop = false;
+            snd.volume = 1.0;
+            snd.muted = false;
+            if (snd.ended) {
+                snd.currentTime = 0;
             }
             snd.onended = function() {
                 window._luxoAvatarAudioActive = false;
             };
+
             let p = snd.play();
             if (p !== undefined) {
                 p.then(function() {
+                    window._luxoAvatarAudioActive = true;
+                    window._saludoAvatarReproducido = true;
                     console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente en inicio de sesión.');
+                    if (typeof window.luxoRemoverListenersUnmute === 'function') {
+                        window.luxoRemoverListenersUnmute();
+                    }
                 }).catch(function(err) {
-                    console.log('[LUXO AVATAR] Autoplay esperando interacción del usuario.');
+                    console.log('[LUXO AVATAR] Autoplay bloqueado por navegador, esperando primer gesto del usuario.');
                 });
             }
         } catch(e){
@@ -150,99 +210,88 @@
         }
     };
 
-    // Auto-activación al cargar el DOM si no se ha iniciado sesión
+    // Gestión inicial al cargar: si hay sesión activa, silenciar avatar. Si es login, permitir interacción.
     try {
-        if (!window.luxoUserIsLoggedIn) {
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function() {
-                    if (!window.luxoUserIsLoggedIn) {
-                        window.luxoPlayLoginAvatarAudio();
-                    }
-                });
-            } else {
-                window.luxoPlayLoginAvatarAudio();
+        if (window.luxoUserIsLoggedIn || window._checkLuxoHasActiveSession()) {
+            window.luxoUserIsLoggedIn = true;
+            window._saludoAvatarReproducido = true;
+            window._luxoAvatarAudioMuted = true;
+            window.luxoStopLoginAvatarAudio();
+            if (typeof window.luxoRemoverListenersUnmute === 'function') {
+                window.luxoRemoverListenersUnmute();
             }
-            setTimeout(function() { if (!window.luxoUserIsLoggedIn) window.luxoPlayLoginAvatarAudio(); }, 500);
-            setTimeout(function() { if (!window.luxoUserIsLoggedIn) window.luxoPlayLoginAvatarAudio(); }, 1200);
+        } else {
+            // En pantalla de login pura: adjuntar listeners para interacción del usuario
+            window.luxoAgregarListenersUnmute();
         }
     } catch(e){}
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
         try {
+            let directEl = document.getElementById('luxo_avatar_audio_el');
+            if (directEl) {
+                try {
+                    directEl.pause();
+                    directEl.currentTime = 0;
+                } catch(e){}
+            }
             let audios = document.querySelectorAll('audio');
             audios.forEach(function(snd) {
                 if (snd.id === 'luxo_avatar_audio_el' || (snd.src && snd.src.includes('saludo_login.mp3'))) {
                     try {
                         snd.pause();
                         snd.currentTime = 0;
-                        snd.loop = false;
-                        snd.muted = true;
-                        snd.removeAttribute('src');
-                        snd.src = '';
-                        snd.load();
-                    } catch(e){}
-                    try {
-                        if (snd.parentNode) snd.parentNode.removeChild(snd);
                     } catch(e){}
                 }
             });
-            let directEl = document.getElementById('luxo_avatar_audio_el');
-            if (directEl) {
-                try {
-                    directEl.pause();
-                    directEl.currentTime = 0;
-                    directEl.loop = false;
-                    directEl.muted = true;
-                    directEl.src = '';
-                    if (directEl.parentNode) directEl.parentNode.removeChild(directEl);
-                } catch(e){}
-            }
         } catch(e){}
     };
 
     // Interceptor INMEDIATO al hacer clic en ACCEDER, Huella o Face ID (0ms de latencia)
     try {
-        function _obtenerTextoElementoYPadres(el, maxDepth = 4) {
-            let combined = '';
-            let curr = el;
-            let depth = 0;
-            while (curr && depth < maxDepth) {
-                let txt = (curr.innerText || curr.textContent || '').trim();
-                let tt = (curr.getAttribute && curr.getAttribute('tooltip')) || '';
-                let al = (curr.getAttribute && curr.getAttribute('aria-label')) || '';
-                let ti = (curr.getAttribute && curr.getAttribute('title')) || '';
-                combined += ` ${txt} ${tt} ${al} ${ti}`;
-                curr = curr.parentElement;
-                depth++;
+        function _esAccionBoton(el, palabra) {
+            if (!el) return false;
+            let ownText = (el.innerText || (el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '').trim().toLowerCase();
+            if (ownText.length > 0 && ownText.length < 35 && ownText.includes(palabra)) {
+                return true;
             }
-            return combined.toLowerCase();
+            if (el.parentElement) {
+                let pText = (el.parentElement.innerText || (el.parentElement.getAttribute && el.parentElement.getAttribute('aria-label')) || '').trim().toLowerCase();
+                if (pText.length > 0 && pText.length < 35 && pText.includes(palabra)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         document.addEventListener('click', function(e) {
             let t = e.target;
             if (!t) return;
-            let combined = _obtenerTextoElementoYPadres(t);
 
-            // 1. Acceder (corta el audio del avatar inmediatamente y pre-desbloquea reproductor)
-            if (combined.includes('acceder')) {
+            // 1. Acceder (corta el audio del avatar inmediatamente al enviar)
+            if (_esAccionBoton(t, 'acceder')) {
                 window.luxoUserIsLoggedIn = true;
-                window.luxoStopLoginAvatarAudio();
                 try {
-                    let a = document.getElementById("luxo_global_tts_player");
-                    if (!a) {
-                        a = document.createElement("audio");
-                        a.id = "luxo_global_tts_player";
-                        (document.body || document.documentElement).appendChild(a);
-                    }
-                    a.muted = false;
-                    let p = a.play();
-                    if (p !== undefined) p.catch(function(){});
+                    localStorage.setItem('luxo_session_active', 'true');
+                    sessionStorage.setItem('luxo_session_active', 'true');
                 } catch(e){}
+                window.luxoStopLoginAvatarAudio();
+                if (typeof window.luxoRemoverListenersUnmute === 'function') {
+                    window.luxoRemoverListenersUnmute();
+                }
+            }
+
+            // 1.1 Botón o icono de audio de avatar (🔊 / 🔇)
+            let txtBtn = (t.innerText || t.textContent || '').trim();
+            if (txtBtn === '🔊' || txtBtn === '🔇') {
+                if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
+                    window.luxoToggleLoginAvatarAudio();
+                }
             }
 
             // 2. Huella / Passkey instantáneo (0ms sin esperar WebSocket/polling)
-            if (!window.luxoUserIsLoggedIn && (combined.includes('huella') || combined.includes('passkey'))) {
+            if (!window.luxoUserIsLoggedIn && (_esAccionBoton(t, 'huella') || _esAccionBoton(t, 'passkey'))) {
                 console.log("[LUXO BIOMETRIA] Clic directo detectado: Abriendo Huella / Passkey instantáneamente (0ms)");
                 if (window.luxoActivarPasskeyLogin) {
                     window.luxoActivarPasskeyLogin();
@@ -250,7 +299,7 @@
             }
 
             // 3. Face ID instantáneo (0ms sin esperar WebSocket/polling)
-            if (!window.luxoUserIsLoggedIn && (combined.includes('face id') || combined.includes('reconocimiento facial') || combined.includes('facial'))) {
+            if (!window.luxoUserIsLoggedIn && (_esAccionBoton(t, 'face id') || _esAccionBoton(t, 'reconocimiento facial') || _esAccionBoton(t, 'facial'))) {
                 console.log("[LUXO BIOMETRIA] Clic directo detectado: Abriendo Face ID instantáneamente (0ms)");
                 if (window.luxoAbrirCamaraFacialLogin) {
                     window.luxoAbrirCamaraFacialLogin();
@@ -261,6 +310,9 @@
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 window.luxoStopLoginAvatarAudio();
+                if (typeof window.luxoRemoverListenersUnmute === 'function') {
+                    window.luxoRemoverListenersUnmute();
+                }
             }
         }, true);
     } catch(e){}
@@ -274,9 +326,19 @@
             return true; // Silenciado
         } else {
             window._luxoAvatarAudioMuted = false;
+            window._saludoAvatarReproducido = false;
             window.luxoPlayLoginAvatarAudio(true);
             return false; // Con audio
         }
+    };
+
+    window.luxoRemoverListenersUnmute = function() {
+        try {
+            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart', 'focusin'].forEach(function(evName) {
+                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+            });
+        } catch(e){}
     };
 
     window.luxoUnmuteAudio = function() {
@@ -294,34 +356,48 @@
                     }
                 } catch(e){}
             }
-            // Si el usuario YA tiene sesión activa confirmada, detener el audio del avatar
+
+            // Si el usuario ya está autenticado formalmente en esta sesión, detener avatar
             if (window.luxoUserIsLoggedIn === true) {
                 window.luxoStopLoginAvatarAudio();
+                window.luxoRemoverListenersUnmute();
                 return;
             }
-            // Si estamos en la pantalla de login y el avatar no está silenciado, iniciar o reanudar
+
+            // Si estamos en la pantalla de login: si el audio no está reproduciéndose y no está silenciado
             if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted) {
                 let snd = document.getElementById('luxo_avatar_audio_el');
-                if (snd) {
-                    if (snd.paused && !snd.ended) {
-                        snd.muted = false;
-                        snd.volume = 1.0;
-                        let p = snd.play();
-                        if (p !== undefined) {
-                            p.catch(function(){});
-                        }
+                if (!snd) {
+                    snd = document.createElement('audio');
+                    snd.id = 'luxo_avatar_audio_el';
+                    snd.preload = 'auto';
+                    snd.setAttribute('playsinline', '');
+                    (document.body || document.documentElement).appendChild(snd);
+                }
+                let targetSrc = window.location.origin + '/custom_assets/saludo_login.mp3';
+                if (!snd.src || !snd.src.includes('saludo_login.mp3')) {
+                    snd.src = targetSrc;
+                }
+                snd.muted = false;
+                snd.volume = 1.0;
+                if (snd.paused) {
+                    if (snd.ended) snd.currentTime = 0;
+                    let p = snd.play();
+                    if (p !== undefined) {
+                        p.then(function() {
+                            window._luxoAvatarAudioActive = true;
+                            window._saludoAvatarReproducido = true;
+                            console.log('[LUXO AVATAR] Audio iniciado exitosamente por primer gesto del usuario.');
+                            window.luxoRemoverListenersUnmute();
+                        }).catch(function(e){
+                            console.log('[LUXO AVATAR] Esperando gesto para reproducir:', e);
+                        });
                     }
-                } else {
-                    window.luxoPlayLoginAvatarAudio(false);
                 }
             }
         } catch(e){}
     };
-    try {
-        ['pointerdown', 'keydown', 'click', 'touchstart'].forEach(function(evName) {
-            window.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
-        });
-    } catch(e) {}
+    // Los listeners de unmute solo se activan explícitamente en la pantalla de login mediante window.luxoAgregarListenersUnmute()
 
     // 5. Detener Audio / Speech
     window.luxoStopTts = function() {
@@ -561,6 +637,12 @@
                                 window.evaluarVisibilidadSimulador();
                             }
                         }
+                        if (typeof data.traductor_visible !== 'undefined') {
+                            window._traductorPollVisible = (data.traductor_visible === true);
+                            if (typeof window.evaluarVisibilidadTraductor === 'function') {
+                                window.evaluarVisibilidadTraductor();
+                            }
+                        }
                         if (data && data.action && data.action !== 'none') {
                             if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
@@ -581,6 +663,24 @@
                                 console.log("[LUXO TTS POLL] Disparando dictado simulador vía evento:", data.mode);
                                 if (window.iniciarDictadoSimulador) {
                                     window.iniciarDictadoSimulador(data.mode || 'chat');
+                                }
+                            } else if (data.action === 'start_traductor_mic' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO TTS POLL] Disparando inicio mic traductor:", data.source);
+                                if (window.luxoStartTraductorMic) {
+                                    window.luxoStartTraductorMic(data.source, data.session_id);
+                                }
+                            } else if (data.action === 'stop_traductor_mic' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO TTS POLL] Disparando parada mic traductor:", data.source);
+                                if (window.luxoStopTraductorMic) {
+                                    window.luxoStopTraductorMic(data.source, data.session_id);
+                                }
+                            } else if (data.action === 'play_traductor_audio' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                console.log("[LUXO TTS POLL] Disparando reproduccion traductor:", data.audio_url);
+                                if (window.luxoPlayTraductorAudio && data.audio_url) {
+                                    window.luxoPlayTraductorAudio(data.audio_url);
                                 }
                             } else if (data.action === 'open_facial_login' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
@@ -1106,6 +1206,8 @@
                     try {
                         localStorage.setItem('logged_user_id', String(data.usuario_id || data.user_id || ''));
                         localStorage.setItem('logged_username', String(data.usuario || ''));
+                        localStorage.setItem('luxo_session_active', 'true');
+                        sessionStorage.setItem('luxo_session_active', 'true');
                     } catch(e){}
                     setTimeout(() => {
                         modal.remove();
@@ -1210,6 +1312,8 @@
                 try {
                     localStorage.setItem('logged_user_id', String(verData.usuario_id || verData.user_id || ''));
                     localStorage.setItem('logged_username', String(verData.usuario || ''));
+                    localStorage.setItem('luxo_session_active', 'true');
+                    sessionStorage.setItem('luxo_session_active', 'true');
                 } catch(e){}
                 setTimeout(() => {
                     banner.remove();
@@ -1398,7 +1502,7 @@
         }
     };
 
-        // --------------------------------------------------------------------------
+    // --------------------------------------------------------------------------
     // MÓDULO INDEPENDIENTE TRADUCTOR DE MOSTRADOR LUXO (2 TOQUES / CONTINUO)
     // --------------------------------------------------------------------------
     window._luxoTradRecording = { 'vendedor': false, 'cliente': false };
@@ -1407,21 +1511,88 @@
     window._luxoTradChunks = { 'vendedor': [], 'cliente': [] };
     window._luxoTradSR = { 'vendedor': null, 'cliente': null };
     window._luxoTradText = { 'vendedor': '', 'cliente': '' };
+    window._luxoTradMimeType = { 'vendedor': 'audio/webm', 'cliente': 'audio/webm' };
+    window._traductorPollVisible = false;
+
+    window._luxoUpdateTradUi = function(source, state) {
+        const btnV = document.getElementById('luxo-trad-btn-vendedor');
+        const btnC = document.getElementById('luxo-trad-btn-cliente');
+        const lblV = document.getElementById('luxo-trad-lbl-vendedor');
+        const lblC = document.getElementById('luxo-trad-lbl-cliente');
+
+        if (source === 'vendedor') {
+            if (btnV && lblV) {
+                if (state === 'recording') {
+                    btnV.style.background = '#B71C1C';
+                    btnV.style.border = '2px solid #FF5252';
+                    btnV.style.boxShadow = '0 0 20px #FF5252';
+                    btnV.style.color = '#FFFFFF';
+                    lblV.innerText = '⏹️ Detener';
+                    if (btnC) { btnC.style.opacity = '0.35'; btnC.style.pointerEvents = 'none'; }
+                } else if (state === 'processing') {
+                    btnV.style.background = '#F57F17';
+                    btnV.style.border = '2px solid #FFD54F';
+                    btnV.style.boxShadow = '0 0 16px #FFD54F';
+                    btnV.style.color = '#FFFFFF';
+                    lblV.innerText = '⏳ Traduciendo...';
+                    if (btnC) { btnC.style.opacity = '0.35'; btnC.style.pointerEvents = 'none'; }
+                } else {
+                    btnV.style.background = 'linear-gradient(135deg, #002244 0%, #004477 100%)';
+                    btnV.style.border = '1.8px solid #00FFFF';
+                    btnV.style.boxShadow = '0 0 12px rgba(0, 255, 255, 0.35)';
+                    btnV.style.color = '#00FFFF';
+                    btnV.style.opacity = '1';
+                    btnV.style.pointerEvents = 'auto';
+                    lblV.innerText = 'Hablar';
+                    if (btnC) { btnC.style.opacity = '1'; btnC.style.pointerEvents = 'auto'; }
+                }
+            }
+        } else if (source === 'cliente') {
+            if (btnC && lblC) {
+                if (state === 'recording') {
+                    btnC.style.background = '#B71C1C';
+                    btnC.style.border = '2px solid #FF5252';
+                    btnC.style.boxShadow = '0 0 20px #FF5252';
+                    btnC.style.color = '#FFFFFF';
+                    lblC.innerText = '⏹️ Finish';
+                    if (btnV) { btnV.style.opacity = '0.35'; btnV.style.pointerEvents = 'none'; }
+                } else if (state === 'processing') {
+                    btnC.style.background = '#F57F17';
+                    btnC.style.border = '2px solid #FFD54F';
+                    btnC.style.boxShadow = '0 0 16px #FFD54F';
+                    btnC.style.color = '#FFFFFF';
+                    lblC.innerText = '⏳ Translating...';
+                    if (btnV) { btnV.style.opacity = '0.35'; btnV.style.pointerEvents = 'none'; }
+                } else {
+                    btnC.style.background = 'linear-gradient(135deg, #2E0854 0%, #4A0E78 100%)';
+                    btnC.style.border = '1.8px solid #D8B4FE';
+                    btnC.style.boxShadow = '0 0 12px rgba(216, 180, 254, 0.35)';
+                    btnC.style.color = '#D8B4FE';
+                    btnC.style.opacity = '1';
+                    btnC.style.pointerEvents = 'auto';
+                    lblC.innerText = 'Speak';
+                    if (btnV) { btnV.style.opacity = '1'; btnV.style.pointerEvents = 'auto'; }
+                }
+            }
+        }
+    };
 
     window.luxoStartTraductorMic = function(source, sessionId) {
-        console.log('[TRADUCTOR JS] Iniciar grabacion continua para:', source, sessionId);
+        const sid = sessionId || (window.getLuxoSessionId ? window.getLuxoSessionId() : (window.luxoSessionId || ''));
+        console.log('[TRADUCTOR JS] Iniciar grabacion continua para:', source, sid);
         window._luxoTradText[source] = '';
         window._luxoTradChunks[source] = [];
 
         // Detener la otra vía si estuviera activa
         ['vendedor', 'cliente'].forEach(function(s) {
             if (s !== source && window._luxoTradRecording[s]) {
-                window.luxoStopTraductorMic(s, sessionId);
+                window.luxoStopTraductorMic(s, sid);
             }
         });
 
         window._luxoTradRecording[source] = true;
-        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=recording', { method: 'POST' }).catch(function(){});
+        window._luxoUpdateTradUi(source, 'recording');
+        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=recording', { method: 'POST' }).catch(function(){});
 
         // 1. Iniciar MediaRecorder nativo (Audio directo a Whisper - 100% compatible)
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -1439,6 +1610,7 @@
                 } else if (!MediaRecorder.isTypeSupported('audio/webm')) {
                     mimeType = '';
                 }
+                window._luxoTradMimeType[source] = mimeType;
 
                 const options = mimeType ? { mimeType: mimeType } : {};
                 const mr = new MediaRecorder(stream, options);
@@ -1451,18 +1623,21 @@
                 };
 
                 mr.onstart = function() {
-                    console.log('[TRADUCTOR MR] Grabacion de audio iniciada para:', source);
+                    console.log('[TRADUCTOR MR] Grabacion de audio iniciada para:', source, mimeType);
                 };
 
                 mr.start(250); // recolectar fragmentos cada 250ms
             }).catch(function(err) {
                 console.log('[TRADUCTOR MR ERROR]', err);
+                window._luxoTradRecording[source] = false;
+                window._luxoUpdateTradUi(source, 'idle');
+                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
                 if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
                     alert('⚠️ Permiso de micrófono denegado. Permite el acceso al micrófono en la barra de tu navegador.');
-                    window._luxoTradRecording[source] = false;
-                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
                 }
             });
+        } else {
+            console.warn('[TRADUCTOR] navigator.mediaDevices no disponible');
         }
 
         // 2. Reconocimiento WebSpeech opcional en paralelo para texto rápido
@@ -1501,8 +1676,10 @@
     };
 
     window.luxoStopTraductorMic = function(source, sessionId) {
-        console.log('[TRADUCTOR JS] Detener grabacion para:', source, sessionId);
+        const sid = sessionId || (window.getLuxoSessionId ? window.getLuxoSessionId() : (window.luxoSessionId || ''));
+        console.log('[TRADUCTOR JS] Detener grabacion para:', source, sid);
         window._luxoTradRecording[source] = false;
+        window._luxoUpdateTradUi(source, 'processing');
 
         // Detener WebSpeech si estaba activo
         if (window._luxoTradSR && window._luxoTradSR[source]) {
@@ -1510,7 +1687,7 @@
             window._luxoTradSR[source] = null;
         }
 
-        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=processing', { method: 'POST' }).catch(function(){});
+        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=processing', { method: 'POST' }).catch(function(){});
 
         // Detener MediaRecorder y despachar audio
         const mr = window._luxoTradMediaRecorder[source];
@@ -1526,12 +1703,14 @@
 
                 const chunks = window._luxoTradChunks[source] || [];
                 const recognizedText = (window._luxoTradText[source] || '').trim();
+                const mime = window._luxoTradMimeType[source] || 'audio/webm';
+                const ext = (mime.indexOf('mp4') !== -1) ? '.mp4' : '.webm';
 
                 if (chunks.length > 0) {
-                    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+                    const audioBlob = new Blob(chunks, { type: mime || 'audio/webm' });
                     const formData = new FormData();
-                    formData.append('file', audioBlob, 'traductor_' + source + '.webm');
-                    formData.append('session_id', sessionId);
+                    formData.append('file', audioBlob, 'traductor_' + source + ext);
+                    formData.append('session_id', sid);
                     formData.append('source', source);
 
                     fetch('/api/traductor/audio_upload', {
@@ -1541,6 +1720,11 @@
                         return res.json();
                     }).then(function(data) {
                         console.log('[TRADUCTOR AUDIO UPLOAD RESULT]:', data);
+                        if (data && data.audio_url) {
+                            window.luxoPlayTraductorAudio(data.audio_url);
+                        }
+                        window._luxoUpdateTradUi(source, 'idle');
+                        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
                     }).catch(function(err) {
                         console.log('[TRADUCTOR UPLOAD ERROR]:', err);
                         // Fallback a texto si WebSpeech tenia algo
@@ -1548,20 +1732,34 @@
                             fetch('/api/traductor/speech_input', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ session_id: sessionId, source: source, text: recognizedText })
-                            }).catch(function(){});
+                                body: JSON.stringify({ session_id: sid, source: source, text: recognizedText })
+                            }).then(function(r){ return r.json(); }).then(function(d){
+                                if (d && d.audio_url) window.luxoPlayTraductorAudio(d.audio_url);
+                                window._luxoUpdateTradUi(source, 'idle');
+                                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
+                            }).catch(function(){
+                                window._luxoUpdateTradUi(source, 'idle');
+                            });
                         } else {
-                            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
+                            window._luxoUpdateTradUi(source, 'idle');
+                            fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
                         }
                     });
                 } else if (recognizedText.length > 0) {
                     fetch('/api/traductor/speech_input', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ session_id: sessionId, source: source, text: recognizedText })
-                    }).catch(function(){});
+                        body: JSON.stringify({ session_id: sid, source: source, text: recognizedText })
+                    }).then(function(r){ return r.json(); }).then(function(d){
+                        if (d && d.audio_url) window.luxoPlayTraductorAudio(d.audio_url);
+                        window._luxoUpdateTradUi(source, 'idle');
+                        fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
+                    }).catch(function(){
+                        window._luxoUpdateTradUi(source, 'idle');
+                    });
                 } else {
-                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
+                    window._luxoUpdateTradUi(source, 'idle');
+                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
                 }
             };
             try { mr.stop(); } catch(eStop){
@@ -1577,10 +1775,17 @@
                 fetch('/api/traductor/speech_input', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: sessionId, source: source, text: recognizedText })
-                }).catch(function(){});
+                    body: JSON.stringify({ session_id: sid, source: source, text: recognizedText })
+                }).then(function(r){ return r.json(); }).then(function(d){
+                    if (d && d.audio_url) window.luxoPlayTraductorAudio(d.audio_url);
+                    window._luxoUpdateTradUi(source, 'idle');
+                    fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
+                }).catch(function(){
+                    window._luxoUpdateTradUi(source, 'idle');
+                });
             } else {
-                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sessionId) + '&state=idle', { method: 'POST' }).catch(function(){});
+                window._luxoUpdateTradUi(source, 'idle');
+                fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=idle', { method: 'POST' }).catch(function(){});
             }
         }
     };
@@ -1588,36 +1793,222 @@
     window.luxoPlayTraductorAudio = function(audioUrl) {
         if (!audioUrl) return;
         try {
-            let a = new Audio(audioUrl);
-            a.play().catch(function(e) { console.log('[TRADUCTOR AUDIO AUTOPLAY]', e); });
-        } catch(e) {}
+            console.log('[TRADUCTOR AUDIO PLAY] Iniciando reproducción:', audioUrl);
+            let a = document.getElementById('luxo_traductor_audio_player');
+            if (!a) {
+                a = document.createElement('audio');
+                a.id = 'luxo_traductor_audio_player';
+                a.preload = 'auto';
+                a.setAttribute('playsinline', '');
+                a.setAttribute('webkit-playsinline', '');
+                (document.body || document.documentElement).appendChild(a);
+            }
+            a.src = audioUrl;
+            a.currentTime = 0;
+            let p = a.play();
+            if (p && p.catch) {
+                p.catch(function(e) {
+                    console.log('[TRADUCTOR AUDIO AUTOPLAY WARN]', e);
+                    const unlock = function() {
+                        a.play().catch(function(){});
+                        window.removeEventListener('click', unlock);
+                        window.removeEventListener('touchstart', unlock);
+                    };
+                    window.addEventListener('click', unlock, { once: true, passive: true });
+                    window.addEventListener('touchstart', unlock, { once: true, passive: true });
+                });
+            }
+        } catch(e) {
+            console.log('[TRADUCTOR AUDIO PLAY ERROR]', e);
+        }
     };
+
+    function ensureTraductorBarCreated() {
+        let bar = document.getElementById('luxo-floating-traductor-bar');
+        if (!bar && (document.body || document.documentElement)) {
+            bar = document.createElement('div');
+            bar.id = 'luxo-floating-traductor-bar';
+            bar.setAttribute('title', 'Micrófonos Traductor Mostrador LUXO');
+            bar.style.cssText = 'position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 9999999; display: none; gap: 12px; align-items: center; justify-content: center; background: rgba(8, 8, 20, 0.94); border: 1.5px solid rgba(0, 255, 255, 0.4); border-radius: 32px; padding: 6px 14px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.85), 0 0 16px rgba(0, 255, 255, 0.3); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); touch-action: manipulation; user-select: none; max-width: 95vw; box-sizing: border-box;';
+
+            bar.innerHTML = `
+                <div id="luxo-trad-btn-vendedor" style="background: linear-gradient(135deg, #002244 0%, #004477 100%); border: 1.8px solid #00FFFF; border-radius: 22px; color: #00FFFF; font-size: 13px; font-weight: 800; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 9px 16px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 0 12px rgba(0, 255, 255, 0.35); transition: all 0.25s ease;">
+                    <span style="font-size:16px;">🎙️</span><span id="luxo-trad-lbl-vendedor">Hablar</span>
+                </div>
+                <div id="luxo-trad-btn-cliente" style="background: linear-gradient(135deg, #2E0854 0%, #4A0E78 100%); border: 1.8px solid #D8B4FE; border-radius: 22px; color: #D8B4FE; font-size: 13px; font-weight: 800; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 9px 16px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 0 12px rgba(216, 180, 254, 0.35); transition: all 0.25s ease;">
+                    <span style="font-size:16px;">🎙️</span><span id="luxo-trad-lbl-cliente">Speak</span>
+                </div>
+            `;
+
+            let isDraggingTrad = false;
+            let startXTrad, startYTrad, initialXTrad, initialYTrad;
+
+            bar.addEventListener('touchstart', function(e) {
+                if (e.target && (e.target.id === 'luxo-trad-btn-vendedor' || e.target.id === 'luxo-trad-btn-cliente' || e.target.closest('#luxo-trad-btn-vendedor') || e.target.closest('#luxo-trad-btn-cliente'))) {
+                    isDraggingTrad = false;
+                    return;
+                }
+                isDraggingTrad = false;
+                let touch = e.touches[0];
+                startXTrad = touch.clientX;
+                startYTrad = touch.clientY;
+                let rect = bar.getBoundingClientRect();
+                initialXTrad = rect.left;
+                initialYTrad = rect.top;
+                bar.style.transition = 'none';
+            }, { passive: true });
+
+            bar.addEventListener('touchmove', function(e) {
+                let touch = e.touches[0];
+                let dx = touch.clientX - startXTrad;
+                let dy = touch.clientY - startYTrad;
+                if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+                    isDraggingTrad = true;
+                    let newX = Math.max(0, Math.min(initialXTrad + dx, window.innerWidth - bar.offsetWidth));
+                    let newY = Math.max(0, Math.min(initialYTrad + dy, window.innerHeight - bar.offsetHeight));
+                    bar.style.left = newX + 'px';
+                    bar.style.top = newY + 'px';
+                    bar.style.bottom = 'auto';
+                    bar.style.transform = 'none';
+                }
+            }, { passive: true });
+
+            function onVendedorPress(e) {
+                if (isDraggingTrad) return;
+                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                console.log('[TRADUCTOR DOCK] Clic en botón Vendedor');
+                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : (window.luxoSessionId || '');
+                if (window._luxoTradRecording['vendedor']) {
+                    window.luxoStopTraductorMic('vendedor', sid);
+                } else {
+                    window.luxoStartTraductorMic('vendedor', sid);
+                }
+            }
+
+            function onClientePress(e) {
+                if (isDraggingTrad) return;
+                if (e) { try { e.preventDefault(); e.stopPropagation(); } catch(err){} }
+                console.log('[TRADUCTOR DOCK] Clic en botón Cliente');
+                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : (window.luxoSessionId || '');
+                if (window._luxoTradRecording['cliente']) {
+                    window.luxoStopTraductorMic('cliente', sid);
+                } else {
+                    window.luxoStartTraductorMic('cliente', sid);
+                }
+            }
+
+            const btnV = bar.querySelector('#luxo-trad-btn-vendedor');
+            const btnC = bar.querySelector('#luxo-trad-btn-cliente');
+
+            if (btnV) {
+                btnV.onclick = onVendedorPress;
+                btnV.ontouchend = function(e) {
+                    if (!isDraggingTrad) { onVendedorPress(e); }
+                };
+            }
+            if (btnC) {
+                btnC.onclick = onClientePress;
+                btnC.ontouchend = function(e) {
+                    if (!isDraggingTrad) { onClientePress(e); }
+                };
+            }
+
+            (document.body || document.documentElement).appendChild(bar);
+        }
+        return bar;
+    }
+
+    function evaluarVisibilidadTraductor() {
+        const hash = (window.location.hash || '').toLowerCase();
+        const path = (window.location.pathname || '').toLowerCase();
+        const isUrlTrad = hash.includes('traductor') || path.includes('traductor');
+        const isStateTrad = (window._luxoActiveView === 'traductor') || (window._traductorVisible === true);
+        const isPollTrad = (window._traductorPollVisible === true);
+
+        const shouldBeVisible = (isUrlTrad || isStateTrad || isPollTrad);
+        const bar = ensureTraductorBarCreated();
+        if (bar) {
+            const currentDisplay = bar.style.display;
+            const targetDisplay = shouldBeVisible ? 'flex' : 'none';
+            if (currentDisplay !== targetDisplay) {
+                bar.style.display = targetDisplay;
+            }
+        }
+        return shouldBeVisible;
+    }
+
+    window.evaluarVisibilidadTraductor = evaluarVisibilidadTraductor;
+    window.showTraductorBar = function(visible) {
+        window._traductorVisible = (visible !== false);
+        window._traductorPollVisible = (visible !== false);
+        if (!visible) {
+            ['vendedor', 'cliente'].forEach(function(s) {
+                if (window._luxoTradRecording[s]) window.luxoStopTraductorMic(s);
+            });
+        }
+        evaluarVisibilidadTraductor();
+    };
+
+    // Escucha de navegación y clics en menú
+    document.addEventListener('click', function(e) {
+        let t = e.target;
+        if (!t) return;
+        let txt = (t.innerText || t.textContent || '').toLowerCase();
+        if (txt.includes('traductor') || txt.includes('translator')) {
+            window._luxoActiveView = 'traductor';
+            window._traductorVisible = true;
+            setTimeout(evaluarVisibilidadTraductor, 200);
+        } else if (txt.includes('chat') || txt.includes('simulador') || txt.includes('capacitacion') || txt.includes('pendientes') || txt.includes('historial') || txt.includes('catalogo') || txt.includes('bitacora')) {
+            if (!txt.includes('traductor')) {
+                window._traductorVisible = false;
+                window._traductorPollVisible = false;
+                setTimeout(evaluarVisibilidadTraductor, 200);
+            }
+        }
+    }, { passive: true });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            ensureTraductorBarCreated();
+            evaluarVisibilidadTraductor();
+        });
+    } else {
+        ensureTraductorBarCreated();
+        evaluarVisibilidadTraductor();
+    }
+
+    setInterval(function() {
+        try { evaluarVisibilidadTraductor(); } catch(e){}
+    }, 1800);
 
     // =========================================================================
     // GESTIÓN DE SUSPENSIÓN Y RECONEXIÓN ROBUSTA EN IPAD / TABLETS / MÓVILES
     // =========================================================================
     (function() {
-        let _bgSuspendedTimestamp = 0;
+        const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        const isMobileOrTablet = isTouch || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent);
 
-        window.addEventListener('pageshow', function(event) {
-            if (event && event.persisted) {
-                console.log('[LUXO MOBILE] Restaurado de BFCache suspendido. Reconectando...');
-                window.location.reload();
-            }
+        let _suspendStartTime = 0;
+
+        // 1. Manejo de BFCache (iOS Safari / iPad / Android) sin recargas forzadas
+        window.addEventListener('pageshow', function(e) {
+            console.log('📱 [LUXO RESUME] Restaurado en primer plano sin recargas forzadas.');
+            try {
+                if (window._luxoACtx && window._luxoACtx.state === 'suspended') {
+                    window._luxoACtx.resume();
+                }
+            } catch(e){}
         });
 
+        // 2. Manejo de visibilidad (cambio de app y desbloqueo de pantalla) manteniendo estado en memoria
         document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                _bgSuspendedTimestamp = Date.now();
-            } else {
-                if (_bgSuspendedTimestamp > 0) {
-                    const diffMs = Date.now() - _bgSuspendedTimestamp;
-                    _bgSuspendedTimestamp = 0;
-                    if (diffMs > 15000) {
-                        console.log('[LUXO MOBILE] Retorno tras suspension prolongada (' + Math.round(diffMs/1000) + 's). Reconectando limpiamente...');
-                        window.location.reload();
+            if (!document.hidden) {
+                console.log('📱 [LUXO RESUME] Pantalla activa. Manteniendo estado en memoria.');
+                try {
+                    if (window._luxoACtx && window._luxoACtx.state === 'suspended') {
+                        window._luxoACtx.resume();
                     }
-                }
+                } catch(e){}
             }
         });
 

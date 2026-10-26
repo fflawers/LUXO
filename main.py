@@ -1195,11 +1195,25 @@ def configurar_rutas_fastapi(app):
 
         if not sim_st and "global" in GLOBAL_SIM_VIEW_STATE:
             sim_st = GLOBAL_SIM_VIEW_STATE["global"]
+        trad_visible = False
+        for k in [token, str(user_id).strip(), str(username).strip().lower(), "1", "unknown"]:
+            if k and k in active_sessions:
+                sess_info = active_sessions[k]
+                if isinstance(sess_info, dict) and sess_info.get("active_view") == "traductor":
+                    trad_visible = True
+                    break
+        if not trad_visible:
+            for s_key, sess_info in list(active_sessions.items()):
+                if isinstance(sess_info, dict) and sess_info.get("active_view") == "traductor":
+                    trad_visible = True
+                    break
+
         if not sim_st:
             sim_st = {"visible": False, "mode": "chat"}
-        
+
         response_data["sim_visible"] = sim_st.get("visible", False)
         response_data["sim_mode"] = sim_st.get("mode", "chat")
+        response_data["traductor_visible"] = trad_visible
 
         from fastapi.responses import JSONResponse
         return JSONResponse(
@@ -3420,7 +3434,7 @@ def configurar_rutas_fastapi(app):
                         _voz_bio = voz_colab_h
                         async def trigger_login_huella():
                             try:
-                                ejecutar_js_flet(page_s, f"window.luxoUserId = '{bio_user['ID_Usuario']}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{bio_user['ID_Usuario']}'); }} catch(e){{}}")
+                                ejecutar_js_flet(page_s, f"window.luxoUserId = '{bio_user['ID_Usuario']}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{bio_user['ID_Usuario']}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
                             except Exception: pass
                             cargar_chat_fn()
                             if saludo_fn:
@@ -3576,7 +3590,7 @@ def configurar_rutas_fastapi(app):
                             _voz_facial = voz_colab_f
                             async def trigger_login_facial():
                                 try:
-                                    ejecutar_js_flet(page_s, f"window.luxoUserId = '{matched_user['ID_Usuario']}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{matched_user['ID_Usuario']}'); }} catch(e){{}}")
+                                    ejecutar_js_flet(page_s, f"window.luxoUserId = '{matched_user['ID_Usuario']}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{matched_user['ID_Usuario']}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
                                 except Exception: pass
                                 cargar_chat_fn()
                                 if saludo_fn:
@@ -5180,18 +5194,37 @@ def main(page: ft.Page):
     page.bgcolor = "#070710"
 
     page.theme_mode = "dark"
-    page.theme = ft.Theme(
-        scrollbar_theme=ft.ScrollbarTheme(
-            track_color={ft.ControlState.DEFAULT: "transparent"},
-            thumb_color={
-                ft.ControlState.DEFAULT: "#333333",
-                ft.ControlState.HOVERED: "#555555"
-            },
-            thickness=6,
-            radius=3,
-            interactive=True
-        )
+    _is_touch_device = (
+        is_mobile or
+        any(k in _ua_scope for k in ["android", "iphone", "ipad", "ipod", "mobile", "tablet"]) or
+        (getattr(page, "width", None) is not None and page.width < 1150) or
+        getattr(page, "platform", None) in [ft.PagePlatform.IOS, ft.PagePlatform.ANDROID]
     )
+    if _is_touch_device:
+        page.theme = ft.Theme(
+            scrollbar_theme=ft.ScrollbarTheme(
+                track_color={ft.ControlState.DEFAULT: "transparent"},
+                thumb_color={ft.ControlState.DEFAULT: "transparent"},
+                thickness=0,
+                radius=0,
+                interactive=False,
+                thumb_visibility=False,
+                track_visibility=False
+            )
+        )
+    else:
+        page.theme = ft.Theme(
+            scrollbar_theme=ft.ScrollbarTheme(
+                track_color={ft.ControlState.DEFAULT: "transparent"},
+                thumb_color={
+                    ft.ControlState.DEFAULT: "#333333",
+                    ft.ControlState.HOVERED: "#555555"
+                },
+                thickness=6,
+                radius=3,
+                interactive=True
+            )
+        )
 
     # En modo web no se usa window_width (es ignorado en navegador)
     if not page.web:
@@ -6720,6 +6753,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         user_info["id"] = None
         user_info["nombre"] = ""
         user_info["rol"] = ""
+        page._saludo_login_emitido_definitivo = False
         
         page.floating_action_button = None
 
@@ -6727,7 +6761,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         
         # Limpiar también variables en memoria y storage del navegador
         try:
-            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
+            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); } catch(e){}")
         except Exception: pass
 
         # Restaurar estado del botón de acceso y limpiar inputs
@@ -17134,8 +17168,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 sim_dictado_en_progreso[0] = True
                 sim_stop_requested[0] = False
 
-                play_sim_beep("start")
-
                 try:
                     if modo == "chat":
                         btn_mic_sim_container.bgcolor = "#FF0000"
@@ -17157,15 +17189,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         except: pass
 
                     r_sim = sr.Recognizer()
-                    r_sim.pause_threshold = 2.2
-                    r_sim.non_speaking_duration = 1.8
-                    r_sim.dynamic_energy_threshold = True
+                    r_sim.pause_threshold = 1.3
+                    r_sim.non_speaking_duration = 0.8
+                    r_sim.dynamic_energy_threshold = False
+                    r_sim.energy_threshold = 1800
 
                     with sr.Microphone() as source:
-                        r_sim.adjust_for_ambient_noise(source, duration=0.3)
+                        play_sim_beep("start")
                         if sim_stop_requested[0]:
                             raise Exception("Cancelado por usuario")
-                        audio = r_sim.listen(source, timeout=14, phrase_time_limit=35)
+                        audio = r_sim.listen(source, timeout=6, phrase_time_limit=30)
 
                     if sim_stop_requested[0]:
                         raise Exception("Cancelado por usuario")
@@ -23311,6 +23344,9 @@ Ejemplo:
                 activar_mic_simulador_js(page, True, "chat")
             else:
                 ejecutar_js_flet(page, f"window._luxoActiveView = '{vista}';")
+            for uid_k, sess in list(active_sessions.items()):
+                if sess.get("page") == page:
+                    sess["active_view"] = str(vista)
             if str(vista) not in ["capacitacion_ia", "simulador"]:
                 for uid_k, sess in list(active_sessions.items()):
                     if sess.get("page") == page:
@@ -23478,7 +23514,9 @@ Ejemplo:
                         elif vista == "weekly":
                             main_views_cache["weekly"] = build_weekly_view()
                         elif vista == "enfoque_diario":
+                            import importlib
                             import enfoque_diario
+                            importlib.reload(enfoque_diario)
                             main_views_cache["enfoque_diario"] = enfoque_diario.build_enfoque_diario_view(page, user_info)
                         elif vista == "enfoque_semanal":
                             import importlib
@@ -24567,6 +24605,15 @@ Ejemplo:
         cambiar_vista(initial_view_to_load)
         page.update()
 
+        def _prewarm_views_bg():
+            try:
+                import enfoque_diario
+                if "enfoque_diario" not in main_views_cache:
+                    main_views_cache["enfoque_diario"] = enfoque_diario.build_enfoque_diario_view(page, user_info)
+            except Exception:
+                pass
+        threading.Thread(target=_prewarm_views_bg, daemon=True).start()
+
     def obtener_avatar_usuario(id_usuario):
         if not id_usuario:
             return None
@@ -24861,12 +24908,9 @@ Ejemplo:
 
     def reproducir_saludo_login(nombre_completo, voice_id=None):
         try:
-            import time
-            now_saludo = time.time()
-            if hasattr(page, "_last_saludo_time") and (now_saludo - page._last_saludo_time < 8.0):
-                print(f"Notice: Saludo de login ya emitido recientemente (<8s), omitiendo duplicado.")
+            if getattr(page, "_saludo_login_emitido_definitivo", False):
                 return
-            page._last_saludo_time = now_saludo
+            page._saludo_login_emitido_definitivo = True
 
             nombre_u = (nombre_completo or "").strip()
             usuario_u = (user_info.get("usuario") or "").strip()
@@ -25044,7 +25088,7 @@ Ejemplo:
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     page.user_id = str(res["ID_Usuario"])
                     u_clean_login = str(res.get("Usuario") or "").lower().strip()
-                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
+                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
                     # Obtener voz preferida guardada del usuario en base de datos
                     voz_usuario_db = None
                     try:
@@ -25229,22 +25273,36 @@ Ejemplo:
         try:
             if audio_is_muted[0]:
                 return
-            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
         except Exception as ex_nat:
             print("Notice reproducir audio avatar nativo:", ex_nat)
 
     def detener_audio_avatar_nativo():
         try:
-            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); } let audios = document.querySelectorAll('audio'); audios.forEach(function(a){ if(a.id === 'luxo_avatar_audio_el' || (a.src && a.src.includes('saludo_login'))){ try{ a.pause(); a.currentTime = 0; a.muted = true; a.src = ''; }catch(e){} } });")
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); }")
         except Exception as ex_stop:
             print("Notice detener audio avatar nativo:", ex_stop)
 
     def toggle_audio(e=None):
         nonlocal login_video_player, btn_audio
+        if not has_interacted_audio[0]:
+            has_interacted_audio[0] = True
+            audio_is_muted[0] = False
+            reproducir_audio_avatar_nativo()
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
+            if btn_audio:
+                try:
+                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                    btn_audio.tooltip = "Silenciar Audio del Avatar"
+                    btn_audio.update()
+                except Exception: pass
+            return
+
         has_interacted_audio[0] = True
         audio_is_muted[0] = not audio_is_muted[0]
         if audio_is_muted[0]:
             detener_audio_avatar_nativo()
+            ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = true; if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); }")
             if btn_audio:
                 try:
                     btn_audio.content = ft.Text("🔇", size=11, color="#888899", text_align="center")
@@ -25253,6 +25311,7 @@ Ejemplo:
                 except Exception: pass
         else:
             reproducir_audio_avatar_nativo()
+            ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
             if btn_audio:
                 try:
                     btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
@@ -25261,9 +25320,11 @@ Ejemplo:
                 except Exception: pass
 
     def unmute_on_first_interaction(e=None):
-        if not has_interacted_audio[0] and not audio_is_muted[0]:
+        if not has_interacted_audio[0]:
             has_interacted_audio[0] = True
+            audio_is_muted[0] = False
             reproducir_audio_avatar_nativo()
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
             if btn_audio:
                 try:
                     btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
@@ -25274,7 +25335,7 @@ Ejemplo:
     def desmutear_avatar_logout():
         has_interacted_audio[0] = True
         audio_is_muted[0] = False
-        ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
+        ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
         if btn_audio:
             try:
                 btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
@@ -25621,7 +25682,7 @@ Ejemplo:
                             page.shared_preferences.get("last_active_view"),
                             return_exceptions=True
                         ),
-                        timeout=3.5
+                        timeout=6.0
                     )
                     uid_saved = pref_results[0] if (len(pref_results) > 0 and not isinstance(pref_results[0], Exception)) else None
                     last_act_str = pref_results[1] if (len(pref_results) > 1 and not isinstance(pref_results[1], Exception)) else None
@@ -25629,6 +25690,7 @@ Ejemplo:
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
+            es_login_biometrico_nuevo = False
             if not uid_saved and hasattr(page, "route") and page.route:
                 try:
                     import urllib.parse
@@ -25639,6 +25701,7 @@ Ejemplo:
                         if cand_uid:
                             uid_saved = cand_uid
                             last_view_saved = "chat"
+                            es_login_biometrico_nuevo = True
                             print(f"✨ [BIOMETRIA AUTO-LOGIN] Ingresando por UID verificado: {uid_saved}")
                     elif "auto_user" in query_params:
                         auto_u = query_params["auto_user"][0].strip().lower()
@@ -25651,6 +25714,7 @@ Ejemplo:
                             if row_u:
                                 uid_saved = str(row_u["ID_Usuario"])
                                 last_view_saved = "chat"
+                                es_login_biometrico_nuevo = True
                                 print(f"✨ [BIOMETRIA AUTO-LOGIN] Ingresando usuario verificado: {auto_u} (ID: {uid_saved})")
                     if uid_saved and hasattr(page, "shared_preferences") and page.shared_preferences:
                         try:
@@ -25683,7 +25747,7 @@ Ejemplo:
                         try:
                             await page.shared_preferences.remove("logged_user_id")
                             await page.shared_preferences.remove("last_activity_timestamp")
-                            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
+                            ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
                         except Exception: pass
                         uid_saved = None
                         print("Sesión expirada automáticamente por inactividad (>3h)")
@@ -25732,7 +25796,7 @@ Ejemplo:
                         page._luxo_token = sess_token
                         u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
                         page.username = u_clean_login
-                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); }} catch(e){{}}")
+                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,
@@ -25773,7 +25837,8 @@ Ejemplo:
                         user_info["voz_preferida"] = voz_efectiva
 
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
-                        reproducir_saludo_login(user_data["Nombre_Completo"], voice_id=voz_efectiva)
+                        if es_login_biometrico_nuevo:
+                            reproducir_saludo_login(user_data["Nombre_Completo"], voice_id=voz_efectiva)
                         cargar_chat(initial_view=last_view_saved)
                         return # Termina sin mostrar login
         except Exception as ex_r:
@@ -25786,7 +25851,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
-        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
+        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); } catch(e){}")
         reproducir_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)

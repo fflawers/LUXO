@@ -196,8 +196,8 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
     if not os.path.exists(file_sap_path):
         raise FileNotFoundError(f"No se encontró el archivo de SAP: {file_sap_path}")
 
-    # 1. Leer Escaneo Físico (Soporte Multi-Formato Inteligente)
-    wb_esc = openpyxl.load_workbook(file_escaneo_path, data_only=True)
+    # 1. Leer Escaneo Físico (Soporte Multi-Formato Inteligente y de Alta Velocidad)
+    wb_esc = openpyxl.load_workbook(file_escaneo_path, read_only=True, data_only=True)
     
     # Búsqueda de hoja 'Scan' si existe (para el formato especial Solara/Multi-hoja), de lo contrario usa la activa
     sheet_esc = wb_esc.active
@@ -207,6 +207,10 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
             break
             
     rows_esc = list(sheet_esc.iter_rows(values_only=True))
+    try:
+        wb_esc.close()
+    except Exception:
+        pass
     
     col_upc_esc = 0  # Col A por defecto
     col_pzs_esc = 1  # Col B por defecto
@@ -256,11 +260,16 @@ def procesar_conciliacion_ciclico(file_escaneo_path, file_sap_path):
         if upc_clean not in info_escaneo_extra:
             info_escaneo_extra[upc_clean] = {"art": art_val, "marca": marca_val}
 
-    # 2. Leer Inventario SAP (StockSummary_Details)
-    wb_sap = openpyxl.load_workbook(file_sap_path, data_only=True)
+    # 2. Leer Inventario SAP (StockSummary_Details - Modo Streaming Rápido)
+    wb_sap = openpyxl.load_workbook(file_sap_path, read_only=True, data_only=True)
     sheet_sap = wb_sap.active
     
     rows_sap = list(sheet_sap.iter_rows(values_only=True))
+    try:
+        wb_sap.close()
+    except Exception:
+        pass
+
     if not rows_sap:
         raise ValueError("El archivo de SAP está vacío.")
 
