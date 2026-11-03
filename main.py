@@ -23724,6 +23724,39 @@ Ejemplo:
             height=45
         )
 
+        def _save_pref_zona_region(uid, z_id, r_id):
+            if not uid:
+                return
+            z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
+            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+            z_norm = name_map.get(z_clean.upper(), z_clean)
+            r_clean = str(r_id).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
+            
+            user_session["zona_activa_id"] = z_norm
+            user_session["region_activa_id"] = r_clean
+            
+            try:
+                if hasattr(page, "shared_preferences") and page.shared_preferences:
+                    page.run_task(page.shared_preferences.set, "luxo_saved_zona", str(z_norm))
+                    page.run_task(page.shared_preferences.set, "luxo_saved_region", str(r_clean))
+                ejecutar_js_flet(page, f"try {{ localStorage.setItem('luxo_saved_zona', '{z_norm}'); localStorage.setItem('luxo_saved_region', '{r_clean}'); }} catch(e){{}}")
+            except Exception as ex_sp:
+                print("Notice save storage zona/region:", ex_sp)
+            
+            def _save():
+                try:
+                    db_p = conectar_db()
+                    if db_p:
+                        cur_p = db_p.cursor()
+                        cur_p.execute("UPDATE usuarios SET Zona = %s, Region = %s WHERE ID_Usuario = %s", (z_norm, r_clean, uid))
+                        db_p.commit()
+                        db_p.close()
+                        print(f"💾 Preferencias de Zona={z_norm} y Región={r_clean} guardadas permanentemente en BD para usuario ID={uid}")
+                except Exception as ex_p:
+                    print("Notice save zona/region DB:", ex_p)
+            import threading
+            threading.Thread(target=_save, daemon=True).start()
+
         def on_global_master_refresh_click(e):
             curr_v = active_view[0] if active_view else "chat"
             curr_lang = (lang_dropdown.value if 'lang_dropdown' in locals() and lang_dropdown and lang_dropdown.value else selected_lang[0]) or "es"
@@ -23741,6 +23774,7 @@ Ejemplo:
                 try:
                     actualizar_top_appbar_layout()
                 except Exception: pass
+                _save_pref_zona_region(user_info.get("id"), z_val, r_val)
 
             if es_admin():
                 try:
@@ -24373,31 +24407,6 @@ Ejemplo:
             opts = get_region_options_for_zona(z_key)
             valid_keys = [o.key for o in opts]
             val = r_key if r_key in valid_keys else "0"
-            def _save_pref_zona_region(uid, z_id, r_id):
-                if not uid:
-                    return
-                z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
-                name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
-                z_norm = name_map.get(z_clean.upper(), z_clean)
-                r_clean = str(r_id).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
-                
-                # Actualizar el diccionario de sesión actual inmediatamente
-                user_session["zona_activa_id"] = z_norm
-                user_session["region_activa_id"] = r_clean
-                
-                def _save():
-                    try:
-                        db_p = conectar_db()
-                        if db_p:
-                            cur_p = db_p.cursor()
-                            cur_p.execute("UPDATE usuarios SET Zona = %s, Region = %s WHERE ID_Usuario = %s", (z_norm, r_clean, uid))
-                            db_p.commit()
-                            db_p.close()
-                            print(f"💾 Preferencias de Zona={z_norm} y Región={r_clean} guardadas permanentemente en BD para usuario ID={uid}")
-                    except Exception as ex_p:
-                        print("Notice save zona/region DB:", ex_p)
-                import threading
-                threading.Thread(target=_save, daemon=True).start()
 
             def on_r_change(e):
                 r_val = e.control.value if (e and getattr(e, "control", None) and e.control.value is not None) else (dd.value or "0")
@@ -25125,6 +25134,12 @@ Ejemplo:
                     if res.get("Region"):
                         r_clean = str(res["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
                         user_session["region_activa_id"] = r_clean
+                    try:
+                        if hasattr(page, "shared_preferences") and page.shared_preferences:
+                            page.run_task(page.shared_preferences.set, "luxo_saved_zona", str(user_session.get("zona_activa_id", "1")))
+                            page.run_task(page.shared_preferences.set, "luxo_saved_region", str(user_session.get("region_activa_id", "0")))
+                        ejecutar_js_flet(page, f"try {{ localStorage.setItem('luxo_saved_zona', '{user_session.get('zona_activa_id', '1')}'); localStorage.setItem('luxo_saved_region', '{user_session.get('region_activa_id', '0')}'); }} catch(e){{}}")
+                    except Exception: pass
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     page.user_id = str(res["ID_Usuario"])
                     u_clean_login = str(res.get("Usuario") or "").lower().strip()
@@ -25720,6 +25735,8 @@ Ejemplo:
                             page.shared_preferences.get("logged_user_id"),
                             page.shared_preferences.get("last_activity_timestamp"),
                             page.shared_preferences.get("last_active_view"),
+                            page.shared_preferences.get("luxo_saved_zona"),
+                            page.shared_preferences.get("luxo_saved_region"),
                             return_exceptions=True
                         ),
                         timeout=6.0
@@ -25727,6 +25744,8 @@ Ejemplo:
                     uid_saved = pref_results[0] if (len(pref_results) > 0 and not isinstance(pref_results[0], Exception)) else None
                     last_act_str = pref_results[1] if (len(pref_results) > 1 and not isinstance(pref_results[1], Exception)) else None
                     last_view_saved = pref_results[2] if (len(pref_results) > 2 and not isinstance(pref_results[2], Exception)) else None
+                    saved_zona_pref = pref_results[3] if (len(pref_results) > 3 and not isinstance(pref_results[3], Exception)) else None
+                    saved_region_pref = pref_results[4] if (len(pref_results) > 4 and not isinstance(pref_results[4], Exception)) else None
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
@@ -25822,11 +25841,18 @@ Ejemplo:
                         user_info["rol"] = user_data["Rol"]
                         user_info["tienda"] = user_data.get("Tienda") or ""
                         user_info["zona"] = user_data.get("Zona") or "Zona Centro"
-                        if user_data.get("Zona"):
+                        if saved_zona_pref and str(saved_zona_pref).strip():
+                            z_cand = str(saved_zona_pref).strip()
+                            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                            user_session["zona_activa_id"] = name_map.get(z_cand.upper(), z_cand)
+                        elif user_data.get("Zona"):
                             z_clean = str(user_data["Zona"]).replace("📍", "").replace("Zona:", "").strip()
                             name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
                             user_session["zona_activa_id"] = name_map.get(z_clean.upper(), z_clean)
-                        if user_data.get("Region"):
+
+                        if saved_region_pref and str(saved_region_pref).strip():
+                            user_session["region_activa_id"] = str(saved_region_pref).strip()
+                        elif user_data.get("Region"):
                             r_clean = str(user_data["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
                             user_session["region_activa_id"] = r_clean
                         user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
