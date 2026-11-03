@@ -21723,15 +21723,43 @@ Ejemplo:
 
                 tot_vly_label.value = f"${tot_vly:,.0f}"
 
+                # Regla de Piso de Protección (10%) para días con VLY <= 0 (cero o negativos)
+                dias_anomalos = [d for d in dias_semana if vly_vals[d] <= 0]
+                dias_positivos = [d for d in dias_semana if vly_vals[d] > 0]
+
+                pcts_por_dia = {}
+                if not dias_anomalos:
+                    # Todos los días son positivos: cálculo natural tradicional
+                    for d in dias_semana:
+                        pcts_por_dia[d] = (vly_vals[d] / tot_vly * 100.0) if tot_vly > 0 else (100.0 / 7.0)
+                elif not dias_positivos:
+                    # Todos los días son 0 o negativos: repartición equitativa
+                    for d in dias_semana:
+                        pcts_por_dia[d] = 100.0 / 7.0
+                else:
+                    # Días con VLY <= 0 reciben piso protector de 10% cada uno
+                    piso_unitario = 10.0
+                    if (len(dias_anomalos) * piso_unitario) >= 100.0:
+                        piso_unitario = 100.0 / float(len(dias_semana))
+                    total_piso = piso_unitario * len(dias_anomalos)
+                    pct_para_positivos = max(0.0, 100.0 - total_piso)
+                    tot_vly_pos = sum(vly_vals[d] for d in dias_positivos)
+
+                    for d in dias_anomalos:
+                        pcts_por_dia[d] = piso_unitario
+                    for d in dias_positivos:
+                        pcts_por_dia[d] = (vly_vals[d] / tot_vly_pos * pct_para_positivos) if tot_vly_pos > 0 else (pct_para_positivos / float(len(dias_positivos)))
+
                 acum_ly = 0.0
                 acum_meta = 0.0
 
                 for d in dias_semana:
                     vly_d = vly_vals[d]
-                    pct_d = (vly_d / tot_vly * 100.0) if tot_vly > 0 else (100.0 / 7.0)
+                    pct_d = pcts_por_dia.get(d, 0.0)
                     meta_d = (meta_total * pct_d / 100.0)
 
-                    acum_ly += vly_d
+                    # Acumulado LY: si un día fue negativo, acumula al menos 0 para no arrastrar déficit en LY
+                    acum_ly += max(0.0, vly_d)
                     acum_meta += meta_d
 
                     pct_labels[d].value = f"{pct_d:.1f}%"
