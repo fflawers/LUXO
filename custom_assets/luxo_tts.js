@@ -101,7 +101,12 @@
 
     window._checkLuxoHasActiveSession = function() {
         try {
-            let sActive = sessionStorage.getItem('luxo_session_active');
+            if (window.luxoUserIsLoggedIn === true) return true;
+            let uId = localStorage.getItem('logged_user_id');
+            if (uId && uId !== 'null' && uId !== 'undefined' && uId !== '') {
+                return true;
+            }
+            let sActive = localStorage.getItem('luxo_session_active') || sessionStorage.getItem('luxo_session_active');
             if (sActive === '1' || sActive === 'true') {
                 return true;
             }

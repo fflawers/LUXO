@@ -7013,7 +7013,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     def cargar_chat(initial_view=None, desde_login=False):
         try:
             detener_audio_avatar_nativo()
-            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio();")
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; window._luxoAvatarAudioMuted = true; window._saludoAvatarReproducido = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); if (window.luxoRemoverListenersUnmute) window.luxoRemoverListenersUnmute();")
         except Exception: pass
         page.clean()
         page.add(

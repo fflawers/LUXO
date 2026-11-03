@@ -659,8 +659,28 @@
 <audio id="luxo_avatar_audio_el" src="/custom_assets/saludo_login.mp3" preload="auto" playsinline></audio>
 <script>
   (function() {
+    function hasActiveSession() {
+      try {
+        if (window.luxoUserIsLoggedIn === true) return true;
+        var uId = localStorage.getItem('logged_user_id');
+        if (uId && uId !== 'null' && uId !== 'undefined' && uId !== '') return true;
+        var sActive = localStorage.getItem('luxo_session_active') || sessionStorage.getItem('luxo_session_active');
+        if (sActive === '1' || sActive === 'true') return true;
+      } catch(e) {}
+      return false;
+    }
+
     function unlockAvatarAudio(e) {
-      if (window.luxoUserIsLoggedIn === true) return;
+      if (hasActiveSession()) {
+        ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
+          document.removeEventListener(ev, unlockAvatarAudio, true);
+        });
+        var sndActive = document.getElementById('luxo_avatar_audio_el');
+        if (sndActive) {
+          try { sndActive.pause(); sndActive.currentTime = 0; } catch(err){}
+        }
+        return;
+      }
       var snd = document.getElementById('luxo_avatar_audio_el');
       if (!snd) return;
       var target = e ? e.target : null;
@@ -688,9 +708,14 @@
         }
       }
     }
-    ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
-      document.addEventListener(ev, unlockAvatarAudio, true);
-    });
+
+    if (hasActiveSession()) {
+      window.luxoUserIsLoggedIn = true;
+    } else {
+      ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
+        document.addEventListener(ev, unlockAvatarAudio, true);
+      });
+    }
   })();
 </script>
 <script src="/custom_assets/luxo_tts.js?v=20261024_v65"></script>
