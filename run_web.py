@@ -76,8 +76,8 @@ if __name__ == "__main__":
         app, 
         host="0.0.0.0", 
         port=puerto, 
-        ws_ping_interval=None, 
-        ws_ping_timeout=None, 
+        ws_ping_interval=20, 
+        ws_ping_timeout=20, 
         timeout_keep_alive=300, 
         **ssl_args
     )
