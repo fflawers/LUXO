@@ -7013,7 +7013,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     def cargar_chat(initial_view=None, desde_login=False):
         try:
             detener_audio_avatar_nativo()
-            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; window._luxoAvatarAudioMuted = true; window._saludoAvatarReproducido = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); if (window.luxoRemoverListenersUnmute) window.luxoRemoverListenersUnmute(); try { document.querySelectorAll('#luxo_avatar_audio_el, audio[src*=\"saludo_login\"]').forEach(function(el){ el.pause(); el.currentTime = 0; el.remove(); }); } catch(e){}")
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; window._luxoAvatarAudioMuted = true; window._saludoAvatarReproducido = true; try { sessionStorage.setItem('luxo_session_active', 'true'); } catch(e){} if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); if (window.luxoRemoverListenersUnmute) window.luxoRemoverListenersUnmute(); try { document.querySelectorAll('#luxo_avatar_audio_el, audio[src*=\"saludo_login\"]').forEach(function(el){ el.pause(); el.currentTime = 0; }); } catch(e){}")
         except Exception: pass
         page.clean()
         page.add(

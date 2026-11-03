@@ -102,28 +102,7 @@
     window._checkLuxoHasActiveSession = function() {
         try {
             if (window.luxoUserIsLoggedIn === true) return true;
-            if (typeof window.getLuxoUserId === 'function') {
-                let gId = window.getLuxoUserId();
-                if (gId && !['unknown', '', 'null', 'undefined'].includes(String(gId).toLowerCase())) {
-                    return true;
-                }
-            }
-            if (window.luxoUserId && !['unknown', '', 'null', 'undefined'].includes(String(window.luxoUserId).toLowerCase())) {
-                return true;
-            }
-            for (let i = 0; i < localStorage.length; i++) {
-                let k = localStorage.key(i);
-                if (k && (k.includes('logged_user_id') || k === 'luxo_user_id')) {
-                    let val = localStorage.getItem(k);
-                    if (val) {
-                        try { val = JSON.parse(val); } catch(e) { val = String(val).replace(/["']/g, ''); }
-                        if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
-                            return true;
-                        }
-                    }
-                }
-            }
-            let sActive = localStorage.getItem('luxo_session_active') || sessionStorage.getItem('luxo_session_active');
+            let sActive = sessionStorage.getItem('luxo_session_active');
             if (sActive === '1' || sActive === 'true') {
                 return true;
             }
@@ -256,7 +235,6 @@
                 try {
                     directEl.pause();
                     directEl.currentTime = 0;
-                    directEl.remove();
                 } catch(e){}
             }
             let audios = document.querySelectorAll('audio');
@@ -265,7 +243,6 @@
                     try {
                         snd.pause();
                         snd.currentTime = 0;
-                        snd.remove();
                     } catch(e){}
                 }
             });
