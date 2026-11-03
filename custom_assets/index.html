@@ -707,6 +707,16 @@
       document.addEventListener(ev, checkInteraction, true);
     });
   })();
+
+  // Prevención de salto de Tab fuera de la cuadrícula en hojas de captura (Excel)
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Tab') {
+      var act = document.activeElement;
+      if (act && (act.tagName === 'INPUT' || act.tagName === 'TEXTAREA')) {
+        e.preventDefault();
+      }
+    }
+  }, false);
 </script>
 <script src="/custom_assets/luxo_tts.js?v=20261103_v69"></script>
 </body>
