@@ -25684,7 +25684,6 @@ Ejemplo:
         content=login_card,
         alignment=ft.alignment.Alignment(0, 0),
         expand=True,
-        on_click=unmute_on_first_interaction,
         gradient=ft.LinearGradient(
             colors=["#021622", "#05070D", "#220228"],
             begin=ft.alignment.Alignment(-1, -0.2),
