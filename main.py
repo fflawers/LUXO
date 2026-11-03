@@ -2364,17 +2364,17 @@ def configurar_rutas_fastapi(app):
                         } else {
                             const bgDuration = Date.now() - lastHiddenTime;
                             console.log("📱 Pestaña/Pantalla reactivada tras:", bgDuration, "ms");
-                            // Auto-recuperación si estuvo en segundo plano más de 6 segundos
-                            if (lastHiddenTime > 0 && bgDuration > 6000) {
+                            // En salidas cotidianas a WhatsApp (< 45s), mantener la pantalla viva sin reiniciar
+                            if (lastHiddenTime > 0 && bgDuration > 45000) {
                                 setTimeout(function() {
                                     try {
-                                        // Si el WebSocket fue cerrado por el teléfono en segundo plano
+                                        // Solo si el socket fue destruido tras ausencia prolongada (> 45s)
                                         if (window._fletWebSocket && (window._fletWebSocket.readyState === 2 || window._fletWebSocket.readyState === 3)) {
-                                            console.warn("🔄 Reconectando sesión activa tras segundo plano...");
+                                            console.warn("🔄 Reconectando sesión limpia tras ausencia prolongada...");
                                             window.location.reload();
                                         }
                                     } catch(e) {}
-                                }, 300);
+                                }, 500);
                             }
                         }
                     });
