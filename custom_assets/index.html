@@ -662,8 +662,23 @@
     function hasActiveSession() {
       try {
         if (window.luxoUserIsLoggedIn === true) return true;
-        var uId = localStorage.getItem('logged_user_id');
-        if (uId && uId !== 'null' && uId !== 'undefined' && uId !== '') return true;
+        if (window.luxoUserId && !['unknown', '', 'null', 'undefined'].includes(String(window.luxoUserId).toLowerCase())) return true;
+        if (typeof window.getLuxoUserId === 'function') {
+          var gId = window.getLuxoUserId();
+          if (gId && !['unknown', '', 'null', 'undefined'].includes(String(gId).toLowerCase())) return true;
+        }
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && (k.includes('logged_user_id') || k === 'luxo_user_id')) {
+            var val = localStorage.getItem(k);
+            if (val) {
+              try { val = JSON.parse(val); } catch(e) { val = String(val).replace(/["']/g, ''); }
+              if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
+                return true;
+              }
+            }
+          }
+        }
         var sActive = localStorage.getItem('luxo_session_active') || sessionStorage.getItem('luxo_session_active');
         if (sActive === '1' || sActive === 'true') return true;
       } catch(e) {}
@@ -677,7 +692,7 @@
         });
         var sndActive = document.getElementById('luxo_avatar_audio_el');
         if (sndActive) {
-          try { sndActive.pause(); sndActive.currentTime = 0; } catch(err){}
+          try { sndActive.pause(); sndActive.currentTime = 0; sndActive.remove(); } catch(err){}
         }
         return;
       }
@@ -711,6 +726,10 @@
 
     if (hasActiveSession()) {
       window.luxoUserIsLoggedIn = true;
+      var el = document.getElementById('luxo_avatar_audio_el');
+      if (el) {
+        try { el.pause(); el.currentTime = 0; el.remove(); } catch(e){}
+      }
     } else {
       ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
         document.addEventListener(ev, unlockAvatarAudio, true);
@@ -718,7 +737,7 @@
     }
   })();
 </script>
-<script src="/custom_assets/luxo_tts.js?v=20261024_v65"></script>
+<script src="/custom_assets/luxo_tts.js?v=20261103_v67"></script>
 </body>
 </html>
 
