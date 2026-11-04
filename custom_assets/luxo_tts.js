@@ -124,10 +124,34 @@
     window.luxoRemoverListenersUnmute = function() {};
     window.luxoAgregarListenersUnmute = function() {};
 
+    function _checkLuxoSessionActiva() {
+        try {
+            if (window.luxoUserIsLoggedIn === true) return true;
+            if (sessionStorage.getItem('luxo_session_active') === 'true') return true;
+            if (localStorage.getItem('luxo_session_active') === 'true') return true;
+            for (let i = 0; i < localStorage.length; i++) {
+                let k = localStorage.key(i);
+                if (k && (k.includes('logged_user_id') || k.includes('logged_username'))) {
+                    let v = localStorage.getItem(k);
+                    if (v && !['unknown', '', 'null', 'undefined'].includes(String(v).toLowerCase())) {
+                        return true;
+                    }
+                }
+            }
+        } catch(e){}
+        return false;
+    }
+
     window.luxoPlayLoginAvatarAudio = function(force) {
-        if (window.luxoUserIsLoggedIn === true && force !== true) {
+        if (_checkLuxoSessionActiva() && force !== true) {
+            window.luxoUserIsLoggedIn = true;
+            window._saludoAvatarReproducido = true;
             window.luxoStopLoginAvatarAudio();
             return;
+        }
+
+        if (window._saludoAvatarReproducido === true && force !== true) {
+            return; // Ya se reprodujo una vez, silencio garantizado
         }
 
         try {
@@ -155,12 +179,14 @@
             }
             snd.onended = function() {
                 window._luxoAvatarAudioActive = false;
+                window._saludoAvatarReproducido = true;
             };
 
             let p = snd.play();
             if (p !== undefined) {
                 p.then(function() {
                     window._luxoAvatarAudioActive = true;
+                    window._saludoAvatarReproducido = true;
                     console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente en inicio de sesión.');
                 }).catch(function(err) {
                     console.log('[LUXO AVATAR] Esperando primer toque del usuario:', err);
@@ -168,15 +194,13 @@
                         window.removeEventListener('pointerdown', _playOnFirstUserTouch, { capture: true });
                         window.removeEventListener('click', _playOnFirstUserTouch, { capture: true });
                         window.removeEventListener('touchstart', _playOnFirstUserTouch, { capture: true });
-                        let isLoggedNow = (window.luxoUserIsLoggedIn === true) ||
-                                          (sessionStorage.getItem('luxo_session_active') === 'true') ||
-                                          (localStorage.getItem('luxo_session_active') === 'true');
-                        if (!isLoggedNow) {
+                        if (!_checkLuxoSessionActiva() && window._saludoAvatarReproducido !== true) {
                             try {
                                 snd.muted = false;
                                 snd.volume = 1.0;
                                 snd.play().then(function() {
                                     window._luxoAvatarAudioActive = true;
+                                    window._saludoAvatarReproducido = true;
                                     console.log('[LUXO AVATAR] Audio activado al primer toque.');
                                 }).catch(function(){});
                             } catch(e){}
@@ -194,12 +218,15 @@
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
+        window._saludoAvatarReproducido = true;
         try {
             let directEl = document.getElementById('luxo_avatar_audio_el');
             if (directEl) {
                 try {
                     directEl.pause();
                     directEl.currentTime = 0;
+                    directEl.src = '';
+                    directEl.remove();
                 } catch(e){}
             }
             let audios = document.querySelectorAll('audio');
@@ -208,6 +235,8 @@
                     try {
                         snd.pause();
                         snd.currentTime = 0;
+                        snd.src = '';
+                        snd.remove();
                     } catch(e){}
                 }
             });
@@ -217,11 +246,10 @@
     // Auto-reproducción segura en pantalla de login si no hay sesión activa
     function _iniciarAudioAvatarLoginSiAplica() {
         try {
-            let hasSession = (window.luxoUserIsLoggedIn === true) ||
-                             (sessionStorage.getItem('luxo_session_active') === 'true') ||
-                             (localStorage.getItem('luxo_session_active') === 'true') ||
-                             (localStorage.getItem('logged_user_id') !== null && localStorage.getItem('logged_user_id') !== '');
-            if (hasSession) {
+            if (_checkLuxoSessionActiva() || window._saludoAvatarReproducido === true) {
+                window.luxoUserIsLoggedIn = true;
+                window._saludoAvatarReproducido = true;
+                window.luxoStopLoginAvatarAudio();
                 return; // En Enfoque Diario o sesión activa: silencio total
             }
             if (typeof window.luxoPlayLoginAvatarAudio === 'function') {
@@ -255,6 +283,7 @@
             // 1. Acceder (corta el audio del avatar inmediatamente al enviar)
             if (_esAccionBoton(t, 'acceder')) {
                 window.luxoUserIsLoggedIn = true;
+                window._saludoAvatarReproducido = true;
                 try {
                     localStorage.setItem('luxo_session_active', 'true');
                     sessionStorage.setItem('luxo_session_active', 'true');
@@ -270,13 +299,6 @@
             if (txtBtn === '🔊' || txtBtn === '🔇') {
                 if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
                     window.luxoToggleLoginAvatarAudio();
-                }
-            }
-
-            // 1.2 Clic en campo de usuario de la pantalla de login
-            if (!window.luxoUserIsLoggedIn && !window._saludoAvatarReproducido && (t.tagName === 'INPUT' || (t.getAttribute && (t.getAttribute('placeholder') || '').toLowerCase().includes('admin')))) {
-                if (typeof window.luxoPlayLoginAvatarAudio === 'function') {
-                    window.luxoPlayLoginAvatarAudio(true);
                 }
             }
 
