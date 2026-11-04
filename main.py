@@ -23686,6 +23686,7 @@ Ejemplo:
             text_size=12,
             label_style=ft.TextStyle(color="#aaaaaa", size=11),
             focused_border_color="#00FFFF",
+            can_request_focus=False
         )
         
         def enviar_sugerencia_click(e):

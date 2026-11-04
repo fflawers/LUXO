@@ -3081,6 +3081,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
     page.on_keyboard_event = on_page_keyboard
 
+    try:
+        async def _set_enfoque_js():
+            try: await page.launch_url("javascript:window._luxoActiveView='enfoque_diario';window._luxoEnfoqueActive=true;void(0);")
+            except: pass
+        if hasattr(page, "run_task"):
+            page.run_task(_set_enfoque_js)
+    except Exception: pass
+
     def generar_pdf_enfoque(target_day=None):
         if not REPORTLAB_AVAILABLE:
             snack = ft.SnackBar(ft.Text("❌ La librería ReportLab no está instalada para generar PDF.", color="white"), bgcolor="red")
@@ -3645,6 +3653,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             def on_cell_focus(e):
                 current_focused_cell[0] = e.control.data
                 is_edit_mode[0] = False
+                try:
+                    c_id = str(e.control.data or "")
+                    async def _mark_cell():
+                        try: await page.launch_url(f"javascript:window._luxoEnfoqueActive=true;window._luxoActiveCell='{c_id}';void(0);")
+                        except: pass
+                    if hasattr(page, "run_task"):
+                        page.run_task(_mark_cell)
+                except Exception: pass
 
             def on_cell_submit(e):
                 navigate(e.control.data, direction="next")
