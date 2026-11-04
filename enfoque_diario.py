@@ -45,6 +45,8 @@ def despachar_navegacion_enfoque(direction="next", session_id="", user_id=""):
             cand = ACTIVE_ENFOQUE_NAVIGATORS[session_id]
         elif "latest" in ACTIVE_ENFOQUE_NAVIGATORS:
             cand = ACTIVE_ENFOQUE_NAVIGATORS["latest"]
+        elif ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = list(ACTIVE_ENFOQUE_NAVIGATORS.values())[-1]
         if cand:
             cand(direction)
     except Exception as ex:
@@ -3313,11 +3315,23 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 current_focused_cell[0] = target_id
                 is_edit_mode[0] = False
                 try:
-                    target_tf.focus()
-                    target_tf.update()
+                    if hasattr(page, "run_task"):
+                        page.run_task(target_tf.focus)
+                    else:
+                        target_tf.focus()
                 except Exception:
-                    try: page.update()
-                    except Exception: pass
+                    try:
+                        import asyncio
+                        asyncio.run_coroutine_threadsafe(target_tf.focus(), page.session.connection.loop)
+                    except Exception:
+                        try: target_tf.focus()
+                        except Exception: pass
+                try:
+                    target_tf.update()
+                except Exception: pass
+                try:
+                    page.update()
+                except Exception: pass
 
         def sheet_keyboard_handler(e: ft.KeyboardEvent):
             curr = current_focused_cell[0]
@@ -3633,7 +3647,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 is_edit_mode[0] = False
 
             def on_cell_submit(e):
-                navigate(e.control.data, direction="down")
+                navigate(e.control.data, direction="next")
 
             tf_obj = ft.TextField(
                 value=val_formatted,

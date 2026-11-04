@@ -708,22 +708,8 @@
     });
   })();
 
-  // Bloqueo absoluto de Tab hacia el menú y salto continuo entre celdas editables
-  window.addEventListener('keydown', function(e) {
-    if (e.key === 'Tab') {
-      var isLogin = (!window.luxoUserIsLoggedIn && sessionStorage.getItem('luxo_session_active') !== 'true');
-      if (!isLogin) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        var dir = e.shiftKey ? 'prev' : 'next';
-        var sid = window.luxoSessionId || '';
-        var uid = (typeof window.getLuxoUserId === 'function') ? window.getLuxoUserId() : (window.luxoUserId || '');
-        fetch('/api/enfoque/nav?direction=' + dir + '&session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid)).catch(function(){});
-      }
-    }
-  }, true);
 </script>
-<script src="/custom_assets/luxo_tts.js?v=20261103_v70"></script>
+<script src="/custom_assets/luxo_tts.js?v=20261103_v71"></script>
 </body>
 </html>
 
