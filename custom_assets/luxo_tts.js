@@ -165,9 +165,13 @@
                 }).catch(function(err) {
                     console.log('[LUXO AVATAR] Esperando primer toque del usuario:', err);
                     function _playOnFirstUserTouch() {
+                        window.removeEventListener('pointerdown', _playOnFirstUserTouch, { capture: true });
                         window.removeEventListener('click', _playOnFirstUserTouch, { capture: true });
                         window.removeEventListener('touchstart', _playOnFirstUserTouch, { capture: true });
-                        if (window.luxoUserIsLoggedIn !== true) {
+                        let isLoggedNow = (window.luxoUserIsLoggedIn === true) ||
+                                          (sessionStorage.getItem('luxo_session_active') === 'true') ||
+                                          (localStorage.getItem('luxo_session_active') === 'true');
+                        if (!isLoggedNow) {
                             try {
                                 snd.muted = false;
                                 snd.volume = 1.0;
@@ -178,6 +182,7 @@
                             } catch(e){}
                         }
                     }
+                    window.addEventListener('pointerdown', _playOnFirstUserTouch, { capture: true, once: true });
                     window.addEventListener('click', _playOnFirstUserTouch, { capture: true, once: true });
                     window.addEventListener('touchstart', _playOnFirstUserTouch, { capture: true, once: true });
                 });
@@ -208,6 +213,23 @@
             });
         } catch(e){}
     };
+
+    // Auto-reproducción segura en pantalla de login si no hay sesión activa
+    function _iniciarAudioAvatarLoginSiAplica() {
+        try {
+            let hasSession = (window.luxoUserIsLoggedIn === true) ||
+                             (sessionStorage.getItem('luxo_session_active') === 'true') ||
+                             (localStorage.getItem('luxo_session_active') === 'true') ||
+                             (localStorage.getItem('logged_user_id') !== null && localStorage.getItem('logged_user_id') !== '');
+            if (hasSession) {
+                return; // En Enfoque Diario o sesión activa: silencio total
+            }
+            if (typeof window.luxoPlayLoginAvatarAudio === 'function') {
+                window.luxoPlayLoginAvatarAudio(false);
+            }
+        } catch(e) {}
+    }
+    setTimeout(_iniciarAudioAvatarLoginSiAplica, 350);
 
     // Interceptor INMEDIATO al hacer clic en ACCEDER, Huella o Face ID (0ms de latencia)
     try {
