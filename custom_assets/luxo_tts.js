@@ -229,30 +229,17 @@
     }
 
     window.luxoPlayLoginAvatarAudio = function(force) {
-        if (force === true) {
-            window.luxoUserIsLoggedIn = false;
-            window._luxoAvatarAudioMuted = false;
-            window._saludoAvatarReproducido = false;
-            try {
-                localStorage.removeItem('luxo_session_active');
-                sessionStorage.removeItem('luxo_session_active');
-            } catch(e){}
-            if (typeof window.luxoAgregarListenersUnmute === 'function') {
-                window.luxoAgregarListenersUnmute();
-            }
-        } else {
-            // Reproducción automática o pasiva: si hay sesión activa, el saludo de login NUNCA debe sonar
-            if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
-                window.luxoUserIsLoggedIn = true;
-                window._saludoAvatarReproducido = true;
-                window._luxoAvatarAudioMuted = true;
-                window.luxoStopLoginAvatarAudio();
-                window.luxoRemoverListenersUnmute();
-                return;
-            }
+        // Si hay sesión activa en cualquier almacenamiento, el saludo de login NUNCA debe sonar
+        if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
+            window.luxoUserIsLoggedIn = true;
+            window._saludoAvatarReproducido = true;
+            window._luxoAvatarAudioMuted = true;
+            window.luxoStopLoginAvatarAudio();
+            window.luxoRemoverListenersUnmute();
+            return;
         }
 
-        if (window.luxoUserIsLoggedIn === true || window._luxoAvatarAudioMuted) {
+        if (window._luxoAvatarAudioMuted) {
             window.luxoStopLoginAvatarAudio();
             return;
         }

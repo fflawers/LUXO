@@ -25951,8 +25951,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
-        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); } catch(e){}")
-        reproducir_audio_avatar_nativo()
+        ejecutar_js_flet(page, "if (!window._checkLuxoHasActiveSession()) { window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); }")
 
     page.run_task(intentar_restaurar_sesion)
     
