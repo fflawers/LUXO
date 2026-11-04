@@ -23182,13 +23182,37 @@ Ejemplo:
             if l == "zh": return zh or en
             return es
 
-        btn_chat = ft.TextButton(
+        class SidebarButton(ft.Container):
+            def __init__(self, content=None, on_click=None, style=None):
+                super().__init__(
+                    content=content,
+                    on_click=on_click,
+                    ink=True,
+                    border_radius=8,
+                    padding=ft.Padding(12, 8, 12, 8),
+                    bgcolor="transparent"
+                )
+            @property
+            def style(self):
+                return None
+            @style.setter
+            def style(self, val):
+                if val and hasattr(val, "bgcolor"):
+                    bg = val.bgcolor
+                    if isinstance(bg, str):
+                        self.bgcolor = bg
+                    elif hasattr(bg, "get"):
+                        self.bgcolor = bg.get("", "transparent")
+                try: self.update()
+                except: pass
+
+        btn_chat = SidebarButton(
             content=ft.Row([ft.Text("✨", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Asistente Chat ✨", "Chat Assistant ✨", "Assistant Chat ✨", "Assistente Chat ✨", "聊天助手 ✨"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("chat", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_historial = ft.TextButton(
+        btn_historial = SidebarButton(
             content=ft.Row([ft.Text("⏳", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Mi Historial ⏳", "My History ⏳", "Mon Historique ⏳", "La Mia Cronologia ⏳", "我的历史记录 ⏳"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("historial", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23196,7 +23220,7 @@ Ejemplo:
 
         btn_operacion_diaria = None
         if es_admin():
-            btn_operacion_diaria = ft.TextButton(
+            btn_operacion_diaria = SidebarButton(
                 content=ft.Row([
                     ft.Text("🔑", color="#00FFFF", size=14, weight="bold"),
                     ft.Text(tr("Aperturas y Cierres 🔑", "Openings & Closings 🔑", "Ouvertures & Fermetures 🔑", "Aperture & Chiusure 🔑", "开门与关门 🔑"), color="white", weight="bold")
@@ -23205,151 +23229,151 @@ Ejemplo:
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
             )
 
-        btn_checklists = ft.TextButton(
+        btn_checklists = SidebarButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Checklists 📋", "Checklists 📋", "Listes 📋", "Liste 📋", "任务清单 📋"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("checklists", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_manuales = ft.TextButton(
+        btn_manuales = SidebarButton(
             content=ft.Row([ft.Text("📚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Manuales 📚", "Manuals 📚", "Manuels 📚", "Manuali 📚", "手册 📚"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("manuales", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_catalogo_upc = ft.TextButton(
+        btn_catalogo_upc = SidebarButton(
             content=ft.Row([ft.Text("🔍", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Catálogo UPCs 🔍", "UPC Catalog 🔍", "Catalogue UPC 🔍", "Catalogo UPC 🔍", "UPC 目录 🔍"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("catalogo_upc", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_garantias = ft.TextButton(
+        btn_garantias = SidebarButton(
             content=ft.Row([ft.Text("👓", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Garantías 👓", "Warranties 👓", "Garanties 👓", "Garanzie 👓", "保修 👓"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("garantias", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_pendientes = ft.TextButton(
+        btn_pendientes = SidebarButton(
             content=ft.Row([ft.Text("📌", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Mis Pendientes 📌", "My Tasks 📌", "Mes Tâches 📌", "I Miei Compiti 📌", "我的待办 📌"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("pendientes", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_tareas = ft.TextButton(
+        btn_tareas = SidebarButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Tareas 📋", "Tasks 📋", "Tâches 📋", "Attività 📋", "任务 📋"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("tareas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_campanas = ft.TextButton(
+        btn_campanas = SidebarButton(
             content=ft.Row([ft.Text("📸", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Campañas 📸", "Campaigns 📸", "Campagnes 📸", "Campagne 📸", "活动 📸"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("campanas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_presupuesto = ft.TextButton(
+        btn_presupuesto = SidebarButton(
             content=ft.Row([ft.Text("💰", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Presupuesto 💰", "Budget 💰", "Budget 💰", "Budget 💰", "预算 💰"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("presupuesto", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_reto = ft.TextButton(
+        btn_reto = SidebarButton(
             content=ft.Row([ft.Text("🏆", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Reto del Día 🏆", "Daily Quiz 🏆", "Défi du Jour 🏆", "Sfida del Giorno 🏆", "每日挑战 🏆"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("reto", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_vendedores = ft.TextButton(
+        btn_vendedores = SidebarButton(
             content=ft.Row([ft.Text("👥", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Configuración Tienda 👥", "Store Config 👥", "Configuration 👥", "Configurazione 👥", "店铺配置 👥"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("vendedores", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_fedex = ft.TextButton(
+        btn_fedex = SidebarButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("FedEx Traspasos 🚚", "FedEx Shipping 🚚", "FedEx Expédition 🚚", "FedEx Spedizione 🚚", "FedEx 物流 🚚"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("fedex", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_simulador = ft.TextButton(
+        btn_simulador = SidebarButton(
             content=ft.Row([ft.Text("🎭", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Simulador IA 🎭", "AI Simulator 🎭", "Simulateur IA 🎭", "Simulatore IA 🎭", "AI 模拟器 🎭"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("simulador", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_crm = ft.TextButton(
+        btn_crm = SidebarButton(
             content=ft.Row([ft.Text("📱", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("CRM Cobertura Oops 📱", "CRM Coverage Oops 📱", "CRM Couverture Oops 📱", "CRM Copertura Oops 📱", "CRM 意外保障 📱"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("crm", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_facturacion = ft.TextButton(
+        btn_facturacion = SidebarButton(
             content=ft.Row([ft.Text("🧾", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Facturación CFDI 🧾", "CFDI Invoicing 🧾", "Facturation CFDI 🧾", "Fatturazione CFDI 🧾", "CFDI 发票 🧾"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("facturacion", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_meta_semanal = ft.TextButton(
+        btn_meta_semanal = SidebarButton(
             content=ft.Row([ft.Text("🎯", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Metas y Métricas 🎯", "Goals & Metrics 🎯", "Objectifs & Métriques 🎯", "Obiettivi & Metriche 🎯", "目标与指标 🎯"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("meta_semanal", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_weekly = ft.TextButton(
+        btn_weekly = SidebarButton(
             content=ft.Row([ft.Text("🗓️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("weekly", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_polar = ft.TextButton(
+        btn_polar = SidebarButton(
             content=ft.Row([ft.Text("🕶️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Polar RB y OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "偏光 RB & OO 🕶️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("polar", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_ciclicos = ft.TextButton(
+        btn_ciclicos = SidebarButton(
             content=ft.Row([ft.Text("🔄", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("ciclicos", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_descuentos = ft.TextButton(
+        btn_descuentos = SidebarButton(
             content=ft.Row([ft.Text("🏷️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Descuentos 🏷️", "Discounts 🏷️", "Remises 🏷️", "Sconti 🏷️", "折扣 🏷️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("descuentos", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_panamericano = ft.TextButton(
+        btn_panamericano = SidebarButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Fichas Panamericano 🚚", "Panamericano Files 🚚", "Fiches Panamericano 🚚", "Fiche Panamericano 🚚", "Panamericano 🚚"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("panamericano", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_disa = ft.TextButton(
+        btn_disa = SidebarButton(
             content=ft.Row([ft.Text("📸", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("DiSA", "DiSA", "DiSA", "DiSA", "DiSA"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("disa", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_enfoque = ft.TextButton(
+        btn_enfoque = SidebarButton(
             content=ft.Row([ft.Text("☀️", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Enfoque Diario ☀️", "Daily Focus ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_diario", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_enfoque_semanal = ft.TextButton(
+        btn_enfoque_semanal = SidebarButton(
             content=ft.Row([ft.Text("📅", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_semanal", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_parroquiales_minutas = ft.TextButton(
+        btn_parroquiales_minutas = SidebarButton(
             content=ft.Row([ft.Text("📢", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Parroquiales y Minutas 📝", "Announcements & Minutes 📝", "Paroissiales & Procès-verbaux 📝", "Avvisi & Verbali 📝", "通告与会议纪要 📝"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("parroquiales_minutas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_traductor = ft.TextButton(
+        btn_traductor = SidebarButton(
             content=ft.Row([ft.Text("🌐", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Traductor 🌐", "Translator 🌐", "Traducteur 🌐", "Traduttore 🌐", "翻译 🌐"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("traductor", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23357,7 +23381,7 @@ Ejemplo:
 
         btn_dashboard = None
         if es_admin():
-            btn_dashboard = ft.TextButton(
+            btn_dashboard = SidebarButton(
                 content=ft.Row([ft.Text("🎮", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Panel de Control 🎮", "Admin Panel 🎮", "Panneau de Contrôle 🎮", "Pannello di Controllo 🎮", "控制面板 🎮"), color="white", weight="bold")], spacing=10),
                 on_click=lambda e: cambiar_vista("dashboard", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23365,7 +23389,7 @@ Ejemplo:
 
         btn_admin_trivia = None
         if es_admin():
-            btn_admin_trivia = ft.TextButton(
+            btn_admin_trivia = SidebarButton(
                 content=ft.Row([ft.Text("❓", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Gestionar Trivia 🧠", "Manage Trivia 🧠", "Gérer Quiz 🧠", "Gestisci Trivia 🧠", "管理问答 🧠"), color="white", weight="bold")], spacing=10),
                 on_click=lambda e: cambiar_vista("admin_trivia", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23373,13 +23397,13 @@ Ejemplo:
 
         btn_bitacora = None
         if es_admin():
-            btn_bitacora = ft.TextButton(
+            btn_bitacora = SidebarButton(
                 content=ft.Row([ft.Text("🛡️", color="#00FFAA", size=14, weight="bold"), ft.Text("Bitácora de Seguridad 🛡️", color="white", weight="bold")], spacing=10),
                 on_click=lambda e: cambiar_vista("bitacora", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
             )
 
-        btn_logout = ft.TextButton(
+        btn_logout = SidebarButton(
             content=ft.Row([ft.Text("👋", color="#FF4500", size=14, weight="bold"), ft.Text(tr("Cerrar Sesión 👋", "Log Out 👋", "Se Déconnecter 👋", "Disconnettersi 👋", "退出登录 👋"), color="#FF4500", weight="bold")], spacing=10),
             on_click=lambda e: cerrar_sesion(),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))

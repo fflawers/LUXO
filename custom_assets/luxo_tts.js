@@ -2036,22 +2036,6 @@
         ['pointerdown', 'keydown', 'click', 'touchstart'].forEach(function(ev) {
             window.addEventListener(ev, renovarActividadUsuario, { passive: true, capture: true });
         });
-
-        // Interceptor estricto de Tab para Enfoque Diario:
-        // Suprime el escape de foco al menú lateral y salta secuencialmente entre celdas
-        window.addEventListener('keydown', function(e) {
-            if (e.key === 'Tab') {
-                const isLogin = (!window.luxoUserIsLoggedIn && !window._checkLuxoHasActiveSession());
-                if (isLogin) return; // Permitir Tab natural en login
-
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                const dir = e.shiftKey ? 'prev' : 'next';
-                const uid = window.getLuxoUserId ? window.getLuxoUserId() : (window.luxoUserId || '');
-                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : (window.luxoSessionId || '');
-                fetch('/api/enfoque/nav?direction=' + dir + '&user_id=' + encodeURIComponent(uid) + '&session_id=' + encodeURIComponent(sid)).catch(function(){});
-            }
-        }, true);
     })();
 })();
 
