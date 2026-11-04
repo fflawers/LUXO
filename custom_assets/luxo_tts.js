@@ -102,16 +102,10 @@
     window._checkLuxoHasActiveSession = function() {
         try {
             if (window.luxoUserIsLoggedIn === true) return true;
-            let lActive = localStorage.getItem('luxo_session_active');
-            if (lActive === '1' || lActive === 'true') return true;
             let sActive = sessionStorage.getItem('luxo_session_active');
             if (sActive === '1' || sActive === 'true') return true;
-            let uId = localStorage.getItem('logged_user_id');
-            if (uId && !['unknown', '', 'null', 'undefined'].includes(String(uId).toLowerCase())) return true;
-            let fUid = localStorage.getItem('flutter.logged_user_id');
-            if (fUid && !['unknown', '', 'null', 'undefined'].includes(String(fUid).toLowerCase())) return true;
-            let fView = localStorage.getItem('flutter.last_active_view');
-            if (fView && !['unknown', '', 'null', 'undefined', 'login'].includes(String(fView).toLowerCase())) return true;
+            let lActive = localStorage.getItem('luxo_session_active');
+            if (lActive === '1' || lActive === 'true') return true;
         } catch(e) {}
         return false;
     };
@@ -149,86 +143,18 @@
 
     window.luxoUnmuteAudio = function(e) {
         window._lastInteractionTime = Date.now();
-        // Si el evento fue de foco, teclado o sintético, ignorarlo completamente para evitar falsos positivos al recargar
         if (e && (e.type === 'focusin' || e.type === 'keydown' || e.isTrusted === false)) {
             return;
         }
-        try {
-            // Si el usuario ya está autenticado, NUNCA reproducir saludo de login
-            if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
-                window.luxoUserIsLoggedIn = true;
-                window._saludoAvatarReproducido = true;
-                window._luxoAvatarAudioMuted = true;
-                window.luxoStopLoginAvatarAudio();
-                window.luxoRemoverListenersUnmute();
-                return;
-            }
-
-            // Desbloquear AudioContext
-            if (!window._luxoAudioUnlocked) {
-                window._luxoAudioUnlocked = true;
-                try {
-                    const AC = window.AudioContext || window.webkitAudioContext;
-                    if (AC) {
-                        if (!window._luxoACtx) window._luxoACtx = new AC();
-                        if (window._luxoACtx.state === 'suspended') {
-                            window._luxoACtx.resume();
-                        }
-                    }
-                } catch(eAC){}
-            }
-
-            // Si ya fue reproducido o silenciado, salir
-            if (window._saludoAvatarReproducido || window._luxoAvatarAudioMuted) {
-                return;
-            }
-
-            // En pantalla de login: reproducir inmediatamente dentro del gesto del usuario
-            let snd = document.getElementById('luxo_avatar_audio_el');
-            if (!snd) {
-                snd = document.createElement('audio');
-                snd.id = 'luxo_avatar_audio_el';
-                snd.preload = 'auto';
-                snd.setAttribute('playsinline', '');
-                (document.body || document.documentElement).appendChild(snd);
-            }
-            let targetSrc = window.location.origin + '/custom_assets/saludo_login.mp3';
-            if (!snd.src || !snd.src.includes('saludo_login.mp3')) {
-                snd.src = targetSrc;
-            }
-            snd.muted = false;
-            snd.volume = 1.0;
-            if (snd.paused) {
-                if (snd.ended) snd.currentTime = 0;
-                let p = snd.play();
-                if (p !== undefined) {
-                    p.then(function() {
-                        window._luxoAvatarAudioActive = true;
-                        window._saludoAvatarReproducido = true;
-                        console.log('[LUXO AVATAR] Audio iniciado exitosamente por interacción directa en login.');
-                        window.luxoRemoverListenersUnmute();
-                    }).catch(function(e){
-                        console.log('[LUXO AVATAR] Esperando siguiente interacción directa:', e);
-                    });
-                }
-            }
-        } catch(e){}
+        if (window.luxoUserIsLoggedIn === true) {
+            window.luxoStopLoginAvatarAudio();
+            return;
+        }
+        window.luxoPlayLoginAvatarAudio(true);
     };
 
     window.luxoAgregarListenersUnmute = function() {
-        if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
-            window.luxoRemoverListenersUnmute();
-            return;
-        }
-        try {
-            // Únicamente escuchar clics y toques directos del usuario. NUNCA focusin ni keydown.
-            ['click', 'touchstart'].forEach(function(evName) {
-                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
-                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
-                window.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
-                document.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
-            });
-        } catch(e){}
+        // Sin listeners globales para evitar reproducciones automáticas al recargar
     };
 
     window.luxoUserIsLoggedIn = window._checkLuxoHasActiveSession();
@@ -238,21 +164,16 @@
     }
 
     window.luxoPlayLoginAvatarAudio = function(force) {
-        // Si hay sesión activa en cualquier almacenamiento, el saludo de login NUNCA debe sonar
-        if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
-            window.luxoUserIsLoggedIn = true;
-            window._saludoAvatarReproducido = true;
-            window._luxoAvatarAudioMuted = true;
+        if (window.luxoUserIsLoggedIn === true && force !== true) {
             window.luxoStopLoginAvatarAudio();
-            window.luxoRemoverListenersUnmute();
             return;
         }
-
-        if (window._luxoAvatarAudioMuted) {
+        if (window._luxoAvatarAudioMuted && force !== true) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
 
+        window._luxoAvatarAudioMuted = false;
         try {
             let snd = document.getElementById('luxo_avatar_audio_el');
             let targetSrc = window.location.origin + '/custom_assets/saludo_login.mp3';
@@ -266,7 +187,6 @@
             if (!snd.src || !snd.src.includes('saludo_login.mp3')) {
                 snd.src = targetSrc;
             }
-            // Si ya está reproduciéndose activamente, no reiniciar
             if (!snd.paused && snd.currentTime > 0) {
                 window._luxoAvatarAudioActive = true;
                 return;
@@ -286,12 +206,9 @@
                 p.then(function() {
                     window._luxoAvatarAudioActive = true;
                     window._saludoAvatarReproducido = true;
-                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente en inicio de sesión.');
-                    if (typeof window.luxoRemoverListenersUnmute === 'function') {
-                        window.luxoRemoverListenersUnmute();
-                    }
+                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente.');
                 }).catch(function(err) {
-                    console.log('[LUXO AVATAR] Autoplay esperando interacción directa del usuario.');
+                    console.log('[LUXO AVATAR] Autoplay esperando interacción:', err);
                 });
             }
         } catch(e){
@@ -299,7 +216,7 @@
         }
     };
 
-    // Gestión inicial al cargar: si hay sesión activa, silenciar avatar. Si es login, permitir interacción.
+    // Gestión inicial al cargar: si hay sesión activa, silenciar avatar
     try {
         if (window.luxoUserIsLoggedIn || window._checkLuxoHasActiveSession()) {
             window.luxoUserIsLoggedIn = true;
@@ -309,9 +226,6 @@
             if (typeof window.luxoRemoverListenersUnmute === 'function') {
                 window.luxoRemoverListenersUnmute();
             }
-        } else {
-            // En pantalla de login pura: adjuntar listeners para interacción directa del usuario
-            window.luxoAgregarListenersUnmute();
         }
     } catch(e){}
 
@@ -376,6 +290,13 @@
             if (txtBtn === '🔊' || txtBtn === '🔇') {
                 if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
                     window.luxoToggleLoginAvatarAudio();
+                }
+            }
+
+            // 1.2 Clic en campo de usuario de la pantalla de login
+            if (!window.luxoUserIsLoggedIn && !window._saludoAvatarReproducido && (t.tagName === 'INPUT' || (t.getAttribute && (t.getAttribute('placeholder') || '').toLowerCase().includes('admin')))) {
+                if (typeof window.luxoPlayLoginAvatarAudio === 'function') {
+                    window.luxoPlayLoginAvatarAudio(true);
                 }
             }
 
