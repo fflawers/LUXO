@@ -25937,6 +25937,7 @@ Ejemplo:
                         user_info["voz_preferida"] = voz_efectiva
 
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
+                        detener_audio_avatar_nativo()
                         if es_login_biometrico_nuevo:
                             reproducir_saludo_login(user_data["Nombre_Completo"], voice_id=voz_efectiva)
                         cargar_chat(initial_view=last_view_saved)
@@ -25951,7 +25952,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
-        ejecutar_js_flet(page, "if (!window._checkLuxoHasActiveSession()) { window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); }")
+        reproducir_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)
     

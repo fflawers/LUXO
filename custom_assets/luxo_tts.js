@@ -208,7 +208,18 @@
                     window._saludoAvatarReproducido = true;
                     console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente.');
                 }).catch(function(err) {
-                    console.log('[LUXO AVATAR] Autoplay esperando interacción:', err);
+                    console.log('[LUXO AVATAR] Autoplay esperando interacción del usuario:', err);
+                    function _playOnFirstUserTouch() {
+                        window.removeEventListener('click', _playOnFirstUserTouch, { capture: true });
+                        window.removeEventListener('touchstart', _playOnFirstUserTouch, { capture: true });
+                        if (window.luxoUserIsLoggedIn !== true && !window._luxoAvatarAudioMuted) {
+                            try {
+                                if (snd.paused) snd.play().catch(function(){});
+                            } catch(e){}
+                        }
+                    }
+                    window.addEventListener('click', _playOnFirstUserTouch, { capture: true, once: true });
+                    window.addEventListener('touchstart', _playOnFirstUserTouch, { capture: true, once: true });
                 });
             }
         } catch(e){
