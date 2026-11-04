@@ -3343,8 +3343,14 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 navigate(curr, direction="left")
 
         active_sheet_navigator[0] = sheet_keyboard_handler
-        ACTIVE_ENFOQUE_NAVIGATORS[user_id] = lambda dir_val: navigate(current_focused_cell[0], direction=dir_val)
-        ACTIVE_ENFOQUE_NAVIGATORS["latest"] = ACTIVE_ENFOQUE_NAVIGATORS[user_id]
+        _nav_cb = lambda dir_val: navigate(current_focused_cell[0], direction=dir_val)
+        ACTIVE_ENFOQUE_NAVIGATORS[user_id] = _nav_cb
+        ACTIVE_ENFOQUE_NAVIGATORS[str(user_id)] = _nav_cb
+        ACTIVE_ENFOQUE_NAVIGATORS["latest"] = _nav_cb
+        try:
+            p_sid = str(getattr(page, "session_id", id(page)))
+            ACTIVE_ENFOQUE_NAVIGATORS[p_sid] = _nav_cb
+        except Exception: pass
 
         is_mobile = is_touch or ((page.width < 800) if (page and getattr(page, "width", None)) else False)
         cell_font_size = 10 if is_mobile else 11
