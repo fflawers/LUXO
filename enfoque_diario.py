@@ -34,6 +34,21 @@ load_dotenv()
 
 _ENFOQUE_DB_POOL = None
 _TABLA_VERIFICADA = False
+ACTIVE_ENFOQUE_NAVIGATORS = {}
+
+def despachar_navegacion_enfoque(direction="next", session_id="", user_id=""):
+    try:
+        cand = None
+        if user_id and user_id in ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = ACTIVE_ENFOQUE_NAVIGATORS[user_id]
+        elif session_id and session_id in ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = ACTIVE_ENFOQUE_NAVIGATORS[session_id]
+        elif "latest" in ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = ACTIVE_ENFOQUE_NAVIGATORS["latest"]
+        if cand:
+            cand(direction)
+    except Exception as ex:
+        print("Error en despachar_navegacion_enfoque:", ex)
 
 def asegurar_tabla_enfoque_db(conn):
     global _TABLA_VERIFICADA
@@ -3232,8 +3247,9 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
 
         def navigate(current_id, direction="down"):
             if not current_id or current_id not in cell_coords:
-                return
-            t_key, r, c = cell_coords[current_id]
+                target_id = linear_order[0] if (linear_order and direction != "prev") else (linear_order[-1] if linear_order else None)
+            else:
+                t_key, r, c = cell_coords[current_id]
             grid = grid_structures[t_key]
             num_rows = len(grid)
             num_cols = len(grid[r]) if num_rows > 0 else 0
@@ -3327,6 +3343,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 navigate(curr, direction="left")
 
         active_sheet_navigator[0] = sheet_keyboard_handler
+        ACTIVE_ENFOQUE_NAVIGATORS[user_id] = lambda dir_val: navigate(current_focused_cell[0], direction=dir_val)
+        ACTIVE_ENFOQUE_NAVIGATORS["latest"] = ACTIVE_ENFOQUE_NAVIGATORS[user_id]
 
         is_mobile = is_touch or ((page.width < 800) if (page and getattr(page, "width", None)) else False)
         cell_font_size = 10 if is_mobile else 11

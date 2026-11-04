@@ -1075,6 +1075,16 @@ def configurar_rutas_fastapi(app):
             print("Error en endpoint download_excel_route:", ex)
         return {"error": "Archivo no encontrado"}
 
+    @app.get("/api/enfoque/nav")
+    async def api_enfoque_nav(direction: str = "next", session_id: str = "", user_id: str = ""):
+        try:
+            import enfoque_diario
+            if hasattr(enfoque_diario, "despachar_navegacion_enfoque"):
+                enfoque_diario.despachar_navegacion_enfoque(direction=direction, session_id=session_id, user_id=user_id)
+        except Exception as ex_nav:
+            print("Notice api_enfoque_nav:", ex_nav)
+        return {"status": "ok"}
+
     async def generar_audio_tts_edge_local(text: str, voice_id: str = "jarvis") -> str:
         import urllib.parse, hashlib, os
         try:

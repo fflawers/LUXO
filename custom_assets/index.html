@@ -708,15 +708,19 @@
     });
   })();
 
-  // Prevención de salto de Tab fuera de la cuadrícula en hojas de captura (Excel)
-  document.addEventListener('keydown', function(e) {
+  // Bloqueo absoluto de Tab hacia el menú y salto continuo en celdas de Enfoque Diario
+  window.addEventListener('keydown', function(e) {
     if (e.key === 'Tab') {
-      var act = document.activeElement;
-      if (act && (act.tagName === 'INPUT' || act.tagName === 'TEXTAREA')) {
+      if (window._luxoActiveView === 'enfoque_diario' || document.body.innerText.includes('DESGLOSE HORARIO') || window.location.hash.includes('enfoque')) {
         e.preventDefault();
+        e.stopImmediatePropagation();
+        var dir = e.shiftKey ? 'prev' : 'next';
+        var sid = window.luxoSessionId || '';
+        var uid = (typeof window.getLuxoUserId === 'function') ? window.getLuxoUserId() : (window.luxoUserId || '');
+        fetch('/api/enfoque/nav?direction=' + dir + '&session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid)).catch(function(){});
       }
     }
-  }, false);
+  }, true);
 </script>
 <script src="/custom_assets/luxo_tts.js?v=20261103_v69"></script>
 </body>
