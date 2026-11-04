@@ -99,17 +99,6 @@
     window._luxoAvatarAudioMuted = false;
     window._saludoAvatarReproducido = false;
 
-    window._checkLuxoHasActiveSession = function() {
-        try {
-            if (window.luxoUserIsLoggedIn === true) return true;
-            let sActive = sessionStorage.getItem('luxo_session_active');
-            if (sActive === '1' || sActive === 'true') return true;
-            let lActive = localStorage.getItem('luxo_session_active');
-            if (lActive === '1' || lActive === 'true') return true;
-        } catch(e) {}
-        return false;
-    };
-
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
         try {
@@ -132,48 +121,15 @@
         } catch(e){}
     };
 
-    window.luxoRemoverListenersUnmute = function() {
-        try {
-            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart', 'focusin'].forEach(function(evName) {
-                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
-                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
-            });
-        } catch(e){}
-    };
-
-    window.luxoUnmuteAudio = function(e) {
-        window._lastInteractionTime = Date.now();
-        if (e && (e.type === 'focusin' || e.type === 'keydown' || e.isTrusted === false)) {
-            return;
-        }
-        if (window.luxoUserIsLoggedIn === true) {
-            window.luxoStopLoginAvatarAudio();
-            return;
-        }
-        window.luxoPlayLoginAvatarAudio(true);
-    };
-
-    window.luxoAgregarListenersUnmute = function() {
-        // Sin listeners globales para evitar reproducciones automáticas al recargar
-    };
-
-    window.luxoUserIsLoggedIn = window._checkLuxoHasActiveSession();
-    if (window.luxoUserIsLoggedIn) {
-        window._saludoAvatarReproducido = true;
-        window._luxoAvatarAudioMuted = true;
-    }
+    window.luxoRemoverListenersUnmute = function() {};
+    window.luxoAgregarListenersUnmute = function() {};
 
     window.luxoPlayLoginAvatarAudio = function(force) {
         if (window.luxoUserIsLoggedIn === true && force !== true) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
-        if (window._luxoAvatarAudioMuted && force !== true) {
-            window.luxoStopLoginAvatarAudio();
-            return;
-        }
 
-        window._luxoAvatarAudioMuted = false;
         try {
             let snd = document.getElementById('luxo_avatar_audio_el');
             let targetSrc = window.location.origin + '/custom_assets/saludo_login.mp3';
@@ -205,16 +161,20 @@
             if (p !== undefined) {
                 p.then(function() {
                     window._luxoAvatarAudioActive = true;
-                    window._saludoAvatarReproducido = true;
-                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente.');
+                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente en inicio de sesión.');
                 }).catch(function(err) {
-                    console.log('[LUXO AVATAR] Autoplay esperando interacción del usuario:', err);
+                    console.log('[LUXO AVATAR] Esperando primer toque del usuario:', err);
                     function _playOnFirstUserTouch() {
                         window.removeEventListener('click', _playOnFirstUserTouch, { capture: true });
                         window.removeEventListener('touchstart', _playOnFirstUserTouch, { capture: true });
-                        if (window.luxoUserIsLoggedIn !== true && !window._luxoAvatarAudioMuted) {
+                        if (window.luxoUserIsLoggedIn !== true) {
                             try {
-                                if (snd.paused) snd.play().catch(function(){});
+                                snd.muted = false;
+                                snd.volume = 1.0;
+                                snd.play().then(function() {
+                                    window._luxoAvatarAudioActive = true;
+                                    console.log('[LUXO AVATAR] Audio activado al primer toque.');
+                                }).catch(function(){});
                             } catch(e){}
                         }
                     }
@@ -226,19 +186,6 @@
             console.log('[LUXO AVATAR] Error al reproducir:', e);
         }
     };
-
-    // Gestión inicial al cargar: si hay sesión activa, silenciar avatar
-    try {
-        if (window.luxoUserIsLoggedIn || window._checkLuxoHasActiveSession()) {
-            window.luxoUserIsLoggedIn = true;
-            window._saludoAvatarReproducido = true;
-            window._luxoAvatarAudioMuted = true;
-            window.luxoStopLoginAvatarAudio();
-            if (typeof window.luxoRemoverListenersUnmute === 'function') {
-                window.luxoRemoverListenersUnmute();
-            }
-        }
-    } catch(e){}
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
