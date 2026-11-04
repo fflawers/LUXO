@@ -108,6 +108,10 @@
             if (sActive === '1' || sActive === 'true') return true;
             let uId = localStorage.getItem('logged_user_id');
             if (uId && !['unknown', '', 'null', 'undefined'].includes(String(uId).toLowerCase())) return true;
+            let fUid = localStorage.getItem('flutter.logged_user_id');
+            if (fUid && !['unknown', '', 'null', 'undefined'].includes(String(fUid).toLowerCase())) return true;
+            let fView = localStorage.getItem('flutter.last_active_view');
+            if (fView && !['unknown', '', 'null', 'undefined', 'login'].includes(String(fView).toLowerCase())) return true;
         } catch(e) {}
         return false;
     };
@@ -145,6 +149,10 @@
 
     window.luxoUnmuteAudio = function(e) {
         window._lastInteractionTime = Date.now();
+        // Si el evento fue de foco, teclado o sintético, ignorarlo completamente para evitar falsos positivos al recargar
+        if (e && (e.type === 'focusin' || e.type === 'keydown' || e.isTrusted === false)) {
+            return;
+        }
         try {
             // Si el usuario ya está autenticado, NUNCA reproducir saludo de login
             if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
@@ -213,7 +221,8 @@
             return;
         }
         try {
-            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart', 'focusin'].forEach(function(evName) {
+            // Únicamente escuchar clics y toques directos del usuario. NUNCA focusin ni keydown.
+            ['click', 'touchstart'].forEach(function(evName) {
                 window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
                 document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
                 window.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
