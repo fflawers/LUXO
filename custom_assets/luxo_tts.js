@@ -148,8 +148,11 @@
     window._checkLuxoSessionActiva = _checkLuxoSessionActiva;
 
     window.luxoPlayLoginAvatarAudio = function(force) {
-        if (_checkLuxoSessionActiva() && force !== true) {
+        if (window.luxoUserIsLoggedIn === true && force !== true) {
             window.luxoStopLoginAvatarAudio();
+            return;
+        }
+        if (window._saludoAvatarReproducido === true && force !== true) {
             return;
         }
 
@@ -184,29 +187,10 @@
             if (p !== undefined) {
                 p.then(function() {
                     window._luxoAvatarAudioActive = true;
-                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente en inicio de sesión.');
+                    window._saludoAvatarReproducido = true;
+                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente al hacer clic en recuadro de usuario.');
                 }).catch(function(err) {
-                    console.log('[LUXO AVATAR] Esperando primer toque del usuario:', err);
-                    function _playOnFirstUserTouch() {
-                        window.removeEventListener('pointerdown', _playOnFirstUserTouch, { capture: true });
-                        window.removeEventListener('click', _playOnFirstUserTouch, { capture: true });
-                        window.removeEventListener('touchstart', _playOnFirstUserTouch, { capture: true });
-                        if (!_checkLuxoSessionActiva()) {
-                            try {
-                                snd.muted = false;
-                                snd.volume = 1.0;
-                                snd.play().then(function() {
-                                    window._luxoAvatarAudioActive = true;
-                                    console.log('[LUXO AVATAR] Audio activado al primer toque.');
-                                }).catch(function(){});
-                            } catch(e){}
-                        } else {
-                            window.luxoStopLoginAvatarAudio();
-                        }
-                    }
-                    window.addEventListener('pointerdown', _playOnFirstUserTouch, { capture: true, once: true });
-                    window.addEventListener('click', _playOnFirstUserTouch, { capture: true, once: true });
-                    window.addEventListener('touchstart', _playOnFirstUserTouch, { capture: true, once: true });
+                    console.log('[LUXO AVATAR] Autoplay bloqueado o esperando interacción:', err);
                 });
             }
         } catch(e){
@@ -236,19 +220,22 @@
         } catch(e){}
     };
 
-    // Auto-reproducción segura en pantalla de login si no hay sesión activa
-    function _iniciarAudioAvatarLoginSiAplica() {
-        try {
-            if (_checkLuxoSessionActiva()) {
-                window.luxoStopLoginAvatarAudio();
-                return; // En Enfoque Diario o sesión activa: silencio total
+    // Escuchar foco directo en cualquier input del DOM de inicio de sesión para activar el audio en 0ms
+    try {
+        document.addEventListener('focusin', function(e) {
+            let el = e.target;
+            if (!el || window.luxoUserIsLoggedIn) return;
+            let tag = (el.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea') {
+                let t = (el.getAttribute('type') || '').toLowerCase();
+                if (t !== 'password' && !window._saludoAvatarReproducido) {
+                    if (typeof window.luxoPlayLoginAvatarAudio === 'function') {
+                        window.luxoPlayLoginAvatarAudio(true);
+                    }
+                }
             }
-            if (typeof window.luxoPlayLoginAvatarAudio === 'function') {
-                window.luxoPlayLoginAvatarAudio(false);
-            }
-        } catch(e) {}
-    }
-    setTimeout(_iniciarAudioAvatarLoginSiAplica, 300);
+        }, true);
+    } catch(e){}
 
     // Interceptor INMEDIATO al hacer clic en ACCEDER, Huella o Face ID (0ms de latencia)
     try {
