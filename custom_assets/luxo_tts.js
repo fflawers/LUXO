@@ -220,22 +220,7 @@
         } catch(e){}
     };
 
-    // Escuchar foco directo en cualquier input del DOM de inicio de sesión para activar el audio en 0ms
-    try {
-        document.addEventListener('focusin', function(e) {
-            let el = e.target;
-            if (!el || window.luxoUserIsLoggedIn) return;
-            let tag = (el.tagName || '').toLowerCase();
-            if (tag === 'input' || tag === 'textarea') {
-                let t = (el.getAttribute('type') || '').toLowerCase();
-                if (t !== 'password' && !window._saludoAvatarReproducido) {
-                    if (typeof window.luxoPlayLoginAvatarAudio === 'function') {
-                        window.luxoPlayLoginAvatarAudio(true);
-                    }
-                }
-            }
-        }, true);
-    } catch(e){}
+    // Audio del avatar silenciado por defecto: activable solo con el botón de bocina (🔊/🔇)
 
     // Interceptor INMEDIATO al hacer clic en ACCEDER, Huella o Face ID (0ms de latencia)
     try {

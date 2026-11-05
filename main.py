@@ -25356,8 +25356,8 @@ Ejemplo:
 
     login_video_player = None
     btn_audio = None
-    has_interacted_audio = [False]
-    audio_is_muted = [False]
+    has_interacted_audio = [True]
+    audio_is_muted = [True]
 
     def reproducir_audio_avatar_nativo():
         try:
@@ -25443,8 +25443,7 @@ Ejemplo:
         color="white",
         bgcolor="#040407",
         border_radius=10,
-        content_padding=12,
-        on_focus=unmute_on_first_interaction
+        content_padding=12
     )
 
     is_pass_hidden = [True]
@@ -25477,7 +25476,6 @@ Ejemplo:
         border_radius=10,
         content_padding=12,
         on_submit=login_click,
-        on_focus=unmute_on_first_interaction,
         suffix=btn_eye_3d
     )
 
@@ -25518,16 +25516,16 @@ Ejemplo:
                 toggle_audio(e)
 
             btn_audio = ft.Container(
-                content=ft.Text("🔊", size=13, color="#00FFFF", text_align="center"),
+                content=ft.Text("🔇", size=13, color="#888899", text_align="center"),
                 bgcolor="#111122",
-                border=ft.Border.all(1.5, "#00FFFF"),
+                border=ft.Border.all(1.5, "#888899"),
                 width=32,
                 height=32,
                 border_radius=16,
                 alignment=ft.alignment.Alignment(0, 0),
-                tooltip="Silenciar / Activar Audio",
-                shadow=[ft.BoxShadow(color="#4000FFFF", blur_radius=10, spread_radius=1)],
-                data=True,
+                tooltip="Activar Audio del Avatar",
+                shadow=[ft.BoxShadow(color="#40888888", blur_radius=10, spread_radius=1)],
+                data=False,
                 on_click=toggle_audio
             )
             video_avatar = ft.Column([
@@ -25539,8 +25537,7 @@ Ejemplo:
                         border_radius=56,
                         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
                         border=ft.Border.all(2.5, "#00F0FF"),
-                        shadow=[ft.BoxShadow(color="#6000FFFF", blur_radius=25, spread_radius=2)],
-                        on_click=on_avatar_tap
+                        shadow=[ft.BoxShadow(color="#6000FFFF", blur_radius=25, spread_radius=2)]
                     ),
                     ft.Container(
                         content=btn_audio,
