@@ -259,7 +259,14 @@
 
             // 1.1 Botón o icono de audio de avatar (🔊 / 🔇)
             let txtBtn = (t.innerText || t.textContent || '').trim();
-            if (txtBtn === '🔊' || txtBtn === '🔇') {
+            let isSpeakerClick = (txtBtn === '🔊' || txtBtn === '🔇' || txtBtn.includes('Toca para escuchar') || _esAccionBoton(t, 'audio') || _esAccionBoton(t, 'avatar') || _esAccionBoton(t, 'escuchar'));
+            if (!isSpeakerClick && !window.luxoUserIsLoggedIn && e.clientX && e.clientY) {
+                let midX = window.innerWidth / 2;
+                if (Math.abs(e.clientX - midX) <= 80 && e.clientY >= 55 && e.clientY <= 240) {
+                    isSpeakerClick = true;
+                }
+            }
+            if (isSpeakerClick && !window.luxoUserIsLoggedIn) {
                 if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
                     window.luxoToggleLoginAvatarAudio();
                 }
@@ -527,8 +534,7 @@
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
 
-                    const hasUserSess = (window.luxoUserIsLoggedIn === true || _checkLuxoSessionActiva());
-                    if (hasUserSess) {
+                    if (window.luxoUserIsLoggedIn === true) {
                         let oldAvatarSnd = document.getElementById('luxo_avatar_audio_el');
                         if (oldAvatarSnd) {
                             window.luxoStopLoginAvatarAudio();
@@ -558,6 +564,14 @@
                             if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
                                 window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
+                            } else if (data.action === 'play_avatar' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                window._luxoAvatarAudioMuted = false;
+                                if (window.luxoPlayLoginAvatarAudio) window.luxoPlayLoginAvatarAudio(true);
+                            } else if (data.action === 'stop_avatar' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                window._luxoAvatarAudioMuted = true;
+                                if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio();
                             } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
                                 window.luxoStopTts();
