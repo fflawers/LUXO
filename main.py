@@ -25228,8 +25228,6 @@ Ejemplo:
                     user_voice_pref[0] = voz_efectiva
                     user_info["voz_preferida"] = voz_efectiva
 
-                    reproducir_saludo_login(res["Nombre_Completo"], voice_id=voz_efectiva)
-                    
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
                     sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
@@ -25248,6 +25246,8 @@ Ejemplo:
                     active_sessions[str(user_id_key)] = sess_dict
                     if page.username:
                         active_sessions[page.username] = sess_dict
+
+                    reproducir_saludo_login(res["Nombre_Completo"], voice_id=voz_efectiva)
 
                     # --- REGISTRAR INICIO DE SESIÓN ---
                     ip_client = getattr(page, "client_ip", None) or "Desconocido"
@@ -25414,7 +25414,6 @@ Ejemplo:
         _evt = {"id": f"avatar_{int(_t.time()*1000)}", "action": _act, "timestamp": _t.time()}
         _tok = getattr(page, "_luxo_token", None) or getattr(page, "session_id", None) or str(id(page))
         GLOBAL_WEB_TTS_EVENTS[str(_tok)] = _evt
-        GLOBAL_WEB_TTS_EVENTS["global"] = _evt
 
         if audio_is_muted[0]:
             detener_audio_avatar_nativo()
@@ -25979,6 +25978,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
+        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
         reproducir_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)
