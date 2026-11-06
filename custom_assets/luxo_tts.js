@@ -137,9 +137,9 @@
     };
 
     window.luxoUserIsLoggedIn = window._checkLuxoHasActiveSession();
+    window._luxoAvatarAudioMuted = true;
     if (window.luxoUserIsLoggedIn) {
         window._saludoAvatarReproducido = true;
-        window._luxoAvatarAudioMuted = true;
     }
 
     window.luxoPlayLoginAvatarAudio = function(force) {
@@ -217,19 +217,16 @@
         }
     };
 
-    // Gestión inicial al cargar: si hay sesión activa, silenciar avatar. Si es login, permitir interacción.
+    // Gestión inicial al cargar: silenciar avatar por defecto. Solo suena si se presiona su botón.
     try {
+        window._luxoAvatarAudioMuted = true;
         if (window.luxoUserIsLoggedIn || window._checkLuxoHasActiveSession()) {
             window.luxoUserIsLoggedIn = true;
             window._saludoAvatarReproducido = true;
-            window._luxoAvatarAudioMuted = true;
             window.luxoStopLoginAvatarAudio();
-            if (typeof window.luxoRemoverListenersUnmute === 'function') {
-                window.luxoRemoverListenersUnmute();
-            }
-        } else {
-            // En pantalla de login pura: adjuntar listeners para interacción del usuario
-            window.luxoAgregarListenersUnmute();
+        }
+        if (typeof window.luxoRemoverListenersUnmute === 'function') {
+            window.luxoRemoverListenersUnmute();
         }
     } catch(e){}
 
@@ -692,6 +689,16 @@
                                 console.log("[LUXO BIOMETRIA] Disparando Registro Huella Colaborador:", data.colab_id, data.colab_name);
                                 if (window.luxoAbrirHuellaColab) {
                                     window.luxoAbrirHuellaColab(data.colab_id, data.colab_name);
+                                }
+                            } else if (data.action === 'play_avatar_audio' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                if (window.luxoPlayLoginAvatarAudio) {
+                                    window.luxoPlayLoginAvatarAudio(true);
+                                }
+                            } else if (data.action === 'stop_avatar_audio' && data.id && data.id !== lastHandledTtsId) {
+                                lastHandledTtsId = data.id;
+                                if (window.luxoStopLoginAvatarAudio) {
+                                    window.luxoStopLoginAvatarAudio();
                                 }
                             }
                         }
