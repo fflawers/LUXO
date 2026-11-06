@@ -4,6 +4,23 @@
 <head>
   <base href="/">
   <script>
+    (function() {
+      try {
+        var sid = sessionStorage.getItem('luxo_client_session_id');
+        if (!sid || sid.length < 5) {
+          sid = 'sid_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now();
+          sessionStorage.setItem('luxo_client_session_id', sid);
+        }
+        window._luxoClientToken = sid;
+        window._luxoClientSessionId = sid;
+        if (!window.location.search.includes('luxo_sid=')) {
+          var sep = window.location.search ? '&' : '?';
+          window.history.replaceState(null, '', window.location.pathname + window.location.search + sep + 'luxo_sid=' + sid + window.location.hash);
+        }
+      } catch(e){}
+    })();
+  </script>
+  <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
         for(let registration of registrations) {

@@ -1158,17 +1158,19 @@ def configurar_rutas_fastapi(app):
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
-        # 2. Enlace por ID de usuario autenticado
+        # 2. Enlace por ID de usuario autenticado (EXCLUSIVAMENTE PARA ACCIONES NO DE VOZ)
         if not evt and user_id and str(user_id).strip() not in ["unknown", "", "None", "null", "undefined"] and str(user_id).strip() in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[str(user_id).strip()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                evt = cand
+                if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
+                    evt = cand
 
-        # 3. Enlace por Username autenticado (ej. mx204562, sgh3502)
+        # 3. Enlace por Username autenticado (EXCLUSIVAMENTE PARA ACCIONES NO DE VOZ)
         if not evt and username and str(username).strip().lower() not in ["unknown", "", "None", "null", "undefined"] and str(username).strip().lower() in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[str(username).strip().lower()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                evt = cand
+                if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
+                    evt = cand
 
         # 4. Enlace por evento global / broadcast (Login / Registro biometrico)
         if not evt and "global" in GLOBAL_WEB_TTS_EVENTS:
@@ -5122,13 +5124,28 @@ def descargar_pdf_archivo(id_manual, page=None):
 
 def main(page: ft.Page):
     import uuid, time
-    dev_token = f"dev_{uuid.uuid4().hex[:12]}"
+    browser_sid = None
+    try:
+        if hasattr(page, "query") and page.query:
+            browser_sid = page.query.get("luxo_sid")
+        if not browser_sid and hasattr(page, "route") and page.route and "luxo_sid=" in str(page.route):
+            import urllib.parse
+            r_str = str(page.route)
+            q_idx = r_str.find("?")
+            if q_idx != -1:
+                parsed_q = urllib.parse.parse_qs(r_str[q_idx+1:])
+                if "luxo_sid" in parsed_q:
+                    browser_sid = parsed_q["luxo_sid"][0]
+    except Exception:
+        browser_sid = None
+
+    dev_token = browser_sid or f"dev_{uuid.uuid4().hex[:12]}"
     page._luxo_token = dev_token
     page._luxo_unique_session_id = dev_token
     page.client_session_id = dev_token
     page.device_id = dev_token
     page.session_id = dev_token
-    ejecutar_js_flet(page, f"window._luxoClientToken = '{dev_token}'; try {{ sessionStorage.setItem('luxo_client_session_id', '{dev_token}'); }} catch(e){{}}")
+    ejecutar_js_flet(page, f"window._luxoClientToken = '{dev_token}'; window._luxoClientSessionId = '{dev_token}'; try {{ sessionStorage.setItem('luxo_client_session_id', '{dev_token}'); }} catch(e){{}}")
 
     def _detect_page_device_type():
         plat = getattr(page, "platform", None)
@@ -5165,12 +5182,7 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time()
         }
-        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
-        u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
-        if u_id and str(u_id).strip() not in ["unknown", "", "None", "null", "undefined"]:
-            GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_data
-        if u_name and u_name not in ["unknown", "", "None", "null", "undefined"]:
-            GLOBAL_WEB_TTS_EVENTS[u_name] = evt_data
+        # Aislamiento estricto: el audio solo se guarda en la sesion privada de este navegador/dispositivo
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -5934,9 +5946,7 @@ def main(page: ft.Page):
             "timestamp": time.time(),
             "device_type": d_type
         }
-        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
-        if u_id and str(u_id) not in ["1", "unknown", "", "None"]:
-            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
+        # Aislamiento estricto por sesion privada
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
@@ -25228,7 +25238,7 @@ Ejemplo:
 
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
-                    sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                    sess_token = getattr(page, "_luxo_token", None) or f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
                     page.user_id = str(user_id_key)
                     page._luxo_token = sess_token
                     page.username = u_clean_login
@@ -25912,7 +25922,7 @@ Ejemplo:
                             user_session["region_activa_id"] = r_clean
                         user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
                         user_id_key = user_data["ID_Usuario"]
-                        sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
+                        sess_token = getattr(page, "_luxo_token", None) or f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
                         page.user_id = str(user_id_key)
                         page._luxo_token = sess_token
                         u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
