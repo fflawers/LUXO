@@ -34,6 +34,23 @@ load_dotenv()
 
 _ENFOQUE_DB_POOL = None
 _TABLA_VERIFICADA = False
+ACTIVE_ENFOQUE_NAVIGATORS = {}
+
+def despachar_navegacion_enfoque(direction="next", session_id="", user_id=""):
+    try:
+        cand = None
+        if user_id and user_id in ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = ACTIVE_ENFOQUE_NAVIGATORS[user_id]
+        elif session_id and session_id in ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = ACTIVE_ENFOQUE_NAVIGATORS[session_id]
+        elif "latest" in ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = ACTIVE_ENFOQUE_NAVIGATORS["latest"]
+        elif ACTIVE_ENFOQUE_NAVIGATORS:
+            cand = list(ACTIVE_ENFOQUE_NAVIGATORS.values())[-1]
+        if cand:
+            cand(direction)
+    except Exception as ex:
+        print("Error en despachar_navegacion_enfoque:", ex)
 
 def asegurar_tabla_enfoque_db(conn):
     global _TABLA_VERIFICADA
@@ -3053,6 +3070,25 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
     scroll_mode_main = ft.ScrollMode.HIDDEN if is_touch else ft.ScrollMode.AUTO
     scroll_mode_table = ft.ScrollMode.HIDDEN if is_touch else ft.ScrollMode.AUTO
 
+    active_sheet_navigator = [None]
+
+    def on_page_keyboard(e: ft.KeyboardEvent):
+        try:
+            if active_sheet_navigator[0]:
+                active_sheet_navigator[0](e)
+        except Exception:
+            pass
+
+    page.on_keyboard_event = on_page_keyboard
+
+    try:
+        async def _set_enfoque_js():
+            try: await page.launch_url("javascript:window._luxoActiveView='enfoque_diario';window._luxoEnfoqueActive=true;void(0);")
+            except: pass
+        if hasattr(page, "run_task"):
+            page.run_task(_set_enfoque_js)
+    except Exception: pass
+
     def generar_pdf_enfoque(target_day=None):
         if not REPORTLAB_AVAILABLE:
             snack = ft.SnackBar(ft.Text("❌ La librería ReportLab no está instalada para generar PDF.", color="white"), bgcolor="red")
@@ -3183,6 +3219,161 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         data = s_state[d_name]
         green_txts = {}
         white_input_fields = {}
+        current_focused_cell = [None]
+        is_edit_mode = [False]
+
+        # Estructura matricial tipo hoja de cálculo
+        colab_list = data.get("colaboradores", [])
+        trafico_list = data.get("trafico_bloques", [])
+
+        grid_structures = {
+            "metas": [
+                ["meta_diaria", "trafico_esperado", "conversion_target", "vta_ly"],
+                ["atv_dia", "aur_dia", "atv_mtd", "aur_mtd"]
+            ],
+            "horarios": [
+                [f"trafico_b_{i}" for i in range(len(trafico_list))]
+            ],
+            "colaboradores": [
+                [f"colab_nom_{idx}", f"colab_hrs_{idx}", f"colab_wea_{idx}", f"colab_kid_{idx}"]
+                for idx in range(len(colab_list))
+            ],
+            "cierre": [
+                [f"colab_int_{idx}", f"colab_conv_{idx}", f"colab_vtac_{idx}", f"colab_anac_{idx}",
+                 f"colab_wead_{idx}", f"colab_weac_{idx}", f"colab_kidc_{idx}", f"colab_ckc_{idx}"]
+                for idx in range(len(colab_list))
+            ]
+        }
+
+        table_order = ["metas", "horarios", "colaboradores", "cierre"]
+        cell_coords = {}
+        linear_order = []
+
+        for t_key in table_order:
+            for r_i, row in enumerate(grid_structures[t_key]):
+                for c_i, cell_id in enumerate(row):
+                    cell_coords[cell_id] = (t_key, r_i, c_i)
+                    linear_order.append(cell_id)
+
+        def navigate(current_id, direction="down"):
+            if not current_id or current_id not in cell_coords:
+                target_id = linear_order[0] if (linear_order and direction != "prev") else (linear_order[-1] if linear_order else None)
+            else:
+                t_key, r, c = cell_coords[current_id]
+            grid = grid_structures[t_key]
+            num_rows = len(grid)
+            num_cols = len(grid[r]) if num_rows > 0 else 0
+
+            target_id = None
+            if direction == "next":
+                if current_id in linear_order:
+                    idx = linear_order.index(current_id)
+                    target_id = linear_order[(idx + 1) % len(linear_order)]
+            elif direction == "prev":
+                if current_id in linear_order:
+                    idx = linear_order.index(current_id)
+                    target_id = linear_order[(idx - 1) % len(linear_order)]
+            elif direction == "right":
+                if c + 1 < num_cols:
+                    target_id = grid[r][c + 1]
+                elif r + 1 < num_rows:
+                    target_id = grid[r + 1][0]
+                else:
+                    t_idx = table_order.index(t_key)
+                    for step in range(1, len(table_order) + 1):
+                        next_t = table_order[(t_idx + step) % len(table_order)]
+                        if grid_structures[next_t] and len(grid_structures[next_t]) > 0 and len(grid_structures[next_t][0]) > 0:
+                            target_id = grid_structures[next_t][0][0]
+                            break
+            elif direction == "left":
+                if c - 1 >= 0:
+                    target_id = grid[r][c - 1]
+                elif r - 1 >= 0:
+                    target_id = grid[r - 1][-1]
+                else:
+                    t_idx = table_order.index(t_key)
+                    for step in range(1, len(table_order) + 1):
+                        prev_t = table_order[(t_idx - step) % len(table_order)]
+                        if grid_structures[prev_t] and len(grid_structures[prev_t]) > 0 and len(grid_structures[prev_t][-1]) > 0:
+                            target_id = grid_structures[prev_t][-1][-1]
+                            break
+            elif direction == "down":
+                if r + 1 < num_rows:
+                    target_id = grid[r + 1][min(c, len(grid[r + 1]) - 1)]
+                else:
+                    t_idx = table_order.index(t_key)
+                    for step in range(1, len(table_order) + 1):
+                        next_t = table_order[(t_idx + step) % len(table_order)]
+                        if grid_structures[next_t] and len(grid_structures[next_t]) > 0 and len(grid_structures[next_t][0]) > 0:
+                            target_id = grid_structures[next_t][0][min(c, len(grid_structures[next_t][0]) - 1)]
+                            break
+            elif direction == "up":
+                if r - 1 >= 0:
+                    target_id = grid[r - 1][min(c, len(grid[r - 1]) - 1)]
+                else:
+                    t_idx = table_order.index(t_key)
+                    for step in range(1, len(table_order) + 1):
+                        prev_t = table_order[(t_idx - step) % len(table_order)]
+                        if grid_structures[prev_t] and len(grid_structures[prev_t]) > 0 and len(grid_structures[prev_t][-1]) > 0:
+                            target_id = grid_structures[prev_t][-1][min(c, len(grid_structures[prev_t][-1]) - 1)]
+                            break
+
+            if target_id and target_id in white_input_fields:
+                target_tf = white_input_fields[target_id]
+                current_focused_cell[0] = target_id
+                is_edit_mode[0] = False
+                try:
+                    if hasattr(page, "run_task"):
+                        page.run_task(target_tf.focus)
+                    else:
+                        target_tf.focus()
+                except Exception:
+                    try:
+                        import asyncio
+                        asyncio.run_coroutine_threadsafe(target_tf.focus(), page.session.connection.loop)
+                    except Exception:
+                        try: target_tf.focus()
+                        except Exception: pass
+                try:
+                    target_tf.update()
+                except Exception: pass
+                try:
+                    page.update()
+                except Exception: pass
+
+        def sheet_keyboard_handler(e: ft.KeyboardEvent):
+            curr = current_focused_cell[0]
+            if not curr or curr not in white_input_fields:
+                return
+            k = str(e.key or "")
+            if k == "F2":
+                is_edit_mode[0] = not is_edit_mode[0]
+                return
+            if is_edit_mode[0] and k in ["ArrowLeft", "ArrowRight"]:
+                return
+            if k == "Tab":
+                navigate(curr, direction="prev" if e.shift else "next")
+            elif k == "Enter":
+                navigate(curr, direction="up" if e.shift else "down")
+            elif k == "ArrowDown":
+                navigate(curr, direction="down")
+            elif k == "ArrowUp":
+                navigate(curr, direction="up")
+            elif k == "ArrowRight":
+                navigate(curr, direction="right")
+            elif k == "ArrowLeft":
+                navigate(curr, direction="left")
+
+        active_sheet_navigator[0] = sheet_keyboard_handler
+        _nav_cb = lambda dir_val: navigate(current_focused_cell[0], direction=dir_val)
+        ACTIVE_ENFOQUE_NAVIGATORS[user_id] = _nav_cb
+        ACTIVE_ENFOQUE_NAVIGATORS[str(user_id)] = _nav_cb
+        ACTIVE_ENFOQUE_NAVIGATORS["latest"] = _nav_cb
+        try:
+            p_sid = str(getattr(page, "session_id", id(page)))
+            ACTIVE_ENFOQUE_NAVIGATORS[p_sid] = _nav_cb
+        except Exception: pass
+
         is_mobile = is_touch or ((page.width < 800) if (page and getattr(page, "width", None)) else False)
         cell_font_size = 10 if is_mobile else 11
         cell_height = 28 if is_mobile else 32
@@ -3459,11 +3650,28 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                         e.control.update()
                 except Exception: pass
 
+            def on_cell_focus(e):
+                current_focused_cell[0] = e.control.data
+                is_edit_mode[0] = False
+                try:
+                    c_id = str(e.control.data or "")
+                    async def _mark_cell():
+                        try: await page.launch_url(f"javascript:window._luxoEnfoqueActive=true;window._luxoActiveCell='{c_id}';void(0);")
+                        except: pass
+                    if hasattr(page, "run_task"):
+                        page.run_task(_mark_cell)
+                except Exception: pass
+
+            def on_cell_submit(e):
+                navigate(e.control.data, direction="next")
+
             tf_obj = ft.TextField(
                 value=val_formatted,
                 data=data_id,
                 on_change=on_white_cell_change,
                 on_blur=on_blur_format_commas,
+                on_focus=on_cell_focus,
+                on_submit=on_cell_submit,
                 text_size=cell_font_size,
                 text_style=ft.TextStyle(weight="bold", color="#FFFFFF"),
                 bgcolor="#1F2937",

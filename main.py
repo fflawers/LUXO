@@ -831,14 +831,14 @@ def generar_audio_tts_edge_sync(text: str, voice_id: str = "jarvis") -> str:
     
     if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
         VOICE_EDGE_SPECS = {
-            "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
-            "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
+            "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+            "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
             "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
-            "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
+            "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
             "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
-            "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"},
-            "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+0%", "pitch": "+0Hz"},
-            "alonso": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
+            "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
+            "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
+            "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
             "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
         }
         spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
@@ -1075,6 +1075,16 @@ def configurar_rutas_fastapi(app):
             print("Error en endpoint download_excel_route:", ex)
         return {"error": "Archivo no encontrado"}
 
+    @app.get("/api/enfoque/nav")
+    async def api_enfoque_nav(direction: str = "next", session_id: str = "", user_id: str = ""):
+        try:
+            import enfoque_diario
+            if hasattr(enfoque_diario, "despachar_navegacion_enfoque"):
+                enfoque_diario.despachar_navegacion_enfoque(direction=direction, session_id=session_id, user_id=user_id)
+        except Exception as ex_nav:
+            print("Notice api_enfoque_nav:", ex_nav)
+        return {"status": "ok"}
+
     async def generar_audio_tts_edge_local(text: str, voice_id: str = "jarvis") -> str:
         import urllib.parse, hashlib, os
         try:
@@ -1097,14 +1107,14 @@ def configurar_rutas_fastapi(app):
         
         if not os.path.exists(filepath):
             VOICE_EDGE_SPECS = {
-                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
                 "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
                 "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
+                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
+                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
                 "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
             }
             spec = VOICE_EDGE_SPECS.get(v_actual, VOICE_EDGE_SPECS["jarvis"])
@@ -2364,6 +2374,18 @@ def configurar_rutas_fastapi(app):
                         } else {
                             const bgDuration = Date.now() - lastHiddenTime;
                             console.log("📱 Pestaña/Pantalla reactivada tras:", bgDuration, "ms");
+                            // En salidas cotidianas a WhatsApp (< 45s), mantener la pantalla viva sin reiniciar
+                            if (lastHiddenTime > 0 && bgDuration > 45000) {
+                                setTimeout(function() {
+                                    try {
+                                        // Solo si el socket fue destruido tras ausencia prolongada (> 45s)
+                                        if (window._fletWebSocket && (window._fletWebSocket.readyState === 2 || window._fletWebSocket.readyState === 3)) {
+                                            console.warn("🔄 Reconectando sesión limpia tras ausencia prolongada...");
+                                            window.location.reload();
+                                        }
+                                    } catch(e) {}
+                                }, 500);
+                            }
                         }
                     });
                     const isFirefox = navigator.userAgent.toLowerCase().includes("firefox");
@@ -4031,16 +4053,16 @@ def reproducir_saludo_login(nombre_usuario, voice_id="jarvis"):
             temp_audio_dir = os.path.join(ASSETS_PATH, "temp_audio")
             os.makedirs(temp_audio_dir, exist_ok=True)
             v_spec = {
-                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "jarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
+                "yarvis": {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"},
                 "luxo_avatar": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "barbara": {"voice": "es-MX-DaliaNeural", "rate": "+3%", "pitch": "+10Hz"},
                 "helena": {"voice": "es-MX-DaliaNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+0%", "pitch": "+0Hz"},
-                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "+0%", "pitch": "+0Hz"},
+                "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "-2Hz"},
+                "sabina": {"voice": "es-ES-ElviraNeural", "rate": "+4%", "pitch": "+5Hz"},
+                "alonso": {"voice": "es-US-AlonsoNeural", "rate": "-6%", "pitch": "-5Hz"},
                 "estandar": {"voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz"}
-            }.get(voice_id, {"voice": "es-ES-AlvaroNeural", "rate": "+0%", "pitch": "+0Hz"})
+            }.get(voice_id, {"voice": "es-ES-AlvaroNeural", "rate": "-6%", "pitch": "-14Hz"})
             
             import hashlib, asyncio, edge_tts
             h = hashlib.md5(f"{saludo_text}_{voice_id}".encode("utf-8")).hexdigest()
@@ -7001,7 +7023,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     def cargar_chat(initial_view=None, desde_login=False):
         try:
             detener_audio_avatar_nativo()
-            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio();")
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = true; window._luxoAvatarAudioMuted = true; window._saludoAvatarReproducido = true; try { sessionStorage.setItem('luxo_session_active', 'true'); } catch(e){} if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); if (window.luxoRemoverListenersUnmute) window.luxoRemoverListenersUnmute(); try { document.querySelectorAll('#luxo_avatar_audio_el, audio[src*=\"saludo_login\"]').forEach(function(el){ el.pause(); el.currentTime = 0; }); } catch(e){}")
         except Exception: pass
         page.clean()
         page.add(
@@ -15195,6 +15217,34 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     fecha = n.get("Fecha_Hora").strftime("%d/%m %H:%M") if n.get("Fecha_Hora") else ""
                     leida = n.get("Leida")
                     
+                    titulo_low = (n.get("Titulo") or "").lower()
+                    msg_low = (n.get("Mensaje") or "").lower()
+                    if tipo == "campana":
+                        destino_vista = "campanas"
+                    elif tipo == "manual":
+                        destino_vista = "manuales"
+                    elif tipo == "tarea":
+                        destino_vista = "tareas"
+                    elif tipo in ["parroquial", "minuta"]:
+                        destino_vista = "parroquiales_minutas"
+                    elif "apertura" in titulo_low or "apertura" in msg_low or tipo == "apertura":
+                        destino_vista = "operacion_diaria"
+                    elif "check" in titulo_low or "checklist" in msg_low:
+                        destino_vista = "checklists"
+                    else:
+                        destino_vista = "chat"
+
+                    def hacer_click_notif(v_dest):
+                        def _on_click_handler(e):
+                            try:
+                                page.pop_dialog()
+                                if v_dest:
+                                    cambiar_vista(v_dest, desde_menu_manual=True)
+                                    page.update()
+                            except Exception as ex_nav:
+                                print(f"Error navegando desde notificacion: {ex_nav}")
+                        return _on_click_handler
+
                     notif_rows.append(
                         ft.Container(
                             content=ft.Row([
@@ -15209,12 +15259,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                     height=8,
                                     bgcolor="#00FFFF" if not leida else "transparent",
                                     border_radius=4
-                                )
+                                ),
+                                ft.Icon(ft.Icons.CHEVRON_RIGHT, color="#555555", size=18)
                             ], vertical_alignment="center", spacing=10),
                             bgcolor="#1e1e1e" if not leida else "#111111",
                             padding=10,
                             border_radius=6,
-                            border=ft.Border.all(1, "#333333" if leida else "#00FFFF")
+                            border=ft.Border.all(1, "#333333" if leida else "#00FFFF"),
+                            ink=True,
+                            tooltip="Toca para ir al módulo 🚀",
+                            on_click=hacer_click_notif(destino_vista)
                         )
                     )
             
@@ -21723,15 +21777,43 @@ Ejemplo:
 
                 tot_vly_label.value = f"${tot_vly:,.0f}"
 
+                # Regla de Piso de Protección (10%) para días con VLY <= 0 (cero o negativos)
+                dias_anomalos = [d for d in dias_semana if vly_vals[d] <= 0]
+                dias_positivos = [d for d in dias_semana if vly_vals[d] > 0]
+
+                pcts_por_dia = {}
+                if not dias_anomalos:
+                    # Todos los días son positivos: cálculo natural tradicional
+                    for d in dias_semana:
+                        pcts_por_dia[d] = (vly_vals[d] / tot_vly * 100.0) if tot_vly > 0 else (100.0 / 7.0)
+                elif not dias_positivos:
+                    # Todos los días son 0 o negativos: repartición equitativa
+                    for d in dias_semana:
+                        pcts_por_dia[d] = 100.0 / 7.0
+                else:
+                    # Días con VLY <= 0 reciben piso protector de 10% cada uno
+                    piso_unitario = 10.0
+                    if (len(dias_anomalos) * piso_unitario) >= 100.0:
+                        piso_unitario = 100.0 / float(len(dias_semana))
+                    total_piso = piso_unitario * len(dias_anomalos)
+                    pct_para_positivos = max(0.0, 100.0 - total_piso)
+                    tot_vly_pos = sum(vly_vals[d] for d in dias_positivos)
+
+                    for d in dias_anomalos:
+                        pcts_por_dia[d] = piso_unitario
+                    for d in dias_positivos:
+                        pcts_por_dia[d] = (vly_vals[d] / tot_vly_pos * pct_para_positivos) if tot_vly_pos > 0 else (pct_para_positivos / float(len(dias_positivos)))
+
                 acum_ly = 0.0
                 acum_meta = 0.0
 
                 for d in dias_semana:
                     vly_d = vly_vals[d]
-                    pct_d = (vly_d / tot_vly * 100.0) if tot_vly > 0 else (100.0 / 7.0)
+                    pct_d = pcts_por_dia.get(d, 0.0)
                     meta_d = (meta_total * pct_d / 100.0)
 
-                    acum_ly += vly_d
+                    # Acumulado LY: si un día fue negativo, acumula al menos 0 para no arrastrar déficit en LY
+                    acum_ly += max(0.0, vly_d)
                     acum_meta += meta_d
 
                     pct_labels[d].value = f"{pct_d:.1f}%"
@@ -23132,13 +23214,37 @@ Ejemplo:
             if l == "zh": return zh or en
             return es
 
-        btn_chat = ft.TextButton(
+        class SidebarButton(ft.Container):
+            def __init__(self, content=None, on_click=None, style=None):
+                super().__init__(
+                    content=content,
+                    on_click=on_click,
+                    ink=True,
+                    border_radius=8,
+                    padding=ft.Padding(12, 8, 12, 8),
+                    bgcolor="transparent"
+                )
+            @property
+            def style(self):
+                return None
+            @style.setter
+            def style(self, val):
+                if val and hasattr(val, "bgcolor"):
+                    bg = val.bgcolor
+                    if isinstance(bg, str):
+                        self.bgcolor = bg
+                    elif hasattr(bg, "get"):
+                        self.bgcolor = bg.get("", "transparent")
+                try: self.update()
+                except: pass
+
+        btn_chat = SidebarButton(
             content=ft.Row([ft.Text("✨", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Asistente Chat ✨", "Chat Assistant ✨", "Assistant Chat ✨", "Assistente Chat ✨", "聊天助手 ✨"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("chat", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_historial = ft.TextButton(
+        btn_historial = SidebarButton(
             content=ft.Row([ft.Text("⏳", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Mi Historial ⏳", "My History ⏳", "Mon Historique ⏳", "La Mia Cronologia ⏳", "我的历史记录 ⏳"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("historial", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23146,7 +23252,7 @@ Ejemplo:
 
         btn_operacion_diaria = None
         if es_admin():
-            btn_operacion_diaria = ft.TextButton(
+            btn_operacion_diaria = SidebarButton(
                 content=ft.Row([
                     ft.Text("🔑", color="#00FFFF", size=14, weight="bold"),
                     ft.Text(tr("Aperturas y Cierres 🔑", "Openings & Closings 🔑", "Ouvertures & Fermetures 🔑", "Aperture & Chiusure 🔑", "开门与关门 🔑"), color="white", weight="bold")
@@ -23155,151 +23261,151 @@ Ejemplo:
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
             )
 
-        btn_checklists = ft.TextButton(
+        btn_checklists = SidebarButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Checklists 📋", "Checklists 📋", "Listes 📋", "Liste 📋", "任务清单 📋"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("checklists", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_manuales = ft.TextButton(
+        btn_manuales = SidebarButton(
             content=ft.Row([ft.Text("📚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Manuales 📚", "Manuals 📚", "Manuels 📚", "Manuali 📚", "手册 📚"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("manuales", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_catalogo_upc = ft.TextButton(
+        btn_catalogo_upc = SidebarButton(
             content=ft.Row([ft.Text("🔍", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Catálogo UPCs 🔍", "UPC Catalog 🔍", "Catalogue UPC 🔍", "Catalogo UPC 🔍", "UPC 目录 🔍"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("catalogo_upc", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_garantias = ft.TextButton(
+        btn_garantias = SidebarButton(
             content=ft.Row([ft.Text("👓", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Garantías 👓", "Warranties 👓", "Garanties 👓", "Garanzie 👓", "保修 👓"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("garantias", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_pendientes = ft.TextButton(
+        btn_pendientes = SidebarButton(
             content=ft.Row([ft.Text("📌", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Mis Pendientes 📌", "My Tasks 📌", "Mes Tâches 📌", "I Miei Compiti 📌", "我的待办 📌"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("pendientes", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_tareas = ft.TextButton(
+        btn_tareas = SidebarButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Tareas 📋", "Tasks 📋", "Tâches 📋", "Attività 📋", "任务 📋"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("tareas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_campanas = ft.TextButton(
+        btn_campanas = SidebarButton(
             content=ft.Row([ft.Text("📸", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Campañas 📸", "Campaigns 📸", "Campagnes 📸", "Campagne 📸", "活动 📸"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("campanas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_presupuesto = ft.TextButton(
+        btn_presupuesto = SidebarButton(
             content=ft.Row([ft.Text("💰", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Presupuesto 💰", "Budget 💰", "Budget 💰", "Budget 💰", "预算 💰"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("presupuesto", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_reto = ft.TextButton(
+        btn_reto = SidebarButton(
             content=ft.Row([ft.Text("🏆", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Reto del Día 🏆", "Daily Quiz 🏆", "Défi du Jour 🏆", "Sfida del Giorno 🏆", "每日挑战 🏆"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("reto", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_vendedores = ft.TextButton(
+        btn_vendedores = SidebarButton(
             content=ft.Row([ft.Text("👥", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Configuración Tienda 👥", "Store Config 👥", "Configuration 👥", "Configurazione 👥", "店铺配置 👥"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("vendedores", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_fedex = ft.TextButton(
+        btn_fedex = SidebarButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("FedEx Traspasos 🚚", "FedEx Shipping 🚚", "FedEx Expédition 🚚", "FedEx Spedizione 🚚", "FedEx 物流 🚚"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("fedex", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_simulador = ft.TextButton(
+        btn_simulador = SidebarButton(
             content=ft.Row([ft.Text("🎭", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Simulador IA 🎭", "AI Simulator 🎭", "Simulateur IA 🎭", "Simulatore IA 🎭", "AI 模拟器 🎭"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("simulador", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_crm = ft.TextButton(
+        btn_crm = SidebarButton(
             content=ft.Row([ft.Text("📱", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("CRM Cobertura Oops 📱", "CRM Coverage Oops 📱", "CRM Couverture Oops 📱", "CRM Copertura Oops 📱", "CRM 意外保障 📱"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("crm", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_facturacion = ft.TextButton(
+        btn_facturacion = SidebarButton(
             content=ft.Row([ft.Text("🧾", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Facturación CFDI 🧾", "CFDI Invoicing 🧾", "Facturation CFDI 🧾", "Fatturazione CFDI 🧾", "CFDI 发票 🧾"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("facturacion", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_meta_semanal = ft.TextButton(
+        btn_meta_semanal = SidebarButton(
             content=ft.Row([ft.Text("🎯", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Metas y Métricas 🎯", "Goals & Metrics 🎯", "Objectifs & Métriques 🎯", "Obiettivi & Metriche 🎯", "目标与指标 🎯"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("meta_semanal", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_weekly = ft.TextButton(
+        btn_weekly = SidebarButton(
             content=ft.Row([ft.Text("🗓️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("weekly", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_polar = ft.TextButton(
+        btn_polar = SidebarButton(
             content=ft.Row([ft.Text("🕶️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Polar RB y OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "偏光 RB & OO 🕶️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("polar", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_ciclicos = ft.TextButton(
+        btn_ciclicos = SidebarButton(
             content=ft.Row([ft.Text("🔄", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("ciclicos", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_descuentos = ft.TextButton(
+        btn_descuentos = SidebarButton(
             content=ft.Row([ft.Text("🏷️", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Descuentos 🏷️", "Discounts 🏷️", "Remises 🏷️", "Sconti 🏷️", "折扣 🏷️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("descuentos", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_panamericano = ft.TextButton(
+        btn_panamericano = SidebarButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Fichas Panamericano 🚚", "Panamericano Files 🚚", "Fiches Panamericano 🚚", "Fiche Panamericano 🚚", "Panamericano 🚚"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("panamericano", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_disa = ft.TextButton(
+        btn_disa = SidebarButton(
             content=ft.Row([ft.Text("📸", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("DiSA", "DiSA", "DiSA", "DiSA", "DiSA"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("disa", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_enfoque = ft.TextButton(
+        btn_enfoque = SidebarButton(
             content=ft.Row([ft.Text("☀️", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Enfoque Diario ☀️", "Daily Focus ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_diario", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_enfoque_semanal = ft.TextButton(
+        btn_enfoque_semanal = SidebarButton(
             content=ft.Row([ft.Text("📅", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_semanal", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_parroquiales_minutas = ft.TextButton(
+        btn_parroquiales_minutas = SidebarButton(
             content=ft.Row([ft.Text("📢", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Parroquiales y Minutas 📝", "Announcements & Minutes 📝", "Paroissiales & Procès-verbaux 📝", "Avvisi & Verbali 📝", "通告与会议纪要 📝"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("parroquiales_minutas", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_traductor = ft.TextButton(
+        btn_traductor = SidebarButton(
             content=ft.Row([ft.Text("🌐", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Traductor 🌐", "Translator 🌐", "Traducteur 🌐", "Traduttore 🌐", "翻译 🌐"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("traductor", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23307,7 +23413,7 @@ Ejemplo:
 
         btn_dashboard = None
         if es_admin():
-            btn_dashboard = ft.TextButton(
+            btn_dashboard = SidebarButton(
                 content=ft.Row([ft.Text("🎮", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Panel de Control 🎮", "Admin Panel 🎮", "Panneau de Contrôle 🎮", "Pannello di Controllo 🎮", "控制面板 🎮"), color="white", weight="bold")], spacing=10),
                 on_click=lambda e: cambiar_vista("dashboard", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23315,7 +23421,7 @@ Ejemplo:
 
         btn_admin_trivia = None
         if es_admin():
-            btn_admin_trivia = ft.TextButton(
+            btn_admin_trivia = SidebarButton(
                 content=ft.Row([ft.Text("❓", color="#FFD700", size=14, weight="bold"), ft.Text(tr("Gestionar Trivia 🧠", "Manage Trivia 🧠", "Gérer Quiz 🧠", "Gestisci Trivia 🧠", "管理问答 🧠"), color="white", weight="bold")], spacing=10),
                 on_click=lambda e: cambiar_vista("admin_trivia", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23323,13 +23429,13 @@ Ejemplo:
 
         btn_bitacora = None
         if es_admin():
-            btn_bitacora = ft.TextButton(
+            btn_bitacora = SidebarButton(
                 content=ft.Row([ft.Text("🛡️", color="#00FFAA", size=14, weight="bold"), ft.Text("Bitácora de Seguridad 🛡️", color="white", weight="bold")], spacing=10),
                 on_click=lambda e: cambiar_vista("bitacora", desde_menu_manual=True),
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
             )
 
-        btn_logout = ft.TextButton(
+        btn_logout = SidebarButton(
             content=ft.Row([ft.Text("👋", color="#FF4500", size=14, weight="bold"), ft.Text(tr("Cerrar Sesión 👋", "Log Out 👋", "Se Déconnecter 👋", "Disconnettersi 👋", "退出登录 👋"), color="#FF4500", weight="bold")], spacing=10),
             on_click=lambda e: cerrar_sesion(),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
@@ -23612,6 +23718,7 @@ Ejemplo:
             text_size=12,
             label_style=ft.TextStyle(color="#aaaaaa", size=11),
             focused_border_color="#00FFFF",
+            can_request_focus=False
         )
         
         def enviar_sugerencia_click(e):
@@ -23684,6 +23791,39 @@ Ejemplo:
             height=45
         )
 
+        def _save_pref_zona_region(uid, z_id, r_id):
+            if not uid:
+                return
+            z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
+            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+            z_norm = name_map.get(z_clean.upper(), z_clean)
+            r_clean = str(r_id).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
+            
+            user_session["zona_activa_id"] = z_norm
+            user_session["region_activa_id"] = r_clean
+            
+            try:
+                if hasattr(page, "shared_preferences") and page.shared_preferences:
+                    page.run_task(page.shared_preferences.set, "luxo_saved_zona", str(z_norm))
+                    page.run_task(page.shared_preferences.set, "luxo_saved_region", str(r_clean))
+                ejecutar_js_flet(page, f"try {{ localStorage.setItem('luxo_saved_zona', '{z_norm}'); localStorage.setItem('luxo_saved_region', '{r_clean}'); }} catch(e){{}}")
+            except Exception as ex_sp:
+                print("Notice save storage zona/region:", ex_sp)
+            
+            def _save():
+                try:
+                    db_p = conectar_db()
+                    if db_p:
+                        cur_p = db_p.cursor()
+                        cur_p.execute("UPDATE usuarios SET Zona = %s, Region = %s WHERE ID_Usuario = %s", (z_norm, r_clean, uid))
+                        db_p.commit()
+                        db_p.close()
+                        print(f"💾 Preferencias de Zona={z_norm} y Región={r_clean} guardadas permanentemente en BD para usuario ID={uid}")
+                except Exception as ex_p:
+                    print("Notice save zona/region DB:", ex_p)
+            import threading
+            threading.Thread(target=_save, daemon=True).start()
+
         def on_global_master_refresh_click(e):
             curr_v = active_view[0] if active_view else "chat"
             curr_lang = (lang_dropdown.value if 'lang_dropdown' in locals() and lang_dropdown and lang_dropdown.value else selected_lang[0]) or "es"
@@ -23701,6 +23841,7 @@ Ejemplo:
                 try:
                     actualizar_top_appbar_layout()
                 except Exception: pass
+                _save_pref_zona_region(user_info.get("id"), z_val, r_val)
 
             if es_admin():
                 try:
@@ -24333,31 +24474,6 @@ Ejemplo:
             opts = get_region_options_for_zona(z_key)
             valid_keys = [o.key for o in opts]
             val = r_key if r_key in valid_keys else "0"
-            def _save_pref_zona_region(uid, z_id, r_id):
-                if not uid:
-                    return
-                z_clean = str(z_id).replace("📍", "").replace("Zona:", "").strip()
-                name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
-                z_norm = name_map.get(z_clean.upper(), z_clean)
-                r_clean = str(r_id).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
-                
-                # Actualizar el diccionario de sesión actual inmediatamente
-                user_session["zona_activa_id"] = z_norm
-                user_session["region_activa_id"] = r_clean
-                
-                def _save():
-                    try:
-                        db_p = conectar_db()
-                        if db_p:
-                            cur_p = db_p.cursor()
-                            cur_p.execute("UPDATE usuarios SET Zona = %s, Region = %s WHERE ID_Usuario = %s", (z_norm, r_clean, uid))
-                            db_p.commit()
-                            db_p.close()
-                            print(f"💾 Preferencias de Zona={z_norm} y Región={r_clean} guardadas permanentemente en BD para usuario ID={uid}")
-                    except Exception as ex_p:
-                        print("Notice save zona/region DB:", ex_p)
-                import threading
-                threading.Thread(target=_save, daemon=True).start()
 
             def on_r_change(e):
                 r_val = e.control.value if (e and getattr(e, "control", None) and e.control.value is not None) else (dd.value or "0")
@@ -25085,6 +25201,12 @@ Ejemplo:
                     if res.get("Region"):
                         r_clean = str(res["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
                         user_session["region_activa_id"] = r_clean
+                    try:
+                        if hasattr(page, "shared_preferences") and page.shared_preferences:
+                            page.run_task(page.shared_preferences.set, "luxo_saved_zona", str(user_session.get("zona_activa_id", "1")))
+                            page.run_task(page.shared_preferences.set, "luxo_saved_region", str(user_session.get("region_activa_id", "0")))
+                        ejecutar_js_flet(page, f"try {{ localStorage.setItem('luxo_saved_zona', '{user_session.get('zona_activa_id', '1')}'); localStorage.setItem('luxo_saved_region', '{user_session.get('region_activa_id', '0')}'); }} catch(e){{}}")
+                    except Exception: pass
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     page.user_id = str(res["ID_Usuario"])
                     u_clean_login = str(res.get("Usuario") or "").lower().strip()
@@ -25106,8 +25228,6 @@ Ejemplo:
                     user_voice_pref[0] = voz_efectiva
                     user_info["voz_preferida"] = voz_efectiva
 
-                    reproducir_saludo_login(res["Nombre_Completo"], voice_id=voz_efectiva)
-                    
                     # Guardar sesión de forma en memoria active_sessions con token de dispositivo único
                     user_id_key = res["ID_Usuario"]
                     sess_token = f"{user_id_key}_{getattr(page, 'session_id', id(page))}"
@@ -25126,6 +25246,8 @@ Ejemplo:
                     active_sessions[str(user_id_key)] = sess_dict
                     if page.username:
                         active_sessions[page.username] = sess_dict
+
+                    reproducir_saludo_login(res["Nombre_Completo"], voice_id=voz_efectiva)
 
                     # --- REGISTRAR INICIO DE SESIÓN ---
                     ip_client = getattr(page, "client_ip", None) or "Desconocido"
@@ -25629,7 +25751,6 @@ Ejemplo:
         content=login_card,
         alignment=ft.alignment.Alignment(0, 0),
         expand=True,
-        on_click=unmute_on_first_interaction,
         gradient=ft.LinearGradient(
             colors=["#021622", "#05070D", "#220228"],
             begin=ft.alignment.Alignment(-1, -0.2),
@@ -25680,6 +25801,8 @@ Ejemplo:
                             page.shared_preferences.get("logged_user_id"),
                             page.shared_preferences.get("last_activity_timestamp"),
                             page.shared_preferences.get("last_active_view"),
+                            page.shared_preferences.get("luxo_saved_zona"),
+                            page.shared_preferences.get("luxo_saved_region"),
                             return_exceptions=True
                         ),
                         timeout=6.0
@@ -25687,6 +25810,8 @@ Ejemplo:
                     uid_saved = pref_results[0] if (len(pref_results) > 0 and not isinstance(pref_results[0], Exception)) else None
                     last_act_str = pref_results[1] if (len(pref_results) > 1 and not isinstance(pref_results[1], Exception)) else None
                     last_view_saved = pref_results[2] if (len(pref_results) > 2 and not isinstance(pref_results[2], Exception)) else None
+                    saved_zona_pref = pref_results[3] if (len(pref_results) > 3 and not isinstance(pref_results[3], Exception)) else None
+                    saved_region_pref = pref_results[4] if (len(pref_results) > 4 and not isinstance(pref_results[4], Exception)) else None
                 except Exception as ex_pref:
                     print("Notice shared_preferences timeout/error:", ex_pref)
 
@@ -25782,11 +25907,18 @@ Ejemplo:
                         user_info["rol"] = user_data["Rol"]
                         user_info["tienda"] = user_data.get("Tienda") or ""
                         user_info["zona"] = user_data.get("Zona") or "Zona Centro"
-                        if user_data.get("Zona"):
+                        if saved_zona_pref and str(saved_zona_pref).strip():
+                            z_cand = str(saved_zona_pref).strip()
+                            name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
+                            user_session["zona_activa_id"] = name_map.get(z_cand.upper(), z_cand)
+                        elif user_data.get("Zona"):
                             z_clean = str(user_data["Zona"]).replace("📍", "").replace("Zona:", "").strip()
                             name_map = {"ZONA CENTRO": "1", "ZONA NORTE": "2", "ZONA OCCIDENTE": "3", "ZONA SUR": "4", "CENTRO": "1", "NORTE": "2", "OCCIDENTE": "3", "SUR": "4"}
                             user_session["zona_activa_id"] = name_map.get(z_clean.upper(), z_clean)
-                        if user_data.get("Region"):
+
+                        if saved_region_pref and str(saved_region_pref).strip():
+                            user_session["region_activa_id"] = str(saved_region_pref).strip()
+                        elif user_data.get("Region"):
                             r_clean = str(user_data["Region"]).replace("🗺️", "").replace("Región:", "").replace("Region:", "").strip()
                             user_session["region_activa_id"] = r_clean
                         user_info["img_usuario"] = obtener_avatar_usuario(user_data["ID_Usuario"])
@@ -25837,6 +25969,7 @@ Ejemplo:
                         user_info["voz_preferida"] = voz_efectiva
 
                         print(f"🔄 Sesión restaurada automáticamente para: {user_data['Nombre_Completo']} (Vista: {last_view_saved})")
+                        detener_audio_avatar_nativo()
                         if es_login_biometrico_nuevo:
                             reproducir_saludo_login(user_data["Nombre_Completo"], voice_id=voz_efectiva)
                         cargar_chat(initial_view=last_view_saved)
@@ -25851,7 +25984,7 @@ Ejemplo:
             page.update()
         except Exception:
             pass
-        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoAgregarListenersUnmute) window.luxoAgregarListenersUnmute(); } catch(e){}")
+        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
         reproducir_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)
