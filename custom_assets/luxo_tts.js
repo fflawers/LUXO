@@ -99,62 +99,70 @@
     window._luxoAvatarAudioMuted = false;
     window._saludoAvatarReproducido = false;
 
-    window.luxoStopLoginAvatarAudio = function() {
-        window._luxoAvatarAudioActive = false;
+    window._checkLuxoHasActiveSession = function() {
         try {
-            let directEl = document.getElementById('luxo_avatar_audio_el');
-            if (directEl) {
-                try {
-                    directEl.pause();
-                    directEl.currentTime = 0;
-                } catch(e){}
+            let sActive = sessionStorage.getItem('luxo_session_active');
+            if (sActive === '1' || sActive === 'true') {
+                return true;
             }
-            let audios = document.querySelectorAll('audio');
-            audios.forEach(function(snd) {
-                if (snd.id === 'luxo_avatar_audio_el' || (snd.src && snd.src.includes('saludo_login.mp3'))) {
-                    try {
-                        snd.pause();
-                        snd.currentTime = 0;
-                    } catch(e){}
-                }
+        } catch(e) {}
+        return false;
+    };
+
+    window.luxoAgregarListenersUnmute = function() {
+        try {
+            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart'].forEach(function(evName) {
+                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                window.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
+                document.addEventListener(evName, window.luxoUnmuteAudio, { capture: true, passive: true });
             });
         } catch(e){}
     };
 
-    window.luxoRemoverListenersUnmute = function() {};
-    window.luxoAgregarListenersUnmute = function() {};
-
-    function _checkLuxoSessionActiva() {
+    window.luxoRemoverListenersUnmute = function() {
         try {
-            if (window.luxoUserIsLoggedIn === true) return true;
-            if (sessionStorage.getItem('luxo_session_active') === 'true') return true;
-            if (localStorage.getItem('luxo_session_active') === 'true') return true;
-
-            for (let i = 0; i < localStorage.length; i++) {
-                let k = localStorage.key(i);
-                if (k && (k.includes('logged_user_id') || k === 'luxo_user_id') && !k.includes('logged_username')) {
-                    let val = localStorage.getItem(k);
-                    if (val) {
-                        try { val = JSON.parse(val); } catch(e) { val = val.replace(/["']/g, ''); }
-                        if (val && !['unknown', '', 'null', 'undefined', '0', 'none'].includes(String(val).toLowerCase())) {
-                            return true;
-                        }
-                    }
-                }
-            }
+            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart'].forEach(function(evName) {
+                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+            });
         } catch(e){}
-        return false;
+    };
+
+    window.luxoUserIsLoggedIn = window._checkLuxoHasActiveSession();
+    if (window.luxoUserIsLoggedIn) {
+        window._saludoAvatarReproducido = true;
+        window._luxoAvatarAudioMuted = true;
     }
-    window._checkLuxoSessionActiva = _checkLuxoSessionActiva;
 
     window.luxoPlayLoginAvatarAudio = function(force) {
-        if (window.luxoUserIsLoggedIn === true && force !== true) {
+        if (force === true) {
+            window.luxoUserIsLoggedIn = false;
+            window._luxoAvatarAudioMuted = false;
+            window._saludoAvatarReproducido = false;
+            try {
+                localStorage.removeItem('luxo_session_active');
+                sessionStorage.removeItem('luxo_session_active');
+            } catch(e){}
+            if (typeof window.luxoAgregarListenersUnmute === 'function') {
+                window.luxoAgregarListenersUnmute();
+            }
+        } else {
+            // Reproducción automática o pasiva: si hay sesión activa, el saludo de login NUNCA debe sonar
+            if (window._checkLuxoHasActiveSession() || window.luxoUserIsLoggedIn === true) {
+                window.luxoUserIsLoggedIn = true;
+                window._saludoAvatarReproducido = true;
+                window._luxoAvatarAudioMuted = true;
+                window.luxoStopLoginAvatarAudio();
+                return;
+            }
+        }
+
+        if (window.luxoUserIsLoggedIn === true) {
             window.luxoStopLoginAvatarAudio();
             return;
         }
-        if (window._saludoAvatarReproducido === true && force !== true) {
-            return;
-        }
+        if (window._luxoAvatarAudioMuted) return;
 
         try {
             let snd = document.getElementById('luxo_avatar_audio_el');
@@ -169,6 +177,7 @@
             if (!snd.src || !snd.src.includes('saludo_login.mp3')) {
                 snd.src = targetSrc;
             }
+            // Si ya está reproduciéndose activamente, no reiniciar
             if (!snd.paused && snd.currentTime > 0) {
                 window._luxoAvatarAudioActive = true;
                 return;
@@ -188,15 +197,34 @@
                 p.then(function() {
                     window._luxoAvatarAudioActive = true;
                     window._saludoAvatarReproducido = true;
-                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente al hacer clic en recuadro de usuario.');
+                    console.log('[LUXO AVATAR] Audio reproduciéndose exitosamente en inicio de sesión.');
+                    if (typeof window.luxoRemoverListenersUnmute === 'function') {
+                        window.luxoRemoverListenersUnmute();
+                    }
                 }).catch(function(err) {
-                    console.log('[LUXO AVATAR] Autoplay bloqueado o esperando interacción:', err);
+                    console.log('[LUXO AVATAR] Autoplay bloqueado por navegador, esperando primer gesto del usuario.');
                 });
             }
         } catch(e){
             console.log('[LUXO AVATAR] Error al reproducir:', e);
         }
     };
+
+    // Gestión inicial al cargar: si hay sesión activa, silenciar avatar. Si es login, permitir interacción.
+    try {
+        if (window.luxoUserIsLoggedIn || window._checkLuxoHasActiveSession()) {
+            window.luxoUserIsLoggedIn = true;
+            window._saludoAvatarReproducido = true;
+            window._luxoAvatarAudioMuted = true;
+            window.luxoStopLoginAvatarAudio();
+            if (typeof window.luxoRemoverListenersUnmute === 'function') {
+                window.luxoRemoverListenersUnmute();
+            }
+        } else {
+            // En pantalla de login pura: adjuntar listeners para interacción del usuario
+            window.luxoAgregarListenersUnmute();
+        }
+    } catch(e){}
 
     window.luxoStopLoginAvatarAudio = function() {
         window._luxoAvatarAudioActive = false;
@@ -219,8 +247,6 @@
             });
         } catch(e){}
     };
-
-    // Audio del avatar silenciado por defecto: activable solo con el botón de bocina (🔊/🔇)
 
     // Interceptor INMEDIATO al hacer clic en ACCEDER, Huella o Face ID (0ms de latencia)
     try {
@@ -246,7 +272,6 @@
             // 1. Acceder (corta el audio del avatar inmediatamente al enviar)
             if (_esAccionBoton(t, 'acceder')) {
                 window.luxoUserIsLoggedIn = true;
-                window._saludoAvatarReproducido = true;
                 try {
                     localStorage.setItem('luxo_session_active', 'true');
                     sessionStorage.setItem('luxo_session_active', 'true');
@@ -259,14 +284,7 @@
 
             // 1.1 Botón o icono de audio de avatar (🔊 / 🔇)
             let txtBtn = (t.innerText || t.textContent || '').trim();
-            let isSpeakerClick = (txtBtn === '🔊' || txtBtn === '🔇' || txtBtn.includes('Toca para escuchar') || _esAccionBoton(t, 'audio') || _esAccionBoton(t, 'avatar') || _esAccionBoton(t, 'escuchar'));
-            if (!isSpeakerClick && !window.luxoUserIsLoggedIn && e.clientX && e.clientY) {
-                let midX = window.innerWidth / 2;
-                if (Math.abs(e.clientX - midX) <= 80 && e.clientY >= 55 && e.clientY <= 240) {
-                    isSpeakerClick = true;
-                }
-            }
-            if (isSpeakerClick && !window.luxoUserIsLoggedIn) {
+            if (txtBtn === '🔊' || txtBtn === '🔇') {
                 if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
                     window.luxoToggleLoginAvatarAudio();
                 }
@@ -314,6 +332,73 @@
         }
     };
 
+    window.luxoRemoverListenersUnmute = function() {
+        try {
+            ['pointerdown', 'mousedown', 'keydown', 'click', 'touchstart', 'focusin'].forEach(function(evName) {
+                window.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+                document.removeEventListener(evName, window.luxoUnmuteAudio, { capture: true });
+            });
+        } catch(e){}
+    };
+
+    window.luxoUnmuteAudio = function() {
+        window._lastInteractionTime = Date.now();
+        try {
+            if (!window._luxoAudioUnlocked) {
+                window._luxoAudioUnlocked = true;
+                try {
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    if (AC) {
+                        if (!window._luxoACtx) window._luxoACtx = new AC();
+                        if (window._luxoACtx.state === 'suspended') {
+                            window._luxoACtx.resume();
+                        }
+                    }
+                } catch(e){}
+            }
+
+            // Si el usuario ya está autenticado formalmente en esta sesión, detener avatar
+            if (window.luxoUserIsLoggedIn === true) {
+                window.luxoStopLoginAvatarAudio();
+                window.luxoRemoverListenersUnmute();
+                return;
+            }
+
+            // Si estamos en la pantalla de login: si el audio no está reproduciéndose y no está silenciado
+            if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted) {
+                let snd = document.getElementById('luxo_avatar_audio_el');
+                if (!snd) {
+                    snd = document.createElement('audio');
+                    snd.id = 'luxo_avatar_audio_el';
+                    snd.preload = 'auto';
+                    snd.setAttribute('playsinline', '');
+                    (document.body || document.documentElement).appendChild(snd);
+                }
+                let targetSrc = window.location.origin + '/custom_assets/saludo_login.mp3';
+                if (!snd.src || !snd.src.includes('saludo_login.mp3')) {
+                    snd.src = targetSrc;
+                }
+                snd.muted = false;
+                snd.volume = 1.0;
+                if (snd.paused) {
+                    if (snd.ended) snd.currentTime = 0;
+                    let p = snd.play();
+                    if (p !== undefined) {
+                        p.then(function() {
+                            window._luxoAvatarAudioActive = true;
+                            window._saludoAvatarReproducido = true;
+                            console.log('[LUXO AVATAR] Audio iniciado exitosamente por primer gesto del usuario.');
+                            window.luxoRemoverListenersUnmute();
+                        }).catch(function(e){
+                            console.log('[LUXO AVATAR] Esperando gesto para reproducir:', e);
+                        });
+                    }
+                }
+            }
+        } catch(e){}
+    };
+    // Los listeners de unmute solo se activan explícitamente en la pantalla de login mediante window.luxoAgregarListenersUnmute()
+
     // 5. Detener Audio / Speech
     window.luxoStopTts = function() {
         let el = document.getElementById("luxo_global_tts_player");
@@ -322,9 +407,6 @@
                 el.pause();
                 el.currentTime = 0;
             } catch(e){}
-        }
-        if (typeof window.luxoStopLoginAvatarAudio === 'function') {
-            window.luxoStopLoginAvatarAudio();
         }
         if ('speechSynthesis' in window) {
             try { window.speechSynthesis.cancel(); } catch(e){}
@@ -534,7 +616,8 @@
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
 
-                    if (window.luxoUserIsLoggedIn === true) {
+                    const hasUserSess = (window.luxoUserIsLoggedIn === true);
+                    if (hasUserSess) {
                         let oldAvatarSnd = document.getElementById('luxo_avatar_audio_el');
                         if (oldAvatarSnd) {
                             window.luxoStopLoginAvatarAudio();
@@ -564,14 +647,6 @@
                             if (data.action === 'speak' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
                                 window.luxoPlayTts(data.text, data.audio_url, data.id, data.voice_id, data.voice_gender);
-                            } else if (data.action === 'play_avatar' && data.id && data.id !== lastHandledTtsId) {
-                                lastHandledTtsId = data.id;
-                                window._luxoAvatarAudioMuted = false;
-                                if (window.luxoPlayLoginAvatarAudio) window.luxoPlayLoginAvatarAudio(true);
-                            } else if (data.action === 'stop_avatar' && data.id && data.id !== lastHandledTtsId) {
-                                lastHandledTtsId = data.id;
-                                window._luxoAvatarAudioMuted = true;
-                                if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio();
                             } else if (data.action === 'stop' && data.id && data.id !== lastHandledTtsId) {
                                 lastHandledTtsId = data.id;
                                 window.luxoStopTts();
@@ -1960,7 +2035,6 @@
         ['pointerdown', 'keydown', 'click', 'touchstart'].forEach(function(ev) {
             window.addEventListener(ev, renovarActividadUsuario, { passive: true, capture: true });
         });
-
         // Interceptor local de teclado para Enfoque Diario (Excel-like continuous navigation)
         let _enfoqueNavBusy = false;
         window.addEventListener('keydown', function(e) {

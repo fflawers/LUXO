@@ -25388,8 +25388,8 @@ Ejemplo:
 
     login_video_player = None
     btn_audio = None
-    has_interacted_audio = [True]
-    audio_is_muted = [True]
+    has_interacted_audio = [False]
+    audio_is_muted = [False]
 
     def reproducir_audio_avatar_nativo():
         try:
@@ -25407,29 +25407,36 @@ Ejemplo:
 
     def toggle_audio(e=None):
         nonlocal login_video_player, btn_audio
+        if not has_interacted_audio[0]:
+            has_interacted_audio[0] = True
+            audio_is_muted[0] = False
+            reproducir_audio_avatar_nativo()
+            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
+            if btn_audio:
+                try:
+                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
+                    btn_audio.tooltip = "Silenciar Audio del Avatar"
+                    btn_audio.update()
+                except Exception: pass
+            return
+
         has_interacted_audio[0] = True
         audio_is_muted[0] = not audio_is_muted[0]
-        import time as _t
-        _act = "stop_avatar" if audio_is_muted[0] else "play_avatar"
-        _evt = {"id": f"avatar_{int(_t.time()*1000)}", "action": _act, "timestamp": _t.time()}
-        _tok = getattr(page, "_luxo_token", None) or getattr(page, "session_id", None) or str(id(page))
-        GLOBAL_WEB_TTS_EVENTS[str(_tok)] = _evt
-
         if audio_is_muted[0]:
             detener_audio_avatar_nativo()
             ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = true; if (window.luxoStopLoginAvatarAudio) { window.luxoStopLoginAvatarAudio(); }")
             if btn_audio:
                 try:
-                    btn_audio.content = ft.Text("🔇", size=13, color="#888899", text_align="center")
+                    btn_audio.content = ft.Text("🔇", size=11, color="#888899", text_align="center")
                     btn_audio.tooltip = "Activar Audio del Avatar"
                     btn_audio.update()
                 except Exception: pass
         else:
             reproducir_audio_avatar_nativo()
-            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
+            ejecutar_js_flet(page, "window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
             if btn_audio:
                 try:
-                    btn_audio.content = ft.Text("🔊", size=13, color="#00FFFF", text_align="center")
+                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
                     btn_audio.tooltip = "Silenciar Audio del Avatar"
                     btn_audio.update()
                 except Exception: pass
@@ -25468,7 +25475,8 @@ Ejemplo:
         color="white",
         bgcolor="#040407",
         border_radius=10,
-        content_padding=12
+        content_padding=12,
+        on_focus=unmute_on_first_interaction
     )
 
     is_pass_hidden = [True]
@@ -25501,6 +25509,7 @@ Ejemplo:
         border_radius=10,
         content_padding=12,
         on_submit=login_click,
+        on_focus=unmute_on_first_interaction,
         suffix=btn_eye_3d
     )
 
@@ -25541,16 +25550,16 @@ Ejemplo:
                 toggle_audio(e)
 
             btn_audio = ft.Container(
-                content=ft.Text("🔇", size=13, color="#888899", text_align="center"),
+                content=ft.Text("🔊", size=13, color="#00FFFF", text_align="center"),
                 bgcolor="#111122",
-                border=ft.Border.all(1.5, "#888899"),
+                border=ft.Border.all(1.5, "#00FFFF"),
                 width=32,
                 height=32,
                 border_radius=16,
                 alignment=ft.alignment.Alignment(0, 0),
-                tooltip="Activar Audio del Avatar",
-                shadow=[ft.BoxShadow(color="#40888888", blur_radius=10, spread_radius=1)],
-                data=False,
+                tooltip="Silenciar / Activar Audio",
+                shadow=[ft.BoxShadow(color="#4000FFFF", blur_radius=10, spread_radius=1)],
+                data=True,
                 on_click=toggle_audio
             )
             video_avatar = ft.Column([
@@ -25563,7 +25572,7 @@ Ejemplo:
                         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
                         border=ft.Border.all(2.5, "#00F0FF"),
                         shadow=[ft.BoxShadow(color="#6000FFFF", blur_radius=25, spread_radius=2)],
-                        on_click=toggle_audio
+                        on_click=on_avatar_tap
                     ),
                     ft.Container(
                         content=btn_audio,
@@ -25574,10 +25583,7 @@ Ejemplo:
                         border_radius=16,
                     )
                 ], width=112, height=112),
-                ft.Container(
-                    content=ft.Text("🔊 Toca para escuchar al Avatar", size=10, color="#80E5FF", weight="w500"),
-                    on_click=toggle_audio
-                )
+                ft.Text("🔊 Toca para escuchar al Avatar", size=10, color="#80E5FF", weight="w500")
             ], horizontal_alignment="center", spacing=6)
         except Exception as ex_v:
             print("Notice video login load:", ex_v)
