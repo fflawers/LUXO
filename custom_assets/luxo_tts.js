@@ -89,7 +89,7 @@
     // 4. Desbloqueo de Audio por Gesto de Usuario & Gestión de Avatar de Inicio
     window._lastInteractionTime = Date.now();
     window._luxoAvatarAudioActive = false;
-    window._luxoAvatarAudioMuted = false;
+    window._luxoAvatarAudioMuted = true;
     window._saludoAvatarReproducido = false;
 
     window._checkLuxoHasActiveSession = function() {
@@ -357,37 +357,8 @@
                 return;
             }
 
-            // Si estamos en la pantalla de login: si el audio no está reproduciéndose y no está silenciado
-            if (!window.luxoUserIsLoggedIn && !window._luxoAvatarAudioMuted) {
-                let snd = document.getElementById('luxo_avatar_audio_el');
-                if (!snd) {
-                    snd = document.createElement('audio');
-                    snd.id = 'luxo_avatar_audio_el';
-                    snd.preload = 'auto';
-                    snd.setAttribute('playsinline', '');
-                    (document.body || document.documentElement).appendChild(snd);
-                }
-                let targetSrc = window.location.origin + '/custom_assets/saludo_login.mp3';
-                if (!snd.src || !snd.src.includes('saludo_login.mp3')) {
-                    snd.src = targetSrc;
-                }
-                snd.muted = false;
-                snd.volume = 1.0;
-                if (snd.paused) {
-                    if (snd.ended) snd.currentTime = 0;
-                    let p = snd.play();
-                    if (p !== undefined) {
-                        p.then(function() {
-                            window._luxoAvatarAudioActive = true;
-                            window._saludoAvatarReproducido = true;
-                            console.log('[LUXO AVATAR] Audio iniciado exitosamente por primer gesto del usuario.');
-                            window.luxoRemoverListenersUnmute();
-                        }).catch(function(e){
-                            console.log('[LUXO AVATAR] Esperando gesto para reproducir:', e);
-                        });
-                    }
-                }
-            }
+            // El audio del avatar en login NO se reproduce automaticamente por clic en pantalla.
+            // Solo se activa si el usuario pulsa manualmente el boton de la bocina.
         } catch(e){}
     };
     // Los listeners de unmute solo se activan explícitamente en la pantalla de login mediante window.luxoAgregarListenersUnmute()

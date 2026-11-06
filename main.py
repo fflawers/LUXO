@@ -1152,27 +1152,25 @@ def configurar_rutas_fastapi(app):
         token = session_id or device_id
         evt = None
 
-        # 1. Prioridad absoluta: token de sesión directo (aislamiento estricto por dispositivo/sesión)
+        # 1. Prioridad: token de sesión directo
         if token and token in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[token]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
-        # 2. Enlace por ID de usuario autenticado (ESTRICTAMENTE NO PARA AUDIOS DE VOZ/LECTURA)
+        # 2. Enlace por ID de usuario autenticado
         if not evt and user_id and str(user_id).strip() not in ["unknown", "", "None", "null", "undefined"] and str(user_id).strip() in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[str(user_id).strip()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
-                    evt = cand
+                evt = cand
 
-        # 3. Enlace por Username autenticado (ESTRICTAMENTE NO PARA AUDIOS DE VOZ/LECTURA)
+        # 3. Enlace por Username autenticado (ej. mx204562, sgh3502)
         if not evt and username and str(username).strip().lower() not in ["unknown", "", "None", "null", "undefined"] and str(username).strip().lower() in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[str(username).strip().lower()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
-                    evt = cand
+                evt = cand
 
-        # 4. Enlace por evento global / broadcast (ESTRICTAMENTE NO PARA AUDIOS DE VOZ/LECTURA)
+        # 4. Enlace por evento global / broadcast (Login / Registro biometrico)
         if not evt and "global" in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS["global"]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
@@ -5167,7 +5165,12 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time()
         }
-        # Aislamiento 100% por sesión privada: el audio solo se entrega al navegador/dispositivo que lo solicitó
+        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
+        u_name = (user_info.get("usuario") or "").strip().lower() if ('user_info' in locals() and user_info) else ""
+        if u_id and str(u_id).strip() not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[str(u_id).strip()] = evt_data
+        if u_name and u_name not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[u_name] = evt_data
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
 
@@ -5931,7 +5934,9 @@ def main(page: ft.Page):
             "timestamp": time.time(),
             "device_type": d_type
         }
-        # Aislamiento 100% por sesión privada
+        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else None)
+        if u_id and str(u_id) not in ["1", "unknown", "", "None"]:
+            GLOBAL_WEB_TTS_EVENTS[str(u_id)] = evt
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
 
@@ -25382,7 +25387,7 @@ Ejemplo:
     login_video_player = None
     btn_audio = None
     has_interacted_audio = [False]
-    audio_is_muted = [False]
+    audio_is_muted = [True]
 
     def reproducir_audio_avatar_nativo():
         try:
@@ -25435,17 +25440,8 @@ Ejemplo:
                 except Exception: pass
 
     def unmute_on_first_interaction(e=None):
-        if not has_interacted_audio[0]:
-            has_interacted_audio[0] = True
-            audio_is_muted[0] = False
-            reproducir_audio_avatar_nativo()
-            ejecutar_js_flet(page, "window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = false; window._saludoAvatarReproducido = false; if (window.luxoPlayLoginAvatarAudio) { window.luxoPlayLoginAvatarAudio(true); }")
-            if btn_audio:
-                try:
-                    btn_audio.content = ft.Text("🔊", size=11, color="#00FFFF", text_align="center")
-                    btn_audio.tooltip = "Silenciar Audio del Avatar"
-                    btn_audio.update()
-                except Exception: pass
+        # Desactivado: el audio del avatar solo se activa manualmente al presionar su boton de bocina
+        pass
 
     def desmutear_avatar_logout():
         has_interacted_audio[0] = True
