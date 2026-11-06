@@ -1158,19 +1158,17 @@ def configurar_rutas_fastapi(app):
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
-        # 2. Enlace por ID de usuario autenticado (EXCLUSIVAMENTE PARA ACCIONES NO DE VOZ)
+        # 2. Enlace por ID de usuario autenticado
         if not evt and user_id and str(user_id).strip() not in ["unknown", "", "None", "null", "undefined"] and str(user_id).strip() in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[str(user_id).strip()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
-                    evt = cand
+                evt = cand
 
-        # 3. Enlace por Username autenticado (EXCLUSIVAMENTE PARA ACCIONES NO DE VOZ)
+        # 3. Enlace por Username autenticado
         if not evt and username and str(username).strip().lower() not in ["unknown", "", "None", "null", "undefined"] and str(username).strip().lower() in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[str(username).strip().lower()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
-                    evt = cand
+                evt = cand
 
         # 4. Enlace por evento global / broadcast (Login / Registro biometrico)
         if not evt and "global" in GLOBAL_WEB_TTS_EVENTS:
@@ -1567,7 +1565,7 @@ def configurar_rutas_fastapi(app):
                                     const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
                                     if (txt) {
                                         playBeep(2);
-                                        const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                        const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
                                         console.log('[MIC MAESTRO LUXO] Enviando consulta a LUXO general:', txt);
                                         fetch('/text_input?user_id=' + encodeURIComponent(uid) + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                     }
@@ -2144,7 +2142,7 @@ def configurar_rutas_fastapi(app):
                         window._luxoTtsIntervalStarted = true;
                         setInterval(function() {
                             try {
-                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
                                 const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
                                 fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' })
                                 .then(function(r) { return r.json(); })
@@ -5172,6 +5170,8 @@ def main(page: ft.Page):
         if not url and not text:
             return
         tok = getattr(page, "_luxo_token", None) or dev_token
+        u_id = str(user_info.get("id") or getattr(page, "user_id", "") or "").strip()
+        u_name = str(user_info.get("usuario") or getattr(page, "username", "") or "").lower().strip()
         evt_id = f"spk_{int(time.time()*1000)}"
         evt_data = {
             "id": evt_id,
@@ -5182,9 +5182,13 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time()
         }
-        # Aislamiento estricto: el audio solo se guarda en la sesion privada de este navegador/dispositivo
+        # Enrutamiento preciso al dispositivo y al usuario autenticado
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
+        if u_id and u_id not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[u_id] = evt_data
+        if u_name and u_name not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[u_name] = evt_data
 
         # Disparo directo a la sesión de este navegador (aislamiento 100% nativo)
         clean_js_text = str(text or "").replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", " ").replace("\r", "")
@@ -5939,6 +5943,8 @@ def main(page: ft.Page):
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         tok = getattr(page, "_luxo_token", None) or dev_token
+        u_id = str(user_info.get("id") or getattr(page, "user_id", "") or "").strip()
+        u_name = str(user_info.get("usuario") or getattr(page, "username", "") or "").lower().strip()
         d_type = _detect_page_device_type()
         evt = {
             "id": f"stop_{int(time.time()*1000)}",
@@ -5946,9 +5952,12 @@ def main(page: ft.Page):
             "timestamp": time.time(),
             "device_type": d_type
         }
-        # Aislamiento estricto por sesion privada
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
+        if u_id and u_id not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[u_id] = evt
+        if u_name and u_name not in ["unknown", "", "None", "null", "undefined"]:
+            GLOBAL_WEB_TTS_EVENTS[u_name] = evt
 
         ejecutar_js_flet(page, "if (window.luxoStopTts) { window.luxoStopTts(); } else { let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); a.currentTime = 0; } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch(e){} } }")
 
@@ -6082,7 +6091,8 @@ def main(page: ft.Page):
             return
         d_type = _detect_page_device_type()
         tok = getattr(page, "_luxo_token", None) or dev_token
-        u_id = getattr(page, "user_id", None) or (user_info.get("id") if ('user_info' in locals() and user_info) else "1")
+        u_id = str(user_info.get("id") or getattr(page, "user_id", "") or "").strip()
+        u_name = str(user_info.get("usuario") or getattr(page, "username", "") or "").lower().strip()
         if not current_speak_is_paused:
             current_speak_is_paused = True
             if current_speak_btn_play_pause:
@@ -6096,9 +6106,12 @@ def main(page: ft.Page):
                 "timestamp": time.time(),
                 "device_type": d_type
             }
-            # Aislamiento 100% por sesión privada
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
+            if u_id and u_id not in ["unknown", "", "None", "null", "undefined"]:
+                GLOBAL_WEB_TTS_EVENTS[u_id] = evt
+            if u_name and u_name not in ["unknown", "", "None", "null", "undefined"]:
+                GLOBAL_WEB_TTS_EVENTS[u_name] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }")
         else:
             current_speak_is_paused = False
@@ -6113,9 +6126,12 @@ def main(page: ft.Page):
                 "timestamp": time.time(),
                 "device_type": d_type
             }
-            # Aislamiento 100% por sesión privada
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
+            if u_id and u_id not in ["unknown", "", "None", "null", "undefined"]:
+                GLOBAL_WEB_TTS_EVENTS[u_id] = evt
+            if u_name and u_name not in ["unknown", "", "None", "null", "undefined"]:
+                GLOBAL_WEB_TTS_EVENTS[u_name] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.play(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }")
 
 
@@ -7048,7 +7064,13 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
         )
         try: page.update()
         except: pass
-        ejecutar_js_flet(page, f"window.luxoUserId = '{user_info.get('id', '1')}';")
+        u_id_str = str(user_info.get('id') or getattr(page, 'user_id', '') or '').strip()
+        u_name_str = str(user_info.get('usuario') or getattr(page, 'username', '') or '').lower().strip()
+        if u_id_str:
+            page.user_id = u_id_str
+        if u_name_str:
+            page.username = u_name_str
+        ejecutar_js_flet(page, f"window.luxoUserId = '{u_id_str}'; window.luxoUsername = '{u_name_str}'; window.luxoUserIsLoggedIn = true; try {{ localStorage.setItem('logged_user_id', '{u_id_str}'); localStorage.setItem('logged_username', '{u_name_str}'); localStorage.setItem('flutter.logged_user_id', '{u_id_str}'); localStorage.setItem('flutter.logged_username', '{u_name_str}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
         # En cargar_chat ya no emitimos saludo de audio duplicado para evitar interrupciones
         page.clean()
 
@@ -17345,7 +17367,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                         r.onresult = function(ev) {
                             const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
                             if (txt) {
-                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
                                 fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=chat&text=' + encodeURIComponent(txt), { method: 'POST' });
                             }
                         };
@@ -18016,7 +18038,7 @@ REGLAS OBLIGATORIAS:
                             r.onresult = function(ev) {
                                 const txt = (ev.results && ev.results[0] && ev.results[0][0]) ? ev.results[0][0].transcript : '';
                                 if (txt) {
-                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '1';
+                                    const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
                                     fetch('/simulador_text_input?user_id=' + encodeURIComponent(uid) + '&mode=' + encodeURIComponent('voz') + '&text=' + encodeURIComponent(txt), { method: 'POST' });
                                 }
                             };
@@ -25313,6 +25335,7 @@ Ejemplo:
                             import time
                             if hasattr(page, "shared_preferences") and page.shared_preferences:
                                 await page.shared_preferences.set("logged_user_id", str(user_info["id"]))
+                                await page.shared_preferences.set("logged_username", str(user_info.get("usuario", "")).lower().strip())
                                 await page.shared_preferences.set("last_activity_timestamp", str(int(time.time())))
                         except Exception as ex_st:
                             print("Notice guardar shared_preferences:", ex_st)
@@ -25927,7 +25950,7 @@ Ejemplo:
                         page._luxo_token = sess_token
                         u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
                         page.username = u_clean_login
-                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
+                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('flutter.logged_user_id', '{user_id_key}'); localStorage.setItem('flutter.logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,
