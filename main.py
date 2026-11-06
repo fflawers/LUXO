@@ -1167,11 +1167,12 @@ def configurar_rutas_fastapi(app):
                 cand = GLOBAL_WEB_TTS_EVENTS[f"{uname}_{dtype}"]
                 if cand and (now - cand.get("timestamp", now)) <= 15.0:
                     evt = cand
-            # 3. Prioridad: canal directo username
+            # 3. Prioridad: canal directo username (exclusivamente no-voz para evitar colisiones entre pestañas)
             if not evt and uname in GLOBAL_WEB_TTS_EVENTS:
                 cand = GLOBAL_WEB_TTS_EVENTS[uname]
                 if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                    evt = cand
+                    if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
+                        evt = cand
 
         # 4. Enlace por ID de usuario autenticado (EXCLUSIVAMENTE ACCIONES NO DE VOZ)
         if not evt and user_id and str(user_id).strip() not in ["unknown", "", "None", "null", "undefined"] and str(user_id).strip() in GLOBAL_WEB_TTS_EVENTS:
@@ -5134,18 +5135,26 @@ def main(page: ft.Page):
     import uuid, time
     browser_sid = None
     try:
-        if hasattr(page, "query") and page.query:
-            browser_sid = page.query.get("luxo_sid")
-        if not browser_sid and hasattr(page, "route") and page.route and "luxo_sid=" in str(page.route):
-            import urllib.parse
-            r_str = str(page.route)
-            q_idx = r_str.find("?")
-            if q_idx != -1:
-                parsed_q = urllib.parse.parse_qs(r_str[q_idx+1:])
-                if "luxo_sid" in parsed_q:
-                    browser_sid = parsed_q["luxo_sid"][0]
+        conn = getattr(getattr(page, "session", None), "connection", None)
+        ws = getattr(conn, "_FletApp__websocket", None)
+        if ws and hasattr(ws, "query_params") and ws.query_params.get("luxo_sid"):
+            browser_sid = str(ws.query_params.get("luxo_sid")).strip()
     except Exception:
         browser_sid = None
+    if not browser_sid:
+        try:
+            if hasattr(page, "query") and page.query:
+                browser_sid = page.query.get("luxo_sid")
+            if not browser_sid and hasattr(page, "route") and page.route and "luxo_sid=" in str(page.route):
+                import urllib.parse
+                r_str = str(page.route)
+                q_idx = r_str.find("?")
+                if q_idx != -1:
+                    parsed_q = urllib.parse.parse_qs(r_str[q_idx+1:])
+                    if "luxo_sid" in parsed_q:
+                        browser_sid = parsed_q["luxo_sid"][0]
+        except Exception:
+            browser_sid = None
 
     dev_token = browser_sid or f"dev_{uuid.uuid4().hex[:12]}"
     page._luxo_token = dev_token
@@ -5192,13 +5201,14 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time()
         }
-        # Canalización privada por dispositivo y usuario autenticado
+        # Canalización privada por dispositivo y sesión única aislada
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
-        if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+        elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
             if d_type:
                 GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt_data
-            GLOBAL_WEB_TTS_EVENTS[u_name] = evt_data
+            else:
+                GLOBAL_WEB_TTS_EVENTS[u_name] = evt_data
 
         # Disparo directo a la sesión de este navegador (aislamiento 100% nativo)
         clean_js_text = str(text or "").replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", " ").replace("\r", "")
@@ -5963,10 +5973,11 @@ def main(page: ft.Page):
         }
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
-        if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+        elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
             if d_type:
                 GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
-            GLOBAL_WEB_TTS_EVENTS[u_name] = evt
+            else:
+                GLOBAL_WEB_TTS_EVENTS[u_name] = evt
 
         ejecutar_js_flet(page, "if (window.luxoStopTts) { window.luxoStopTts(); } else { let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); a.currentTime = 0; } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch(e){} } }")
 
@@ -6116,10 +6127,11 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
-            if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+            elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
                 if d_type:
                     GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
-                GLOBAL_WEB_TTS_EVENTS[u_name] = evt
+                else:
+                    GLOBAL_WEB_TTS_EVENTS[u_name] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }")
         else:
             current_speak_is_paused = False
@@ -6136,10 +6148,11 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
-            if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+            elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
                 if d_type:
                     GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
-                GLOBAL_WEB_TTS_EVENTS[u_name] = evt
+                else:
+                    GLOBAL_WEB_TTS_EVENTS[u_name] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.play(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }")
 
 

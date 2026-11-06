@@ -54,11 +54,12 @@
   <link rel="manifest" href="manifest.json">
 
   <script>
+    var flet_ws_sid = window._luxoClientToken || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('luxo_client_session_id') : '') || '';
     var flet = {
       pyodide: false,
       multiView: false,
       noCdn: false,
-      webSocketEndpoint: "/ws",
+      webSocketEndpoint: "/ws" + (flet_ws_sid ? "?luxo_sid=" + encodeURIComponent(flet_ws_sid) : ""),
       entrypointBaseUrl: "/",
       assetBase: "/",
       routeUrlStrategy: "path",
@@ -107,6 +108,16 @@
   </script>
 
   <!-- fletAppConfig -->
+  <script>
+    (function() {
+      try {
+        var sid = window._luxoClientToken || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('luxo_client_session_id') : '') || '';
+        if (sid && typeof flet !== 'undefined') {
+          flet.webSocketEndpoint = "ws?luxo_sid=" + encodeURIComponent(sid);
+        }
+      } catch(e){}
+    })();
+  </script>
 
   <script src="python.js"></script>
 </head>
