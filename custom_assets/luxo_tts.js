@@ -594,6 +594,8 @@
                     const uid = window.getLuxoUserId ? window.getLuxoUserId() : '';
                     const uname = window.getLuxoUsername ? window.getLuxoUsername() : '';
                     const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : '';
+                    const isMob = (/iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent)) || (window.innerWidth < 768);
+                    const devType = isMob ? 'mobile' : 'desktop';
 
                     const hasUserSess = (window.luxoUserIsLoggedIn === true);
                     if (hasUserSess) {
@@ -603,7 +605,7 @@
                         }
                     }
 
-                    const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' });
+                    const res = await fetch('/api/tts/poll?session_id=' + encodeURIComponent(sid) + '&user_id=' + encodeURIComponent(uid) + '&username=' + encodeURIComponent(uname) + '&device_type=' + encodeURIComponent(devType) + '&last_id=' + encodeURIComponent(lastHandledTtsId || '') + '&_t=' + Date.now(), { cache: 'no-store' });
                     if (res && res.ok) {
                         const data = await res.json();
                         if (typeof data.sim_visible !== 'undefined') {

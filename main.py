@@ -1152,27 +1152,35 @@ def configurar_rutas_fastapi(app):
         token = session_id or device_id
         evt = None
 
-        # 1. Prioridad: token de sesión directo del dispositivo (canal 100% privado para audio)
+        uname = str(username or "").strip().lower()
+        dtype = str(device_type or "").strip().lower()
+
+        # 1. Prioridad: token de sesión directo del dispositivo
         if token and token in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[token]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 evt = cand
 
-        # 2. Enlace por ID de usuario autenticado (EXCLUSIVAMENTE ACCIONES NO DE VOZ)
+        # 2. Prioridad: canal privado username + tipo de dispositivo (ej: mx204562_desktop vs sgh3502_mobile)
+        if not evt and uname and uname not in ["unknown", "", "none", "null", "undefined"]:
+            if dtype and f"{uname}_{dtype}" in GLOBAL_WEB_TTS_EVENTS:
+                cand = GLOBAL_WEB_TTS_EVENTS[f"{uname}_{dtype}"]
+                if cand and (now - cand.get("timestamp", now)) <= 15.0:
+                    evt = cand
+            # 3. Prioridad: canal directo username
+            if not evt and uname in GLOBAL_WEB_TTS_EVENTS:
+                cand = GLOBAL_WEB_TTS_EVENTS[uname]
+                if cand and (now - cand.get("timestamp", now)) <= 15.0:
+                    evt = cand
+
+        # 4. Enlace por ID de usuario autenticado (EXCLUSIVAMENTE ACCIONES NO DE VOZ)
         if not evt and user_id and str(user_id).strip() not in ["unknown", "", "None", "null", "undefined"] and str(user_id).strip() in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS[str(user_id).strip()]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
                 if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
                     evt = cand
 
-        # 3. Enlace por Username autenticado (EXCLUSIVAMENTE ACCIONES NO DE VOZ)
-        if not evt and username and str(username).strip().lower() not in ["unknown", "", "None", "null", "undefined"] and str(username).strip().lower() in GLOBAL_WEB_TTS_EVENTS:
-            cand = GLOBAL_WEB_TTS_EVENTS[str(username).strip().lower()]
-            if cand and (now - cand.get("timestamp", now)) <= 15.0:
-                if cand.get("action") not in ["speak", "stop", "pause", "resume"]:
-                    evt = cand
-
-        # 4. Enlace por evento global / broadcast (EXCLUSIVAMENTE ACCIONES NO DE VOZ)
+        # 5. Enlace por evento global / broadcast (EXCLUSIVAMENTE ACCIONES NO DE VOZ)
         if not evt and "global" in GLOBAL_WEB_TTS_EVENTS:
             cand = GLOBAL_WEB_TTS_EVENTS["global"]
             if cand and (now - cand.get("timestamp", now)) <= 15.0:
@@ -1184,7 +1192,7 @@ def configurar_rutas_fastapi(app):
             response_data = evt
             # Consumir eventos de un solo uso para que no se repitan en bucle
             if evt.get("action") in ["speak", "stop", "pause", "resume", "open_facial_login", "open_passkey_login", "open_colab_face", "open_colab_huella"]:
-                for target_k in [token, str(user_id).strip(), str(username).strip().lower(), "global"]:
+                for target_k in [token, f"{uname}_{dtype}", uname, str(user_id).strip(), "global"]:
                     if target_k and target_k in GLOBAL_WEB_TTS_EVENTS and GLOBAL_WEB_TTS_EVENTS[target_k].get("id") == evt.get("id"):
                         del GLOBAL_WEB_TTS_EVENTS[target_k]
             print(f"[LUXO TTS POLL SERVER] DISPATCH: session_id='{session_id}', user_id='{user_id}', username='{username}', device_id='{device_id}', action='{response_data.get('action')}', id='{response_data.get('id')}'")
@@ -5172,6 +5180,8 @@ def main(page: ft.Page):
         if not url and not text:
             return
         tok = getattr(page, "_luxo_token", None) or dev_token
+        u_name = str(user_info.get("usuario") or getattr(page, "username", "") or "").lower().strip()
+        d_type = _detect_page_device_type()
         evt_id = f"spk_{int(time.time()*1000)}"
         evt_data = {
             "id": evt_id,
@@ -5182,9 +5192,13 @@ def main(page: ft.Page):
             "voice_gender": voice_gender,
             "timestamp": time.time()
         }
-        # Aislamiento estricto por dispositivo: solo se almacena en el token privado de este dispositivo/pestaña
+        # Canalización privada por dispositivo y usuario autenticado
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
+        if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+            if d_type:
+                GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt_data
+            GLOBAL_WEB_TTS_EVENTS[u_name] = evt_data
 
         # Disparo directo a la sesión de este navegador (aislamiento 100% nativo)
         clean_js_text = str(text or "").replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", " ").replace("\r", "")
@@ -5939,6 +5953,7 @@ def main(page: ft.Page):
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
         tok = getattr(page, "_luxo_token", None) or dev_token
+        u_name = str(user_info.get("usuario") or getattr(page, "username", "") or "").lower().strip()
         d_type = _detect_page_device_type()
         evt = {
             "id": f"stop_{int(time.time()*1000)}",
@@ -5948,6 +5963,10 @@ def main(page: ft.Page):
         }
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
+        if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+            if d_type:
+                GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
+            GLOBAL_WEB_TTS_EVENTS[u_name] = evt
 
         ejecutar_js_flet(page, "if (window.luxoStopTts) { window.luxoStopTts(); } else { let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); a.currentTime = 0; } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch(e){} } }")
 
@@ -6081,6 +6100,7 @@ def main(page: ft.Page):
             return
         d_type = _detect_page_device_type()
         tok = getattr(page, "_luxo_token", None) or dev_token
+        u_name = str(user_info.get("usuario") or getattr(page, "username", "") or "").lower().strip()
         if not current_speak_is_paused:
             current_speak_is_paused = True
             if current_speak_btn_play_pause:
@@ -6096,6 +6116,10 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
+            if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+                if d_type:
+                    GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
+                GLOBAL_WEB_TTS_EVENTS[u_name] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.pause(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.pause(); } catch(e){} }")
         else:
             current_speak_is_paused = False
@@ -6112,6 +6136,10 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
+            if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+                if d_type:
+                    GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
+                GLOBAL_WEB_TTS_EVENTS[u_name] = evt
             ejecutar_js_flet(page, "let a = document.getElementById('luxo_global_tts_player'); if (a) { try { a.play(); } catch(e){} } if ('speechSynthesis' in window) { try { window.speechSynthesis.resume(); } catch(e){} }")
 
 
