@@ -13,9 +13,10 @@
         }
         window._luxoClientToken = sid;
         window._luxoClientSessionId = sid;
+        document.cookie = "luxo_sid=" + sid + "; path=/; max-age=31536000; SameSite=Lax";
         if (!window.location.search.includes('luxo_sid=')) {
           var sep = window.location.search ? '&' : '?';
-          window.history.replaceState(null, '', window.location.pathname + window.location.search + sep + 'luxo_sid=' + sid + window.location.hash);
+          window.location.replace(window.location.pathname + window.location.search + sep + 'luxo_sid=' + sid + window.location.hash);
         }
       } catch(e){}
     })();

@@ -42,6 +42,20 @@
     window.getLuxoSessionId = function() {
         if (window._luxoClientToken) return window._luxoClientToken;
         try {
+            let p = new URLSearchParams(window.location.search);
+            if (p.get('luxo_sid')) {
+                window._luxoClientToken = p.get('luxo_sid');
+                return p.get('luxo_sid');
+            }
+        } catch(e){}
+        try {
+            let m = document.cookie.match(/luxo_sid=([^;]+)/);
+            if (m && m[1]) {
+                window._luxoClientToken = m[1].trim();
+                return window._luxoClientToken;
+            }
+        } catch(e){}
+        try {
             let stored = sessionStorage.getItem('luxo_client_session_id');
             if (stored) {
                 window._luxoClientSessionId = stored;
@@ -49,7 +63,7 @@
             }
         } catch(e){}
         if (!window._luxoClientSessionId) {
-            window._luxoClientSessionId = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+            window._luxoClientSessionId = 'sid_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
             try { sessionStorage.setItem('luxo_client_session_id', window._luxoClientSessionId); } catch(e){}
         }
         return window._luxoClientSessionId;
