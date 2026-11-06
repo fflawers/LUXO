@@ -113,7 +113,7 @@
       try {
         var sid = window._luxoClientToken || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('luxo_client_session_id') : '') || '';
         if (sid && typeof flet !== 'undefined') {
-          flet.webSocketEndpoint = "ws?luxo_sid=" + encodeURIComponent(sid);
+          flet.webSocketEndpoint = "/ws?luxo_sid=" + encodeURIComponent(sid);
         }
       } catch(e){}
     })();

@@ -563,6 +563,9 @@
                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                             } else {
                                 console.warn("[LUXO TTS] Autoplay bloqueado por política del navegador; esperando interacción de usuario.");
+                                if (text && ('speechSynthesis' in window)) {
+                                    window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
+                                }
                             }
                         });
                     }

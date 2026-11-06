@@ -5204,7 +5204,7 @@ def main(page: ft.Page):
         # Canalización privada por dispositivo y sesión única aislada
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt_data
-        elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+        if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
             if d_type:
                 GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt_data
             else:
@@ -5973,7 +5973,7 @@ def main(page: ft.Page):
         }
         if tok:
             GLOBAL_WEB_TTS_EVENTS[tok] = evt
-        elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+        if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
             if d_type:
                 GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
             else:
@@ -6127,7 +6127,7 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
-            elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+            if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
                 if d_type:
                     GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
                 else:
@@ -6148,7 +6148,7 @@ def main(page: ft.Page):
             }
             if tok:
                 GLOBAL_WEB_TTS_EVENTS[tok] = evt
-            elif u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
+            if u_name and u_name not in ["unknown", "", "none", "null", "undefined"]:
                 if d_type:
                     GLOBAL_WEB_TTS_EVENTS[f"{u_name}_{d_type}"] = evt
                 else:
