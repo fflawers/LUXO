@@ -7078,7 +7078,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             page.user_id = u_id_str
         if u_name_str:
             page.username = u_name_str
-        ejecutar_js_flet(page, f"window.luxoUserId = '{u_id_str}'; window.luxoUsername = '{u_name_str}'; window.luxoUserIsLoggedIn = true; try {{ localStorage.setItem('logged_user_id', '{u_id_str}'); localStorage.setItem('logged_username', '{u_name_str}'); localStorage.setItem('flutter.logged_user_id', '{u_id_str}'); localStorage.setItem('flutter.logged_username', '{u_name_str}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
+        ejecutar_js_flet(page, f"window.luxoUserId = '{u_id_str}'; window.luxoUsername = '{u_name_str}'; window.luxoUserIsLoggedIn = true; try {{ sessionStorage.setItem('luxo_tab_user_id', '{u_id_str}'); sessionStorage.setItem('luxo_tab_username', '{u_name_str}'); localStorage.setItem('logged_user_id', '{u_id_str}'); localStorage.setItem('logged_username', '{u_name_str}'); localStorage.setItem('flutter.logged_user_id', '{u_id_str}'); localStorage.setItem('flutter.logged_username', '{u_name_str}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
         # En cargar_chat ya no emitimos saludo de audio duplicado para evitar interrupciones
         page.clean()
 
@@ -25248,7 +25248,7 @@ Ejemplo:
                     user_info["img_usuario"] = obtener_avatar_usuario(res["ID_Usuario"])
                     page.user_id = str(res["ID_Usuario"])
                     u_clean_login = str(res.get("Usuario") or "").lower().strip()
-                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
+                    ejecutar_js_flet(page, f"window.luxoUserId = '{res['ID_Usuario']}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ sessionStorage.setItem('luxo_tab_user_id', '{res['ID_Usuario']}'); sessionStorage.setItem('luxo_tab_username', '{u_clean_login}'); localStorage.setItem('logged_user_id', '{res['ID_Usuario']}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
                     # Obtener voz preferida guardada del usuario en base de datos
                     voz_usuario_db = None
                     try:
@@ -25958,7 +25958,7 @@ Ejemplo:
                         page._luxo_token = sess_token
                         u_clean_login = str(user_data.get("Usuario") or "").strip().lower()
                         page.username = u_clean_login
-                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('flutter.logged_user_id', '{user_id_key}'); localStorage.setItem('flutter.logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
+                        ejecutar_js_flet(page, f"window.luxoUserId = '{user_id_key}'; window.luxoUsername = '{u_clean_login}'; window.luxoUserIsLoggedIn = true; if (window.luxoStopLoginAvatarAudio) window.luxoStopLoginAvatarAudio(); try {{ sessionStorage.setItem('luxo_tab_user_id', '{user_id_key}'); sessionStorage.setItem('luxo_tab_username', '{u_clean_login}'); localStorage.setItem('logged_user_id', '{user_id_key}'); localStorage.setItem('logged_username', '{u_clean_login}'); localStorage.setItem('flutter.logged_user_id', '{user_id_key}'); localStorage.setItem('flutter.logged_username', '{u_clean_login}'); localStorage.setItem('luxo_session_active', 'true'); sessionStorage.setItem('luxo_session_active', 'true'); }} catch(e){{}}")
                         sess_dict = {
                             "page": page,
                             "user_info": user_info,

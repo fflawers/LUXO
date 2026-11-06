@@ -14,7 +14,13 @@
             return String(window.luxoUserId);
         }
         try {
-            let val = localStorage.getItem('flutter.logged_user_id') || sessionStorage.getItem('logged_user_id') || localStorage.getItem('logged_user_id');
+            let sVal = sessionStorage.getItem('luxo_tab_user_id') || sessionStorage.getItem('logged_user_id');
+            if (sVal && !['unknown', '', 'null', 'undefined'].includes(String(sVal).toLowerCase())) {
+                try { sVal = JSON.parse(sVal); } catch(e) { sVal = String(sVal).replace(/["']/g, ''); }
+                window.luxoUserId = String(sVal);
+                return String(sVal);
+            }
+            let val = localStorage.getItem('flutter.logged_user_id') || localStorage.getItem('logged_user_id');
             if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
                 try { val = JSON.parse(val); } catch(e) { val = String(val).replace(/["']/g, ''); }
                 window.luxoUserId = String(val);
@@ -29,7 +35,13 @@
             return String(window.luxoUsername).toLowerCase().trim();
         }
         try {
-            let val = localStorage.getItem('flutter.logged_username') || localStorage.getItem('logged_username') || sessionStorage.getItem('logged_username');
+            let sVal = sessionStorage.getItem('luxo_tab_username') || sessionStorage.getItem('logged_username');
+            if (sVal && !['unknown', '', 'null', 'undefined'].includes(String(sVal).toLowerCase())) {
+                try { sVal = JSON.parse(sVal); } catch(e) { sVal = String(sVal).replace(/["']/g, ''); }
+                window.luxoUsername = String(sVal).toLowerCase().trim();
+                return window.luxoUsername;
+            }
+            let val = localStorage.getItem('flutter.logged_username') || localStorage.getItem('logged_username');
             if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
                 try { val = JSON.parse(val); } catch(e) { val = String(val).replace(/["']/g, ''); }
                 return String(val).toLowerCase().trim();
@@ -38,35 +50,22 @@
         return '';
     };
 
-    // 2. Obtener Session ID
+    // 2. Obtener Session ID (Estrictamente aislado por pestaña en sessionStorage)
     window.getLuxoSessionId = function() {
         if (window._luxoClientToken) return window._luxoClientToken;
         try {
-            let p = new URLSearchParams(window.location.search);
-            if (p.get('luxo_sid')) {
-                window._luxoClientToken = p.get('luxo_sid');
-                return p.get('luxo_sid');
-            }
-        } catch(e){}
-        try {
-            let m = document.cookie.match(/luxo_sid=([^;]+)/);
-            if (m && m[1]) {
-                window._luxoClientToken = m[1].trim();
-                return window._luxoClientToken;
-            }
-        } catch(e){}
-        try {
             let stored = sessionStorage.getItem('luxo_client_session_id');
-            if (stored) {
+            if (stored && stored.length > 4) {
+                window._luxoClientToken = stored;
                 window._luxoClientSessionId = stored;
                 return stored;
             }
         } catch(e){}
-        if (!window._luxoClientSessionId) {
-            window._luxoClientSessionId = 'sid_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-            try { sessionStorage.setItem('luxo_client_session_id', window._luxoClientSessionId); } catch(e){}
-        }
-        return window._luxoClientSessionId;
+        let newSid = 'tab_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+        try { sessionStorage.setItem('luxo_client_session_id', newSid); } catch(e){}
+        window._luxoClientToken = newSid;
+        window._luxoClientSessionId = newSid;
+        return newSid;
     };
 
     // 3. Crear / Obtener elemento de audio persistente en el DOM
