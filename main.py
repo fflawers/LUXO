@@ -25973,8 +25973,8 @@ Ejemplo:
             page.update()
         except Exception:
             pass
-        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; } catch(e){}")
-        reproducir_audio_avatar_nativo()
+        ejecutar_js_flet(page, "try { localStorage.removeItem('logged_user_id'); localStorage.removeItem('logged_username'); localStorage.removeItem('flutter.logged_user_id'); localStorage.removeItem('flutter.logged_username'); localStorage.removeItem('luxo_session_active'); sessionStorage.clear(); window.luxoUserId = null; window.luxoUsername = null; window.luxoUserIsLoggedIn = false; window._luxoAvatarAudioMuted = true; } catch(e){}")
+        detener_audio_avatar_nativo()
 
     page.run_task(intentar_restaurar_sesion)
     

@@ -659,38 +659,8 @@
 <audio id="luxo_avatar_audio_el" src="/custom_assets/saludo_login.mp3" preload="auto" playsinline></audio>
 <script>
   (function() {
-    function unlockAvatarAudio(e) {
-      if (window.luxoUserIsLoggedIn === true) return;
-      var snd = document.getElementById('luxo_avatar_audio_el');
-      if (!snd) return;
-      var target = e ? e.target : null;
-      var txt = target ? ((target.innerText || target.textContent || '') + '').trim() : '';
-      if (txt === '🔊' || txt === '🔇') {
-        if (!snd.paused && snd.currentTime > 0) {
-          snd.pause();
-        } else {
-          snd.muted = false;
-          snd.volume = 1.0;
-          snd.play().catch(function(){});
-        }
-        return;
-      }
-      if (snd.paused) {
-        snd.muted = false;
-        snd.volume = 1.0;
-        var p = snd.play();
-        if (p !== undefined) {
-          p.then(function() {
-            ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
-              document.removeEventListener(ev, unlockAvatarAudio, true);
-            });
-          }).catch(function(){});
-        }
-      }
-    }
-    ['touchstart', 'pointerdown', 'click'].forEach(function(ev) {
-      document.addEventListener(ev, unlockAvatarAudio, true);
-    });
+    // El audio del avatar en el login NO se reproduce automaticamente por toques en la pantalla.
+    // Solo se reproduce si el usuario hace clic en el boton de la bocina.
   })();
 </script>
 <script src="/custom_assets/luxo_tts.js?v=20261105_v93"></script>

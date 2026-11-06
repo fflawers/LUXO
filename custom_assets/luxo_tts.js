@@ -14,7 +14,7 @@
             return String(window.luxoUserId);
         }
         try {
-            let val = sessionStorage.getItem('logged_user_id') || localStorage.getItem('logged_user_id');
+            let val = localStorage.getItem('flutter.logged_user_id') || sessionStorage.getItem('logged_user_id') || localStorage.getItem('logged_user_id');
             if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
                 try { val = JSON.parse(val); } catch(e) { val = String(val).replace(/["']/g, ''); }
                 window.luxoUserId = String(val);
@@ -29,8 +29,9 @@
             return String(window.luxoUsername).toLowerCase().trim();
         }
         try {
-            let val = localStorage.getItem('logged_username') || sessionStorage.getItem('logged_username');
+            let val = localStorage.getItem('flutter.logged_username') || localStorage.getItem('logged_username') || sessionStorage.getItem('logged_username');
             if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
+                try { val = JSON.parse(val); } catch(e) { val = String(val).replace(/["']/g, ''); }
                 return String(val).toLowerCase().trim();
             }
         } catch(e) {}
