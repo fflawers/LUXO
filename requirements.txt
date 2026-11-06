@@ -1,5 +1,4 @@
 flet==0.86.5
-flet-web==0.86.5
 flet-video
 mysql-connector-python
 PyMuPDF
@@ -7,7 +6,7 @@ openpyxl
 python-dotenv
 bcrypt
 requests
-fastapi==0.115.12
+fastapi
 uvicorn
 SpeechRecognition
 pyaudio

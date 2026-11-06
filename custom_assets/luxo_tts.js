@@ -2035,44 +2035,6 @@
         ['pointerdown', 'keydown', 'click', 'touchstart'].forEach(function(ev) {
             window.addEventListener(ev, renovarActividadUsuario, { passive: true, capture: true });
         });
-        // Interceptor local de teclado para Enfoque Diario (Excel-like continuous navigation)
-        let _enfoqueNavBusy = false;
-        window.addEventListener('keydown', function(e) {
-            const isEnfoque = (window._luxoActiveView === 'enfoque_diario') || (window._luxoEnfoqueActive === true);
-            if (!isEnfoque) return;
-
-            let dir = null;
-            if (e.key === 'Tab') {
-                dir = e.shiftKey ? 'prev' : 'next';
-            } else if (e.key === 'Enter') {
-                dir = e.shiftKey ? 'up' : 'down';
-            } else if (e.key === 'ArrowDown') {
-                dir = 'down';
-            } else if (e.key === 'ArrowUp') {
-                dir = 'up';
-            } else if (e.key === 'ArrowRight' && !window._luxoCellEditMode) {
-                dir = 'right';
-            } else if (e.key === 'ArrowLeft' && !window._luxoCellEditMode) {
-                dir = 'left';
-            } else if (e.key === 'F2') {
-                window._luxoCellEditMode = !window._luxoCellEditMode;
-                return;
-            }
-
-            if (dir) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                if (_enfoqueNavBusy) return;
-                _enfoqueNavBusy = true;
-                const uid = window.getLuxoUserId ? window.getLuxoUserId() : (window.luxoUserId || '');
-                const sid = window.getLuxoSessionId ? window.getLuxoSessionId() : (window.luxoSessionId || '');
-                fetch('/api/enfoque/nav?direction=' + dir + '&user_id=' + encodeURIComponent(uid) + '&session_id=' + encodeURIComponent(sid))
-                    .catch(function(){})
-                    .finally(function() {
-                        setTimeout(function() { _enfoqueNavBusy = false; }, 40);
-                    });
-            }
-        }, true);
     })();
 })();
 

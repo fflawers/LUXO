@@ -40,15 +40,11 @@ if __name__ == "__main__":
     @app.middleware("http")
     async def add_no_cache_headers(request, call_next):
         response = await call_next(request)
-        path = request.url.path.lower()
-        # Solo forzar no-cache en el HTML principal para detectar actualizaciones
-        if path == "" or path == "/" or path.endswith(".html"):
+        path = request.url.path
+        if (path.endswith(".js") or path.endswith(".html") or path == "" or path == "/") and not path.endswith(".mp4") and not path.endswith(".mp3"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
-        # Permitir que el motor gráfico pesado (.wasm, canvaskit, fuentes) se almacene en caché local del teléfono
-        elif any(ext in path for ext in [".wasm", "canvaskit", ".ttf", ".woff", ".png", ".jpg", ".mp4", ".mp3"]):
-            response.headers["Cache-Control"] = "public, max-age=86400"
         return response
 
     configurar_rutas_fastapi(app)
