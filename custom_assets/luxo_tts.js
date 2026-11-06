@@ -14,18 +14,11 @@
             return String(window.luxoUserId);
         }
         try {
-            for (let i = 0; i < localStorage.length; i++) {
-                let key = localStorage.key(i);
-                if (key && (key.includes('logged_user_id') || key === 'luxo_user_id')) {
-                    let val = localStorage.getItem(key);
-                    if (val) {
-                        try { val = JSON.parse(val); } catch(e) { val = val.replace(/["']/g, ''); }
-                        if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
-                            window.luxoUserId = String(val);
-                            return String(val);
-                        }
-                    }
-                }
+            let val = sessionStorage.getItem('logged_user_id') || localStorage.getItem('logged_user_id');
+            if (val && !['unknown', '', 'null', 'undefined'].includes(String(val).toLowerCase())) {
+                try { val = JSON.parse(val); } catch(e) { val = String(val).replace(/["']/g, ''); }
+                window.luxoUserId = String(val);
+                return String(val);
             }
         } catch(e) {}
         return '';
