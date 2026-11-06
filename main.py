@@ -15217,6 +15217,34 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     fecha = n.get("Fecha_Hora").strftime("%d/%m %H:%M") if n.get("Fecha_Hora") else ""
                     leida = n.get("Leida")
                     
+                    titulo_low = (n.get("Titulo") or "").lower()
+                    msg_low = (n.get("Mensaje") or "").lower()
+                    if tipo == "campana":
+                        destino_vista = "campanas"
+                    elif tipo == "manual":
+                        destino_vista = "manuales"
+                    elif tipo == "tarea":
+                        destino_vista = "tareas"
+                    elif tipo in ["parroquial", "minuta"]:
+                        destino_vista = "parroquiales_minutas"
+                    elif "apertura" in titulo_low or "apertura" in msg_low or tipo == "apertura":
+                        destino_vista = "operacion_diaria"
+                    elif "check" in titulo_low or "checklist" in msg_low:
+                        destino_vista = "checklists"
+                    else:
+                        destino_vista = "chat"
+
+                    def hacer_click_notif(v_dest):
+                        def _on_click_handler(e):
+                            try:
+                                page.pop_dialog()
+                                if v_dest:
+                                    cambiar_vista(v_dest, desde_menu_manual=True)
+                                    page.update()
+                            except Exception as ex_nav:
+                                print(f"Error navegando desde notificacion: {ex_nav}")
+                        return _on_click_handler
+
                     notif_rows.append(
                         ft.Container(
                             content=ft.Row([
@@ -15231,12 +15259,16 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                                     height=8,
                                     bgcolor="#00FFFF" if not leida else "transparent",
                                     border_radius=4
-                                )
+                                ),
+                                ft.Icon(ft.Icons.CHEVRON_RIGHT, color="#555555", size=18)
                             ], vertical_alignment="center", spacing=10),
                             bgcolor="#1e1e1e" if not leida else "#111111",
                             padding=10,
                             border_radius=6,
-                            border=ft.Border.all(1, "#333333" if leida else "#00FFFF")
+                            border=ft.Border.all(1, "#333333" if leida else "#00FFFF"),
+                            ink=True,
+                            tooltip="Toca para ir al módulo 🚀",
+                            on_click=hacer_click_notif(destino_vista)
                         )
                     )
             
