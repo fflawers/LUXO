@@ -10144,7 +10144,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 active_sessions[user_info["id"]]["siri_orb"] = siri_orb_flet
 
             btn_send_whatsapp = ft.Container(
-                content=ft.Text("✈️", color="white", size=16, weight="bold"),
+                content=ft.Icon(ft.Icons.SEND_ROUNDED, color="white", size=20),
                 gradient=ft.LinearGradient(
                     colors=["#00F0FF", "#9D50BB"],
                     begin=ft.alignment.Alignment(-1, -1),
