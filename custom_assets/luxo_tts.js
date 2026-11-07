@@ -286,9 +286,17 @@
                 }
             }
 
-            // 1.1 Botón o icono de audio de avatar (🔊 / 🔇)
+            // 1.1 Botón o icono de audio de avatar (🔊 / 🔇 o toque directo sobre el avatar)
             let txtBtn = (t.innerText || t.textContent || '').trim();
-            if (txtBtn === '🔊' || txtBtn === '🔇') {
+            let isAvatarArea = false;
+            if (!window.luxoUserIsLoggedIn && e.clientX && e.clientY) {
+                let cx = window.innerWidth / 2;
+                let dx = Math.abs(e.clientX - cx);
+                if (dx < 85 && e.clientY > 70 && e.clientY < 380) {
+                    isAvatarArea = true;
+                }
+            }
+            if (txtBtn === '🔊' || txtBtn === '🔇' || isAvatarArea) {
                 if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
                     window.luxoToggleLoginAvatarAudio();
                 }
