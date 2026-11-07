@@ -25623,21 +25623,15 @@ Ejemplo:
 
     header_title = ft.Column([
         ft.ShaderMask(
-            content=ft.Text("LUXO OS", size=28, weight="bold", color="white"),
+            content=ft.Text("LUXO", size=28, weight="bold", color="white"),
             blend_mode=ft.BlendMode.SRC_IN,
             shader=ft.LinearGradient(
                 colors=["#00F0FF", "#E040FB"],
                 begin=ft.alignment.Alignment(-1, 0),
                 end=ft.alignment.Alignment(1, 0)
             )
-        ),
-        ft.Text(
-            "PORTAL DE AUTENTICACIÓN",
-            size=9,
-            weight="bold",
-            color="#8899A6"
         )
-    ], horizontal_alignment="center", spacing=3)
+    ], horizontal_alignment="center", spacing=0)
 
     user_field_group = ft.Column([
         ft.Text("USUARIO", size=10, weight="bold", color="#00F0FF"),
