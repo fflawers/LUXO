@@ -15174,28 +15174,51 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     mostrar_snack("Formato no válido. Use PNG, JPG o JPEG.", color="red")
                     return
                 
+                # Leer archivo y convertir a Base64
+                with open(path, "rb") as f_img:
+                    b64_str = base64.b64encode(f_img.read()).decode("utf-8")
+                mime = "image/png" if ext == ".png" else "image/jpeg"
+                data_uri = f"data:{mime};base64,{b64_str}"
+
+                # Guardar y sobreescribir permanentemente en MySQL (la anterior se destruye automáticamente)
+                try:
+                    db = conectar_db()
+                    if db:
+                        c = db.cursor()
+                        try:
+                            c.execute("ALTER TABLE usuarios ADD COLUMN Foto_Perfil MEDIUMTEXT")
+                            db.commit()
+                        except Exception: pass
+                        c.execute("UPDATE usuarios SET Foto_Perfil = %s WHERE ID_Usuario = %s", (data_uri, u_id))
+                        db.commit()
+                        db.close()
+                except Exception as ex_db:
+                    print("Error guardando foto en MySQL:", ex_db)
+
+                # Respaldo en disco local
                 os.makedirs(os.path.join(ASSETS_PATH, "perfiles"), exist_ok=True)
                 for e in [".png", ".jpg", ".jpeg"]:
                     r_old = os.path.join(ASSETS_PATH, "perfiles", f"user_{u_id}{e}")
                     if os.path.exists(r_old):
-                        try:
-                            os.remove(r_old)
-                        except Exception:
-                            pass
+                        try: os.remove(r_old)
+                        except Exception: pass
                 
                 destino = os.path.join(ASSETS_PATH, "perfiles", f"user_{u_id}{ext}")
                 import shutil
                 shutil.copy(path, destino)
                 
-                # Actualizar cache y controles
-                new_img = obtener_avatar_usuario(u_id)
-                user_info["img_usuario"] = new_img
+                # Actualizar cache y controles en memoria
+                user_info["img_usuario"] = data_uri
                 
-                # Actualizar el control del avatar del perfil
-                profile_icon.content = ft.Image(src=new_img, width=40, height=40, fit=ft.controls.box.BoxFit.COVER)
+                # Actualizar el control del avatar del perfil (abajo)
+                profile_icon.content = ft.Image(src=data_uri, width=44, height=44, fit=ft.controls.box.BoxFit.COVER)
+                try: profile_icon.update()
+                except Exception: pass
+
+                # Actualizar el control del avatar de LUXO SYSTEM (arriba)
                 if 'avatar_header_widget' in locals() and avatar_header_widget:
                     try:
-                        avatar_header_widget.content = ft.Image(src=new_img, width=34, height=34, fit=ft.controls.box.BoxFit.COVER)
+                        avatar_header_widget.content = ft.Image(src=data_uri, width=34, height=34, fit=ft.controls.box.BoxFit.COVER)
                         avatar_header_widget.update()
                     except Exception: pass
                 mostrar_snack("Foto de perfil actualizada con éxito.", color="#7CFC00")
@@ -24793,6 +24816,24 @@ Ejemplo:
     def obtener_avatar_usuario(id_usuario):
         if not id_usuario:
             return None
+        # 1. Consultar primero en MySQL para persistencia permanente
+        try:
+            db = conectar_db()
+            if db:
+                c = db.cursor()
+                try:
+                    c.execute("ALTER TABLE usuarios ADD COLUMN Foto_Perfil MEDIUMTEXT")
+                    db.commit()
+                except Exception: pass
+                c.execute("SELECT Foto_Perfil FROM usuarios WHERE ID_Usuario = %s LIMIT 1", (id_usuario,))
+                row = c.fetchone()
+                db.close()
+                if row and row[0]:
+                    return row[0]
+        except Exception as ex_db:
+            print("Notice leer avatar MySQL:", ex_db)
+
+        # 2. Respaldo secundario en disco local si existiera
         os.makedirs(os.path.join(ASSETS_PATH, "perfiles"), exist_ok=True)
         for ext in [".png", ".jpg", ".jpeg"]:
             ruta = os.path.join(ASSETS_PATH, "perfiles", f"user_{id_usuario}{ext}")
