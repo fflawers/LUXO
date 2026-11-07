@@ -2734,18 +2734,6 @@ def configurar_rutas_fastapi(app):
 
             print(f"DEBUG: active_sessions keys={list(active_sessions.keys())}, session encontrada={'Sí' if session else 'No'}")
             if session and text:
-                user_info = session.get("user_info") or {}
-                u_id_fresh = user_info.get("id")
-                fresh_session = (active_sessions.get(u_id_fresh) or active_sessions.get(str(u_id_fresh)) or session) if u_id_fresh else session
-
-                # Interceptar comando de voz de reproducción / pausa antes de mandar al chat
-                try:
-                    if procesar_comando_reproduccion_voz(text, fresh_session):
-                        print(f"✅ [VOZ] Comando de control de reproducción ejecutado desde /text_input: '{text}'")
-                        return {"status": "success", "action": "voice_playback_control"}
-                except Exception as ex_cmd:
-                    print("Error procesar_comando_reproduccion_voz en /text_input:", ex_cmd)
-
                 cambiar_vista = session.get("cambiar_vista")
                 page = session.get("page")
 
@@ -3833,46 +3821,6 @@ import time
 
 hilo_escucha_iniciado = False
 
-def procesar_comando_reproduccion_voz(cmd_text, sess):
-    if not sess or not cmd_text:
-        return False
-    q_cmd = cmd_text.lower().strip().rstrip(".?!")
-    for pref in ["oye luxo", "hola luxo", "oye lujo", "hola lujo", "luxo", "oye", "por favor"]:
-        if q_cmd.startswith(pref):
-            q_cmd = q_cmd[len(pref):].strip()
-            break
-
-    pausa_cmds = ["pausa", "pausar", "silencio", "silénciate", "silenciate", "alto", "detente", "stop", "cállate", "callate", "pausa la voz", "pausa el audio", "para"]
-    reproduce_cmds = ["reproduce", "reproducir", "continúa", "continua", "sigue", "reanuda", "reanudar", "play", "lee", "leer", "reproduce la respuesta", "reproduce el mensaje", "lee la respuesta", "reproduce de nuevo"]
-
-    if q_cmd in pausa_cmds:
-        print(f"⏸️ [VOZ] Comando de pausa detectado: '{q_cmd}'")
-        toggle_pause_fn = sess.get("toggle_pause")
-        is_speaking_fn = sess.get("is_speaking")
-        is_paused_fn = sess.get("is_paused")
-        if is_speaking_fn and is_speaking_fn() and is_paused_fn and not is_paused_fn() and toggle_pause_fn:
-            toggle_pause_fn()
-        elif sess.get("stop_speak"):
-            sess["stop_speak"]()
-        if platform.system() == "Windows":
-            try: winsound.Beep(1200, 80)
-            except Exception: pass
-        return True
-    elif q_cmd in reproduce_cmds:
-        print(f"▶️ [VOZ] Comando de reproducción/reanudación detectado: '{q_cmd}'")
-        is_paused_fn = sess.get("is_paused")
-        toggle_pause_fn = sess.get("toggle_pause")
-        last_speak_fn = sess.get("last_speak_trigger")
-        if is_paused_fn and is_paused_fn() and toggle_pause_fn:
-            toggle_pause_fn()
-        elif last_speak_fn:
-            last_speak_fn()
-        if platform.system() == "Windows":
-            try: winsound.Beep(1800, 80)
-            except Exception: pass
-        return True
-    return False
-
 def iniciar_hilo_escucha_luxo():
     global hilo_escucha_iniciado
     if hilo_escucha_iniciado:
@@ -3980,8 +3928,6 @@ def iniciar_hilo_escucha_luxo():
                                         enviar_mensaje_fn = user_session.get("enviar_mensaje")
                                         page_obj = user_session.get("page")
                                         if query and input_msg and enviar_mensaje_fn:
-                                            if procesar_comando_reproduccion_voz(query, user_session):
-                                                continue
                                             print(f"🚀 Enviando pregunta a LUXO IA desde voz: '{query}'")
                                             input_msg.value = query
                                             try: input_msg.update()
@@ -4018,8 +3964,6 @@ def iniciar_hilo_escucha_luxo():
                                         enviar_mensaje_fn = target_sess.get("enviar_mensaje")
                                         page_obj = target_sess.get("page")
                                         if query and input_msg and enviar_mensaje_fn:
-                                            if procesar_comando_reproduccion_voz(query, target_sess):
-                                                continue
                                             print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
                                             input_msg.value = query
                                             try: input_msg.update()
@@ -5994,7 +5938,6 @@ def main(page: ft.Page):
     current_speak_btn_speaker = None
     current_speak_btn_play_pause = None
     current_speak_is_paused = False
-    current_speak_seq = [0]
     active_sapi_instance = [None]
     user_voice_pref = ["jarvis"]
     try:
@@ -6019,7 +5962,6 @@ def main(page: ft.Page):
 
     def stop_current_speak():
         nonlocal current_speak_btn_speaker, current_speak_btn_play_pause, current_speak_is_paused
-        current_speak_seq[0] += 1
         tok = getattr(page, "_luxo_token", None) or dev_token
         u_name = str(user_info.get("usuario") or getattr(page, "username", "") or "").lower().strip()
         d_type = _detect_page_device_type()
@@ -6095,9 +6037,6 @@ def main(page: ft.Page):
         if not text:
             return
 
-        current_speak_seq[0] += 1
-        this_seq = current_speak_seq[0]
-
         if active_sapi_instance[0]:
             try:
                 active_sapi_instance[0].Speak("", 2)
@@ -6134,7 +6073,7 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-        def _speak_worker(seq=this_seq):
+        def _speak_worker():
             try:
                 v_actual = voice_id or (user_voice_pref[0] if user_voice_pref else "jarvis")
                 texto_fonetico = limpiar_texto_para_voz(text)
@@ -6142,11 +6081,6 @@ def main(page: ft.Page):
                     audio_url = generar_audio_tts_edge_sync(texto_fonetico, v_actual)
                 except Exception:
                     audio_url = ""
-
-                # Si el usuario canceló o lanzó una nueva reproducción, descartar hilo obsoleto
-                if seq != current_speak_seq[0]:
-                    print(f"⏹️ [_speak_worker] Petición de audio #{seq} obsoleta (actual: #{current_speak_seq[0]}), descartada.")
-                    return
                 
                 # Actualizar icono a reproduciendo
                 if btn_speaker and current_speak_btn_speaker == btn_speaker:
@@ -7465,52 +7399,6 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             # Expandir abreviaturas informales antes de procesar el mensaje
             user_text_expandido = expandir_abreviaturas(user_text)
             user_text_norm = normalizar_texto(user_text_expandido)
-
-            # --- COMANDO DIRECTO DE CONTROL DE AUDIO / VOZ (REPRODUCCIÓN Y PAUSA) ---
-            u_clean = user_text_norm.strip().rstrip(".?!")
-            for pref in ["oye luxo", "hola luxo", "oye lujo", "hola lujo", "luxo", "oye", "por favor"]:
-                if u_clean.startswith(pref):
-                    u_clean = u_clean[len(pref):].strip()
-                    break
-
-            pausa_cmds = ["pausa", "pausar", "silencio", "silenciate", "alto", "detente", "stop", "callate", "pausa la voz", "pausa el audio", "para"]
-            reproduce_cmds = ["reproduce", "reproducir", "continua", "sigue", "reanuda", "reanudar", "play", "lee", "leer", "reproduce la respuesta", "reproduce el mensaje", "lee la respuesta", "reproduce de nuevo"]
-
-            if u_clean in pausa_cmds:
-                input_msg.value = ""
-                try: input_msg.update()
-                except Exception: pass
-                if current_speak_btn_speaker and not current_speak_is_paused:
-                    toggle_pause_speak()
-                else:
-                    stop_current_speak()
-                try: mostrar_snack("⏸️ Lectura pausada", color="#FFD700")
-                except Exception: pass
-                return
-
-            if u_clean in reproduce_cmds:
-                input_msg.value = ""
-                try: input_msg.update()
-                except Exception: pass
-                if current_speak_btn_speaker and current_speak_is_paused:
-                    toggle_pause_speak()
-                    try: mostrar_snack("▶️ Reanudando lectura...", color="#00FFFF")
-                    except Exception: pass
-                else:
-                    u_id_val = user_info.get("id")
-                    triggered = False
-                    for k_s in [u_id_val, str(u_id_val) if u_id_val else None, getattr(page, "_luxo_token", None), getattr(page, "device_id", None)]:
-                        if k_s and k_s in active_sessions and active_sessions[k_s].get("last_speak_trigger"):
-                            active_sessions[k_s]["last_speak_trigger"]()
-                            triggered = True
-                            break
-                    if triggered:
-                        try: mostrar_snack("🔊 Reproduciendo respuesta...", color="#00FFFF")
-                        except Exception: pass
-                    else:
-                        try: mostrar_snack("ℹ️ No hay ningún mensaje previo para reproducir", color="#FFA500")
-                        except Exception: pass
-                return
 
             # --- 0. COMANDO DIRECTO DE CERRAR SESIÓN (CHAT Y VOZ) ---
             is_logout_query = any(trig in user_text_norm for trig in [
@@ -9707,13 +9595,6 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     btn_speaker.on_click = handle_speaker_click
                     btn_play_pause.on_click = handle_play_pause_click
 
-                    def trigger_last_speak():
-                        handle_speaker_click(None)
-                    u_id_val = user_info.get("id")
-                    for k_s in [u_id_val, str(u_id_val) if u_id_val else None, getattr(page, "_luxo_token", None), getattr(page, "device_id", None)]:
-                        if k_s and k_s in active_sessions:
-                            active_sessions[k_s]["last_speak_trigger"] = trigger_last_speak
-
                     feedback_buttons = ft.Row([
                         ft.Text("¿Te sirvió?", color="#aaaaaa", size=10),
                         ft.IconButton(
@@ -10003,11 +9884,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             "input_msg": input_msg,
             "enviar_mensaje": enviar_mensaje,
             "page": page,
-            "is_mobile": (getattr(page, "width", None) and page.width < 800) or False,
-            "toggle_pause": toggle_pause_speak,
-            "stop_speak": stop_current_speak,
-            "is_speaking": lambda: current_speak_btn_speaker is not None,
-            "is_paused": lambda: current_speak_is_paused
+            "is_mobile": (getattr(page, "width", None) and page.width < 800) or False
         }
         if user_info.get("id"):
             active_sessions[user_info["id"]] = sess_data
