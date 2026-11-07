@@ -522,6 +522,10 @@
                     let audioEl = getOrCreateAudioElement();
                     audioEl.muted = false;
                     audioEl.volume = 1.0;
+
+                    if ('speechSynthesis' in window) {
+                        try { window.speechSynthesis.cancel(); } catch(e){}
+                    }
                     
                     console.log("[LUXO TTS] DIAGNOSTICO DE REPRODUCCION:", {
                         audioUrl_recibido: audioUrl,
@@ -547,6 +551,9 @@
                     if (playPromise !== undefined) {
                         playPromise.then(function() {
                             console.log("[LUXO TTS SUCCESS] audio.play() iniciado exitosamente:", fullUrl);
+                            if ('speechSynthesis' in window) {
+                                try { window.speechSynthesis.cancel(); } catch(e){}
+                            }
                         }).catch(function(err) {
                             console.error("[LUXO TTS ERROR] audio.play() fue rechazado/fallo:", {
                                 err_name: err.name,
@@ -569,7 +576,7 @@
                                 setTimeout(function() { tryPlayAudio(retriesLeft - 1); }, 350);
                             } else {
                                 console.warn("[LUXO TTS] Autoplay bloqueado por política del navegador; esperando interacción de usuario.");
-                                if (text && ('speechSynthesis' in window)) {
+                                if (!audioUrl && text && ('speechSynthesis' in window)) {
                                     window.luxoSpeakWebSpeech(text, voiceId, voiceGender);
                                 }
                             }
