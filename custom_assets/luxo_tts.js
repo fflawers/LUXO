@@ -288,15 +288,16 @@
 
             // 1.1 Botón o icono de audio de avatar (🔊 / 🔇 o toque directo sobre el avatar)
             let txtBtn = (t.innerText || t.textContent || '').trim();
+            let isInputField = (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t.closest && t.closest('input, textarea, .flet-text-field')));
             let isAvatarArea = false;
-            if (!window.luxoUserIsLoggedIn && e.clientX && e.clientY) {
+            if (!isInputField && !window.luxoUserIsLoggedIn && e.clientX && e.clientY) {
                 let cx = window.innerWidth / 2;
                 let dx = Math.abs(e.clientX - cx);
-                if (dx < 85 && e.clientY > 70 && e.clientY < 380) {
+                if (dx <= 65 && e.clientY >= 105 && e.clientY <= 235) {
                     isAvatarArea = true;
                 }
             }
-            if (txtBtn === '🔊' || txtBtn === '🔇' || isAvatarArea) {
+            if (!isInputField && (txtBtn === '🔊' || txtBtn === '🔇' || isAvatarArea)) {
                 if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
                     window.luxoToggleLoginAvatarAudio();
                 }
