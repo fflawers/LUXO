@@ -15193,6 +15193,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 
                 # Actualizar el control del avatar del perfil
                 profile_icon.content = ft.Image(src=new_img, width=40, height=40, fit=ft.controls.box.BoxFit.COVER)
+                if 'avatar_header_widget' in locals() and avatar_header_widget:
+                    try:
+                        avatar_header_widget.content = ft.Image(src=new_img, width=34, height=34, fit=ft.controls.box.BoxFit.COVER)
+                        avatar_header_widget.update()
+                    except Exception: pass
                 mostrar_snack("Foto de perfil actualizada con éxito.", color="#7CFC00")
                 page.update()
             except Exception as ex:
@@ -24119,21 +24124,25 @@ Ejemplo:
             entrenamiento_controls
         )
 
-        avatar_luxo2_base64 = obtener_64("luxo_avatar2.png") or obtener_64("avatar_luxo2.png")
+        u_avatar_header = user_info.get("img_usuario") or obtener_avatar_usuario(user_info.get("id"))
         
         avatar_header_widget = ft.Container(
             content=ft.Image(
-                src=avatar_luxo2_base64,
+                src=u_avatar_header,
                 width=34,
                 height=34,
                 fit=ft.controls.box.BoxFit.COVER
-            ) if avatar_luxo2_base64 else ft.Text("🤖", size=18, color="#00FFFF"),
+            ) if u_avatar_header else ft.Icon(ft.Icons.PERSON_ROUNDED, size=20, color="#00FFFF"),
             width=34,
             height=34,
             border_radius=17,
             bgcolor="#1A102F",
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
             border=ft.Border.all(1.5, "#00FFFF"),
             alignment=ft.alignment.Alignment(0, 0),
+            ink=True,
+            on_click=cambiar_foto_perfil,
+            tooltip="Foto de Perfil (Toca para cambiar) 📷",
             shadow=[
                 ft.BoxShadow(
                     color="#4000FFFF",
