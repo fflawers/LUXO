@@ -16583,19 +16583,19 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     print("Error cargar colaboradores DB:", ex)
 
                 if not rows:
-                    t_nom = user_info.get("tienda", "VALLEJO")
-                    store_colabs_def = {
-                        "VALLEJO": [("VIVIANA", "Gerente de Tienda"), ("moises", "Subgerente"), ("diego", "Vendedor")],
-                        "INTERLOMAS": [("idalia", "Gerente de Tienda"), ("Viviana", "Subgerente"), ("carlos", "Vendedor")],
-                        "ATIZAPAN": [("FERNANDO", "Gerente de Tienda"), ("STEFANI", "Subgerente"), ("MOISES", "Vendedor")],
-                        "PERISUR": [("ROBERTO", "Gerente de Tienda"), ("ANA", "Subgerente"), ("LUIS", "Vendedor")],
-                        "LINDAVISTA": [("PATRICIA", "Gerente de Tienda"), ("JORGE", "Subgerente"), ("SARA", "Vendedor")],
-                        "SANTA FE": [("MAURICIO", "Gerente de Tienda"), ("ELENA", "Subgerente"), ("GABRIEL", "Vendedor")],
-                        "SATÉLITE": [("DANIEL", "Gerente de Tienda"), ("KAREN", "Subgerente"), ("ANDRES", "Vendedor")],
-                        "PACHUCA": [("OSCAR", "Gerente de Tienda"), ("VERONICA", "Subgerente"), ("MANUEL", "Vendedor")]
-                    }
-                    defaults = store_colabs_def.get(t_nom, [("VIVIANA", "Gerente de Tienda"), ("moises", "Subgerente"), ("diego", "Vendedor")])
-                    rows = [{"ID_Vendedor": idx+100, "Nombre_Completo": nom, "Puesto": pst, "fecha_f": "Activo"} for idx, (nom, pst) in enumerate(defaults)]
+                    vendedores_list.controls.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.PEOPLE_OUTLINE_ROUNDED, color="#888899", size=22),
+                                ft.Text("No hay colaboradores registrados aún. Agrega al equipo con el formulario de arriba.", color="#888899", size=12, italic=True)
+                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+                            padding=20,
+                            alignment=ft.alignment.Alignment(0, 0)
+                        )
+                    )
+                    try: page.update()
+                    except Exception: pass
+                    return
 
                 for r in rows:
                     v_id = r["ID_Vendedor"]
@@ -16661,7 +16661,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                             except Exception: pass
                         return delete_click
 
-                    colab_id = r.get("ID_Usuario") or 1
+                    colab_id = r.get("ID_Vendedor") or r.get("ID_Usuario") or 1
                     colab_name = (r.get("Nombre_Completo") or "Colaborador").replace("'", "").strip()
 
                     def make_facial_click(cid=colab_id, cname=colab_name):
