@@ -9928,7 +9928,7 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             "enviar_mensaje": enviar_mensaje,
             "page": page,
             "is_mobile": (getattr(page, "width", None) and page.width < 800) or False,
-            "toggle_pause": toggle_pause_current_speak,
+            "toggle_pause": toggle_pause_speak,
             "stop_speak": stop_current_speak,
             "is_speaking": lambda: current_speak_btn_speaker is not None,
             "is_paused": lambda: current_speak_is_paused
