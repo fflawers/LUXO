@@ -25615,9 +25615,8 @@ Ejemplo:
                         height=32,
                         border_radius=16,
                     )
-                ], width=112, height=112),
-                ft.Text("🔇 Toca la bocina para escuchar al Avatar", size=10, color="#80E5FF", weight="w500")
-            ], horizontal_alignment="center", spacing=6)
+                ], width=112, height=112)
+            ], horizontal_alignment="center", spacing=0)
         except Exception as ex_v:
             print("Notice video login load:", ex_v)
             video_avatar = None
@@ -25691,30 +25690,30 @@ Ejemplo:
             pass
 
     btn_login_huella = ft.Container(
-        content=ft.Row([
-            ft.Text("👆", size=16),
-            ft.Text("Huella / Passkey", color="#D8B4FE", size=11, weight="bold")
-        ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+        content=ft.Icon(ft.Icons.FINGERPRINT_ROUNDED, size=24, color="#D8B4FE"),
         bgcolor="#120d24",
         border=ft.Border.all(1.2, "#D8B4FE"),
         border_radius=12,
-        padding=8,
+        padding=10,
+        width=56,
+        height=46,
+        alignment=ft.alignment.Alignment(0, 0),
         on_click=on_click_login_huella,
-        tooltip="Ingresar con Huella / Passkey biométrica",
+        tooltip="Huella / Passkey",
         ink=True
     )
 
     btn_login_facial = ft.Container(
-        content=ft.Row([
-            ft.Text("📷", size=16),
-            ft.Text("Face ID", color="#00FFFF", size=11, weight="bold")
-        ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+        content=ft.Icon(ft.Icons.FACE_ROUNDED, size=24, color="#00FFFF"),
         bgcolor="#061a24",
         border=ft.Border.all(1.2, "#00FFFF"),
         border_radius=12,
-        padding=8,
+        padding=10,
+        width=56,
+        height=46,
+        alignment=ft.alignment.Alignment(0, 0),
         on_click=on_click_login_facial,
-        tooltip="Ingresar con Reconocimiento Facial (Cámara)",
+        tooltip="Face ID",
         ink=True
     )
 
@@ -25727,7 +25726,7 @@ Ejemplo:
         ft.Row([
             btn_login_huella,
             btn_login_facial
-        ], alignment=ft.MainAxisAlignment.CENTER, spacing=10, width=300)
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=16, width=300)
     ], spacing=10, horizontal_alignment="center")
 
     login_card = ft.Container(
