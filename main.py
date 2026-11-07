@@ -3821,6 +3821,38 @@ import time
 
 hilo_escucha_iniciado = False
 
+def procesar_comando_reproduccion_voz(cmd_text, sess):
+    if not sess or not cmd_text:
+        return False
+    q_cmd = cmd_text.lower().strip().rstrip(".?!")
+    if q_cmd in ["pausa", "pausar", "silencio", "silénciate", "silenciate", "alto", "detente", "stop", "cállate", "callate"]:
+        print(f"⏸️ [VOZ] Comando de pausa detectado: '{q_cmd}'")
+        toggle_pause_fn = sess.get("toggle_pause")
+        is_speaking_fn = sess.get("is_speaking")
+        is_paused_fn = sess.get("is_paused")
+        if is_speaking_fn and is_speaking_fn() and is_paused_fn and not is_paused_fn() and toggle_pause_fn:
+            toggle_pause_fn()
+        elif sess.get("stop_speak"):
+            sess["stop_speak"]()
+        if platform.system() == "Windows":
+            try: winsound.Beep(1200, 80)
+            except Exception: pass
+        return True
+    elif q_cmd in ["reproduce", "reproducir", "continúa", "continua", "sigue", "reanuda", "reanudar", "play", "lee", "leer"]:
+        print(f"▶️ [VOZ] Comando de reproducción/reanudación detectado: '{q_cmd}'")
+        is_paused_fn = sess.get("is_paused")
+        toggle_pause_fn = sess.get("toggle_pause")
+        last_speak_fn = sess.get("last_speak_trigger")
+        if is_paused_fn and is_paused_fn() and toggle_pause_fn:
+            toggle_pause_fn()
+        elif last_speak_fn:
+            last_speak_fn()
+        if platform.system() == "Windows":
+            try: winsound.Beep(1800, 80)
+            except Exception: pass
+        return True
+    return False
+
 def iniciar_hilo_escucha_luxo():
     global hilo_escucha_iniciado
     if hilo_escucha_iniciado:
@@ -3928,6 +3960,8 @@ def iniciar_hilo_escucha_luxo():
                                         enviar_mensaje_fn = user_session.get("enviar_mensaje")
                                         page_obj = user_session.get("page")
                                         if query and input_msg and enviar_mensaje_fn:
+                                            if procesar_comando_reproduccion_voz(query, user_session):
+                                                continue
                                             print(f"🚀 Enviando pregunta a LUXO IA desde voz: '{query}'")
                                             input_msg.value = query
                                             try: input_msg.update()
@@ -3964,6 +3998,8 @@ def iniciar_hilo_escucha_luxo():
                                         enviar_mensaje_fn = target_sess.get("enviar_mensaje")
                                         page_obj = target_sess.get("page")
                                         if query and input_msg and enviar_mensaje_fn:
+                                            if procesar_comando_reproduccion_voz(query, target_sess):
+                                                continue
                                             print(f"🚀 Enviando pregunta post-'Oye LUXO': '{query}'")
                                             input_msg.value = query
                                             try: input_msg.update()
@@ -9595,6 +9631,13 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                     btn_speaker.on_click = handle_speaker_click
                     btn_play_pause.on_click = handle_play_pause_click
 
+                    def trigger_last_speak():
+                        handle_speaker_click(None)
+                    u_id_val = user_info.get("id")
+                    for k_s in [u_id_val, str(u_id_val) if u_id_val else None, getattr(page, "_luxo_token", None), getattr(page, "device_id", None)]:
+                        if k_s and k_s in active_sessions:
+                            active_sessions[k_s]["last_speak_trigger"] = trigger_last_speak
+
                     feedback_buttons = ft.Row([
                         ft.Text("¿Te sirvió?", color="#aaaaaa", size=10),
                         ft.IconButton(
@@ -9884,7 +9927,11 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             "input_msg": input_msg,
             "enviar_mensaje": enviar_mensaje,
             "page": page,
-            "is_mobile": (getattr(page, "width", None) and page.width < 800) or False
+            "is_mobile": (getattr(page, "width", None) and page.width < 800) or False,
+            "toggle_pause": toggle_pause_current_speak,
+            "stop_speak": stop_current_speak,
+            "is_speaking": lambda: current_speak_btn_speaker is not None,
+            "is_paused": lambda: current_speak_is_paused
         }
         if user_info.get("id"):
             active_sessions[user_info["id"]] = sess_data
