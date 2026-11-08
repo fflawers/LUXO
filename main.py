@@ -4554,6 +4554,31 @@ def rebuild_rag_cache():
 # =========================================
 
 def guardar_config_key(key_name, val):
+    # 1. Guardar en Base de Datos MySQL (Permanente e indestructible en Render)
+    try:
+        conn = conectar_db()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS configuraciones_sistema (
+                    clave VARCHAR(100) PRIMARY KEY,
+                    valor TEXT,
+                    fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            """)
+            val_str = json.dumps(val) if not isinstance(val, str) else val
+            cur.execute("""
+                INSERT INTO configuraciones_sistema (clave, valor)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+            """, (key_name, val_str))
+            conn.commit()
+            cur.close()
+            conn.close()
+    except Exception as e_db:
+        print("NOTICE GUARDANDO CONFIG EN DB:", e_db)
+
+    # 2. Respaldo adicional en config.json local
     try:
         config_path = os.path.join(BASE_PATH, "config.json")
         config_data = {}
@@ -4570,6 +4595,41 @@ def guardar_config_key(key_name, val):
     except Exception as e:
         print("ERROR GUARDANDO CONFIG:", e)
         return False
+
+def obtener_config_key(key_name, default=None):
+    # 1. Intentar leer desde Base de Datos MySQL
+    try:
+        conn = conectar_db()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("SELECT valor FROM configuraciones_sistema WHERE clave = %s LIMIT 1", (key_name,))
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row and row[0] is not None:
+                val_raw = row[0]
+                if isinstance(default, bool):
+                    if str(val_raw).strip().lower() in ("true", "1"):
+                        return True
+                    if str(val_raw).strip().lower() in ("false", "0"):
+                        return False
+                try:
+                    return json.loads(val_raw)
+                except Exception:
+                    return val_raw
+    except Exception as e_db:
+        print("NOTICE OBTENIENDO CONFIG DE DB:", e_db)
+
+    # 2. Fallback a config.json local
+    try:
+        config_path = os.path.join(BASE_PATH, "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get(key_name, default)
+    except Exception:
+        pass
+    return default
 
 def optimizar_imagen(imagen_bytes):
     try:
@@ -12598,26 +12658,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
                 print("Error actualizando tareas vencidas:", e)
 
         def check_garantias_bloqueadas():
-            config_path = os.path.join(BASE_PATH, "config.json")
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        return data.get("garantias_bloqueadas", False)
-                except Exception:
-                    pass
-            return False
+            return bool(obtener_config_key("garantias_bloqueadas", default=False))
 
         def check_garantias_url():
-            config_path = os.path.join(BASE_PATH, "config.json")
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        return data.get("garantias_url", "")
-                except Exception:
-                    pass
-            return ""
+            return str(obtener_config_key("garantias_url", default="") or "")
 
         def obtener_url_descarga_google(url):
             if not url:
@@ -13078,26 +13122,10 @@ EJEMPLOS ERRÓNEOS A EVITAR (RETROALIMENTACIÓN NEGATIVA A NO REPETIR):
             )
 
         def check_tareas_bloqueadas():
-            config_path = os.path.join(BASE_PATH, "config.json")
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        return data.get("tareas_bloqueadas", False)
-                except Exception:
-                    pass
-            return False
+            return bool(obtener_config_key("tareas_bloqueadas", default=False))
 
         def check_tareas_url():
-            config_path = os.path.join(BASE_PATH, "config.json")
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        return data.get("tareas_url", "")
-                except Exception:
-                    pass
-            return ""
+            return str(obtener_config_key("tareas_url", default="") or "")
 
         def build_modulo_tareas_admin_tab():
             tareas_bloqueadas = check_tareas_bloqueadas()
