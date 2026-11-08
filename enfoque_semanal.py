@@ -643,7 +643,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                 dd_semana
             ], spacing=6, alignment=ft.MainAxisAlignment.END)
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.Padding(10, 6, 10, 6) if is_mobile else ft.Padding(12, 6, 12, 6),
+        padding=ft.Padding(8, 4, 8, 4) if is_mobile else ft.Padding(10, 4, 10, 4),
         bgcolor="#0C101C",
         border=ft.Border.all(1, "#28324E"),
         border_radius=ft.BorderRadius(6, 6, 6, 6)
@@ -721,60 +721,62 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     else:
         panel_preguntas = ft.Container(
             content=ft.Column([
-                # Fila 1: Indicadores y Nombres de Colaboradores (Directamente Editables)
+                # Fila 1: Indicadores y Nombres de Colaboradores (Directamente Editables con Bloques Balanceados)
                 ft.Row([
                     # Fortaleza
-                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#00FFFF", size=14),
-                    ft.Text("FORTALEZA:", size=11, weight="bold", color="#00FFFF"),
-                    ft.Text("Colaborador:", size=10, color="#CBD5E1"),
-                    ft.Container(content=tf_colab_fuerte, width=125),
-                    ft.Text("KPI Fuerte:", size=10, color="#CBD5E1"),
-                    ft.Container(content=dd_kpi_fuerte, width=175),
-                    ft.Text("Val:", size=10, color="#00FFFF", weight="bold"),
-                    ft.Container(content=tf_valor_actual_fuerte, width=65),
+                    ft.Row([
+                        ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#00FFFF", size=13),
+                        ft.Text("FORTALEZA:", size=10.5, weight="bold", color="#00FFFF"),
+                        ft.Text("Colaborador:", size=9.5, color="#CBD5E1"),
+                        ft.Container(content=tf_colab_fuerte, width=110),
+                        ft.Text("KPI Fuerte:", size=9.5, color="#CBD5E1"),
+                        ft.Container(content=dd_kpi_fuerte, width=155),
+                        ft.Text("Val:", size=9.5, color="#00FFFF", weight="bold"),
+                        ft.Container(content=tf_valor_actual_fuerte, width=58),
+                    ], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
 
-                    ft.Container(width=6),
-                    ft.Container(width=1, height=28, bgcolor="#334155"),
-                    ft.Container(width=6),
+                    ft.Container(width=1, height=24, bgcolor="#334155"),
 
                     # Desarrollo
-                    ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#FF7A33", size=14),
-                    ft.Text("DESARROLLO:", size=11, weight="bold", color="#FF7A33"),
-                    ft.Text("KPI Oportunidad:", size=10, color="#CBD5E1"),
-                    ft.Container(content=dd_kpi_debil, width=180),
-                    ft.Text("Val:", size=10, color="#FF7A33", weight="bold"),
-                    ft.Container(content=tf_valor_actual_debil, width=65),
-                ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    ft.Row([
+                        ft.Icon(ft.Icons.TRENDING_UP_ROUNDED, color="#FF7A33", size=13),
+                        ft.Text("DESARROLLO:", size=10.5, weight="bold", color="#FF7A33"),
+                        ft.Text("KPI Oportunidad:", size=9.5, color="#CBD5E1"),
+                        ft.Container(content=dd_kpi_debil, width=160),
+                        ft.Text("Val:", size=9.5, color="#FF7A33", weight="bold"),
+                        ft.Container(content=tf_valor_actual_debil, width=58),
+                    ], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ], spacing=6, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
 
                 # Fila 2: ¿Hicieron algo extraordinario? (Con separación para que no se encime)
                 ft.Row([
-                    ft.Text("¿Hicieron algo extraordinario? (Opcional):", size=10.5, color="#94A3B8"),
+                    ft.Text("¿Hicieron algo extraordinario? (Opcional):", size=10, color="#94A3B8"),
                     ft.Container(content=tf_extra_fuerte, expand=True),
                     ft.ElevatedButton(
-                        content=ft.Row([ft.Text("⚡", size=13), ft.Text("Generar Enfoque", weight="heavy", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=4),
+                        content=ft.Row([ft.Text("⚡", size=12), ft.Text("Generar Enfoque", weight="heavy", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
                         style=ft.ButtonStyle(
                             bgcolor="#008080",
                             color="white",
                             shape=ft.RoundedRectangleBorder(radius=5),
-                            padding=ft.Padding(12, 8, 12, 8)
+                            padding=ft.Padding(10, 6, 10, 6)
                         ),
-                        height=36,
+                        height=34,
                         on_click=lambda e: ejecutar_cruce_inteligente(e, rotar=True)
                     ),
                     ft.ElevatedButton(
-                        content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=11)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
+                        content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
                         style=ft.ButtonStyle(
                             bgcolor="#1B4332",
                             color="white",
                             shape=ft.RoundedRectangleBorder(radius=5),
-                            padding=ft.Padding(12, 8, 12, 8)
+                            padding=ft.Padding(10, 6, 10, 6)
                         ),
-                        height=36,
+                        height=34,
                         on_click=guardar_estado
                     )
-                ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
-            ], spacing=10),
-            padding=ft.Padding(10, 10, 10, 10),
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ], spacing=6),
+            padding=ft.Padding(8, 6, 8, 6),
             bgcolor="#0B0F1C",
             border=ft.Border.all(1, "#1E2742"),
             border_radius=ft.BorderRadius(6, 6, 6, 6)
@@ -784,7 +786,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     # TABLA UNIFICADA IDÉNTICA A LA BITÁCORA FÍSICA (UN SOLO RECTÁNGULO CONTINUO)
     # ==============================================================================
     BORDER_COLOR = "#475569"      # Líneas de cuadrícula estilo hoja física
-    COL0_WIDTH = 125
+    COL0_WIDTH = 115
 
     # Helper para celda individual dentro de la cuadrícula unificada
     def celda_grid(titulo, subtitulo, control, border_right=True, expand=1, title_color="#00FFFF"):
@@ -851,19 +853,19 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                 ),
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("RESULTADOS ACTUALES:", size=7.5, weight="heavy", color="#CBD5E1"),
+                        ft.Text("RESULTADOS ACTUALES:", size=7, weight="heavy", color="#CBD5E1"),
                         ft.Container(
                             content=control_actuales,
-                            width=78,
-                            height=30,
+                            width=70,
+                            height=26,
                             bgcolor="#040711",
                             border=ft.Border.all(1.2, border_box_color),
                             border_radius=ft.BorderRadius(3, 3, 3, 3),
                             alignment=ft.Alignment(0, 0),
-                            padding=ft.Padding(2, 0, 2, 0)
+                            padding=ft.Padding(1, 0, 1, 0)
                         )
                     ], spacing=1, horizontal_alignment=ft.CrossAxisAlignment.END, alignment=ft.MainAxisAlignment.CENTER),
-                    padding=ft.Padding(0, 0, 6, 2)
+                    padding=ft.Padding(0, 0, 4, 1)
                 )
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
@@ -917,7 +919,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     ])
     row_banner = ft.Container(
         content=ft.Row(banner_controls, spacing=0),
-        height=30 if is_mobile else 34,
+        height=28 if is_mobile else 30,
         bgcolor="#131B2E",
         border=ft.Border(bottom=ft.BorderSide(1.5, BORDER_COLOR))
     )
@@ -942,7 +944,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     ])
     row_1 = ft.Container(
         content=ft.Row(r1_controls, spacing=0),
-        height=68 if is_mobile else 78,
+        height=64 if is_mobile else 68,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
@@ -965,7 +967,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     ])
     row_2 = ft.Container(
         content=ft.Row(r2_controls, spacing=0),
-        height=68 if is_mobile else 78,
+        height=64 if is_mobile else 68,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
@@ -986,7 +988,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     ])
     row_3 = ft.Container(
         content=ft.Row(r3_controls, spacing=0),
-        height=130 if is_mobile else 100,
+        height=110 if is_mobile else 88,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
@@ -1008,7 +1010,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
     ])
     row_4 = ft.Container(
         content=ft.Row(r4_controls, spacing=0),
-        height=96 if is_mobile else 85,
+        height=86 if is_mobile else 76,
         border=ft.Border(bottom=ft.BorderSide(1, BORDER_COLOR))
     )
 
@@ -1019,7 +1021,7 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
         ], alignment=ft.MainAxisAlignment.START),
         padding=ft.Padding(8, 4, 8, 4) if is_mobile else ft.Padding(12, 4, 12, 4),
         bgcolor="#0C101C",
-        height=26 if is_mobile else 28
+        height=24 if is_mobile else 26
     )
 
     # Cuadrícula Rectangular Completa (Un Solo Bloque Sólido de Filas)
@@ -1043,10 +1045,10 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
             header_section,
             panel_preguntas,
             rectangulo_bitacora_completa,
-            ft.Container(height=20),
+            ft.Container(height=10),
         ],
-        spacing=8,
-        scroll=ft.ScrollMode.AUTO,
+        spacing=6,
+        scroll=ft.ScrollMode.ADAPTIVE,
         expand=True
     )
 
