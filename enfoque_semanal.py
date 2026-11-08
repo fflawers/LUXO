@@ -746,35 +746,38 @@ def build_enfoque_semanal_view(page: ft.Page, user_info=None):
                         ft.Text("Val:", size=9.5, color="#FF7A33", weight="bold"),
                         ft.Container(content=tf_valor_actual_debil, width=58),
                     ], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                ], spacing=6, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ], spacing=6, run_spacing=8, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
 
                 # Fila 2: ¿Hicieron algo extraordinario? (Con separación para que no se encime)
-                ft.Row([
-                    ft.Text("¿Hicieron algo extraordinario? (Opcional):", size=10, color="#94A3B8"),
-                    ft.Container(content=tf_extra_fuerte, expand=True),
-                    ft.ElevatedButton(
-                        content=ft.Row([ft.Text("⚡", size=12), ft.Text("Generar Enfoque", weight="heavy", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
-                        style=ft.ButtonStyle(
-                            bgcolor="#008080",
-                            color="white",
-                            shape=ft.RoundedRectangleBorder(radius=5),
-                            padding=ft.Padding(10, 6, 10, 6)
+                ft.Container(
+                    content=ft.Row([
+                        ft.Text("¿Hicieron algo extraordinario? (Opcional):", size=10, color="#94A3B8"),
+                        ft.Container(content=tf_extra_fuerte, expand=True),
+                        ft.ElevatedButton(
+                            content=ft.Row([ft.Text("⚡", size=12), ft.Text("Generar Enfoque", weight="heavy", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
+                            style=ft.ButtonStyle(
+                                bgcolor="#008080",
+                                color="white",
+                                shape=ft.RoundedRectangleBorder(radius=5),
+                                padding=ft.Padding(10, 6, 10, 6)
+                            ),
+                            height=34,
+                            on_click=lambda e: ejecutar_cruce_inteligente(e, rotar=True)
                         ),
-                        height=34,
-                        on_click=lambda e: ejecutar_cruce_inteligente(e, rotar=True)
-                    ),
-                    ft.ElevatedButton(
-                        content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
-                        style=ft.ButtonStyle(
-                            bgcolor="#1B4332",
-                            color="white",
-                            shape=ft.RoundedRectangleBorder(radius=5),
-                            padding=ft.Padding(10, 6, 10, 6)
-                        ),
-                        height=34,
-                        on_click=guardar_estado
-                    )
-                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+                        ft.ElevatedButton(
+                            content=ft.Row([ft.Text("💾", size=12), ft.Text("Guardar", weight="bold", size=10.5)], alignment=ft.MainAxisAlignment.CENTER, spacing=3),
+                            style=ft.ButtonStyle(
+                                bgcolor="#1B4332",
+                                color="white",
+                                shape=ft.RoundedRectangleBorder(radius=5),
+                                padding=ft.Padding(10, 6, 10, 6)
+                            ),
+                            height=34,
+                            on_click=guardar_estado
+                        )
+                    ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=ft.Padding(0, 6, 0, 0)
+                )
             ], spacing=6),
             padding=ft.Padding(8, 6, 8, 6),
             bgcolor="#0B0F1C",
