@@ -916,14 +916,6 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
 
     def limpiar_chat(e):
         chat_list.controls.clear()
-        agregar_burbuja_traduccion(
-            "LUXO Sistema",
-            "Traductor de mostrador listo. Toca 'Hablar' para empezar y toca de nuevo para cortar y traducir.",
-            "Counter interpreter ready. Tap 'Speak' to start and tap again to finish and translate.",
-            "#00FFFF",
-            "[Sistema]",
-            lang_code="en"
-        )
         try: page.update()
         except: pass
 
@@ -934,12 +926,10 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
         on_click=limpiar_chat
     )
 
-    limpiar_chat(None)
-
     card_vendedor = ft.Container(
         content=ft.Column([
             ft.Row([
-                ft.Text("LADO VENDEDOR (Espanol)", color="#00FFFF", weight="bold", size=14),
+                ft.Text("LADO VENDEDOR (Español)", color="#00FFFF", weight="bold", size=13),
                 btn_genero
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Row([
@@ -952,18 +942,19 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                     tooltip="Traducir al Cliente",
                     on_click=lambda e: procesar_traduccion_vendedor_texto()
                 )
-            ], spacing=8)
-        ], spacing=8),
+            ], spacing=6)
+        ], spacing=6),
         bgcolor="#0c0c1a",
-        padding=12,
-        border_radius=14,
-        border=ft.Border.all(1.5, "#00FFFF")
+        padding=10,
+        border_radius=12,
+        border=ft.Border.all(1.5, "#00FFFF"),
+        expand=not is_mobile
     )
 
     card_cliente = ft.Container(
         content=ft.Column([
             ft.Row([
-                ft.Text("LADO CLIENTE (Cualquier Idioma)", color="#D8B4FE", weight="bold", size=14),
+                ft.Text("LADO CLIENTE (Cualquier Idioma)", color="#D8B4FE", weight="bold", size=13),
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Row([
                 txt_input_cliente,
@@ -975,26 +966,35 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                     tooltip="Translate to Seller",
                     on_click=lambda e: procesar_traduccion_cliente_texto()
                 )
-            ], spacing=8)
-        ], spacing=8),
+            ], spacing=6)
+        ], spacing=6),
         bgcolor="#120c1c",
-        padding=12,
-        border_radius=14,
-        border=ft.Border.all(1.5, "#D8B4FE")
+        padding=10,
+        border_radius=12,
+        border=ft.Border.all(1.5, "#D8B4FE"),
+        expand=not is_mobile
+    )
+
+    controles_inferiores = (
+        ft.Column([card_vendedor, card_cliente], spacing=8)
+        if is_mobile
+        else ft.Row([card_vendedor, card_cliente], spacing=10)
     )
 
     ejecutar_js_traductor(page, "console.log('[TRADUCTOR] Vista iniciada correctamente');")
 
     return ft.Column([
         ft.Row([
-            ft.Icon(ft.Icons.TRANSLATE_ROUNDED, color="#00FFFF", size=26),
-            ft.Text("TRADUCTOR DE MOSTRADOR LUXO", size=20 if is_mobile else 22, color="white", weight="bold"),
-            ft.Container(expand=True),
-            status_indicator,
-            btn_limpiar
+            ft.Row([
+                ft.Icon(ft.Icons.TRANSLATE_ROUNDED, color="#00FFFF", size=22),
+                ft.Text("TRADUCTOR DE MOSTRADOR", size=16 if is_mobile else 18, color="white", weight="bold"),
+            ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.Row([
+                status_indicator,
+                btn_limpiar
+            ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-        ft.Text("Traduccion inteligente bidireccional por voz con sistema de 2 toques (Toca para hablar, toca para traducir sin limite de tiempo).", size=12, color="#888899"),
-        ft.Divider(height=10, color="#222233"),
+        ft.Divider(height=4, color="#1c1c2e"),
         ft.Container(
             content=chat_list,
             expand=True,
@@ -1002,9 +1002,6 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
             border_radius=12,
             border=ft.Border.all(1, "#181828")
         ),
-        ft.Divider(height=8, color="transparent"),
-        ft.Column([
-            card_vendedor,
-            card_cliente
-        ], spacing=10)
+        ft.Divider(height=6, color="transparent"),
+        controles_inferiores
     ], expand=True)
