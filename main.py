@@ -3219,16 +3219,24 @@ def configurar_rutas_fastapi(app):
     import base64, json as _json, secrets as _secrets
 
     def registrar_sesion_biometrica(id_usuario, nombre_usuario, empleado_identificado, metodo, es_gerente, ip_acceso, dispositivo):
-        """Guarda el ingreso biométrico en la bitácora de seguridad de MySQL."""
+        """Guarda el ingreso biométrico en la bitácora de seguridad de MySQL garantizando compatibilidad con ENUM."""
         try:
             db_b = conectar_db()
             if db_b:
                 cur_b = db_b.cursor()
+                # Normalizar método para cumplir estrictamente con ENUM('Facial','Huella','Contrasena')
+                m_low = str(metodo or "").lower()
+                if "facial" in m_low:
+                    metodo_norm = "Facial"
+                elif "huella" in m_low or "passkey" in m_low:
+                    metodo_norm = "Huella"
+                else:
+                    metodo_norm = "Contrasena"
                 cur_b.execute("""
                     INSERT INTO bitacora_sesiones_biometricas
                         (ID_Usuario, Nombre_Usuario, Empleado_Identificado, Metodo_Ingreso, Es_Gerente_Verificado, IP_Acceso, Dispositivo)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (id_usuario, nombre_usuario, empleado_identificado, metodo, es_gerente, ip_acceso, dispositivo))
+                """, (id_usuario, nombre_usuario, empleado_identificado, metodo_norm, es_gerente, ip_acceso, dispositivo))
                 db_b.commit()
                 db_b.close()
         except Exception as ex_b:
@@ -3347,7 +3355,7 @@ def configurar_rutas_fastapi(app):
             user_handle = (body.get("user_handle") or "").strip()
             device_token = (body.get("device_token") or "").strip()
             user_agent = request.headers.get("user-agent", "Desconocido")
-            ip_client = request.client.host if request.client else "Desconocido"
+            ip_client = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "Desconocido")
 
             if not credential_id and not raw_id and not user_handle:
                 return {"status": "error", "message": "Credencial biométrica no proporcionada"}
@@ -3411,11 +3419,12 @@ def configurar_rutas_fastapi(app):
             puesto = str(bio_user.get("Puesto", "")).lower()
             es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
 
+            cuenta_tienda_h = (bio_user.get("Usuario") or bio_user.get("Nombre_Completo") or "Tienda").strip()
             registrar_sesion_biometrica(
                 id_usuario=bio_user["ID_Usuario"],
-                nombre_usuario=nombre_identificado_h,
+                nombre_usuario=cuenta_tienda_h,
                 empleado_identificado=nombre_identificado_h,
-                metodo="Huella / Passkey",
+                metodo="Huella",
                 es_gerente=es_gerente,
                 ip_acceso=ip_client,
                 dispositivo=user_agent[:150]
@@ -3501,7 +3510,7 @@ def configurar_rutas_fastapi(app):
             frame_b64 = body.get("frame_base64", "")
             device_token = (body.get("device_token") or "").strip()
             user_agent = request.headers.get("user-agent", "Desconocido")
-            ip_client = request.client.host if request.client else "Desconocido"
+            ip_client = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "Desconocido")
 
             if not frame_b64:
                 return {"status": "error", "message": "No se recibió imagen de la cámara"}
@@ -3568,11 +3577,12 @@ def configurar_rutas_fastapi(app):
                 puesto = str(matched_user.get("Puesto", "")).lower()
                 es_gerente = "gerente" in rol or "gerente" in puesto or "admin" in rol
 
+                cuenta_tienda_f = (matched_user.get("Usuario") or matched_user.get("Nombre_Completo") or "Tienda").strip()
                 registrar_sesion_biometrica(
                     id_usuario=matched_user["ID_Usuario"],
-                    nombre_usuario=nombre_identificado_f,
+                    nombre_usuario=cuenta_tienda_f,
                     empleado_identificado=nombre_identificado_f,
-                    metodo="Reconocimiento Facial",
+                    metodo="Facial",
                     es_gerente=es_gerente,
                     ip_acceso=ip_client,
                     dispositivo=user_agent[:150]
@@ -20556,7 +20566,7 @@ Ejemplo:
                         SELECT ID_Sesion, Nombre_Usuario, Empleado_Identificado, Metodo_Ingreso, Es_Gerente_Verificado,
                                IP_Acceso, Dispositivo, DATE_FORMAT(Fecha_Hora, '%d/%m/%Y %H:%i:%s') as Fecha_Hora
                         FROM bitacora_sesiones_biometricas
-                        ORDER BY Fecha_Hora DESC
+                        ORDER BY ID_Sesion DESC
                         LIMIT 200
                     """)
                     registros = cur_bit.fetchall()
@@ -20580,15 +20590,19 @@ Ejemplo:
                         fecha_val = r.get("Fecha_Hora", "")
 
                         # Distintivo visual según método
-                        if "facial" in metodo_ingreso.lower():
+                        m_low = metodo_ingreso.lower()
+                        if "facial" in m_low:
                             metodo_icon = "📸 Reconocimiento Facial"
                             metodo_color = "#00FFFF"
-                        elif "huella" in metodo_ingreso.lower() or "passkey" in metodo_ingreso.lower():
+                            colab_label = f"👤 {nombre_emp} (Colaborador)" if nombre_emp and "acceso" not in nombre_emp.lower() else f"👤 {nombre_emp}"
+                        elif "huella" in m_low or "passkey" in m_low:
                             metodo_icon = "👆 Huella Dactilar"
                             metodo_color = "#7CFC00"
+                            colab_label = f"👤 {nombre_emp} (Colaborador)" if nombre_emp and "acceso" not in nombre_emp.lower() else f"👤 {nombre_emp}"
                         else:
                             metodo_icon = "🔑 Contraseña"
                             metodo_color = "#D8B4FE"
+                            colab_label = "👤 Acceso con Contraseña"
 
                         card = ft.Container(
                             content=ft.Column([
@@ -20602,7 +20616,7 @@ Ejemplo:
                                     )
                                 ], alignment="spaceBetween"),
                                 ft.Row([
-                                    ft.Text(f"👤 {nombre_emp}", color="white", weight="bold", size=13),
+                                    ft.Text(colab_label, color="white", weight="bold", size=13),
                                     ft.Text(f"🏪 Cuenta: {cuenta_usuario}", color="#00FFFF", size=12),
                                 ], alignment="spaceBetween"),
                                 ft.Row([
@@ -20654,7 +20668,7 @@ Ejemplo:
                         SELECT DATE_FORMAT(Fecha_Hora, '%d/%m/%Y %H:%i:%s') as Fecha_Hora,
                                Empleado_Identificado, Nombre_Usuario, Metodo_Ingreso, IP_Acceso, Dispositivo
                         FROM bitacora_sesiones_biometricas
-                        ORDER BY Fecha_Hora DESC
+                        ORDER BY ID_Sesion DESC
                     """)
                     filas = cur_exp.fetchall()
                     db_exp.close()
@@ -25430,7 +25444,7 @@ Ejemplo:
                                         INSERT INTO bitacora_sesiones_biometricas
                                             (ID_Usuario, Nombre_Usuario, Empleado_Identificado, Metodo_Ingreso, Es_Gerente_Verificado, IP_Acceso, Dispositivo)
                                         VALUES (%s, %s, %s, 'Contrasena', %s, %s, %s)
-                                    """, (uid, nombre, nombre, es_gerente_pw, ip, ua[:150]))
+                                    """, (uid, nombre, "Acceso con Contraseña", es_gerente_pw, ip, ua[:150]))
                                     db_bit2.commit()
                                     db_bit2.close()
                             except Exception as ex_bit2:
