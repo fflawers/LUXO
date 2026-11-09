@@ -1598,9 +1598,22 @@
         window._luxoUpdateTradUi(source, 'recording');
         fetch('/api/traductor/mic_state?source=' + encodeURIComponent(source) + '&session_id=' + encodeURIComponent(sid) + '&state=recording', { method: 'POST' }).catch(function(){});
 
-        // 1. Iniciar MediaRecorder nativo (Audio directo a Whisper - 100% compatible)
+        // 1. Iniciar MediaRecorder nativo (Audio directo a Whisper - 100% compatible con Ganancia Automática)
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            const micAudioConstraints = {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: false, // Desactiva filtro agresivo en móviles para no ahogar la voz suave
+                    autoGainControl: true,   // Ganancia automática de hardware para captar voz normal y baja sin gritar
+                    channelCount: 1
+                }
+            };
+            navigator.mediaDevices.getUserMedia(micAudioConstraints)
+            .catch(function() {
+                // Fallback de compatibilidad
+                return navigator.mediaDevices.getUserMedia({ audio: true });
+            })
+            .then(function(stream) {
                 if (!window._luxoTradRecording[source]) {
                     stream.getTracks().forEach(function(t) { t.stop(); });
                     return;
