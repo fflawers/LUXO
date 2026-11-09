@@ -9339,6 +9339,9 @@ INSTRUCCIÓN DE PERSONALIDAD Y SEGURIDAD (ESTILO SIMULADOR IA)
 5. Para respuestas basadas en manuales, cita al final de tu mensaje la fuente exacta en el idioma correspondiente.
 6. Para fórmulas matemáticas usa "entre" o "dividido entre" para divisiones, nunca "dividido por".
 7. NO traduzcas siglas (como AUR) si la traducción no está textualmente en el manual.
+8. REGLA ESTRICTA DE METAS, CIFRAS Y MÍNIMOS (CERO INVENCIÓN):
+   - Queda TERMINANTEMENTE PROHIBIDO inventar metas, mínimos esperados, montos en dinero, monedas extranjeras (como USD, dólares) o porcentajes que no aparezcan de forma textual en el manual.
+   - Si el manual indica un mínimo (ejemplo: 'Aur 10% más que el año pasado' o 'Ppt 1.45'), cita EXACTAMENTE ese dato. Si el documento no especifica un monto en dinero o mínimo para una métrica, NO LO INVENTES NI ASUMAS ESTÁNDARES EXTERNOS.
 
 ══════════════════════════════════════════════════════════
 INSTRUCCIÓN DE INTERPRETACIÓN Y ORTOGRAFÍA (OBLIGATORIO)
