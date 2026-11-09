@@ -315,6 +315,10 @@ def reproducir_audio_traduccion_async(texto: str, idioma: str, genero: str = "fe
                             tok = getattr(page, "_luxo_token", None) or getattr(page, "session_id", None) or getattr(page, "user_id", None)
                             if tok:
                                 events_dict[str(tok)] = evt_data
+                            u_name = str(getattr(page, "username", "") or "").lower().strip()
+                            if u_name:
+                                d_type = "mobile" if (getattr(page, "width", 0) and page.width < 768) else "desktop"
+                                events_dict[f"{u_name}_{d_type}"] = evt_data
                             print(f"[TRADUCTOR PLAY DISPATCH PRIVADO] {audio_web_url} (tok: {tok}, id: {evt_id})")
                     except Exception as ex_w:
                         print("Notice web play dispatch:", ex_w)
@@ -775,7 +779,13 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                 tok = getattr(pg, "_luxo_token", None) or getattr(pg, "session_id", None) or sid
                 if tok:
                     events_dict[str(tok)] = evt_data
-                print(f"[TRADUCTOR EVENT DISPATCH PRIVADO] {action} {src} (tok: {tok}, id: {evt_id})")
+                if sid and sid != tok:
+                    events_dict[str(sid)] = evt_data
+                u_name = str(getattr(pg, "username", "") or "").lower().strip()
+                if u_name:
+                    d_type = "mobile" if (getattr(pg, "width", 0) and pg.width < 768) else "desktop"
+                    events_dict[f"{u_name}_{d_type}"] = evt_data
+                print(f"[TRADUCTOR EVENT DISPATCH PRIVADO] {action} {src} (tok: {tok}, sid: {sid}, id: {evt_id})")
         except Exception as ex_d:
             print("Notice disparar_evento_traductor:", ex_d)
 
@@ -882,21 +892,25 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     def on_mic_vendedor_click(e):
         if grabando_estado["vendedor"]:
             set_visual_estado("vendedor", "processing")
+            disparar_evento_traductor(page, "stop_traductor_mic", "vendedor", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStopTraductorMic) window.luxoStopTraductorMic('vendedor', '{session_token}');")
         else:
             set_visual_estado("vendedor", "recording")
             if grabando_estado["cliente"]:
                 set_visual_estado("cliente", "idle")
+            disparar_evento_traductor(page, "start_traductor_mic", "vendedor", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStartTraductorMic) window.luxoStartTraductorMic('vendedor', '{session_token}');")
 
     def on_mic_cliente_click(e):
         if grabando_estado["cliente"]:
             set_visual_estado("cliente", "processing")
+            disparar_evento_traductor(page, "stop_traductor_mic", "cliente", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStopTraductorMic) window.luxoStopTraductorMic('cliente', '{session_token}');")
         else:
             set_visual_estado("cliente", "recording")
             if grabando_estado["vendedor"]:
                 set_visual_estado("vendedor", "idle")
+            disparar_evento_traductor(page, "start_traductor_mic", "cliente", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStartTraductorMic) window.luxoStartTraductorMic('cliente', '{session_token}');")
 
     btn_mic_vendedor.on_click = on_mic_vendedor_click
