@@ -616,9 +616,9 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                 content=ft.Column([
                     ft.Row([
                         ft.Row([
-                            ft.Text(icono, size=16),
-                            ft.Text(origen_lbl, color=color_accent, weight="bold", size=13),
-                        ], spacing=6),
+                            ft.Text(icono, size=15),
+                            ft.Text(origen_lbl, color=color_accent, weight="bold", size=12, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, expand=True),
+                        ], spacing=6, expand=True),
                         ft.IconButton(
                             icon=ft.Icons.VOLUME_UP_ROUNDED,
                             icon_color=color_accent,
