@@ -491,12 +491,21 @@ def registrar_rutas_fastapi_traductor(app=None):
                             headers = {"Authorization": f"Bearer {gkey}"}
                             with open(temp_path, "rb") as f:
                                 files = {"file": (f"traductor_rec{ext}", f, mime)}
-                                data = {
-                                    "model": "whisper-large-v3",
-                                    "response_format": "verbose_json",
-                                    "temperature": 0.0,
-                                    "prompt": "Conversación de mostrador en óptica Sunglass Hut sobre lentes de sol, armazones, gafas polarizadas, micas, graduaciones, marcas Ray-Ban, Oakley, Prada, 偏光, 偏光镜, 太阳镜, 镜框."
-                                }
+                                if source == "vendedor":
+                                    data = {
+                                        "model": "whisper-large-v3",
+                                        "response_format": "verbose_json",
+                                        "temperature": 0.0,
+                                        "language": "es",
+                                        "prompt": "Conversación de mostrador en óptica Sunglass Hut sobre lentes de sol, armazones, gafas polarizadas, micas, marcas Ray-Ban, Oakley, modelos y precios."
+                                    }
+                                else:
+                                    data = {
+                                        "model": "whisper-large-v3",
+                                        "response_format": "verbose_json",
+                                        "temperature": 0.0,
+                                        "prompt": "Conversación de mostrador en óptica Sunglass Hut sobre lentes de sol, armazones, gafas polarizadas, micas, graduaciones, marcas Ray-Ban, Oakley, Prada, 偏光, 偏光镜, 太阳镜, 镜框."
+                                    }
                                 res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=12)
                             if res_w.status_code == 200:
                                 w_data = res_w.json()
