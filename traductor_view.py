@@ -104,12 +104,14 @@ def ejecutar_js_traductor(page: ft.Page, js_code: str):
     except Exception as ex:
         print("Notice ejecutar_js_traductor:", ex)
 
-def detectar_idioma_y_traducir_ia(texto: str) -> dict:
+def detectar_idioma_y_traducir_ia(texto: str, idioma_cliente: str = "en") -> dict:
     """Detecta el idioma, tono y genero del hablante y traduce con terminologia optica de lujo."""
     if not texto or not texto.strip():
         return None
 
     txt_clean = texto.strip()
+    cliente_lang_clean = (idioma_cliente or "en").lower().strip()
+    nombre_idioma_cliente = VOCES_NATIVAS_EXTRANJERAS.get(cliente_lang_clean[:2], {}).get("name", cliente_lang_clean.upper())
 
     prompt_traduccion = (
         "Eres un traductor simultaneo profesional en mostrador.\n"
@@ -117,11 +119,11 @@ def detectar_idioma_y_traducir_ia(texto: str) -> dict:
         "ESTRICTAMENTE PROHIBIDO:\n"
         "- NO actues como asistente ni como vendedor ni como chatbot.\n"
         "- NO agregues saludos que el usuario no dijo.\n"
-        "- NO agregues frases de cortesia ni bienvenidas ni explicaciones.\n"
-        "- Si el usuario dijo 'Hola', la traduccion DEBE SER UNICAMENTE 'Hello' o 'Hi'.\n\n"
+        "- NO agregues frases de cortesia ni bienvenidas ni explicaciones.\n\n"
+        f"IDIOMA ACTIVO DEL CLIENTE EN MOSTRADOR: {nombre_idioma_cliente} (codigo ISO '{cliente_lang_clean}')\n\n"
         f"TEXTO A TRADUCIR:\n\"{txt_clean}\"\n\n"
-        "REGLAS:\n"
-        "1. Si el texto esta en ESPANOL ('es'), traducelo al INGLES ('en') o al idioma activo del cliente.\n"
+        "REGLAS OBLIGATORIAS:\n"
+        f"1. Si el texto esta en ESPANOL ('es'), traducelo obligatoriamente al idioma activo del cliente extranjero ({nombre_idioma_cliente}, codigo '{cliente_lang_clean}'). NUNCA lo traduzcas al ingles a menos que el cliente sea angloparlante.\n"
         "2. Si el texto esta en CUALQUIER OTRO IDIOMA, traducelo al ESPANOL ('es') para el vendedor.\n"
         "3. Usa terminologia optica precisa si el texto menciona lentes, armazones o micas.\n\n"
         "Responde UNICAMENTE en formato JSON valido con este formato exacto:\n"
@@ -310,10 +312,10 @@ def reproducir_audio_traduccion_async(texto: str, idioma: str, genero: str = "fe
                                 "id": evt_id,
                                 "timestamp": time.time()
                             }
-                            tok = getattr(page, "_luxo_token", None) or getattr(page, "session_id", None)
-                            if tok: events_dict[str(tok)] = evt_data
-                            events_dict["global"] = evt_data
-                            print(f"[TRADUCTOR PLAY DISPATCH] {audio_web_url} (id: {evt_id})")
+                            tok = getattr(page, "_luxo_token", None) or getattr(page, "session_id", None) or getattr(page, "user_id", None)
+                            if tok:
+                                events_dict[str(tok)] = evt_data
+                            print(f"[TRADUCTOR PLAY DISPATCH PRIVADO] {audio_web_url} (tok: {tok}, id: {evt_id})")
                     except Exception as ex_w:
                         print("Notice web play dispatch:", ex_w)
                 else:
@@ -402,7 +404,9 @@ def registrar_rutas_fastapi_traductor(app=None):
 
                 sess_handler = TRADUCTOR_SESSIONS.get(session_id)
                 if not sess_handler and TRADUCTOR_SESSIONS:
-                    sess_handler = list(TRADUCTOR_SESSIONS.values())[-1]
+                    # Solo recurrir si hay exactamente 1 sesion activa para evitar cruces entre dispositivos
+                    if len(TRADUCTOR_SESSIONS) == 1:
+                        sess_handler = list(TRADUCTOR_SESSIONS.values())[0]
 
                 if sess_handler:
                     set_visual_fn = sess_handler.get("set_visual")
@@ -497,6 +501,12 @@ def registrar_rutas_fastapi_traductor(app=None):
                 finally:
                     try: os.unlink(temp_path)
                     except: pass
+
+                # Filtro de seguridad anti-ruido (evitar burbujas dobles con '...' o silencios)
+                clean_whisper = texto_transcrito.strip(" .!¡?¿").lower() if texto_transcrito else ""
+                if not clean_whisper or clean_whisper in ["you", "subtítulos realizados por la comunidad de amara.org", "gracias", "bye"] or texto_transcrito.strip() in [".", "..", "...", "...."]:
+                    print(f"[TRADUCTOR WHISPER] Transcripcion de ruido descartada: '{texto_transcrito}'")
+                    texto_transcrito = ""
 
                 if texto_transcrito and sess_handler:
                     fn = sess_handler.get("procesar_vendedor" if source == "vendedor" else "procesar_cliente")
@@ -763,9 +773,9 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                     "timestamp": time.time()
                 }
                 tok = getattr(pg, "_luxo_token", None) or getattr(pg, "session_id", None) or sid
-                if tok: events_dict[str(tok)] = evt_data
-                events_dict["global"] = evt_data
-                print(f"[TRADUCTOR EVENT DISPATCH] {action} {src} (id: {evt_id})")
+                if tok:
+                    events_dict[str(tok)] = evt_data
+                print(f"[TRADUCTOR EVENT DISPATCH PRIVADO] {action} {src} (tok: {tok}, id: {evt_id})")
         except Exception as ex_d:
             print("Notice disparar_evento_traductor:", ex_d)
 
@@ -781,9 +791,14 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
 
         def _do_work():
             try:
-                res = detectar_idioma_y_traducir_ia(texto)
+                # Pasar idioma activo del cliente extranjero a la IA
+                target_lang = idioma_cliente_actual[0] if (idioma_cliente_actual and idioma_cliente_actual[0]) else "en"
+                res = detectar_idioma_y_traducir_ia(texto, idioma_cliente=target_lang)
                 if res:
-                    idioma_dest = res.get("destino", idioma_cliente_actual[0])
+                    idioma_dest = res.get("destino", target_lang)
+                    # Si el texto original era espanol y el cliente no es ingles, forzar el idioma del cliente
+                    if res.get("origen") == "es" and target_lang != "en" and idioma_dest == "en":
+                        idioma_dest = target_lang
                     trad = res.get("texto_traducido", "")
                     flag_dest = VOCES_NATIVAS_EXTRANJERAS.get(idioma_dest[:2].lower(), {}).get("name", idioma_dest.upper())
                     agregar_burbuja_traduccion(
@@ -867,25 +882,21 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     def on_mic_vendedor_click(e):
         if grabando_estado["vendedor"]:
             set_visual_estado("vendedor", "processing")
-            disparar_evento_traductor(page, "stop_traductor_mic", "vendedor", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStopTraductorMic) window.luxoStopTraductorMic('vendedor', '{session_token}');")
         else:
             set_visual_estado("vendedor", "recording")
             if grabando_estado["cliente"]:
                 set_visual_estado("cliente", "idle")
-            disparar_evento_traductor(page, "start_traductor_mic", "vendedor", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStartTraductorMic) window.luxoStartTraductorMic('vendedor', '{session_token}');")
 
     def on_mic_cliente_click(e):
         if grabando_estado["cliente"]:
             set_visual_estado("cliente", "processing")
-            disparar_evento_traductor(page, "stop_traductor_mic", "cliente", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStopTraductorMic) window.luxoStopTraductorMic('cliente', '{session_token}');")
         else:
             set_visual_estado("cliente", "recording")
             if grabando_estado["vendedor"]:
                 set_visual_estado("vendedor", "idle")
-            disparar_evento_traductor(page, "start_traductor_mic", "cliente", session_token)
             ejecutar_js_traductor(page, f"if(window.luxoStartTraductorMic) window.luxoStartTraductorMic('cliente', '{session_token}');")
 
     btn_mic_vendedor.on_click = on_mic_vendedor_click
