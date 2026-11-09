@@ -125,7 +125,7 @@ def detectar_idioma_y_traducir_ia(texto: str, idioma_cliente: str = "en") -> dic
         "REGLAS OBLIGATORIAS:\n"
         f"1. Si el texto esta en ESPANOL ('es'), traducelo obligatoriamente al idioma activo del cliente extranjero ({nombre_idioma_cliente}, codigo '{cliente_lang_clean}'). NUNCA lo traduzcas al ingles a menos que el cliente sea angloparlante.\n"
         "2. Si el texto esta en CUALQUIER OTRO IDIOMA, traducelo al ESPANOL ('es') para el vendedor.\n"
-        "3. Usa terminologia optica precisa si el texto menciona lentes, armazones o micas.\n\n"
+        "3. CONTEXTO Y TERMINOLOGIA OPTICA (Sunglass Hut): Eres un traductor experto en mostrador de optica y lentes de sol. Si el texto contiene pequenos deslices foneticos de transcripcion (por ejemplo '天光' en vez de '偏光' para lentes polarizados, o marcas como Ray-Ban/Oakley), deduce e interpreta siempre el termino optico correcto ('lentes polarizados', etc.) omitiendo soplidos, ruidos de microfono o palabras onomatopeyicas como 'pupu' o 'pff'.\n\n"
         "Responde UNICAMENTE en formato JSON valido con este formato exacto:\n"
         "{\n"
         '    "idioma_origen": "codigo_iso",\n'
@@ -491,7 +491,12 @@ def registrar_rutas_fastapi_traductor(app=None):
                             headers = {"Authorization": f"Bearer {gkey}"}
                             with open(temp_path, "rb") as f:
                                 files = {"file": (f"traductor_rec{ext}", f, mime)}
-                                data = {"model": "whisper-large-v3", "response_format": "verbose_json"}
+                                data = {
+                                    "model": "whisper-large-v3",
+                                    "response_format": "verbose_json",
+                                    "temperature": 0.0,
+                                    "prompt": "Conversación de mostrador en óptica Sunglass Hut sobre lentes de sol, armazones, gafas polarizadas, micas, graduaciones, marcas Ray-Ban, Oakley, Prada, 偏光, 偏光镜, 太阳镜, 镜框."
+                                }
                                 res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=12)
                             if res_w.status_code == 200:
                                 w_data = res_w.json()

@@ -1603,7 +1603,7 @@
             const micAudioConstraints = {
                 audio: {
                     echoCancellation: true,
-                    noiseSuppression: false, // Desactiva filtro agresivo en móviles para no ahogar la voz suave
+                    noiseSuppression: true,  // Filtro de ruido activo para evitar soplidos o ruidos de corte (pupu)
                     autoGainControl: true,   // Ganancia automática de hardware para captar voz normal y baja sin gritar
                     channelCount: 1
                 }
