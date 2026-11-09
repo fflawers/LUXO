@@ -125,7 +125,7 @@ def detectar_idioma_y_traducir_ia(texto: str, idioma_cliente: str = "en") -> dic
         "REGLAS OBLIGATORIAS:\n"
         f"1. Si el texto esta en ESPANOL ('es'), traducelo obligatoriamente al idioma activo del cliente extranjero ({nombre_idioma_cliente}, codigo '{cliente_lang_clean}'). NUNCA lo traduzcas al ingles a menos que el cliente sea angloparlante.\n"
         "2. Si el texto esta en CUALQUIER OTRO IDIOMA, traducelo al ESPANOL ('es') para el vendedor.\n"
-        "3. CONTEXTO Y TERMINOLOGIA OPTICA (Sunglass Hut): Eres un traductor experto en mostrador de optica y lentes de sol. Si el texto contiene pequenos deslices foneticos de transcripcion (por ejemplo '天光' en vez de '偏光' para lentes polarizados, o marcas como Ray-Ban/Oakley), deduce e interpreta siempre el termino optico correcto ('lentes polarizados', etc.) omitiendo soplidos, ruidos de microfono o palabras onomatopeyicas como 'pupu' o 'pff'.\n\n"
+        "3. CONTEXTO, TERMINOLOGIA OPTICA Y VENTAS DE MOSTRADOR (Sunglass Hut): Eres un traductor experto en mostrador de óptica, lentes de sol y ventas retail. Entiende términos de ventas como precios ('esta gafa cuesta', 'pesos mexicanos', '¿cuánto cuesta?'), formas de pago (tarjeta, efectivo, meses sin intereses), descuentos, promociones, garantías y accesorios (estuche, microfibra). Si el texto contiene pequeños deslices fonéticos (por ejemplo 'esta capa' por 'esta gafa', '天光' por '偏光' para lentes polarizados, o marcas como Ray-Ban/Oakley/Prada), deduce e interpreta siempre el término óptico o de ventas correcto omitiendo ruidos o soplidos de micrófono.\n\n"
         "Responde UNICAMENTE en formato JSON valido con este formato exacto:\n"
         "{\n"
         '    "idioma_origen": "codigo_iso",\n'
@@ -497,14 +497,14 @@ def registrar_rutas_fastapi_traductor(app=None):
                                         "response_format": "verbose_json",
                                         "temperature": 0.0,
                                         "language": "es",
-                                        "prompt": "Conversación de mostrador en óptica Sunglass Hut sobre lentes de sol, armazones, gafas polarizadas, micas, marcas Ray-Ban, Oakley, modelos y precios."
+                                        "prompt": "Conversación de ventas en mostrador de óptica Sunglass Hut: esta gafa cuesta, estas gafas, armazones, lentes de sol, polarizados, precio en pesos mexicanos, descuento, tarjeta, efectivo, marcas Ray-Ban, Oakley, Prada."
                                     }
                                 else:
                                     data = {
                                         "model": "whisper-large-v3",
                                         "response_format": "verbose_json",
                                         "temperature": 0.0,
-                                        "prompt": "Conversación de mostrador en óptica Sunglass Hut sobre lentes de sol, armazones, gafas polarizadas, micas, graduaciones, marcas Ray-Ban, Oakley, Prada, 偏光, 偏光镜, 太阳镜, 镜框."
+                                        "prompt": "Conversación de mostrador en óptica Sunglass Hut: sunglasses, polarized lenses, price, how much is it, discount, Ray-Ban, Oakley, 偏光, 偏光镜, 太阳镜, 镜框, 多少钱."
                                     }
                                 res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=12)
                             if res_w.status_code == 200:
@@ -631,10 +631,20 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                     ft.Container(
                         content=ft.Row([
                             ft.Icon(ft.Icons.TRANSLATE_ROUNDED, color="#00FFFF", size=16),
-                            ft.Text(texto_trad, color="white", weight="bold", size=15, expand=True)
+                            ft.Text(texto_trad, color="white", weight="bold", size=15, expand=True),
+                            ft.Container(
+                                content=ft.Icon(ft.Icons.VOLUME_UP_ROUNDED, color=color_accent, size=18),
+                                width=32,
+                                height=32,
+                                border_radius=8,
+                                bgcolor=f"{color_accent}15",
+                                alignment=ft.Alignment(0, 0),
+                                tooltip="Volver a escuchar pronunciación",
+                                on_click=re_escuchar
+                            )
                         ], spacing=8),
                         bgcolor="#16162a",
-                        padding=10,
+                        padding=ft.Padding(10, 8, 8, 8),
                         border_radius=8,
                         border=ft.Border.all(1, color_accent)
                     )
