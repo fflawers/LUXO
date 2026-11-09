@@ -289,15 +289,20 @@
             // 1.1 Botón o icono de audio de avatar (🔊 / 🔇 o toque directo sobre el avatar)
             let txtBtn = (t.innerText || t.textContent || '').trim();
             let isInputField = (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t.closest && t.closest('input, textarea, .flet-text-field')));
+            
+            // Protección: Verificar si ya hay una sesión activa o si la pantalla actual NO es la de login
+            let tieneSesion = (window.luxoUserIsLoggedIn === true || (typeof window._checkLuxoHasActiveSession === 'function' && window._checkLuxoHasActiveSession()) || localStorage.getItem('logged_user_id') || sessionStorage.getItem('luxo_session_active') === 'true');
+            let hayPantallaLogin = !tieneSesion && !!document.querySelector('input[type="password"], input[autocomplete="current-password"]');
+            
             let isAvatarArea = false;
-            if (!isInputField && !window.luxoUserIsLoggedIn && e.clientX && e.clientY) {
+            if (!isInputField && hayPantallaLogin && e.clientX && e.clientY) {
                 let cx = window.innerWidth / 2;
                 let dx = Math.abs(e.clientX - cx);
                 if (dx <= 65 && e.clientY >= 105 && e.clientY <= 235) {
                     isAvatarArea = true;
                 }
             }
-            if (!isInputField && (txtBtn === '🔊' || txtBtn === '🔇' || isAvatarArea)) {
+            if (!isInputField && hayPantallaLogin && (txtBtn === '🔊' || txtBtn === '🔇' || isAvatarArea)) {
                 if (typeof window.luxoToggleLoginAvatarAudio === 'function') {
                     window.luxoToggleLoginAvatarAudio();
                 }
