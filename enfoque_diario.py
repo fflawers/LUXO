@@ -1113,57 +1113,425 @@ def calcular_dia(d_name, user_id):
         "carekits_pct": cv_carekits_pct
     }
 
-def generar_plan_smart_ia(dia_base, user_id=None):
-    """
-    Genera recomendaciones inteligentes y un plan de acción SMART
-    personalizado para el día, basado en los cálculos matemáticos,
-    cuotas de venta, tráfico horario y métricas de productividad.
-    """
+_SGH_NORMATIVAS_REF = (
+    "NORMATIVAS OFICIALES SUNGLASS HUT (SGH): "
+    "1) Nuestros Estándares: Limpieza de tienda, Imagen personal, Reunión matutina con el equipo. "
+    "2) Nuestros No Negociables: Registro puntual de entrada/salida, Cero uso de celular personal en piso, "
+    "Mantenerse fuera de caja y respetar zona, Seguimiento constante en Store Dashboard; cuotas clave de equipo: "
+    "Wearables 15% de venta (mín. 1), Kids 5% de unidades (mín. 1), CareKits 30% de unidades (mín. 1). "
+    "3) Los Cinco Secretos / Brandies: Pulir es Poder (mín. 3 armazones en charola), Póntelos, "
+    "Diviértete Más (venta cruzada 2do par + CareKit), Cuídalos, Ajuste Perfecto. "
+    "4) Customer Journey (5 etapas): Empieza una relación -> Gánate su confianza -> "
+    "Interactúa y relaciona -> Descubre y aprende -> Ve más allá."
+)
+
+
+def _collect_enfoque_ai_keys():
+    import sys
+    keys = []
+    gemini_keys = []
+
+    def _add_k(k):
+        if k and isinstance(k, str) and k.strip() and k.strip() not in keys:
+            keys.append(k.strip())
+
+    def _add_gk(k):
+        if k and isinstance(k, str) and k.strip() and k.strip() not in gemini_keys:
+            gemini_keys.append(k.strip())
+
+    for env_name in ("GROQ_API_KEY", "GROQ_API_KEY_2", "GROQ_API_KEY_3"):
+        _add_k(os.getenv(env_name, ""))
+    _add_gk(os.getenv("GEMINI_API_KEY", ""))
+
+    main_mod = sys.modules.get("main")
+    if main_mod is not None:
+        for attr in ("GROQ_KEYS",):
+            vals = getattr(main_mod, attr, None)
+            if isinstance(vals, (list, tuple)):
+                for v in vals:
+                    _add_k(v)
+        for attr in ("GROQ_API_KEY", "GROQ_API_KEY_2", "GROQ_API_KEY_3"):
+            _add_k(getattr(main_mod, attr, ""))
+        _add_gk(getattr(main_mod, "GEMINI_API_KEY", ""))
+
+    cfg_path = os.path.join(BASE_PATH, "config.json")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as cf:
+                cfg = json.load(cf)
+            for m in (cfg.get("models") or []):
+                _add_k(m.get("apiKey", ""))
+            _add_gk(cfg.get("gemini_api_key", ""))
+        except Exception:
+            pass
+
+    return keys, gemini_keys
+
+
+def _llamar_ia_enfoque_json(system_prompt, user_prompt, required_keys, timeout=10):
+    import re
+    import requests
+
+    keys, gemini_keys = _collect_enfoque_ai_keys()
+
+    def _parse_json_obj(raw_txt):
+        if not raw_txt:
+            return None
+        cleaned = re.sub(r"<think>.*?</think>", "", raw_txt, flags=re.DOTALL).strip()
+        cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL).strip()
+        m = re.search(r"\{[\s\S]*\}", cleaned)
+        if not m:
+            return None
+        try:
+            obj = json.loads(m.group(0))
+            if isinstance(obj, dict) and all(isinstance(obj.get(k), str) and obj.get(k).strip() for k in required_keys):
+                return {k: obj[k].strip() for k in required_keys}
+        except Exception:
+            return None
+        return None
+
+    for key in keys:
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        if key.startswith("sk-or-"):
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            modelos = ["meta-llama/llama-3.3-70b-instruct", "qwen/qwen-2.5-72b-instruct"]
+        else:
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            modelos = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+
+        for mod in modelos:
+            payload = {
+                "model": mod,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.15,
+            }
+            try:
+                res = requests.post(url, headers=headers, json=payload, timeout=timeout)
+                if res.status_code == 200:
+                    data_r = res.json()
+                    txt = (data_r.get("choices") or [{}])[0].get("message", {}).get("content", "")
+                    parsed = _parse_json_obj(txt)
+                    if parsed:
+                        return parsed, f"ia:{mod}"
+                elif res.status_code in (401, 403):
+                    break
+            except Exception:
+                continue
+
+    for gk in gemini_keys:
+        for gm in ("gemini-flash-latest", "gemini-2.0-flash"):
+            try:
+                url_gem = f"https://generativelanguage.googleapis.com/v1beta/models/{gm}:generateContent?key={gk}"
+                payload_gem = {
+                    "contents": [{"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}],
+                    "generationConfig": {"temperature": 0.15},
+                }
+                res_g = requests.post(url_gem, json=payload_gem, timeout=timeout)
+                if res_g.status_code == 200:
+                    cands = res_g.json().get("candidates") or []
+                    if cands:
+                        txt_g = ((cands[0].get("content") or {}).get("parts") or [{}])[0].get("text", "")
+                        parsed = _parse_json_obj(txt_g)
+                        if parsed:
+                            return parsed, f"ia:{gm}"
+            except Exception:
+                continue
+
+    return None, "fallback"
+
+
+def _construir_contexto_enfoque(dia_base, user_id=None):
     if user_id and user_id not in user_states:
         init_user_state(user_id)
-    s_state = user_states[user_id]["store_state"] if (user_id and user_id in user_states) else (user_states.get("default", {}).get("store_state", {}))
-    calc = calcular_dia(dia_base, user_id if user_id else "default")
+    uid = user_id if user_id else "default"
+    s_state = user_states[uid]["store_state"] if uid in user_states else (user_states.get("default", {}).get("store_state", {}))
+    calc = calcular_dia(dia_base, uid)
     data = s_state.get(dia_base, {})
-    
+
     meta_ns = float(calc.get("meta_diaria", 0.0) or 0.0)
     meta_ideal = float(calc.get("meta_ideal", 0.0) or (meta_ns * 1.10))
     tot_horas = float(calc.get("tot_horas", 0.0) or 0.0)
     vta_prod = float(calc.get("vta_neta_prod", 0.0) or 0.0)
     u_prod = float(calc.get("u_prod", 0.0) or 0.0)
-    meta_conv = float(calc.get("conversion_target", 0.15) or 0.15) * 100.0
+    meta_conv = float(data.get("conversion_target", 0.0) or 0.0) * 100.0
     tot_pzas = int(calc.get("total_unidades", 0) or 0)
     trafico_esp = int(data.get("trafico_esperado", 0) or 0)
     atv_val = float(data.get("atv_dia", 0.0) or 0.0)
     aur_val = float(data.get("aur_dia", 0.0) or 0.0)
-    
-    colabs_activos = [c for c in data.get("colaboradores", []) if (c.get("nombre") or "").strip() and float(c.get("horas", 0) or 0) > 0]
-    num_colabs = len(colabs_activos)
-    
+
+    etiquetas_bloques = ["Apertura-1pm", "1pm-3pm", "3pm-5pm", "5pm-7pm", "7pm-Cierre"]
+    raw_b = data.get("trafico_bloques", [0, 0, 0, 0, 0])
+    b_traf = [int(x or 0) for x in (raw_b if isinstance(raw_b, list) else [0, 0, 0, 0, 0])[:5]]
+    b_pesos = calc.get("b_pesos", [0.0] * 5)
+    b_metas = calc.get("b_metas", [0.0] * 5)
+    bloques_info = [
+        {
+            "bloque": etiquetas_bloques[i],
+            "trafico": b_traf[i] if i < len(b_traf) else 0,
+            "peso_pct": round((b_pesos[i] * 100.0), 1) if i < len(b_pesos) else 0.0,
+            "meta_venta": round(b_metas[i], 2) if i < len(b_metas) else 0.0,
+        }
+        for i in range(5)
+        if (i < len(b_traf) and b_traf[i] > 0) or (i < len(b_metas) and b_metas[i] > 0)
+    ]
+
     colab_rows = calc.get("colab_rows", [])
-    tot_wea = sum(int(r.get("meta_wea", 0) or 0) for r in colab_rows)
-    tot_kid = sum(int(r.get("meta_kid", 0) or 0) for r in colab_rows)
-    tot_ck = sum(int(r.get("meta_ck", 0) or 0) for r in colab_rows)
-    
-    ritmo_hora_tienda = (meta_ns / tot_horas) if tot_horas > 0 else (meta_ns / 8.0)
-    
-    ritmo_str = f"Ritmo tienda: ${ritmo_hora_tienda:,.0f}/hr (${meta_ns:,.0f} en {tot_horas:.1f} hrs totales). Cada asesor debe colocar ${vta_prod:,.0f}/hr ({u_prod:.2f} pzs/hr). Horas pico clave: 3:00pm-4:00pm y 5:00pm-6:00pm."
-    especifico_str = f"Aplicar técnica 'Pulir es Poder' con los {trafico_esp} clientes esperados. Realizar al menos 2 demos de Smart Glasses (Wearables) por asesor y presentar 3 armazones en charola."
-    medible_str = f"Alcanzar venta de ${meta_ns:,.0f} ({tot_pzas} piezas) con {meta_conv:.1f}% de conversión. Cuotas no negociables: {tot_wea} Wearables, {tot_kid} Kids y {tot_ck} CareKits en equipo."
-    alcanzable_str = f"Concentrar energía en bloques de 3-4pm y 5-6pm (50% tráfico). Los {num_colabs if num_colabs > 0 else 'asesores en'} colaboradores en turno impulsarán venta cruzada (2do par + kit) fuera de caja."
-    reto_str = f"Superar la Meta Ideal de ${meta_ideal:,.0f} (+10%), elevando el ATV por encima de ${atv_val:,.0f} con modelos solares premium/wearables y cuidando un AUR de ${aur_val:,.0f}."
-    tiempo_str = f"Monitoreo en Store Dashboard cada 2 horas (12:00pm, 2:00pm, 4:00pm, 6:00pm y 8:00pm). Asignación de zonas y relevos 15 min antes de picos de tráfico."
-    logros_str = f"Excelente dinamismo en bloques pico de la tarde, cumplimiento de metas en demos de Wearables y apego riguroso a estándares de limpieza e imagen personal."
-    oportunidades_str = f"Reforzar el ofrecimiento proactivo de CareKits al cierre de cada venta y profundizar preguntas abiertas en el Customer Journey para maximizar el ticket promedio."
-    
+    colabs_activos = [r for r in colab_rows if (r.get("nombre") or "").strip() and float(r.get("horas", 0) or 0) > 0]
+    tot_wea = int(calc.get("wea_unid_meta", 0) or sum(int(r.get("meta_wea", 0) or 0) for r in colabs_activos))
+    tot_kid = int(calc.get("kids_unid_meta", 0) or sum(int(r.get("meta_kid", 0) or 0) for r in colabs_activos))
+    tot_ck = int(calc.get("ck_unid_meta", 0) or sum(int(r.get("meta_ck", 0) or 0) for r in colabs_activos))
+
+    venta_real = float(calc.get("venta_neta_dia", 0.0) or 0.0)
+    pzas_reales = int(calc.get("venta_unidades_dia", 0) or 0)
+    interacciones_reales = int(calc.get("tot_interacciones", 0) or 0)
+    convertidos_reales = int(calc.get("tot_convertidos", 0) or 0)
+    conv_real_pct = float(calc.get("conversion_dia", 0.0) or 0.0) * 100.0
+    wea_demos = int(calc.get("tot_wea_demos", 0) or 0)
+    wea_reales = int(calc.get("tot_wea_cierre", 0) or 0)
+    ana_reales = int(calc.get("tot_ana_cierre", 0) or 0)
+    kid_reales = int(calc.get("tot_kid_cierre", 0) or 0)
+    ck_reales = int(calc.get("tot_ck_cierre", 0) or 0)
+
+    desmarcados = []
+    for sec_name, sec_key in (
+        ("Estándares", "checks_estandares"),
+        ("No Negociables", "checks_no_negociables"),
+        ("Cinco Secretos", "checks_secretos"),
+        ("Customer Journey", "checks_journey"),
+    ):
+        sec_dict = data.get(sec_key)
+        if isinstance(sec_dict, dict):
+            for k, v in sec_dict.items():
+                if not v:
+                    desmarcados.append(f"{sec_name}:{k}")
+
+    colabs_cierre = [
+        {
+            "nombre": r.get("nombre"),
+            "horas": round(float(r.get("horas", 0) or 0), 1),
+            "meta_vta": round(float(r.get("meta_vta", 0) or 0), 2),
+            "vta_real": round(float(r.get("vta_cierre", 0) or 0), 2),
+            "cumpl_vta_pct": round((float(r.get("vta_cierre", 0) or 0) / float(r.get("meta_vta", 1) or 1)) * 100.0, 1) if float(r.get("meta_vta", 0) or 0) > 0 else None,
+            "interacciones": int(r.get("interacciones", 0) or 0),
+            "convertidos": int(r.get("convertidos", 0) or 0),
+            "conv_real_pct": round(float(r.get("conversion_cierre", 0) or 0) * 100.0, 1),
+            "wea_demos": int(r.get("wea_demos", 0) or 0),
+            "wea_real": int(r.get("wea_cierre", 0) or 0),
+            "wea_meta": int(r.get("meta_wea", 0) or 0),
+            "kid_real": int(r.get("kid_cierre", 0) or 0),
+            "kid_meta": int(r.get("meta_kid", 0) or 0),
+            "ck_real": int(r.get("ck_cierre", 0) or 0),
+            "ck_meta": int(r.get("meta_ck", 0) or 0),
+        }
+        for r in colabs_activos
+    ]
+
+    ctx = {
+        "dia": dia_base,
+        "planeacion_metas": {
+            "meta_venta_ns": round(meta_ns, 2),
+            "meta_ideal_110": round(meta_ideal, 2),
+            "meta_piezas": tot_pzas,
+            "trafico_esperado": trafico_esp,
+            "conversion_objetivo_pct": round(meta_conv, 1),
+            "transacciones_meta": int(calc.get("transacciones", 0) or 0),
+            "atv_objetivo": round(atv_val, 2),
+            "aur_objetivo": round(aur_val, 2),
+            "horas_totales": round(tot_horas, 1),
+            "ritmo_tienda_por_hora": round((meta_ns / tot_horas), 2) if tot_horas > 0 else 0.0,
+            "prod_venta_por_hora": round(vta_prod, 2),
+            "prod_pzas_por_hora": round(u_prod, 2),
+            "cuotas_equipo": {"wearables": tot_wea, "kids": tot_kid, "carekits": tot_ck},
+            "bloques_horarios": bloques_info,
+            "colaboradores_programados": [
+                {
+                    "nombre": r.get("nombre"),
+                    "horas": round(float(r.get("horas", 0) or 0), 1),
+                    "meta_vta": round(float(r.get("meta_vta", 0) or 0), 2),
+                    "meta_wea": int(r.get("meta_wea", 0) or 0),
+                    "meta_kid": int(r.get("meta_kid", 0) or 0),
+                    "meta_ck": int(r.get("meta_ck", 0) or 0),
+                }
+                for r in colabs_activos
+            ],
+        },
+        "resultados_reales_cierre": {
+            "venta_real_ns": round(venta_real, 2),
+            "cumplimiento_meta_pct": round((venta_real / meta_ns) * 100.0, 1) if meta_ns > 0 else None,
+            "diferencia_meta_ns": round(venta_real - meta_ns, 2) if meta_ns > 0 else None,
+            "piezas_reales": pzas_reales,
+            "analogos_reales": ana_reales,
+            "interacciones_reales": interacciones_reales,
+            "convertidos_reales": convertidos_reales,
+            "conversion_real_pct": round(conv_real_pct, 1),
+            "wearables_demos": wea_demos,
+            "wearables_vendidos": wea_reales,
+            "wearables_meta": tot_wea,
+            "tasa_cierre_demo_wearable_pct": round((wea_reales / wea_demos) * 100.0, 1) if wea_demos > 0 else None,
+            "kids_vendidos": kid_reales,
+            "kids_meta": tot_kid,
+            "carekits_vendidos": ck_reales,
+            "carekits_meta": tot_ck,
+            "atv_real": round(venta_real / convertidos_reales, 2) if convertidos_reales > 0 else None,
+            "aur_real": round(venta_real / pzas_reales, 2) if pzas_reales > 0 else None,
+            "productividad_real_por_hora": round(venta_real / tot_horas, 2) if tot_horas > 0 else None,
+            "detalle_colaboradores": colabs_cierre,
+        },
+        "normativas_desmarcadas": desmarcados,
+    }
+    return data, calc, ctx
+
+
+def generar_plan_smart_ia(dia_base, user_id=None):
+    """
+    Genera el Ritmo y Plan SMART de apertura usando IA real conectada a las
+    métricas reales capturadas y normativas SGH. No genera textos ficticios si el día está vacío.
+    """
+    _, _, ctx = _construir_contexto_enfoque(dia_base, user_id)
+    pm = ctx["planeacion_metas"]
+    meta_ns = pm["meta_venta_ns"]
+    tot_horas = pm["horas_totales"]
+    trafico_esp = pm["trafico_esperado"]
+
+    faltantes = []
+    if meta_ns <= 0:
+        faltantes.append("Meta Diaria (Manual)")
+    if tot_horas <= 0 and trafico_esp <= 0:
+        faltantes.append("Horas de colaboradores o Tráfico Esperado")
+    if faltantes:
+        return {
+            "ok": False,
+            "error": "Te falta capturar en la hoja del día: " + " y ".join(faltantes) + "."
+        }
+
+    system_prompt = (
+        f"Eres el coach operativo oficial de Sunglass Hut (SGH). {_SGH_NORMATIVAS_REF} "
+        "REGLAS ESTRICTAS ANTI-ALUCINACIÓN: "
+        "1) Usa ÚNICAMENTE cifras, nombres de asesores y bloques horarios presentes en el JSON recibido. "
+        "2) PROHIBIDO inventar horarios pico, porcentajes, montos o nombres no incluidos en el JSON. Si un dato es 0, no lo maquilles. "
+        "3) Responde SOLO con un JSON válido (sin markdown) con las claves exactas: "
+        "ritmo_venta_hoy, smart_especifico, smart_medible, smart_alcanzable, smart_reto, smart_tiempo. "
+        "Cada valor debe ser conciso (1 a 2 líneas) para caber en formato PDF; usa pesos mexicanos ($), nunca escribas USD."
+    )
+    user_prompt = (
+        f"Genera el Ritmo de Venta y los 5 puntos S.M.A.R.T. para el día {dia_base} con base exacta en estos datos:\n"
+        f"{json.dumps(pm, ensure_ascii=False)}"
+    )
+
+    ia_res, source = _llamar_ia_enfoque_json(
+        system_prompt,
+        user_prompt,
+        ["ritmo_venta_hoy", "smart_especifico", "smart_medible", "smart_alcanzable", "smart_reto", "smart_tiempo"],
+        timeout=10,
+    )
+    if ia_res:
+        ia_res["ok"] = True
+        ia_res["_source"] = source
+        return ia_res
+
+    bloques_ord = sorted(pm["bloques_horarios"], key=lambda b: b.get("trafico", 0), reverse=True)
+    picos_txt = ", ".join(f"{b['bloque']} ({b['peso_pct']:.0f}%)" for b in bloques_ord[:2]) if bloques_ord else "bloques de mayor afluencia capturados"
+    equipo_txt = f"{len(pm['colaboradores_programados'])} asesor(es) ({tot_horas:.1f} hrs)" if tot_horas > 0 else "el equipo en turno"
+    cuotas = pm["cuotas_equipo"]
+
     return {
-        "ritmo_venta_hoy": ritmo_str,
-        "smart_especifico": especifico_str,
-        "smart_medible": medible_str,
-        "smart_alcanzable": alcanzable_str,
-        "smart_reto": reto_str,
-        "smart_tiempo": tiempo_str,
-        "logros_hoy": logros_str,
-        "oportunidades_manana": oportunidades_str
+        "ok": True,
+        "_source": "determinista",
+        "ritmo_venta_hoy": f"Ritmo objetivo: ${pm['ritmo_tienda_por_hora']:,.0f}/hr (${meta_ns:,.0f} en {tot_horas:.1f} hrs). Prod. individual: ${pm['prod_venta_por_hora']:,.0f}/hr y {pm['prod_pzas_por_hora']:.2f} pzs/hr.",
+        "smart_especifico": f"Ejecutar 'Pulir es Poder' y 3 armazones en charola por interacción con los {trafico_esp} clientes esperados, priorizando demos de Wearables y ajuste perfecto.",
+        "smart_medible": f"Lograr ${meta_ns:,.0f} ({pm['meta_piezas']} pzs) con {pm['conversion_objetivo_pct']:.1f}% de conversión; cuotas no negociables: {cuotas['wearables']} Wearables, {cuotas['kids']} Kids y {cuotas['carekits']} CareKits.",
+        "smart_alcanzable": f"Enfocar al equipo de {equipo_txt} fuera de caja durante {picos_txt}, impulsando venta cruzada (2do par + CareKit) y Customer Journey.",
+        "smart_reto": f"Alcanzar Meta Ideal de ${pm['meta_ideal_110']:,.0f} (+10%) cuidando ATV objetivo de ${pm['atv_objetivo']:,.0f} y AUR de ${pm['aur_objetivo']:,.0f}.",
+        "smart_tiempo": "Cortes de seguimiento en Store Dashboard cada 2 horas y relevos planeados antes de los bloques de mayor tráfico.",
+    }
+
+
+def generar_logros_oportunidades_ia(dia_base, user_id=None):
+    """
+    Genera LOGROS DE HOY y OPORTUNIDADES PARA MAÑANA exclusivamente a partir
+    de los resultados reales obtenidos al cierre en '¿Cómo vamos?' y las normativas SGH.
+    """
+    _, _, ctx = _construir_contexto_enfoque(dia_base, user_id)
+    res = ctx["resultados_reales_cierre"]
+    pm = ctx["planeacion_metas"]
+
+    hay_resultados = (
+        res["venta_real_ns"] > 0
+        or res["piezas_reales"] > 0
+        or res["interacciones_reales"] > 0
+        or res["convertidos_reales"] > 0
+        or res["wearables_demos"] > 0
+    )
+    faltantes_cierre = []
+    if pm["meta_venta_ns"] <= 0:
+        faltantes_cierre.append("Meta Diaria (Manual)")
+    if not hay_resultados:
+        faltantes_cierre.append("resultados reales de cierre en '¿Cómo vamos?' (Venta al cierre, Piezas o Interacciones)")
+    if faltantes_cierre:
+        return {
+            "ok": False,
+            "error": "Te falta capturar para analizar el cierre: " + " y ".join(faltantes_cierre) + "."
+        }
+
+    system_prompt = (
+        f"Eres el coach operativo oficial de Sunglass Hut (SGH). {_SGH_NORMATIVAS_REF} "
+        "REGLAS ESTRICTAS ANTI-ALUCINACIÓN PARA CIERRE DEL DÍA: "
+        "1) Basa TODO tu análisis ÚNICAMENTE en comparar 'planeacion_metas' vs 'resultados_reales_cierre' y 'normativas_desmarcadas'. Recuerda que 'meta_piezas' (M.UNID) es la meta de piezas y 'transacciones_meta' es la meta de tickets; no las confundas. "
+        "2) PROHIBIDO inventar datos, porcentajes, horarios o logros que no estén respaldados por cifras reales. "
+        "3) En 'logros_hoy': destaca exclusivamente metas cumplidas, categorías con avance real o asesores con mejor cumplimiento/conversión real. "
+        "Si la venta estuvo por debajo de meta, reconoce objetivamente las cifras reales alcanzadas (ej. venta neta, piezas, demos, conversiones) sin exagerar ni mentir. "
+        "4) En 'oportunidades_manana': señala exclusivamente brechas reales (ej. % faltante vs meta, conversión real menor a objetivo, déficit en Wearables/CareKits/Kids, baja conversión de demos o normativas desmarcadas) y recomienda la acción concreta según la normativa SGH. "
+        "5) Todas las cifras monetarias están en pesos mexicanos ($); nunca escribas 'USD'. Responde SOLO con JSON válido con claves exactas: logros_hoy, oportunidades_manana (2 a 4 líneas cada una)."
+    )
+    user_prompt = (
+        f"Analiza el cierre real del día {dia_base} con este JSON exacto:\n"
+        f"{json.dumps(ctx, ensure_ascii=False)}"
+    )
+
+    ia_res, source = _llamar_ia_enfoque_json(
+        system_prompt,
+        user_prompt,
+        ["logros_hoy", "oportunidades_manana"],
+        timeout=10,
+    )
+    if ia_res:
+        ia_res["ok"] = True
+        ia_res["_source"] = source
+        return ia_res
+
+    cumpl_txt = f"{res['cumplimiento_meta_pct']:.1f}% de la meta (${res['venta_real_ns']:,.0f} vs ${pm['meta_venta_ns']:,.0f})" if res["cumplimiento_meta_pct"] is not None else f"${res['venta_real_ns']:,.0f} vendidos"
+    top_colabs = [c for c in res["detalle_colaboradores"] if c["vta_real"] > 0]
+    top_colabs.sort(key=lambda x: x["vta_real"], reverse=True)
+    top_str = f" Destacó {top_colabs[0]['nombre']} con ${top_colabs[0]['vta_real']:,.0f}." if top_colabs else ""
+
+    brechas = []
+    if res["diferencia_meta_ns"] is not None and res["diferencia_meta_ns"] < 0:
+        brechas.append(f"cerrar brecha de ${abs(res['diferencia_meta_ns']):,.0f} vs meta")
+    if pm["conversion_objetivo_pct"] > 0 and res["conversion_real_pct"] < pm["conversion_objetivo_pct"]:
+        brechas.append(f"elevar conversión ({res['conversion_real_pct']:.1f}% real vs {pm['conversion_objetivo_pct']:.1f}% meta)")
+    if res["wearables_vendidos"] < res["wearables_meta"]:
+        brechas.append(f"Wearables ({res['wearables_vendidos']}/{res['wearables_meta']}, {res['wearables_demos']} demos)")
+    if res["carekits_vendidos"] < res["carekits_meta"]:
+        brechas.append(f"CareKits ({res['carekits_vendidos']}/{res['carekits_meta']})")
+    if res["kids_vendidos"] < res["kids_meta"]:
+        brechas.append(f"Kids ({res['kids_vendidos']}/{res['kids_meta']})")
+    if ctx["normativas_desmarcadas"]:
+        brechas.append("normativas pendientes: " + ", ".join(ctx["normativas_desmarcadas"][:3]))
+
+    oport_txt = (
+        "Foco para mañana basado en resultados reales: " + "; ".join(brechas) + ". Reforzar Customer Journey y seguimiento en Store Dashboard."
+        if brechas else
+        "Sostener el cumplimiento alcanzado en metas y cuotas no negociables mediante seguimiento continuo en Store Dashboard."
+    )
+
+    return {
+        "ok": True,
+        "_source": "determinista",
+        "logros_hoy": f"Cierre real: {cumpl_txt}, {res['piezas_reales']} piezas, {res['convertidos_reales']} transacciones ({res['conversion_real_pct']:.1f}% conv.) y {res['wearables_demos']} demos Wearables.{top_str}",
+        "oportunidades_manana": oport_txt,
     }
 
 DAY_TO_PLAN_SHEET = {
@@ -1432,7 +1800,7 @@ def generar_excel_y_pdf_enfoque(d_name, user_id, export_pdf=False):
 
                         ws_plan = wb_com.Worksheets(plan_sheet_name if plan_sheet_name in ws_names else "PLAN ACCION DOMINGO")
                         try:
-                            ws_plan.PageSetup.PrintArea = "$A$1:$O$36"
+                            ws_plan.PageSetup.PrintArea = "$A$1:$P$36"
                             ws_plan.PageSetup.Zoom = False
                             ws_plan.PageSetup.FitToPagesWide = 1
                             ws_plan.PageSetup.FitToPagesTall = 1
@@ -2131,18 +2499,19 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         clear_and_write(p_dia, fitz.Rect(371.6, y_tc1, 400.6, y_tc2), f"{tot_cierre_kids_d}" if tot_cierre_kids_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
         clear_and_write(p_dia, fitz.Rect(400.6, y_tc1, 434.0, y_tc2), f"{tot_cierre_ck_d}" if tot_cierre_ck_d > 0 else "", fontsize=5.8, fill=None, align_center=True)
 
-        # 2. Estampar Plan de Acción
-        clear_and_write(p_plan, fitz.Rect(425, 68, 470, 80), semana_str, fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(508, 68, 560, 80), dia_base, fontsize=7.5, fill=None, align_center=True)
+        # 2. Estampar Plan de Acción (coordenadas calibradas a template_plan.pdf Carta completo)
+        clear_and_write(p_plan, fitz.Rect(338, 27, 389, 41), semana_str, fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(409, 27, 478, 41), dia_base, fontsize=7.5, fill=None, align_center=True)
 
         u_prod_val = float(c.get('u_prod', 0.0) or 0.0)
+        C_PLAN_GREEN = (0.816, 0.882, 0.827)
 
-        clear_and_write(p_plan, fitz.Rect(90, 160, 135, 175), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(136, 160, 175, 175), f"${m_dia:,.0f}" if m_dia > 0 else "", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(176, 160, 215, 175), f"{tot_unids}" if tot_unids > 0 else "", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(216, 160, 258, 175), f"${vta_prod:,.0f}" if vta_prod > 0 else "", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(259, 160, 300, 175), f"{u_prod_val:.2f}" if u_prod_val > 0 else "", fontsize=7.5, fill=None, align_center=True)
-        clear_and_write(p_plan, fitz.Rect(380, 155, 545, 175), f"${(m_dia/tot_hrs_val):,.2f} / hr" if (tot_hrs_val > 0 and m_dia > 0) else "", fontsize=7.5, fill=None, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(54.6, 108.5, 88.8, 126.3), f"{tot_hrs_val:.1f}" if tot_hrs_val > 0 else "", fontsize=6.5, fill=C_PLAN_GREEN, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(90.0, 108.5, 124.3, 126.3), f"${m_dia:,.0f}" if m_dia > 0 else "", fontsize=6.0, fill=C_PLAN_GREEN, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(125.5, 108.5, 159.9, 126.3), f"{tot_unids}" if tot_unids > 0 else "", fontsize=6.5, fill=C_PLAN_GREEN, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(161.1, 108.5, 195.4, 126.3), f"${vta_prod:,.0f}" if vta_prod > 0 else "", fontsize=6.0, fill=C_PLAN_GREEN, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(196.6, 108.5, 230.9, 126.3), f"{u_prod_val:.2f}" if u_prod_val > 0 else "", fontsize=6.5, fill=C_PLAN_GREEN, align_center=True)
+        clear_and_write(p_plan, fitz.Rect(308, 110, 575, 126), f"${(m_dia/tot_hrs_val):,.2f} / hr" if (tot_hrs_val > 0 and m_dia > 0) else "", fontsize=7.5, fill=None, align_center=True)
 
         # CHECKBOXES DEL PLAN DE ACCIÓN (Nuestros Estándares, No Negociables, Secretos, Journey)
         def es_marcado(val):
@@ -2157,54 +2526,54 @@ def generar_pdf_enfoque_vectorial(d_name, user_id, out_pdf_path):
         def draw_pdf_check(page, rect, checked):
             if es_marcado(checked):
                 # Casilla con marco verde fino y marca de cotejo perfecta
-                in_rect = fitz.Rect(rect.x0 + 1.0, rect.y0 + 1.0, rect.x1 - 1.0, rect.y1 - 1.0)
-                page.draw_rect(in_rect, color=(0.06, 0.72, 0.50), fill=(0.89, 0.97, 0.92), width=0.8, overlay=True)
-                p1 = fitz.Point(in_rect.x0 + 2.5, in_rect.y0 + in_rect.height * 0.52)
-                p2 = fitz.Point(in_rect.x0 + in_rect.width * 0.40, in_rect.y1 - 2.8)
-                p3 = fitz.Point(in_rect.x1 - 2.5, in_rect.y0 + 3.0)
-                page.draw_line(p1, p2, color=(0.05, 0.55, 0.35), width=2.0, overlay=True)
-                page.draw_line(p2, p3, color=(0.05, 0.55, 0.35), width=2.0, overlay=True)
+                in_rect = fitz.Rect(rect.x0 + 0.8, rect.y0 + 0.8, rect.x1 - 0.8, rect.y1 - 0.8)
+                page.draw_rect(in_rect, color=(0.06, 0.72, 0.50), fill=(0.89, 0.97, 0.92), width=0.7, overlay=True)
+                p1 = fitz.Point(in_rect.x0 + in_rect.width * 0.20, in_rect.y0 + in_rect.height * 0.52)
+                p2 = fitz.Point(in_rect.x0 + in_rect.width * 0.42, in_rect.y1 - in_rect.height * 0.22)
+                p3 = fitz.Point(in_rect.x1 - in_rect.width * 0.18, in_rect.y0 + in_rect.height * 0.22)
+                page.draw_line(p1, p2, color=(0.05, 0.55, 0.35), width=1.6, overlay=True)
+                page.draw_line(p2, p3, color=(0.05, 0.55, 0.35), width=1.6, overlay=True)
 
         # Estándares (Columna izquierda: 3 casillas calibradas)
         c_est = d_data.get("checks_estandares", {}) if isinstance(d_data.get("checks_estandares"), dict) else {}
-        draw_pdf_check(p_plan, fitz.Rect(279.6, 250.3, 295.6, 264.7), c_est.get("limpieza", False))
-        draw_pdf_check(p_plan, fitz.Rect(279.3, 272.7, 295.3, 287.1), c_est.get("imagen", False))
-        draw_pdf_check(p_plan, fitz.Rect(279.6, 295.5, 295.7, 309.9), c_est.get("reunion", False))
+        draw_pdf_check(p_plan, fitz.Rect(214.6, 186.4, 228.4, 198.8), c_est.get("limpieza", False))
+        draw_pdf_check(p_plan, fitz.Rect(214.4, 205.7, 228.1, 218.0), c_est.get("imagen", False))
+        draw_pdf_check(p_plan, fitz.Rect(214.7, 225.2, 228.4, 237.5), c_est.get("reunion", False))
 
         # Secretos (Columna izquierda: 5 casillas calibradas)
         c_sec = d_data.get("checks_secretos", {}) if isinstance(d_data.get("checks_secretos"), dict) else {}
-        draw_pdf_check(p_plan, fitz.Rect(280.6, 408.2, 299.4, 422.6), c_sec.get("pulir", False))
-        draw_pdf_check(p_plan, fitz.Rect(280.4, 430.1, 299.3, 444.4), c_sec.get("pontelos", False))
-        draw_pdf_check(p_plan, fitz.Rect(280.7, 451.8, 299.6, 466.2), c_sec.get("diviertete", False))
-        draw_pdf_check(p_plan, fitz.Rect(280.4, 471.8, 299.3, 486.1), c_sec.get("cuidalos", False))
-        draw_pdf_check(p_plan, fitz.Rect(280.4, 493.0, 299.4, 507.4), c_sec.get("ajuste", False))
+        draw_pdf_check(p_plan, fitz.Rect(215.5, 322.0, 231.7, 334.3), c_sec.get("pulir", False))
+        draw_pdf_check(p_plan, fitz.Rect(215.3, 340.8, 231.6, 353.1), c_sec.get("pontelos", False))
+        draw_pdf_check(p_plan, fitz.Rect(215.6, 359.5, 231.8, 371.8), c_sec.get("diviertete", False))
+        draw_pdf_check(p_plan, fitz.Rect(215.3, 376.6, 231.6, 388.9), c_sec.get("cuidalos", False))
+        draw_pdf_check(p_plan, fitz.Rect(215.4, 394.9, 231.6, 407.2), c_sec.get("ajuste", False))
 
-        # No Negociables (Columna derecha: 4 casillas calibradas x=548.0..563.0)
+        # No Negociables (Columna derecha: 4 casillas calibradas x=570.8..587.3)
         c_noneg = d_data.get("checks_no_negociables", {}) if isinstance(d_data.get("checks_no_negociables"), dict) else {}
-        draw_pdf_check(p_plan, fitz.Rect(548.0, 250.6, 563.0, 264.6), c_noneg.get("registro", False))
-        draw_pdf_check(p_plan, fitz.Rect(548.0, 270.1, 563.0, 284.1), c_noneg.get("sin_celular", False))
-        draw_pdf_check(p_plan, fitz.Rect(548.0, 292.2, 563.0, 306.2), c_noneg.get("fuera_caja", False))
-        draw_pdf_check(p_plan, fitz.Rect(548.0, 314.2, 563.0, 328.2), c_noneg.get("seguimiento", False))
+        draw_pdf_check(p_plan, fitz.Rect(571.0, 186.7, 587.3, 199.0), c_noneg.get("registro", False))
+        draw_pdf_check(p_plan, fitz.Rect(570.9, 205.8, 587.2, 218.1), c_noneg.get("sin_celular", False))
+        draw_pdf_check(p_plan, fitz.Rect(570.8, 224.5, 587.2, 236.7), c_noneg.get("fuera_caja", False))
+        draw_pdf_check(p_plan, fitz.Rect(570.8, 243.9, 587.1, 256.2), c_noneg.get("seguimiento", False))
 
-        # Customer Journey (Columna derecha: 5 casillas calibradas x=486.0..503.0)
+        # Customer Journey (Columna central: 5 casillas calibradas x=391.4..408.9)
         c_jrn = d_data.get("checks_journey", {}) if isinstance(d_data.get("checks_journey"), dict) else {}
-        draw_pdf_check(p_plan, fitz.Rect(486.0, 449.8, 503.0, 464.6), c_jrn.get("relacion", False))
-        draw_pdf_check(p_plan, fitz.Rect(486.0, 471.8, 503.0, 486.7), c_jrn.get("confianza", False))
-        draw_pdf_check(p_plan, fitz.Rect(486.0, 493.9, 503.0, 507.8), c_jrn.get("interactua", False))
-        draw_pdf_check(p_plan, fitz.Rect(486.0, 516.0, 503.0, 530.4), c_jrn.get("descubre", False))
-        draw_pdf_check(p_plan, fitz.Rect(486.0, 537.1, 503.0, 549.6), c_jrn.get("ve_mas_alla", False))
+        draw_pdf_check(p_plan, fitz.Rect(391.4, 357.5, 408.9, 371.5), c_jrn.get("relacion", False))
+        draw_pdf_check(p_plan, fitz.Rect(391.6, 375.6, 408.8, 389.5), c_jrn.get("confianza", False))
+        draw_pdf_check(p_plan, fitz.Rect(392.7, 395.6, 408.8, 407.8), c_jrn.get("interactua", False))
+        draw_pdf_check(p_plan, fitz.Rect(391.5, 414.5, 408.8, 426.6), c_jrn.get("descubre", False))
+        draw_pdf_check(p_plan, fitz.Rect(391.5, 432.5, 408.8, 445.1), c_jrn.get("ve_mas_alla", False))
 
         # SMART (Líneas perfectamente alineadas)
-        clear_and_write(p_plan, fitz.Rect(125, 689, 315, 698), str(d_data.get("smart_especifico") or ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 698, 315, 707), str(d_data.get("smart_medible") or ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 707, 315, 716), str(d_data.get("smart_alcanzable") or ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 716, 315, 725), str(d_data.get("smart_reto") or ""), fontsize=6.0, fill=None)
-        clear_and_write(p_plan, fitz.Rect(125, 725, 315, 734), str(d_data.get("smart_tiempo") or ""), fontsize=6.0, fill=None)
+        clear_and_write(p_plan, fitz.Rect(92, 563.3, 315, 571.1), str(d_data.get("smart_especifico") or ""), fontsize=5.8, fill=None)
+        clear_and_write(p_plan, fitz.Rect(92, 571.1, 315, 578.9), str(d_data.get("smart_medible") or ""), fontsize=5.8, fill=None)
+        clear_and_write(p_plan, fitz.Rect(92, 578.9, 315, 586.7), str(d_data.get("smart_alcanzable") or ""), fontsize=5.8, fill=None)
+        clear_and_write(p_plan, fitz.Rect(92, 586.7, 315, 594.5), str(d_data.get("smart_reto") or ""), fontsize=5.8, fill=None)
+        clear_and_write(p_plan, fitz.Rect(92, 594.5, 315, 602.2), str(d_data.get("smart_tiempo") or ""), fontsize=5.8, fill=None)
 
         # Tu enfoque para hoy
         enf_hoy = str(d_data.get("enfoque_hoy") or "").strip()
         if enf_hoy:
-            p_plan.insert_textbox(fitz.Rect(325, 688, 550, 734), enf_hoy, fontsize=6.8, fontname="helv", color=(0,0,0))
+            p_plan.insert_textbox(fitz.Rect(322, 564.5, 584, 601.5), enf_hoy, fontsize=6.5, fontname="helv", color=(0,0,0))
 
         # 3. Componer en 2 páginas tamaño Carta Vertical 100% escala (Doble Cara / 1:1 original)
         doc_out = fitz.open()
@@ -4208,9 +4577,64 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                 data[section][key] = val
                 guardar_estado_persistente(user_id)
 
+        smart_status_txt = ft.Text("", size=11, weight="bold", color="#FDE68A")
+        smart_status_banner = ft.Container(
+            content=smart_status_txt,
+            visible=False,
+            bgcolor="#451A03",
+            border=ft.Border.all(1, "#F59E0B"),
+            border_radius=8,
+            padding=ft.Padding(10, 8, 10, 8),
+        )
+
+        logros_status_txt = ft.Text("", size=11, weight="bold", color="#FDE68A")
+        logros_status_banner = ft.Container(
+            content=logros_status_txt,
+            visible=False,
+            bgcolor="#451A03",
+            border=ft.Border.all(1, "#F59E0B"),
+            border_radius=8,
+            padding=ft.Padding(10, 8, 10, 8),
+        )
+
+        def _set_banner(banner, txt_ctrl, msg_txt, kind="warn"):
+            styles = {
+                "warn": ("#451A03", "#F59E0B", "#FDE68A"),
+                "loading": ("#0F172A", "#00FFFF", "#67E8F9"),
+                "ok": ("#064E3B", "#10B981", "#A7F3D0"),
+            }
+            bg_c, brd_c, fg_c = styles.get(kind, styles["warn"])
+            banner.bgcolor = bg_c
+            banner.border = ft.Border.all(1, brd_c)
+            txt_ctrl.color = fg_c
+            txt_ctrl.value = msg_txt
+            banner.visible = True
+            try:
+                banner.update()
+            except Exception:
+                pass
+
+        def _mostrar_aviso_ia(msg_txt, bg_hex="#00FFFF", txt_col="black"):
+            if not page:
+                return
+            try:
+                snack = ft.SnackBar(ft.Text(msg_txt, color=txt_col, weight="bold"), bgcolor=bg_hex, duration=4500)
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
+            except Exception:
+                pass
+
         def on_generar_smart_ia_click(e):
+            _set_banner(smart_status_banner, smart_status_txt, f"⏳ Generando Plan SMART real con IA para {d_name}...", kind="loading")
             plan_res = generar_plan_smart_ia(d_name, user_id)
-            for k, val in plan_res.items():
+            if not plan_res.get("ok", True):
+                err_msg = "⚠️ " + plan_res.get("error", "Faltan metas del día.")
+                _set_banner(smart_status_banner, smart_status_txt, err_msg, kind="warn")
+                _mostrar_aviso_ia(err_msg, bg_hex="#F59E0B", txt_col="black")
+                return
+            for k in ("ritmo_venta_hoy", "smart_especifico", "smart_medible", "smart_alcanzable", "smart_reto", "smart_tiempo"):
+                val = plan_res.get(k, "")
                 data[k] = val
                 if k in smart_text_fields:
                     smart_text_fields[k].value = val
@@ -4219,15 +4643,33 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     except Exception:
                         pass
             guardar_estado_persistente(user_id)
-            if page:
-                page.snack_bar = ft.SnackBar(
-                    ft.Text(f"⚡ Plan SMART generado con IA para {d_name} basado en métricas reales.", color="black", weight="bold"),
-                    bgcolor="#00FFFF",
-                    duration=3000
-                )
-                page.snack_bar.open = True
-                try: page.update()
-                except Exception: pass
+            src_lbl = "IA" if str(plan_res.get("_source", "")).startswith("ia:") else "cálculo local exacto"
+            ok_msg = f"✅ Plan SMART generado con {src_lbl} para {d_name} según metas reales."
+            _set_banner(smart_status_banner, smart_status_txt, ok_msg, kind="ok")
+            _mostrar_aviso_ia(ok_msg, bg_hex="#00FFFF", txt_col="black")
+
+        def on_generar_logros_ia_click(e):
+            _set_banner(logros_status_banner, logros_status_txt, f"⏳ Analizando resultados reales de cierre de {d_name} con IA...", kind="loading")
+            res_ia = generar_logros_oportunidades_ia(d_name, user_id)
+            if not res_ia.get("ok", True):
+                err_msg = "⚠️ " + res_ia.get("error", "Faltan resultados reales de cierre.")
+                _set_banner(logros_status_banner, logros_status_txt, err_msg, kind="warn")
+                _mostrar_aviso_ia(err_msg, bg_hex="#F59E0B", txt_col="black")
+                return
+            for k in ("logros_hoy", "oportunidades_manana"):
+                val = res_ia.get(k, "")
+                data[k] = val
+                if k in smart_text_fields:
+                    smart_text_fields[k].value = val
+                    try:
+                        smart_text_fields[k].update()
+                    except Exception:
+                        pass
+            guardar_estado_persistente(user_id)
+            src_lbl = "IA" if str(res_ia.get("_source", "")).startswith("ia:") else "análisis exacto"
+            ok_msg = f"✅ Logros y Oportunidades generados con {src_lbl} según resultados reales de {d_name}."
+            _set_banner(logros_status_banner, logros_status_txt, ok_msg, kind="ok")
+            _mostrar_aviso_ia(ok_msg, bg_hex="#E040FB", txt_col="white")
 
         # Cálculo de métricas del día para el encabezado del plan
         horas_prog = sum(float(c.get("horas", 0.0) or 0.0) for c in data.get("colaboradores", []))
@@ -4548,6 +4990,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         card_enfoque_texto = ft.Container(
             content=ft.Column([
                 header_smart_content,
+                smart_status_banner,
                 ft.Divider(height=6, color="#374151"),
                 ft.Column(smart_rows, spacing=6)
             ]),
@@ -4575,6 +5018,18 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
             ]
         ], spacing=2, vertical_alignment="center")
 
+        btn_ia_logros = ft.ElevatedButton(
+            "⚡ Analizar Cierre con IA",
+            icon=ft.Icons.AUTO_AWESOME,
+            bgcolor="#E040FB",
+            color="#FFFFFF",
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                text_style=ft.TextStyle(weight="bold", size=11)
+            ),
+            on_click=on_generar_logros_ia_click
+        )
+
         # Tarjeta 7: Logros de Hoy y Oportunidades para Mañana (2 Cuadros Oficiales)
         if is_mobile_w:
             header_logros_content = ft.Column([
@@ -4582,7 +5037,8 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Icon(ft.Icons.EMOJI_EVENTS_ROUNDED, color="#E040FB", size=18),
                     ft.Text("🏆 LOGROS DE HOY Y OPORTUNIDADES PARA MAÑANA", color="#E040FB", weight="bold", size=11),
                 ], spacing=6),
-                star_row_logros
+                star_row_logros,
+                btn_ia_logros
             ], spacing=4)
         else:
             header_logros_content = ft.Row([
@@ -4590,7 +5046,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
                     ft.Icon(ft.Icons.EMOJI_EVENTS_ROUNDED, color="#E040FB", size=18),
                     ft.Text("🏆 LOGROS DE HOY Y OPORTUNIDADES PARA MAÑANA", color="#E040FB", weight="bold", size=13),
                 ], spacing=6),
-                star_row_logros
+                ft.Row([star_row_logros, btn_ia_logros], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         tf_logros = ft.TextField(
@@ -4648,6 +5104,7 @@ def build_enfoque_diario_view(page: ft.Page, session_user: dict = None):
         card_logros_texto = ft.Container(
             content=ft.Column([
                 header_logros_content,
+                logros_status_banner,
                 ft.Divider(height=6, color="#374151"),
                 boxes_row
             ], spacing=8),
