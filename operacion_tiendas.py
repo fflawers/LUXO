@@ -2,6 +2,7 @@ import flet as ft
 import os
 import re
 import json
+import base64
 from datetime import datetime, timedelta, time, timezone
 
 def get_now_mexico_city():
@@ -211,6 +212,208 @@ def obtener_tiendas_activas(db, zona_id=None, region_id=None):
     info = obtener_tiendas_activas_info(db, zona_id, region_id)
     return list(info.keys())
 
+_OP_FOTO_BYTES_OK = False
+
+def _asegurar_columna_foto_bytes(db):
+    global _OP_FOTO_BYTES_OK
+    if _OP_FOTO_BYTES_OK or not db:
+        return
+    try:
+        cur = db.cursor()
+        cur.execute("SHOW COLUMNS FROM operacion_diaria_tiendas LIKE 'Foto_Bytes'")
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE operacion_diaria_tiendas ADD COLUMN Foto_Bytes LONGBLOB NULL AFTER Foto_Apertura")
+            db.commit()
+        cur.close()
+        _OP_FOTO_BYTES_OK = True
+    except Exception as ex_col:
+        print("Notice Foto_Bytes column:", ex_col)
+
+
+def _comprimir_foto_apertura_bytes(raw_bytes):
+    if not raw_bytes:
+        return raw_bytes
+    try:
+        import io
+        from PIL import Image, ImageOps
+        with Image.open(io.BytesIO(raw_bytes)) as img:
+            try:
+                img = ImageOps.exif_transpose(img)
+            except Exception:
+                pass
+            if img.mode in ("RGBA", "P", "LA"):
+                img = img.convert("RGB")
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+            max_dim = 1280
+            if img.width > max_dim or img.height > max_dim:
+                img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=78, optimize=True)
+            return out.getvalue()
+    except Exception as ex_img:
+        print("Notice comprimir foto apertura:", ex_img)
+        return raw_bytes
+
+
+def _img_src_desde_registro(reg):
+    if not reg:
+        return None
+    raw_b = reg.get("Foto_Bytes")
+    if raw_b:
+        try:
+            b_data = bytes(raw_b)
+            if len(b_data) >= 32:
+                return "data:image/jpeg;base64," + base64.b64encode(b_data).decode("utf-8")
+        except Exception:
+            pass
+    rel = str(reg.get("Foto_Apertura") or "").strip().lstrip("/")
+    if rel:
+        cand_abs = os.path.join(BASE_PATH, rel)
+        if os.path.exists(cand_abs):
+            try:
+                with open(cand_abs, "rb") as f:
+                    b_file = f.read()
+                if len(b_file) >= 32:
+                    return "data:image/jpeg;base64," + base64.b64encode(b_file).decode("utf-8")
+            except Exception:
+                pass
+        return "/" + rel
+    return None
+
+
+def _construir_alias_tiendas_db(db):
+    alias_map = {}
+    for k, v in MAPEO_CODIGOS_TIENDAS_ALIAS.items():
+        ku = str(k).strip().upper()
+        vu = str(v).strip().upper()
+        alias_map[ku] = ku if ku.isdigit() else vu
+    if not db:
+        return alias_map
+    try:
+        cur = db.cursor(dictionary=True)
+        cur.execute("SELECT id, nombre_tienda FROM tiendas")
+        for r in cur.fetchall():
+            sid = str(r.get("id") or "").strip()
+            sname = str(r.get("nombre_tienda") or "").strip()
+            if sid:
+                alias_map[sid.upper()] = sid
+                if sid in MAPEO_CODIGOS_TIENDAS_ALIAS:
+                    alias_map[str(MAPEO_CODIGOS_TIENDAS_ALIAS[sid]).upper()] = sid
+            if sname and sid:
+                alias_map[sname.upper()] = sid
+        cur.execute("SELECT Usuario, Tienda FROM usuarios WHERE Usuario LIKE 'sgh%'")
+        for u in cur.fetchall():
+            uname = str(u.get("Usuario") or "").strip().lower()
+            tval = str(u.get("Tienda") or "").strip()
+            m_num = re.match(r"^sgh(\d+)$", uname)
+            if m_num:
+                code = m_num.group(1)
+                alias_map[code.upper()] = code
+                if tval:
+                    alias_map[tval.upper()] = code
+        cur.close()
+    except Exception as ex_al:
+        print("Notice alias tiendas DB:", ex_al)
+    return alias_map
+
+
+def _resolver_codigo_tienda_usuario(user_info, db=None):
+    u_login = str((user_info or {}).get("usuario") or (user_info or {}).get("username") or "").strip().lower()
+    m_u = re.match(r"^sgh(\d+)$", u_login)
+    if m_u:
+        return m_u.group(1)
+    raw_t = str((user_info or {}).get("tienda") or "").strip()
+    if raw_t:
+        u_t = raw_t.upper()
+        if u_t in MAPEO_CODIGOS_TIENDAS_ALIAS:
+            mapped = str(MAPEO_CODIGOS_TIENDAS_ALIAS[u_t]).strip()
+            return mapped if mapped.isdigit() else raw_t
+        if db is not None:
+            amap = _construir_alias_tiendas_db(db)
+            if u_t in amap:
+                return amap[u_t]
+    return raw_t
+
+
+def _obtener_candidatos_tienda_usuario(user_info, canonical_code):
+    cands = []
+    for val in (
+        canonical_code,
+        (user_info or {}).get("tienda"),
+        MAPEO_CODIGOS_TIENDAS_ALIAS.get(str(canonical_code or "").upper()),
+    ):
+        s = str(val or "").strip()
+        if s and s not in cands:
+            cands.append(s)
+    return cands
+
+
+def _emitir_pubsub_operacion(page, payload):
+    if page and hasattr(page, "pubsub") and page.pubsub:
+        try:
+            page.pubsub.send_all_on_topic("operacion_diaria_updates", payload)
+        except Exception as ex_ps:
+            print("Notice pubsub operacion:", ex_ps)
+
+
+def registrar_apertura_en_bd(db, store_code, foto_rel_path, foto_bytes=None, extra_match_keys=None):
+    if not db or not store_code:
+        return False, "Sin conexión o tienda"
+    crear_tabla_operacion_diaria_if_not_exists(db)
+    _asegurar_columna_foto_bytes(db)
+
+    limit_str = obtener_hora_limite_apertura(store_code)
+    limit_time = datetime.strptime(limit_str, "%H:%M").time()
+    now_dt = get_now_mexico_city()
+    estado = "Puntual" if now_dt.time() <= limit_time else "Tarde"
+    now_str = now_dt.strftime("%H:%M:%S")
+    fecha_str = now_dt.strftime("%Y-%m-%d")
+
+    keys = []
+    for k in [store_code] + list(extra_match_keys or []):
+        ks = str(k or "").strip()
+        if ks and ks not in keys:
+            keys.append(ks)
+
+    cur = db.cursor(dictionary=True)
+    placeholders = ",".join(["%s"] * len(keys))
+    cur.execute(
+        f"SELECT ID, Numero_Tienda, Hora_Apertura, Estado_Apertura FROM operacion_diaria_tiendas "
+        f"WHERE Fecha = %s AND TRIM(Numero_Tienda) IN ({placeholders}) ORDER BY ID ASC LIMIT 1",
+        tuple([fecha_str] + keys),
+    )
+    existing = cur.fetchone()
+    if existing:
+        cur.execute(
+            """
+            UPDATE operacion_diaria_tiendas
+            SET Hora_Apertura = IF(Hora_Apertura IS NULL, %s, Hora_Apertura),
+                Foto_Apertura = %s,
+                Foto_Bytes = COALESCE(%s, Foto_Bytes),
+                Estado_Apertura = IF(Estado_Apertura IS NULL, %s, Estado_Apertura)
+            WHERE ID = %s
+            """,
+            (now_str, foto_rel_path, foto_bytes, estado, existing["ID"]),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Apertura, Foto_Apertura, Foto_Bytes, Estado_Apertura)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                Hora_Apertura = IF(Hora_Apertura IS NULL, VALUES(Hora_Apertura), Hora_Apertura),
+                Foto_Apertura = VALUES(Foto_Apertura),
+                Foto_Bytes = COALESCE(VALUES(Foto_Bytes), Foto_Bytes),
+                Estado_Apertura = IF(Estado_Apertura IS NULL, VALUES(Estado_Apertura), Estado_Apertura)
+            """,
+            (store_code, fecha_str, now_str, foto_rel_path, foto_bytes, estado),
+        )
+    db.commit()
+    cur.close()
+    return True, estado
+
+
 def crear_tabla_operacion_diaria_if_not_exists(db):
     if not db:
         return
@@ -223,6 +426,7 @@ def crear_tabla_operacion_diaria_if_not_exists(db):
                 Fecha DATE NOT NULL,
                 Hora_Apertura TIME NULL,
                 Foto_Apertura VARCHAR(500) NULL,
+                Foto_Bytes LONGBLOB NULL,
                 Estado_Apertura VARCHAR(50) NULL,
                 Hora_Cierre TIME NULL,
                 Venta_Con_Iva DECIMAL(12, 2) NULL,
@@ -231,6 +435,7 @@ def crear_tabla_operacion_diaria_if_not_exists(db):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
         db.commit()
+        _asegurar_columna_foto_bytes(db)
     except Exception as ex:
         print("Error asegurando tabla operacion_diaria_tiendas:", ex)
 
@@ -251,14 +456,23 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
             db.close()
             return
             
+        fecha_hoy_mx = get_now_mexico_city().strftime("%Y-%m-%d")
+        alias_map = _construir_alias_tiendas_db(db)
         cursor = db.cursor(dictionary=True)
         cursor.execute("""
             SELECT DISTINCT Numero_Tienda 
             FROM operacion_diaria_tiendas 
-            WHERE Fecha = CURDATE() AND Hora_Apertura IS NOT NULL AND Hora_Apertura != ''
-        """)
+            WHERE Fecha = %s AND Hora_Apertura IS NOT NULL AND Hora_Apertura != ''
+        """, (fecha_hoy_mx,))
         rows_rep = cursor.fetchall()
-        reportados_set = set(str(r["Numero_Tienda"]).strip() for r in rows_rep if r["Numero_Tienda"])
+        reportados_set = set()
+        for r in rows_rep:
+            if r.get("Numero_Tienda"):
+                raw_n = str(r["Numero_Tienda"]).strip()
+                reportados_set.add(raw_n)
+                mapped_n = alias_map.get(raw_n.upper())
+                if mapped_n:
+                    reportados_set.add(mapped_n)
         db.close()
         
         limit_str = obtener_hora_limite_apertura()
@@ -307,14 +521,23 @@ def actualizar_estrella_aperturas(page, star_icon_container, conectar_db_fn=None
             if db_click:
                 try:
                     dict_click = obtener_tiendas_activas_info(db_click, zona_id=active_z, region_id=active_r)
+                    fecha_hoy_c = get_now_mexico_city().strftime("%Y-%m-%d")
+                    alias_c = _construir_alias_tiendas_db(db_click)
                     cursor_c = db_click.cursor(dictionary=True)
                     cursor_c.execute("""
                         SELECT DISTINCT Numero_Tienda 
                         FROM operacion_diaria_tiendas 
-                        WHERE Fecha = CURDATE() AND Hora_Apertura IS NOT NULL AND Hora_Apertura != ''
-                    """)
+                        WHERE Fecha = %s AND Hora_Apertura IS NOT NULL AND Hora_Apertura != ''
+                    """, (fecha_hoy_c,))
                     r_rows = cursor_c.fetchall()
-                    r_set_click = set(str(r["Numero_Tienda"]).strip() for r in r_rows if r["Numero_Tienda"])
+                    r_set_click = set()
+                    for r in r_rows:
+                        if r.get("Numero_Tienda"):
+                            rn = str(r["Numero_Tienda"]).strip()
+                            r_set_click.add(rn)
+                            mn = alias_c.get(rn.upper())
+                            if mn:
+                                r_set_click.add(mn)
                     db_click.close()
                 except Exception as ex_db:
                     print("Notice db_click:", ex_db)
@@ -471,7 +694,14 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
     mostrar_snack = mostrar_snack_fn
     tr = tr_fn
     
-    tienda_usuario = (user_info.get("tienda") or "").strip()
+    db_init = db_fn()
+    tienda_usuario = _resolver_codigo_tienda_usuario(user_info, db=db_init)
+    if db_init:
+        try:
+            db_init.close()
+        except Exception:
+            pass
+    candidatos_tienda = _obtener_candidatos_tienda_usuario(user_info, tienda_usuario)
     rol_usuario = user_info.get("rol")
     
     view_content = ft.Column(spacing=15, expand=True, scroll=ft.ScrollMode.AUTO)
@@ -491,35 +721,24 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
         )
         return view_content
     
-    def procesar_registro_apertura(foto_rel_path):
+    def procesar_registro_apertura(foto_rel_path, foto_bytes=None):
         db = db_fn()
         if not db:
             mostrar_snack("Error de conexión a la base de datos", "red")
-            return
+            return False
             
         try:
-            limit_str = obtener_hora_limite_apertura()
-            limit_time = datetime.strptime(limit_str, "%H:%M").time()
-            now_time = get_now_mexico_city().time()
-            
-            estado = "Puntual" if now_time <= limit_time else "Tarde"
-            
-            # Usar hora local de Python, no CURRENT_TIME() de MySQL (que puede ser UTC)
-            now_dt = get_now_mexico_city()
-            now_str = now_dt.strftime("%H:%M:%S")
-            fecha_str = now_dt.strftime("%Y-%m-%d")
-            
-            cursor = db.cursor()
-            cursor.execute("""
-                INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Apertura, Foto_Apertura, Estado_Apertura)
-                VALUES (%s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                    Hora_Apertura = IF(Hora_Apertura IS NULL, VALUES(Hora_Apertura), Hora_Apertura),
-                    Foto_Apertura = VALUES(Foto_Apertura),
-                    Estado_Apertura = IF(Estado_Apertura IS NULL, VALUES(Estado_Apertura), Estado_Apertura)
-            """, (tienda_usuario, fecha_str, now_str, foto_rel_path, estado))
-            db.commit()
+            ok_ap, estado = registrar_apertura_en_bd(
+                db,
+                tienda_usuario,
+                foto_rel_path,
+                foto_bytes=foto_bytes,
+                extra_match_keys=candidatos_tienda,
+            )
             db.close()
+            if not ok_ap:
+                mostrar_snack("No se pudo guardar la apertura", "red")
+                return False
             
             mostrar_snack(f"Apertura registrada con éxito ({estado})!", "#7CFC00")
             
@@ -527,11 +746,13 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 actualizar_estrella_aperturas(page, None, db_fn)
             except Exception:
                 pass
-                
+            _emitir_pubsub_operacion(page, {"tipo": "apertura", "tienda": tienda_usuario})
             refrescar_vista_operacion()
+            return True
         except Exception as ex:
             print("Error registrando apertura:", ex)
             mostrar_snack("Error al guardar registro en base de datos", "red")
+            return False
 
     def tomar_foto_click(e):
         def on_foto_selected(path):
@@ -539,7 +760,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
             if not path or not os.path.exists(path):
                 print("[Daily Operations on_foto_selected] Invalid file path received.")
                 mostrar_snack("Error: No se recibió ninguna imagen.", "red")
-                return
+                return False
             
             try:
                 # Validar que el archivo no esté vacío o dañado (al menos 100 bytes)
@@ -547,27 +768,38 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 if f_size < 100:
                     print(f"[Daily Operations on_foto_selected] File is empty or corrupt (size: {f_size} bytes).")
                     mostrar_snack("⚠️ La foto tomada está vacía o incompleta. Por favor tómala nuevamente.", "orange")
-                    return
+                    return False
 
                 dest_dir = os.path.join(BASE_PATH, "uploads", "aperturas")
                 os.makedirs(dest_dir, exist_ok=True)
-                t_num = str(user_info.get("tienda") or "tienda").replace(" ", "_")
+                t_num = str(tienda_usuario or "tienda").replace(" ", "_")
                 f_name = f"apertura_{t_num}_{get_now_mexico_city().strftime('%Y%m%d_%H%M%S')}.jpg"
                 dest_path = os.path.join(dest_dir, f_name)
                 
                 with open(path, "rb") as f_in:
-                    opt_bytes = f_in.read()
+                    raw_bytes = f_in.read()
+                opt_bytes = _comprimir_foto_apertura_bytes(raw_bytes)
 
                 with open(dest_path, "wb") as f_out:
                     f_out.write(opt_bytes)
 
                 print(f"[Daily Operations on_foto_selected] Foto guardada ({len(opt_bytes)} bytes): {dest_path}")
-                procesar_registro_apertura(f"uploads/aperturas/{f_name}")
+                return procesar_registro_apertura(f"uploads/aperturas/{f_name}", foto_bytes=opt_bytes)
             except Exception as ex:
                 print("Error guardando foto local de apertura:", ex)
                 mostrar_snack("Error al guardar la foto de apertura", "red")
+                return False
 
-        seleccionar_archivo_async("Tomar Foto o Seleccionar Foto de Apertura", "media", on_foto_selected, captureMode=True)
+        try:
+            seleccionar_archivo_async(
+                "Tomar Foto o Seleccionar Foto de Apertura",
+                "media",
+                on_foto_selected,
+                captureMode=True,
+                metadata={"tipo": "apertura_tienda", "tienda": tienda_usuario, "candidatos": candidatos_tienda},
+            )
+        except TypeError:
+            seleccionar_archivo_async("Tomar Foto o Seleccionar Foto de Apertura", "media", on_foto_selected, captureMode=True)
 
     # Inputs Cierre
     venta_input = ft.TextField(
@@ -611,19 +843,34 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
             now_str = now_dt.strftime("%H:%M:%S")
             fecha_str = now_dt.strftime("%Y-%m-%d")
             
-            cursor = db.cursor()
-            cursor.execute("""
-                INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Cierre, Venta_Con_Iva, Piezas_Vendidas)
-                VALUES (%s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                    Hora_Cierre = %s, 
-                    Venta_Con_Iva = %s, 
-                    Piezas_Vendidas = %s
-            """, (tienda_usuario, fecha_str, now_str, venta, piezas, now_str, venta, piezas))
+            crear_tabla_operacion_diaria_if_not_exists(db)
+            cursor = db.cursor(dictionary=True)
+            cands = candidatos_tienda or [tienda_usuario]
+            ph = ",".join(["%s"] * len(cands))
+            cursor.execute(
+                f"SELECT ID FROM operacion_diaria_tiendas WHERE Fecha = %s AND TRIM(Numero_Tienda) IN ({ph}) ORDER BY ID ASC LIMIT 1",
+                tuple([fecha_str] + cands),
+            )
+            existing_c = cursor.fetchone()
+            if existing_c:
+                cursor.execute(
+                    "UPDATE operacion_diaria_tiendas SET Hora_Cierre = %s, Venta_Con_Iva = %s, Piezas_Vendidas = %s WHERE ID = %s",
+                    (now_str, venta, piezas, existing_c["ID"]),
+                )
+            else:
+                cursor.execute("""
+                    INSERT INTO operacion_diaria_tiendas (Numero_Tienda, Fecha, Hora_Cierre, Venta_Con_Iva, Piezas_Vendidas)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE 
+                        Hora_Cierre = %s, 
+                        Venta_Con_Iva = %s, 
+                        Piezas_Vendidas = %s
+                """, (tienda_usuario, fecha_str, now_str, venta, piezas, now_str, venta, piezas))
             db.commit()
             db.close()
             
             mostrar_snack("Cierre diario guardado exitosamente!", "#7CFC00")
+            _emitir_pubsub_operacion(page, {"tipo": "cierre", "tienda": tienda_usuario})
             refrescar_vista_operacion()
         except Exception as ex:
             print("Error al guardar cierre:", ex)
@@ -635,15 +882,24 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
     def refrescar_vista_operacion():
         apertura_card.content = ft.ProgressRing(width=20, height=20)
         cierre_card.content = ft.ProgressRing(width=20, height=20)
-        page.update()
+        try:
+            page.update()
+        except Exception:
+            pass
         
         db = db_fn()
         reg = None
         if db:
             try:
+                crear_tabla_operacion_diaria_if_not_exists(db)
                 fecha_hoy = get_now_mexico_city().strftime("%Y-%m-%d")
                 cursor = db.cursor(dictionary=True)
-                cursor.execute("SELECT * FROM operacion_diaria_tiendas WHERE TRIM(Numero_Tienda) = TRIM(%s) AND Fecha = %s", (tienda_usuario, fecha_hoy))
+                cands = candidatos_tienda or [tienda_usuario]
+                ph = ",".join(["%s"] * len(cands))
+                cursor.execute(
+                    f"SELECT * FROM operacion_diaria_tiendas WHERE Fecha = %s AND TRIM(Numero_Tienda) IN ({ph}) ORDER BY (Hora_Apertura IS NOT NULL) DESC, ID DESC LIMIT 1",
+                    tuple([fecha_hoy] + cands),
+                )
                 reg = cursor.fetchone()
                 db.close()
             except Exception as ex:
@@ -653,6 +909,7 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
             ap_time = (datetime.min + reg["Hora_Apertura"]).strftime("%I:%M %p")
             ap_estado = reg["Estado_Apertura"]
             badge_color = "#7CFC00" if ap_estado == "Puntual" else "#FF4500"
+            foto_src_val = _img_src_desde_registro(reg)
             
             apertura_card.content = ft.Column([
                 ft.Row([
@@ -667,9 +924,9 @@ def build_operacion_diaria_view(page, user_info, conectar_db_fn, mostrar_snack_f
                 ft.Text(f"Apertura registrada a las: {ap_time}", color="#aaaaaa"),
                 ft.Container(
                     content=ft.Image(
-                        src="/" + reg["Foto_Apertura"].lstrip("/") if reg["Foto_Apertura"] else None,
+                        src=foto_src_val,
                         width=200, height=200, fit=ft.BoxFit.COVER, border_radius=8
-                    ) if reg["Foto_Apertura"] else ft.Icon(ft.Icons.IMAGE, size=40, color="#aaaaaa"),
+                    ) if foto_src_val else ft.Icon(ft.Icons.IMAGE, size=40, color="#aaaaaa"),
                     bgcolor="#222233",
                     border_radius=8,
                     padding=2
@@ -827,13 +1084,25 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
                 crear_tabla_operacion_diaria_if_not_exists(db)
                 tiendas_info = obtener_tiendas_activas_info(db, zona_id=z_act, region_id=r_act)
                 tiendas = list(tiendas_info.keys())
+                alias_map = _construir_alias_tiendas_db(db)
                 cursor = db.cursor(dictionary=True)
                 cursor.execute("""
                     SELECT * FROM operacion_diaria_tiendas 
                     WHERE Fecha = %s
+                    ORDER BY (Hora_Apertura IS NOT NULL) DESC, (Hora_Cierre IS NOT NULL) DESC, ID DESC
                 """, (fecha_consulta[0],))
                 rows = cursor.fetchall()
-                registros = {str(r["Numero_Tienda"]).strip(): r for r in rows}
+                registros = {}
+                for r in rows:
+                    raw_key = str(r.get("Numero_Tienda") or "").strip()
+                    if not raw_key:
+                        continue
+                    registros.setdefault(raw_key, r)
+                    registros.setdefault(raw_key.upper(), r)
+                    canon = alias_map.get(raw_key.upper())
+                    if canon:
+                        registros.setdefault(canon, r)
+                        registros.setdefault(canon.upper(), r)
 
                 # Cargar todas las horas limite en 1 sola consulta sin crear conexiones repetidas
                 try:
@@ -857,22 +1126,29 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
         rows_data = []
         default_hora_limite = obtener_hora_limite_apertura()
         for store in tiendas:
-            reg = registros.get(store)
+            store_name_cmp = str(tiendas_info.get(store) or "").strip().upper()
+            alias_code_cmp = str(MAPEO_CODIGOS_TIENDAS_ALIAS.get(store, "")).strip().upper()
+            reg = (
+                registros.get(store)
+                or registros.get(str(store).upper())
+                or (registros.get(store_name_cmp) if store_name_cmp else None)
+                or (registros.get(alias_code_cmp) if alias_code_cmp else None)
+            )
             
             if reg and reg["Hora_Apertura"]:
                 ap_time = (datetime.min + reg["Hora_Apertura"]).strftime("%I:%M %p")
                 ap_estado = reg["Estado_Apertura"]
                 ap_color = "#7CFC00" if ap_estado == "Puntual" else "#FF4500"
+                img_src_admin = _img_src_desde_registro(reg)
                 
-                def make_foto_click(path_val, name_val):
+                def make_foto_click(src_val, name_val):
                     def ver_foto_click(e):
                         def cerrar_dialog(ev):
                             page.pop_dialog()
-                        fixed_path = "/" + path_val.lstrip("/") if path_val else None
                         dlg = ft.AlertDialog(
                             title=ft.Text(f"Foto de Apertura - {name_val}", color="#00FFFF", weight="bold"),
                             content=ft.Container(
-                                content=ft.Image(src=fixed_path, fit=ft.BoxFit.CONTAIN),
+                                content=ft.Image(src=src_val, fit=ft.BoxFit.CONTAIN) if src_val else ft.Text("Sin imagen disponible", color="#aaaaaa"),
                                 width=600,
                                 height=500
                             ),
@@ -895,7 +1171,7 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
                         icon_color="#00FFFF", 
                         icon_size=14 if is_mobile_w else 16, 
                         tooltip="Ver Foto de Apertura", 
-                        on_click=make_foto_click(reg["Foto_Apertura"], store)
+                        on_click=make_foto_click(img_src_admin, tiendas_info.get(store, store))
                     )
                 ], spacing=4 if is_mobile_w else 6, wrap=True)
             else:
@@ -1033,5 +1309,24 @@ def build_aperturas_cierres_tab(page, user_info, conectar_db_fn, mostrar_snack_f
         tabla_container
     ])
     
+    def _on_pubsub_operacion(*args):
+        try:
+            if not getattr(tab_container, "page", None):
+                return
+            async def _async_ref():
+                try:
+                    refrescar_tabla()
+                except Exception:
+                    pass
+            page.run_task(_async_ref)
+        except Exception:
+            pass
+
+    if page and hasattr(page, "pubsub") and page.pubsub:
+        try:
+            page.pubsub.subscribe_topic("operacion_diaria_updates", _on_pubsub_operacion)
+        except Exception:
+            pass
+
     refrescar_tabla()
     return tab_container

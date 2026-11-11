@@ -541,6 +541,7 @@ def run_async_sync(coro, page):
     return result[0]
 
 active_sessions = {}
+pending_upload_callbacks = {}
 
 import urllib.parse
 import asyncio
@@ -2969,6 +2970,7 @@ def configurar_rutas_fastapi(app):
             form = await request.form()
             file = form.get("file")
             user_id = form.get("user_id", "1")
+            token = str(form.get("token") or "").strip()
             if file:
                 raw_filename = getattr(file, "filename", "upload.jpg") or "upload.jpg"
                 filename = os.path.basename(raw_filename)
@@ -2992,14 +2994,74 @@ def configurar_rutas_fastapi(app):
                 except Exception as ex_opt:
                     print("Notice optimizar_archivo_multimedia:", ex_opt)
                 
+                pending = pending_upload_callbacks.pop(token, None) if token else None
                 user_id_val = int(user_id) if (user_id and str(user_id).isdigit()) else user_id
                 session = active_sessions.get(user_id_val) or active_sessions.get(str(user_id))
-                if session and session.get("active_file_callback") and session["active_file_callback"][0]:
+
+                cb = pending.get("cb") if pending else None
+                cb_page = pending.get("page") if pending else (session.get("page") if session else None)
+                meta = pending.get("metadata") if pending else None
+                if not cb and session and session.get("active_file_callback") and session["active_file_callback"][0]:
                     cb = session["active_file_callback"][0]
+
+                cb_ok = None
+                cb_err = None
+                if cb:
+                    if cb_page is not None and hasattr(cb_page, "run_task"):
+                        done_ev = asyncio.Event()
+                        async def _run_cb_in_flet():
+                            nonlocal cb_ok, cb_err
+                            try:
+                                res_val = cb(abs_path)
+                                cb_ok = True if res_val is None else bool(res_val)
+                            except Exception as ex_fcb:
+                                cb_err = str(ex_fcb)
+                                print("Error ejecutando callback en Flet task:", ex_fcb)
+                            finally:
+                                done_ev.set()
+                        try:
+                            cb_page.run_task(_run_cb_in_flet)
+                            await asyncio.wait_for(done_ev.wait(), timeout=12.0)
+                        except Exception as ex_rt:
+                            print("Notice run_task upload fallback:", ex_rt)
+                            cb_ok = None
+
+                    if cb_ok is None:
+                        try:
+                            res_sync = await asyncio.to_thread(cb, abs_path)
+                            cb_ok = True if res_sync is None else bool(res_sync)
+                        except Exception as ex_cb:
+                            cb_err = str(ex_cb)
+                            print("Error ejecutando callback directo de archivo subido:", ex_cb)
+
+                if not cb_ok and isinstance(meta, dict) and meta.get("tipo") == "apertura_tienda":
                     try:
-                        cb(abs_path)
-                    except Exception as ex_cb:
-                        print("Error ejecutando callback de archivo subido:", ex_cb)
+                        store_c = str(meta.get("tienda") or "").strip()
+                        cands_c = meta.get("candidatos") or [store_c]
+                        with open(abs_path, "rb") as f_fb:
+                            raw_fb = f_fb.read()
+                        opt_fb = operacion_tiendas._comprimir_foto_apertura_bytes(raw_fb)
+                        dest_dir_fb = os.path.join(BASE_PATH, "uploads", "aperturas")
+                        os.makedirs(dest_dir_fb, exist_ok=True)
+                        f_name_fb = f"apertura_{store_c}_{operacion_tiendas.get_now_mexico_city().strftime('%Y%m%d_%H%M%S')}.jpg"
+                        with open(os.path.join(dest_dir_fb, f_name_fb), "wb") as f_out_fb:
+                            f_out_fb.write(opt_fb)
+                        db_fb = conectar_db()
+                        if db_fb:
+                            ok_fb, _ = operacion_tiendas.registrar_apertura_en_bd(
+                                db_fb, store_c, f"uploads/aperturas/{f_name_fb}", foto_bytes=opt_fb, extra_match_keys=cands_c
+                            )
+                            db_fb.close()
+                            if ok_fb:
+                                cb_ok = True
+                                if cb_page is not None:
+                                    operacion_tiendas._emitir_pubsub_operacion(cb_page, {"tipo": "apertura", "tienda": store_c})
+                    except Exception as ex_fb:
+                        cb_err = str(ex_fb)
+                        print("Error respaldo apertura en backend:", ex_fb)
+
+                if cb_ok is False or (isinstance(meta, dict) and meta.get("tipo") == "apertura_tienda" and not cb_ok):
+                    return {"status": "error", "message": cb_err or "No se pudo guardar la foto en la base de datos."}
                         
                 return {"status": "success", "filename": filename, "filepath": abs_path}
             return {"status": "error", "message": "No se recibió archivo."}
@@ -3008,7 +3070,7 @@ def configurar_rutas_fastapi(app):
             return {"status": "error", "message": str(ex)}
 
     @app.get("/upload_widget")
-    async def get_upload_widget(type: str = "generic", user_id: str = "1"):
+    async def get_upload_widget(type: str = "generic", user_id: str = "1", token: str = ""):
         from fastapi.responses import HTMLResponse
         
         accept_map = {
@@ -3163,6 +3225,7 @@ def configurar_rutas_fastapi(app):
                     let formData = new FormData();
                     formData.append('user_id', '{user_id}');
                     formData.append('upload_type', '{type}');
+                    formData.append('token', '{token}');
                     formData.append('file', selectedFile);
                     
                     fetch('/api/upload_generic', {{
@@ -6394,12 +6457,24 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
     # DIÁLOGOS DE ARCHIVO (SEGUROS CON TKINTER HILO SEPARADO)
     # =========================================
 
-    def seleccionar_archivo_async(titulo, extensiones, callback, captureMode=False):
+    def seleccionar_archivo_async(titulo, extensiones, callback, captureMode=False, metadata=None):
+        import uuid
         active_file_callback[0] = callback
         user_id_key = user_info.get("id") or 1
         if user_id_key not in active_sessions:
             active_sessions[user_id_key] = {}
         active_sessions[user_id_key]["active_file_callback"] = active_file_callback
+
+        upload_token = uuid.uuid4().hex
+        if len(pending_upload_callbacks) > 150:
+            for old_k in list(pending_upload_callbacks.keys())[:50]:
+                pending_upload_callbacks.pop(old_k, None)
+        pending_upload_callbacks[upload_token] = {
+            "cb": callback,
+            "page": page,
+            "user_id": user_id_key,
+            "metadata": metadata,
+        }
 
         upload_type = "generic"
         if "pdf" in str(extensiones).lower() or "pdf" in str(titulo).lower():
@@ -6415,7 +6490,7 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
             try:
                 # Flutter blocks javascript: URLs, so we must use the actual URL.
                 # To avoid a full new tab where possible, we request a popup window.
-                target_url = f"/upload_widget?type={upload_type}&user_id={user_id_key}"
+                target_url = f"/upload_widget?type={upload_type}&user_id={user_id_key}&token={upload_token}"
                 await page.launch_url(target_url, web_popup_window=True, web_popup_window_width=450, web_popup_window_height=700)
             except Exception as ex_launch:
                 print("Error abriendo upload widget:", ex_launch)
