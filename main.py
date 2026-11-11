@@ -716,8 +716,12 @@ def optimizar_archivo_multimedia(filepath):
         # 1. Optimización de Imágenes (.jpg, .jpeg, .png, .webp)
         if ext in ['.jpg', '.jpeg', '.png', '.webp']:
             if file_size_mb > 0.8:  # Si la imagen pesa más de 800 KB
-                from PIL import Image
+                from PIL import Image, ImageOps
                 with Image.open(filepath) as img:
+                    try:
+                        img = ImageOps.exif_transpose(img)
+                    except Exception:
+                        pass
                     if img.mode in ("RGBA", "P") and ext in ['.jpg', '.jpeg']:
                         img = img.convert("RGB")
                     
@@ -4700,6 +4704,10 @@ def optimizar_imagen(imagen_bytes):
         import io
         
         img = Image.open(io.BytesIO(imagen_bytes))
+        try:
+            img = ImageOps.exif_transpose(img)
+        except Exception:
+            pass
         if img.mode != 'RGB':
             img = img.convert('RGB')
             
