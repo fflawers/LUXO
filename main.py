@@ -7854,6 +7854,19 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "abre ciclicos": "ciclicos",
                     "ver ciclicos": "ciclicos",
 
+                    # Bitácora de Conteo de Tienda
+                    "abrir bitacora de conteo": "bitacora_conteo",
+                    "abre bitacora de conteo": "bitacora_conteo",
+                    "bitacora de conteo": "bitacora_conteo",
+                    "bitacora conteo": "bitacora_conteo",
+                    "conteo de tienda": "bitacora_conteo",
+                    "conteo diario": "bitacora_conteo",
+                    "abrir conteo": "bitacora_conteo",
+                    "abre conteo": "bitacora_conteo",
+                    "ver conteo": "bitacora_conteo",
+                    "ir a conteo": "bitacora_conteo",
+                    "conteo": "bitacora_conteo",
+
                     # Descuentos y Promociones
                     "descuentos": "descuentos",
                     "descuento": "descuentos",
@@ -23517,6 +23530,12 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
+        btn_bitacora_conteo = SidebarButton(
+            content=ft.Row([ft.Text("📊", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Conteo Diario 📊", "Daily Count 📊", "Comptage Jour 📊", "Conteggio 📊", "每日盘点 📊"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("bitacora_conteo", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
+
         btn_enfoque_semanal = SidebarButton(
             content=ft.Row([ft.Text("📅", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅"), color="white", weight="bold")], spacing=10),
             on_click=lambda e: cambiar_vista("enfoque_semanal", desde_menu_manual=True),
@@ -23619,7 +23638,7 @@ Ejemplo:
                 (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_polar, "polar"), (btn_enfoque, "enfoque_diario"),
                 (btn_enfoque_semanal, "enfoque_semanal"), (btn_parroquiales_minutas, "parroquiales_minutas"),
                 (btn_crm, "crm"), (btn_fedex, "fedex"),
-                (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_panamericano, "panamericano"), (btn_disa, "disa")
+                (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_bitacora_conteo, "bitacora_conteo"), (btn_panamericano, "panamericano"), (btn_disa, "disa")
             ]
             for btn_tuple in all_btn_tuples:
                 btn = btn_tuple[0]
@@ -23689,6 +23708,20 @@ Ejemplo:
                             main_views_cache["ciclicos"] = ciclicos_view.build_ciclicos_view(
                                 page, store_code=st_code, store_name=st_name, user_role=u_role,
                                 seleccionar_archivo_async=seleccionar_archivo_async
+                            )
+                        elif vista == "bitacora_conteo":
+                            import importlib
+                            import bitacora_conteo_view
+                            importlib.reload(bitacora_conteo_view)
+                            st_code = user_info.get("tienda") or "A540"
+                            st_name = user_info.get("nombre") or f"Tienda {st_code}"
+                            main_views_cache["bitacora_conteo"] = bitacora_conteo_view.build_bitacora_conteo_view(
+                                page,
+                                store_code=st_code,
+                                store_name=st_name,
+                                user_info=user_info,
+                                seleccionar_archivo_async=seleccionar_archivo_async,
+                                mostrar_snack_fn=mostrar_snack
                             )
                         elif vista == "descuentos":
                             import descuentos_view
@@ -24013,6 +24046,7 @@ Ejemplo:
                 btn_weekly.content.controls[1].value = tr("Weekly 🗓️", "Weekly 🗓️", "Hebdomadaire 🗓️", "Settimanale 🗓️", "每周 🗓️")
                 btn_polar.content.controls[1].value = tr("Polar RB y OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "Polar RB & OO 🕶️", "偏光 RB & OO 🕶️")
                 btn_ciclicos.content.controls[1].value = tr("Conteos Cíclicos 🔄", "Cycle Counts 🔄", "Comptages Cycliques 🔄", "Conteggi Ciclici 🔄", "循环盘点 🔄")
+                btn_bitacora_conteo.content.controls[1].value = tr("Conteo Diario 📊", "Daily Count 📊", "Comptage Jour 📊", "Conteggio 📊", "每日盘点 📊")
                 btn_enfoque.content.controls[1].value = tr("Enfoque Diario 2026 ☀️", "Daily Focus 2026 ☀️", "Focus Quotidien ☀️", "Focus Giornaliero ☀️", "每日焦点 ☀️")
                 btn_enfoque_semanal.content.controls[1].value = tr("Enfoque Semanal 📅", "Weekly Focus 📅", "Focus Hebdo 📅", "Focus Settimanale 📅", "每周焦点 📅")
                 btn_parroquiales_minutas.content.controls[1].value = tr("Parroquiales y Minutas 📝", "Announcements & Minutes 📝", "Paroissiales & Procès-verbaux 📝", "Avvisi & Verbali 📝", "通告与会议纪要 📝")
@@ -24030,6 +24064,7 @@ Ejemplo:
                 tile_clientes.title.value = tr("🤝 CLIENTES Y GARANTÍAS", "🤝 CLIENTS & WARRANTY", "🤝 CLIENTS & GARANTIE", "🤝 CLIENTI & GARANZIA", "🤝 客户与保修")
                 tile_operacion.title.value = tr("📋 OPERACIÓN Y TIENDA", "📋 STORE OPERATIONS", "📋 OPÉRATIONS MAGASIN", "📋 OPERAZIONI NEGOZIO", "📋 店铺运营")
                 tile_entrenamiento.title.value = tr("🧠 CAPACITACIÓN E IA", "🧠 TRAINING & IA", "🧠 FORMATION & IA", "🧠 FORMAZIONE & IA", "🧠 培训与 AI")
+                tile_bitacora.title.value = tr("📒 BITÁCORA", "📒 LOGBOOK", "📒 JOURNAL", "📒 REGISTRO", "📒 日志")
 
                 btn_logout.content.controls[1].value = tr("Cerrar Sesión 👋", "Log Out 👋", "Se Déconnecter 👋", "Disconnettersi 👋", "退出登录 👋")
                 suggestion_box.content.controls[0].value = tr("¿Qué te gustaría que tuviera LUXO?", "What would you like LUXO to have?", "Qu'aimeriez-vous que LUXO ait ?", "Cosa vorresti che avesse LUXO?", "您希望 LUXO 增加什么功能？")
@@ -24192,6 +24227,12 @@ Ejemplo:
             entrenamiento_controls
         )
 
+        bitacora_controls = [btn_bitacora_conteo]
+        tile_bitacora = crear_acordeon(
+            ft.Text(tr("📒 BITÁCORA", "📒 LOGBOOK", "📒 JOURNAL", "📒 REGISTRO", "📒 日志"), color="#00FFFF", weight="bold", size=12),
+            bitacora_controls
+        )
+
         u_avatar_header = user_info.get("img_usuario") or obtener_avatar_usuario(user_info.get("id"))
         
         avatar_header_widget = ft.Container(
@@ -24272,6 +24313,7 @@ Ejemplo:
             btn_parroquiales_minutas,
             btn_pendientes,
             ft.Divider(height=10, color="#333333"),
+            tile_bitacora,
             tile_ventas,
             tile_clientes,
             tile_operacion,
