@@ -23387,16 +23387,14 @@ Ejemplo:
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
 
-        btn_operacion_diaria = None
-        if es_admin():
-            btn_operacion_diaria = SidebarButton(
-                content=ft.Row([
-                    ft.Text("🔑", color="#00FFFF", size=14, weight="bold"),
-                    ft.Text(tr("Aperturas y Cierres 🔑", "Openings & Closings 🔑", "Ouvertures & Fermetures 🔑", "Aperture & Chiusure 🔑", "开门与关门 🔑"), color="white", weight="bold")
-                ], spacing=10),
-                on_click=lambda e: cambiar_vista("operacion_diaria", desde_menu_manual=True),
-                style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
-            )
+        btn_operacion_diaria = SidebarButton(
+            content=ft.Row([
+                ft.Text("🔑", color="#00FFFF", size=14, weight="bold"),
+                ft.Text(tr("Aperturas y Cierres 🔑", "Openings & Closings 🔑", "Ouvertures & Fermetures 🔑", "Aperture & Chiusure 🔑", "开门与关门 🔑"), color="white", weight="bold")
+            ], spacing=10),
+            on_click=lambda e: cambiar_vista("operacion_diaria", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
 
         btn_checklists = SidebarButton(
             content=ft.Row([ft.Text("📋", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Checklists 📋", "Checklists 📋", "Listes 📋", "Liste 📋", "任务清单 📋"), color="white", weight="bold")], spacing=10),
@@ -23814,12 +23812,13 @@ Ejemplo:
                                 seleccionar_archivo_async=seleccionar_archivo_async
                             )
                         elif vista == "operacion_diaria":
-                            if not es_admin():
-                                mostrar_snack("Acceso denegado: Se requieren permisos de Administrador.", color="red")
-                                active_view[0] = "chat"
-                                main_views_cache["chat"] = build_chat_view()
-                            else:
+                            if es_admin():
                                 main_views_cache["operacion_diaria"] = operacion_tiendas.build_aperturas_cierres_tab(page, user_info, conectar_db, mostrar_snack, tr, get_zona_region_fn=obtener_zona_region_activa)
+                            else:
+                                main_views_cache["operacion_diaria"] = operacion_tiendas.build_operacion_diaria_view(
+                                    page, user_info, conectar_db, mostrar_snack, tr,
+                                    seleccionar_archivo_async=seleccionar_archivo_async
+                                )
                         elif vista == "admin_trivia":
                             if not es_admin():
                                 mostrar_snack("Acceso denegado: Se requieren permisos de administrador.", color="red")
