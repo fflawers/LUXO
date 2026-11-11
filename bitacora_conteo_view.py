@@ -148,12 +148,13 @@ def build_bitacora_conteo_view(
             label=label,
             value=str(estado_ref["data"].get(key_estado, "") or ""),
             width=width,
-            height=40,
-            text_size=12,
+            height=30,
+            text_size=11,
+            label_style=ft.TextStyle(size=10),
             color="white",
             border_color="#475569",
             focused_border_color="#00FFFF",
-            content_padding=ft.padding.Padding(8, 4, 8, 4),
+            content_padding=ft.padding.Padding(6, 2, 6, 2),
         )
         def _on_ch(e):
             estado_ref["data"][key_estado] = e.control.value or ""
@@ -163,13 +164,13 @@ def build_bitacora_conteo_view(
         tf.on_focus = _on_hdr_focus
         return tf
 
-    tf_cch1 = _make_header_tf("Caja Chica 1", 125, "caja_chica_1")
-    tf_cch2 = _make_header_tf("Caja Chica 2", 125, "caja_chica_2")
-    tf_cch3 = _make_header_tf("Caja Chica 3", 125, "caja_chica_3")
-    tf_rec_m = _make_header_tf("Recibí (Matutino)", 160, "recibi_mat")
-    tf_ent_m = _make_header_tf("Entregó (Matutino)", 160, "entrego_mat")
-    tf_rec_v = _make_header_tf("Recibí (Vespertino)", 160, "recibi_ves")
-    tf_ent_v = _make_header_tf("Entregó (Vespertino)", 160, "entrego_ves")
+    tf_cch1 = _make_header_tf("Caja Chica 1", 92, "caja_chica_1")
+    tf_cch2 = _make_header_tf("Caja Chica 2", 92, "caja_chica_2")
+    tf_cch3 = _make_header_tf("Caja Chica 3", 92, "caja_chica_3")
+    tf_rec_m = _make_header_tf("Recibí (Matutino)", 124, "recibi_mat")
+    tf_ent_m = _make_header_tf("Entregó (Matutino)", 124, "entrego_mat")
+    tf_rec_v = _make_header_tf("Recibí (Vespertino)", 124, "recibi_ves")
+    tf_ent_v = _make_header_tf("Entregó (Vespertino)", 124, "entrego_ves")
 
     def _sync_header_fields_from_state():
         d = estado_ref["data"]
@@ -371,7 +372,11 @@ def build_bitacora_conteo_view(
                 txt_c.value = val_s
             if ck not in ("cod", "mar"):
                 _actualizar_celdas_calculadas_fila(turno, rk)
-            upd_ctrls.append(w["row"])
+                upd_ctrls.append(w["row"])
+            elif w.get("left_row") is not None:
+                upd_ctrls.append(w["left_row"])
+            else:
+                upd_ctrls.append(w["row"])
         if ck not in ("cod", "mar"):
             if total_row_ref[0] is not None:
                 upd_ctrls.append(total_row_ref[0])
@@ -423,10 +428,10 @@ def build_bitacora_conteo_view(
             vis_h = body_height_ref[0]
             if y_pos < scroll_win_top[0]:
                 scroll_win_top[0] = max(0, y_pos - 36)
-                scroll_off = max(0, scroll_win_top[0] + 280)
+                scroll_off = scroll_win_top[0]
             elif (y_pos + 38) > (scroll_win_top[0] + vis_h):
                 scroll_win_top[0] = max(0, y_pos - vis_h + 72)
-                scroll_off = max(0, scroll_win_top[0] + 280)
+                scroll_off = scroll_win_top[0]
 
         abrir_tactil = focus_editor or meta["editable_text"] or (modo_tactil[0] and not from_arrow and not from_tab)
         need_focus = abrir_tactil or (not from_arrow) or from_tab
@@ -614,28 +619,31 @@ def build_bitacora_conteo_view(
         titulo_turno = "TURNO MATUTINO" if turno == "matutino" else "TURNO VESPERTINO"
         bg_turno = "#1E3A8A" if turno == "matutino" else "#581C87"
 
-        header_top = ft.Row([
-            ft.Container(
-                content=ft.Text("ARMAZONES", size=11, weight="bold", color="white"),
-                width=W_COD + W_MAR,
-                height=26,
-                bgcolor="#374151",
-                border=ft.Border.all(0.5, "#111827"),
-                alignment=ft.alignment.Alignment(0, 0),
-            ),
-            ft.Container(
-                content=ft.Text(titulo_turno, size=12, weight="bold", color="white"),
-                width=W_NUM * 12 + W_OK,
-                height=26,
-                bgcolor=bg_turno,
-                border=ft.Border.all(0.5, "#111827"),
-                alignment=ft.alignment.Alignment(0, 0),
-            ),
-        ], spacing=0)
+        W_LEFT = W_COD + W_MAR
+        W_RIGHT = W_NUM * 12 + W_OK
 
-        header_cols = ft.Row([
+        hdr_left_top = ft.Container(
+            content=ft.Text("ARMAZONES", size=11, weight="bold", color="white"),
+            width=W_LEFT,
+            height=26,
+            bgcolor="#374151",
+            border=ft.Border.all(0.5, "#111827"),
+            alignment=ft.alignment.Alignment(0, 0),
+        )
+        hdr_left_cols = ft.Row([
             _hdr_cell("CÓD", W_COD),
             _hdr_cell("MARCA", W_MAR),
+        ], spacing=0)
+
+        hdr_right_top = ft.Container(
+            content=ft.Text(titulo_turno, size=12, weight="bold", color="white"),
+            width=W_RIGHT,
+            height=26,
+            bgcolor=bg_turno,
+            border=ft.Border.all(0.5, "#111827"),
+            alignment=ft.alignment.Alignment(0, 0),
+        )
+        hdr_right_cols = ft.Row([
             _hdr_cell("EXH", W_NUM, color=HEX_NEGRO),
             _hdr_cell("BOD", W_NUM, color=HEX_AZUL),
             _hdr_cell("GT", W_NUM, color=HEX_ROJO),
@@ -651,28 +659,28 @@ def build_bitacora_conteo_view(
             _hdr_cell("EN", W_NUM, bg="#E5E7EB", color=HEX_NEGRO),
         ], spacing=0)
 
-        body_rows = []
+        left_rows = []
+        right_rows = []
         y_cursor = [0]
         filas_data = estado_ref["data"]["filas"]
         q_busq = filtro_texto[0].strip().lower()
 
-        def _make_section_bar(label):
-            return ft.Row([
-                ft.Container(
-                    content=ft.Text(label, size=11, weight="bold", color="#111827"),
-                    width=W_COD + W_MAR,
-                    height=22,
-                    bgcolor="#9CA3AF",
-                    border=ft.Border.all(0.5, "#374151"),
-                    alignment=ft.alignment.Alignment(0, 0),
-                ),
-                ft.Container(
-                    width=W_NUM * 12 + W_OK,
-                    height=22,
-                    bgcolor="#D1D5DB",
-                    border=ft.Border.all(0.5, "#374151"),
-                ),
-            ], spacing=0)
+        def _make_section_bars(label):
+            l_bar = ft.Container(
+                content=ft.Text(label, size=11, weight="bold", color="#111827"),
+                width=W_LEFT,
+                height=22,
+                bgcolor="#9CA3AF",
+                border=ft.Border.all(0.5, "#374151"),
+                alignment=ft.alignment.Alignment(0, 0),
+            )
+            r_bar = ft.Container(
+                width=W_RIGHT,
+                height=22,
+                bgcolor="#D1D5DB",
+                border=ft.Border.all(0.5, "#374151"),
+            )
+            return l_bar, r_bar
 
         def _build_light_cell(row_key, campo_key, val_init, r_idx, width_c, base_bg="#FFFFFF", base_border="#CBD5E1", align_left=False, editable_text=False, txt_size=13, color_override=None):
             t_color = color_override or FIELD_TEXT_COLOR.get(campo_key, HEX_NEGRO)
@@ -726,7 +734,9 @@ def build_bitacora_conteo_view(
                         continue
 
                 if section_label and not rendered_any:
-                    body_rows.append(_make_section_bar(section_label))
+                    sb_l, sb_r = _make_section_bars(section_label)
+                    left_rows.append(sb_l)
+                    right_rows.append(sb_r)
                     y_cursor[0] += 22
                 rendered_any = True
 
@@ -763,17 +773,18 @@ def build_bitacora_conteo_view(
                         alignment=ft.alignment.Alignment(-1, 0),
                     )
 
-                cells = [cell_cod, cell_mar]
+                left_row = ft.Row([cell_cod, cell_mar], spacing=0)
+                num_cells = []
 
                 for ck in ["exh", "bod", "gt", "dan", "se"]:
                     t_c, cont_c, m_c = _build_light_cell(rk, ck, raw_t.get(ck, ""), r_idx, W_NUM)
                     texts_map[ck] = t_c
                     row_map[ck] = m_c
                     row_order.append((ck, m_c))
-                    cells.append(cont_c)
+                    num_cells.append(cont_c)
 
                 txt_tot = ft.Text("", size=12, weight="bold", color=HEX_NEGRO)
-                cells.append(ft.Container(content=txt_tot, width=W_NUM, height=H_ROW, bgcolor="#F1F5F9", border=ft.Border.all(0.5, "#9CA3AF"), alignment=ft.alignment.Alignment(0, 0)))
+                num_cells.append(ft.Container(content=txt_tot, width=W_NUM, height=H_ROW, bgcolor="#F1F5F9", border=ft.Border.all(0.5, "#9CA3AF"), alignment=ft.alignment.Alignment(0, 0)))
 
                 for ck in ["tr", "mim"]:
                     t_ro = ft.Text(
@@ -784,7 +795,7 @@ def build_bitacora_conteo_view(
                         text_align=ft.TextAlign.CENTER,
                     )
                     texts_map[ck] = t_ro
-                    cells.append(ft.Container(
+                    num_cells.append(ft.Container(
                         content=t_ro,
                         width=W_NUM,
                         height=H_ROW,
@@ -795,7 +806,7 @@ def build_bitacora_conteo_view(
 
                 txt_ok = ft.Text("", size=14, weight="bold", color=HEX_VERDE)
                 txt_diff = ft.Text("", size=9, weight="bold", color=HEX_ROJO)
-                cells.append(ft.Container(
+                num_cells.append(ft.Container(
                     content=ft.Row([txt_ok, txt_diff], spacing=2, alignment=ft.MainAxisAlignment.CENTER),
                     width=W_OK, height=H_ROW, bgcolor="#F1F5F9", border=ft.Border.all(0.5, "#9CA3AF"),
                     alignment=ft.alignment.Alignment(0, 0),
@@ -806,12 +817,12 @@ def build_bitacora_conteo_view(
                     texts_map[ck] = t_c
                     row_map[ck] = m_c
                     row_order.append((ck, m_c))
-                    cells.append(cont_c)
+                    num_cells.append(cont_c)
 
                 txt_en = ft.Text("", size=12, weight="bold", color=HEX_NEGRO)
-                cells.append(ft.Container(content=txt_en, width=W_NUM, height=H_ROW, bgcolor="#F1F5F9", border=ft.Border.all(0.5, "#9CA3AF"), alignment=ft.alignment.Alignment(0, 0)))
+                num_cells.append(ft.Container(content=txt_en, width=W_NUM, height=H_ROW, bgcolor="#F1F5F9", border=ft.Border.all(0.5, "#9CA3AF"), alignment=ft.alignment.Alignment(0, 0)))
 
-                row_ctrl = ft.Row(cells, spacing=0)
+                row_ctrl = ft.Row(num_cells, spacing=0)
                 cell_grid.append(row_map)
                 cell_col_order.append(row_order)
                 row_y_offsets.append(y_cursor[0])
@@ -819,13 +830,15 @@ def build_bitacora_conteo_view(
 
                 row_widgets[(turno, rk)] = {
                     "row": row_ctrl,
+                    "left_row": left_row,
                     "texts": texts_map,
                     "tot": txt_tot,
                     "ok": txt_ok,
                     "diff": txt_diff,
                     "en": txt_en,
                 }
-                body_rows.append(row_ctrl)
+                left_rows.append(left_row)
+                right_rows.append(row_ctrl)
                 _actualizar_celdas_calculadas_fila(turno, rk)
 
         _add_template_rows(bcs.ARMAZONES_FILAS, editable_brand=False)
@@ -833,14 +846,15 @@ def build_bitacora_conteo_view(
         _add_template_rows(bcs.ACCESORIOS_FILAS[:5], editable_brand=False, section_label="ACCESORIOS")
         _add_template_rows(bcs.ACCESORIOS_FILAS[5:], editable_brand=True)
 
-        if not body_rows:
-            body_rows.append(
+        if not right_rows:
+            left_rows.append(ft.Container(width=W_LEFT, height=70, bgcolor="#F8FAFC"))
+            right_rows.append(
                 ft.Container(
                     content=ft.Text(
                         "Sin marcas visibles con ese filtro. Limpia la búsqueda o pulsa 'Todas las marcas'.",
                         size=12, color="#475569", weight="bold"
                     ),
-                    width=W_COD + W_MAR + W_NUM * 12 + W_OK,
+                    width=W_RIGHT,
                     height=70,
                     bgcolor="#F8FAFC",
                     alignment=ft.alignment.Alignment(0, 0),
@@ -850,13 +864,12 @@ def build_bitacora_conteo_view(
 
         # Fila TOTAL (fija debajo de las filas visibles)
         tot_map = {}
-        tot_cells = [
-            ft.Container(
-                content=ft.Text("TOTAL", size=12, weight="bold", color=HEX_NEGRO),
-                width=W_COD + W_MAR, height=32, bgcolor="#D1D5DB", border=ft.Border.all(0.8, "#111827"),
-                padding=ft.padding.Padding(8, 0, 0, 0), alignment=ft.alignment.Alignment(-1, 0),
-            )
-        ]
+        tot_left_cell = ft.Container(
+            content=ft.Text("TOTAL", size=12, weight="bold", color=HEX_NEGRO),
+            width=W_LEFT, height=32, bgcolor="#D1D5DB", border=ft.Border.all(0.8, "#111827"),
+            padding=ft.padding.Padding(8, 0, 0, 0), alignment=ft.alignment.Alignment(-1, 0),
+        )
+        tot_cells = []
         for ck in ["exh", "bod", "gt", "dan", "se", "tot", "tr", "mim", "ok", "e", "st", "sv", "en"]:
             c_w = W_OK if ck == "ok" else W_NUM
             c_col = bcs.FIELD_TEXT_COLOR.get(ck, HEX_NEGRO) if hasattr(bcs, "FIELD_TEXT_COLOR") else FIELD_TEXT_COLOR.get(ck, HEX_NEGRO)
@@ -872,23 +885,101 @@ def build_bitacora_conteo_view(
 
         _recalcular_y_pintar_totales(turno)
 
-        body_col = ft.Column(body_rows, spacing=0)
-        body_height_ref[0] = 440
+        pw_cur = getattr(page, "width", None) or 1200
+        ph_cur = getattr(page, "height", None) or 760
+        try:
+            ph_cur = int(ph_cur)
+        except Exception:
+            ph_cur = 760
+        vis_h = max(280, min(520, ph_cur - (310 if es_movil else 330)))
+        body_height_ref[0] = vis_h
+
+        hdr_right_scroll = ft.Row(
+            [ft.Column([hdr_right_top, hdr_right_cols], spacing=0)],
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+        body_right_scroll = ft.Row(
+            [ft.Column(right_rows, spacing=0)],
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+        tot_right_scroll = ft.Row(
+            [total_row],
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
+
+        h_scrollers = (hdr_right_scroll, body_right_scroll, tot_right_scroll)
+        h_sync_lock = [False]
+        h_last_off = [-1.0]
+
+        async def _sync_h_async(src_idx, off):
+            if h_sync_lock[0]:
+                return
+            h_sync_lock[0] = True
+            try:
+                h_last_off[0] = off
+                for i, sc in enumerate(h_scrollers):
+                    if i != src_idx:
+                        try:
+                            await sc.scroll_to(offset=off, duration=0)
+                        except Exception:
+                            pass
+            finally:
+                h_sync_lock[0] = False
+
+        def _make_h_handler(src_idx):
+            def _on_hs(e):
+                if h_sync_lock[0]:
+                    return
+                off = float(getattr(e, "extent_before", 0.0) or 0.0)
+                if abs(off - h_last_off[0]) < 1.5:
+                    return
+                try:
+                    page.run_task(_sync_h_async, src_idx, off)
+                except Exception:
+                    pass
+            return _on_hs
+
+        hdr_right_scroll.on_scroll = _make_h_handler(0)
+        body_right_scroll.on_scroll = _make_h_handler(1)
+        tot_right_scroll.on_scroll = _make_h_handler(2)
+
+        left_body_col = ft.Column(left_rows, spacing=0, width=W_LEFT)
+        body_vscroll = ft.Column(
+            [
+                ft.Row(
+                    [left_body_col, body_right_scroll],
+                    spacing=0,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                )
+            ],
+            spacing=0,
+            scroll=ft.ScrollMode.AUTO,
+            height=vis_h,
+            on_scroll=lambda e: scroll_win_top.__setitem__(0, float(getattr(e, "extent_before", 0.0) or 0.0)),
+        )
+        body_scroll_col_ref[0] = body_vscroll
+
+        total_table_w = W_LEFT + W_RIGHT
+        tbl_w = (total_table_w + 3) if (pw_cur - 270) >= (total_table_w + 3) else None
 
         tabla_host.controls = [
-            ft.Row([
-                ft.Container(
-                    content=ft.Column([
-                        header_top,
-                        header_cols,
-                        body_col,
-                        total_row,
+            ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Column([hdr_left_top, hdr_left_cols], spacing=0, width=W_LEFT),
+                        hdr_right_scroll,
                     ], spacing=0),
-                    bgcolor="#FFFFFF",
-                    border=ft.Border.all(1.5, "#111827"),
-                    border_radius=6,
-                )
-            ], scroll=ft.ScrollMode.AUTO)
+                    body_vscroll,
+                    ft.Row([tot_left_cell, tot_right_scroll], spacing=0),
+                ], spacing=0),
+                width=tbl_w,
+                bgcolor="#FFFFFF",
+                border=ft.Border.all(1.5, "#111827"),
+                border_radius=6,
+            )
         ]
 
     # ==========================================================================
@@ -1486,23 +1577,92 @@ def build_bitacora_conteo_view(
 
     MIM_PORTAL_URL = "https://mim.luxotticaretail.com/sap/bc/ui5_ui5/ui2/ushell/shells/abap/FioriLaunchpad.html?sap-client=500&sap-language=ES#Shell-home"
 
-    barra_acciones = ft.Row([
-        btn_tab_mat,
-        btn_tab_ves,
-        ft.ElevatedButton("🌐 MIM", on_click=lambda e: _lanzar_descarga_url(MIM_PORTAL_URL, inline=1), bgcolor="#0369A1", color="white", tooltip="Abrir portal MIM para descargar inventario"),
-        ft.ElevatedButton("📥 Subir Excel MIM", on_click=subir_mim_click, bgcolor="#0284C7", color="white"),
-        ft.ElevatedButton("➡️ Aplicar Ajuste a Vespertino", on_click=pasar_ajuste_vespertino_click, bgcolor="#7C3AED", color="white"),
-        ft.ElevatedButton("💾 Guardar", on_click=guardar_click, bgcolor="#059669", color="white"),
-        ft.ElevatedButton("📄 Descargar PDF", on_click=lambda e: _generar_y_abrir_pdf(0), bgcolor="#DC2626", color="white"),
-        ft.ElevatedButton("🖨️ Ver / Imprimir", on_click=lambda e: _generar_y_abrir_pdf(1), bgcolor="#334155", color="white"),
-        ft.ElevatedButton("📊 Descargar Semana (Excel)", on_click=abrir_descarga_semanal, bgcolor="#0D9488", color="white"),
-    ], wrap=True, spacing=8)
+    es_movil_ipad = (getattr(page, "width", None) or 1200) < 1050
+
+    btn_mim = ft.ElevatedButton("🌐 MIM", on_click=lambda e: _lanzar_descarga_url(MIM_PORTAL_URL, inline=1), bgcolor="#0369A1", color="white", tooltip="Abrir portal MIM para descargar inventario")
+    btn_subir_mim = ft.ElevatedButton("📥 Subir Excel" if es_movil_ipad else "📥 Subir Excel MIM", on_click=subir_mim_click, bgcolor="#0284C7", color="white")
+    btn_ajuste_ves = ft.ElevatedButton("➡️ Aplicar Ajuste a Vespertino", on_click=pasar_ajuste_vespertino_click, bgcolor="#7C3AED", color="white")
+    btn_guardar = ft.ElevatedButton("💾 Guardar", on_click=guardar_click, bgcolor="#059669", color="white")
+    btn_dl_pdf = ft.ElevatedButton("📄 PDF" if es_movil_ipad else "📄 Descargar PDF", on_click=lambda e: _generar_y_abrir_pdf(0), bgcolor="#DC2626", color="white")
+    btn_ver_pdf = ft.ElevatedButton("🖨️ Ver / Imprimir", on_click=lambda e: _generar_y_abrir_pdf(1), bgcolor="#334155", color="white")
+    btn_excel_sem = ft.ElevatedButton("📊 Descargar Semana (Excel)", on_click=abrir_descarga_semanal, bgcolor="#0D9488", color="white")
+
+    if es_movil_ipad:
+        for _b in (btn_subir_mim, btn_guardar, btn_dl_pdf):
+            _b.height = 34
+            _b.style = ft.ButtonStyle(padding=ft.padding.Padding(10, 0, 10, 0))
+
+        menu_movil_panel = ft.Container(
+            visible=False,
+            bgcolor="#0F172A",
+            border=ft.Border.all(1, "#334155"),
+            border_radius=8,
+            padding=8,
+        )
+
+        def _toggle_menu_movil(e):
+            menu_movil_panel.visible = not menu_movil_panel.visible
+            try:
+                menu_movil_panel.update()
+            except Exception:
+                pass
+
+        def _wrap_cierra_menu(fn):
+            def _wrapped(ev):
+                menu_movil_panel.visible = False
+                try:
+                    menu_movil_panel.update()
+                except Exception:
+                    pass
+                if fn:
+                    fn(ev)
+            return _wrapped
+
+        for _mb in (btn_tab_mat, btn_tab_ves, btn_mim, btn_ajuste_ves, btn_ver_pdf, btn_excel_sem):
+            _mb.on_click = _wrap_cierra_menu(_mb.on_click)
+
+        menu_movil_panel.content = ft.Row([
+            btn_tab_mat,
+            btn_tab_ves,
+            btn_mim,
+            btn_ajuste_ves,
+            btn_ver_pdf,
+            btn_excel_sem,
+        ], wrap=True, spacing=6)
+
+        btn_menu_hamb = ft.ElevatedButton(
+            "☰",
+            on_click=_toggle_menu_movil,
+            bgcolor="#1E293B",
+            color="#00FFFF",
+            height=34,
+            width=44,
+            tooltip="Más opciones de Conteo",
+            style=ft.ButtonStyle(padding=ft.padding.Padding(0, 0, 0, 0)),
+        )
+
+        barra_acciones = ft.Column([
+            ft.Row([btn_menu_hamb, btn_subir_mim, btn_guardar, btn_dl_pdf], wrap=True, spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            menu_movil_panel,
+        ], spacing=6)
+    else:
+        barra_acciones = ft.Row([
+            btn_tab_mat,
+            btn_tab_ves,
+            btn_mim,
+            btn_subir_mim,
+            btn_ajuste_ves,
+            btn_guardar,
+            btn_dl_pdf,
+            btn_ver_pdf,
+            btn_excel_sem,
+        ], wrap=True, spacing=8)
 
     cabecera_fisica = ft.Container(
         content=ft.Row([
             tf_cch1, tf_cch2, tf_cch3, tf_rec_m, tf_ent_m, tf_rec_v, tf_ent_v
-        ], wrap=True, spacing=8),
-        padding=8,
+        ], wrap=True, spacing=5),
+        padding=6,
         bgcolor="#0F172A",
         border=ft.Border.all(1, "#1E293B"),
         border_radius=8,
@@ -1554,8 +1714,6 @@ def build_bitacora_conteo_view(
         content=ft.Row([
             lbl_celda_activa,
             tf_editor_rapido,
-            ft.ElevatedButton("✏️ Editar", on_click=lambda e: active_cell_pos[0] and _select_cell(*active_cell_pos[0], focus_editor=True), bgcolor="#1E293B", color="#38BDF8", height=32),
-            btn_modo_tactil,
             tf_buscar_marca,
         ], wrap=True, spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         padding=ft.padding.Padding(10, 6, 10, 6),
@@ -1585,9 +1743,8 @@ def build_bitacora_conteo_view(
                 ft.Text(f"({store_name} - {tienda_key})", size=13, color="#94A3B8"),
             ], wrap=True, spacing=10),
             barra_fecha_q,
-            cabecera_fisica,
             barra_acciones,
-            leyenda_colores,
+            cabecera_fisica,
             barra_editor_rapido,
             kb_listener,
         ],
@@ -1595,7 +1752,6 @@ def build_bitacora_conteo_view(
         scroll=ft.ScrollMode.ALWAYS,
         expand=True,
     )
-    body_scroll_col_ref[0] = outer_scroll_col
 
     return ft.Container(
         content=outer_scroll_col,
