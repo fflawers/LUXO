@@ -38,6 +38,48 @@ VOCES_NATIVAS_EXTRANJERAS = {
     "es": {"female": "es-MX-DaliaNeural", "male": "es-MX-JorgeNeural", "name": "Espanol MX"},
 }
 
+LANG_ALIAS_MAP = {
+    "zh": "zh", "zh-cn": "zh", "zh-tw": "zh", "zh-hk": "zh", "zh-hans": "zh", "zh-hant": "zh",
+    "chinese": "zh", "mandarin": "zh", "cantonese": "zh", "cmn": "zh", "yue": "zh", "chino": "zh", "chino mandarin": "zh",
+    "en": "en", "en-us": "en", "en-gb": "en", "english": "en", "ingles": "en",
+    "fr": "fr", "fr-fr": "fr", "fr-ca": "fr", "french": "fr", "frances": "fr",
+    "de": "de", "de-de": "de", "german": "de", "aleman": "de",
+    "it": "it", "it-it": "it", "italian": "it", "italiano": "it",
+    "pt": "pt", "pt-br": "pt", "pt-pt": "pt", "portuguese": "pt", "portugues": "pt",
+    "ja": "ja", "ja-jp": "ja", "jp": "ja", "japanese": "ja", "japones": "ja",
+    "ko": "ko", "ko-kr": "ko", "kr": "ko", "korean": "ko", "coreano": "ko",
+    "ru": "ru", "ru-ru": "ru", "russian": "ru", "ruso": "ru",
+    "ar": "ar", "ar-sa": "ar", "arabic": "ar", "arabe": "ar",
+    "es": "es", "es-mx": "es", "es-es": "es", "spanish": "es", "espanol": "es",
+}
+
+
+def normalizar_codigo_idioma(lang_str: str, texto_muestra: str = "") -> str:
+    """Convierte nombres largos o variantes (ej. 'chinese', 'zh-CN', 'cmn') a ISO-2 exacto."""
+    raw = (lang_str or "").strip().lower().replace("_", "-")
+    if raw in LANG_ALIAS_MAP:
+        return LANG_ALIAS_MAP[raw]
+    for k, v in LANG_ALIAS_MAP.items():
+        if raw.startswith(k + "-") or (len(k) >= 4 and k in raw):
+            return v
+    if len(raw) >= 2 and raw[:2] in VOCES_NATIVAS_EXTRANJERAS:
+        return raw[:2]
+    # Deteccion por escritura si el codigo fue 'auto' o desconocido
+    if texto_muestra:
+        if any("\u4e00" <= ch <= "\u9fff" for ch in texto_muestra):
+            if any("\u3040" <= ch <= "\u30ff" for ch in texto_muestra):
+                return "ja"
+            return "zh"
+        if any("\u3040" <= ch <= "\u30ff" for ch in texto_muestra):
+            return "ja"
+        if any("\uac00" <= ch <= "\ud7af" for ch in texto_muestra):
+            return "ko"
+        if any("\u0400" <= ch <= "\u04ff" for ch in texto_muestra):
+            return "ru"
+        if any("\u0600" <= ch <= "\u06ff" for ch in texto_muestra):
+            return "ar"
+    return ""
+
 _K1 = "".join(["gs", "k_7Gb4UGvZQJMl8mvBV", "ps8WGdyb3FYvLln5u4O", "Zd7fY5AtoV9z3jq6"])
 _K2 = "".join(["gs", "k_dHjnPd44yUIZhuoD", "PeIUWGdyb3FYJKYQurq", "THzHyvYXkCGfmO3el"])
 _K3 = "".join(["gs", "k_D3UgxJwwMfn5U73l", "4jwbWGdyb3FY7sHPshk", "qp4simDOAZxaMNQzS"])
@@ -104,41 +146,83 @@ def ejecutar_js_traductor(page: ft.Page, js_code: str):
     except Exception as ex:
         print("Notice ejecutar_js_traductor:", ex)
 
-def detectar_idioma_y_traducir_ia(texto: str, idioma_cliente: str = "en") -> dict:
-    """Detecta el idioma, tono y genero del hablante y traduce con terminologia optica de lujo."""
+def detectar_idioma_y_traducir_ia(texto: str, idioma_cliente: str = "en", historial_contexto: list = None, es_vendedor: bool = None) -> dict:
+    """Detecta el idioma, tono y genero del hablante y traduce con terminologia optica de lujo y contexto."""
     if not texto or not texto.strip():
         return None
 
     txt_clean = texto.strip()
-    cliente_lang_clean = (idioma_cliente or "en").lower().strip()
-    nombre_idioma_cliente = VOCES_NATIVAS_EXTRANJERAS.get(cliente_lang_clean[:2], {}).get("name", cliente_lang_clean.upper())
+    cliente_lang_clean = normalizar_codigo_idioma(idioma_cliente) or "en"
+    if cliente_lang_clean == "es":
+        cliente_lang_clean = "en"
+    nombre_idioma_cliente = VOCES_NATIVAS_EXTRANJERAS.get(cliente_lang_clean, {}).get("name", cliente_lang_clean.upper())
+
+    ctx_block = ""
+    if historial_contexto:
+        ultimas = historial_contexto[-4:]
+        ctx_lines = [f"- {h}" for h in ultimas if h]
+        if ctx_lines:
+            ctx_block = "CONTEXTO RECIENTE DE LA CONVERSACION (solo referencia para genero/numero/modelo, NO retraducir):\n" + "\n".join(ctx_lines) + "\n\n"
+
+    rol_hint = ""
+    if es_vendedor is True:
+        rol_hint = f"HABLANTE ACTUAL: VENDEDOR MEXICANO hablando en ESPANOL ('es'). Debes traducir OBLIGATORIAMENTE al idioma del cliente: {nombre_idioma_cliente} ('{cliente_lang_clean}').\n"
+    elif es_vendedor is False:
+        rol_hint = "HABLANTE ACTUAL: CLIENTE EXTRANJERO. Detecta su idioma exacto en ISO-2 (ej. 'zh', 'en', 'fr', 'ja', 'ko') y tradúcelo al ESPANOL ('es') natural de México.\n"
 
     prompt_traduccion = (
-        "Eres un traductor simultaneo profesional en mostrador.\n"
-        "Tu trabajo es EXCLUSIVAMENTE traducir el texto dado de forma literal, precisa y concisa.\n"
+        "Eres un traductor simultaneo profesional de alta precision en mostrador de óptica de lujo (Sunglass Hut).\n"
+        "Tu trabajo es EXCLUSIVAMENTE traducir el texto dado con precision gramatical (singular vs plural exacto, numeros y montos).\n"
         "ESTRICTAMENTE PROHIBIDO:\n"
-        "- NO actues como asistente ni como vendedor ni como chatbot.\n"
-        "- NO agregues saludos que el usuario no dijo.\n"
-        "- NO agregues frases de cortesia ni bienvenidas ni explicaciones.\n\n"
-        f"IDIOMA ACTIVO DEL CLIENTE EN MOSTRADOR: {nombre_idioma_cliente} (codigo ISO '{cliente_lang_clean}')\n\n"
+        "- NO actues como asistente ni chatbot ni agregues saludos o comentarios que no se dijeron.\n"
+        "- NO dejes palabras sin traducir ni devuelvas la frase en el mismo idioma de origen.\n\n"
+        f"{rol_hint}"
+        f"IDIOMA ACTIVO DEL CLIENTE EN MOSTRADOR: {nombre_idioma_cliente} (codigo ISO-2: '{cliente_lang_clean}')\n\n"
+        f"{ctx_block}"
         f"TEXTO A TRADUCIR:\n\"{txt_clean}\"\n\n"
         "REGLAS OBLIGATORIAS:\n"
-        f"1. Si el texto esta en ESPANOL ('es'), traducelo obligatoriamente al idioma activo del cliente extranjero ({nombre_idioma_cliente}, codigo '{cliente_lang_clean}'). NUNCA lo traduzcas al ingles a menos que el cliente sea angloparlante.\n"
-        "2. Si el texto esta en CUALQUIER OTRO IDIOMA, traducelo al ESPANOL ('es') para el vendedor.\n"
-        "3. CONTEXTO, TERMINOLOGIA OPTICA Y VENTAS DE MOSTRADOR (Sunglass Hut): Eres un traductor experto en mostrador de óptica, lentes de sol y ventas retail. Entiende términos de ventas como precios ('esta gafa cuesta', 'pesos mexicanos', '¿cuánto cuesta?'), formas de pago (tarjeta, efectivo, meses sin intereses), descuentos, promociones, garantías y accesorios (estuche, microfibra). Si el texto contiene pequeños deslices fonéticos (por ejemplo 'esta capa' por 'esta gafa', '天光' por '偏光' para lentes polarizados, o marcas como Ray-Ban/Oakley/Prada), deduce e interpreta siempre el término óptico o de ventas correcto omitiendo ruidos o soplidos de micrófono.\n\n"
-        "Responde UNICAMENTE en formato JSON valido con este formato exacto:\n"
+        f"1. Si el texto esta en ESPANOL ('es'), traducelo OBLIGATORIAMENTE a {nombre_idioma_cliente} (codigo '{cliente_lang_clean}'). En chino usa caracteres simplificados naturales y fluidez comercial cortes.\n"
+        "2. Si el texto esta en CUALQUIER OTRO IDIOMA, traducelo al ESPANOL ('es') natural para el vendedor, respetando si habla en singular ('este lente', 'una pieza') o en plural ('estos lentes', 'dos piezas').\n"
+        "3. GLOSARIO OPTICO Y VENTAS DE MOSTRADOR: interpreta con precision términos como lente/gafa/armazón (镜框/太阳镜), mica/cristal (镜片), polarizado/Prizm/Chromance (偏光镜片), fotocromático Transitions (变色镜片), antirreflejante (防反光/镀膜), filtro azul (防蓝光), policarbonato, acetato, titanio, varilla (镜腿), puente nasal/plaquetas (鼻托), graduación/miopía/astigmatismo, garantía/cobertura Oops, cambio en 30 días, meses sin intereses (分期免息), segunda pieza al 40%, descuentos (20%/30%/50%), factura, estuche/microfibra, tarjeta/efectivo, pesos mexicanos (MXN), Ray-Ban/Oakley/Prada/Burberry/Gucci. Corrige pequeños deslices fonéticos del micrófono (ej. 'esta capa'->'esta gafa', '天光'->'偏光').\n\n"
+        "Responde UNICAMENTE en JSON valido exacto:\n"
         "{\n"
-        '    "idioma_origen": "codigo_iso",\n'
-        '    "idioma_destino": "codigo_iso",\n'
-        '    "traduccion": "texto traducido exacto sin anadidos",\n'
+        '    "idioma_origen": "codigo_iso2",\n'
+        '    "idioma_destino": "codigo_iso2",\n'
+        '    "traduccion": "texto traducido exacto",\n'
         '    "genero_hablante": "female" o "male"\n'
         "}"
     )
 
-    # Metodo 1: Groq API ultra-rapida (Qwen 3.8 / GPT-OSS) - respuesta en ~300ms
+    def _validar_resultado_ia(d_obj):
+        trad_v = (d_obj.get("traduccion") or "").strip()
+        if not trad_v:
+            return None
+        orig_n = normalizar_codigo_idioma(d_obj.get("idioma_origen"), txt_clean) or ("es" if es_vendedor else cliente_lang_clean)
+        dest_n = normalizar_codigo_idioma(d_obj.get("idioma_destino"), trad_v)
+        if es_vendedor is True or orig_n == "es":
+            orig_n = "es"
+            dest_n = cliente_lang_clean
+            # Rechazar si la IA devolvio exactamente la frase en espanol sin traducir a otro idioma
+            if trad_v.lower().strip(" .!¡?¿") == txt_clean.lower().strip(" .!¡?¿"):
+                return None
+            if dest_n == "zh" and not any("\u4e00" <= ch <= "\u9fff" for ch in trad_v):
+                return None
+        elif es_vendedor is False:
+            dest_n = "es"
+            if not orig_n or orig_n == "es":
+                orig_n = normalizar_codigo_idioma("", txt_clean) or cliente_lang_clean
+        return {
+            "origen": orig_n,
+            "destino": dest_n or ("es" if orig_n != "es" else cliente_lang_clean),
+            "texto_original": txt_clean,
+            "texto_traducido": trad_v,
+            "genero_detectado": d_obj.get("genero_hablante", "female")
+        }
+
+    # Metodo 1: Groq API ultra-rapida con modelos activos reales
     groq_keys = get_groq_api_keys_traductor()
     for gkey in groq_keys:
-        for modelo in ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
+        for modelo in ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
             try:
                 url_groq = "https://api.groq.com/openai/v1/chat/completions"
                 headers = {"Authorization": f"Bearer {gkey}", "Content-Type": "application/json"}
@@ -148,30 +232,24 @@ def detectar_idioma_y_traducir_ia(texto: str, idioma_cliente: str = "en") -> dic
                     "temperature": 0.1,
                     "response_format": {"type": "json_object"}
                 }
-                r = requests.post(url_groq, headers=headers, json=payload, timeout=5)
+                r = requests.post(url_groq, headers=headers, json=payload, timeout=8)
                 if r.status_code == 200:
                     data_raw = r.json()["choices"][0]["message"]["content"]
                     d = json.loads(data_raw)
-                    trad = d.get("traduccion", "").strip()
-                    if trad:
-                        return {
-                            "origen": d.get("idioma_origen", "auto"),
-                            "destino": d.get("idioma_destino", "en"),
-                            "texto_original": txt_clean,
-                            "texto_traducido": trad,
-                            "genero_detectado": d.get("genero_hablante", "female")
-                        }
+                    res_ok = _validar_resultado_ia(d)
+                    if res_ok:
+                        return res_ok
             except Exception:
                 pass
 
     # Metodo 2: Gemini Flash REST
     gemini_key = get_gemini_api_key_traductor()
     if gemini_key:
-        for mod in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-flash-latest"]:
+        for mod in ["gemini-2.5-flash", "gemini-flash-latest"]:
             try:
                 url_gem = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:generateContent?key={gemini_key}"
                 payload_gem = {"contents": [{"parts": [{"text": prompt_traduccion}]}]}
-                rm = requests.post(url_gem, json=payload_gem, timeout=5)
+                rm = requests.post(url_gem, json=payload_gem, timeout=8)
                 if rm.status_code == 200:
                     raw_txt = rm.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                     if "```json" in raw_txt:
@@ -179,25 +257,19 @@ def detectar_idioma_y_traducir_ia(texto: str, idioma_cliente: str = "en") -> dic
                     elif "```" in raw_txt:
                         raw_txt = raw_txt.split("```")[1].split("```")[0].strip()
                     d = json.loads(raw_txt)
-                    trad = d.get("traduccion", "").strip()
-                    if trad:
-                        return {
-                            "origen": d.get("idioma_origen", "auto"),
-                            "destino": d.get("idioma_destino", "en"),
-                            "texto_original": txt_clean,
-                            "texto_traducido": trad,
-                            "genero_detectado": d.get("genero_hablante", "female")
-                        }
+                    res_ok = _validar_resultado_ia(d)
+                    if res_ok:
+                        return res_ok
             except Exception:
                 pass
 
-    # Metodo 3: Fallback literal estricto (cero añadidos)
-    es_probable_espanol = any(w in txt_clean.lower() for w in [
+    # Metodo 3: Fallback minimo de emergencia (nunca devuelve espanol haciendose pasar por idioma extranjero)
+    es_probable_espanol = bool(es_vendedor) or any(w in txt_clean.lower() for w in [
         "hola", "lentes", "sol", "precio", "cuanto", "gracias", "armazon", "armazones", "mica", "micas",
         "polarizado", "polarizadas", "tienen", "buenas", "tardes", "dias", "que", "quiero", "busco", "oferta"
     ])
-    orig = "es" if es_probable_espanol else "en"
-    dest = "en" if orig == "es" else "es"
+    orig = "es" if es_probable_espanol else (normalizar_codigo_idioma("", txt_clean) or cliente_lang_clean or "en")
+    dest = cliente_lang_clean if orig == "es" else "es"
 
     fallback_trans = ""
     lower_t = txt_clean.lower().strip(" .!¡?¿")
@@ -257,7 +329,9 @@ def generar_audio_traduccion_sync(texto: str, idioma: str, genero: str = "female
     if not texto or not texto.strip():
         return ""
     try:
-        lang_key = idioma[:2].lower() if idioma else "es"
+        lang_key = normalizar_codigo_idioma(idioma, texto) or (idioma[:2].lower() if idioma else "es")
+        if lang_key not in VOCES_NATIVAS_EXTRANJERAS:
+            lang_key = "en" if any(ord(c) < 128 for c in texto) else "es"
         v_spec = VOCES_NATIVAS_EXTRANJERAS.get(lang_key, VOCES_NATIVAS_EXTRANJERAS.get("es", {}))
         voice_name = v_spec.get(genero, v_spec.get("female", "es-MX-DaliaNeural"))
         rate_val = "-10%" if lang_key in ["en", "de"] else "-8%"
@@ -484,6 +558,59 @@ def registrar_rutas_fastapi_traductor(app=None):
 
                 texto_transcrito = ""
                 idioma_detectado = "auto"
+                whisper_baja_confianza = False
+                HALLUCINACIONES_RUIDO = {
+                    "you", "thank you", "thanks", "thanks for watching", "thank you for watching",
+                    "bye", "gracias", "subtitulos realizados por la comunidad de amara.org",
+                    "subtítulos realizados por la comunidad de amara.org", "amara.org",
+                    "请不吝点赞", "字幕", "谢谢观看", "感谢观看", "请订阅", "优优独播剧场"
+                }
+
+                def _es_alucinacion_ruido(txt_chk):
+                    c = (txt_chk or "").strip(" .!¡?¿。，、").lower()
+                    if not c or c in {".", "..", "...", "...."} or c in HALLUCINACIONES_RUIDO:
+                        return True
+                    return any(h in c for h in ("amara.org", "请不吝点赞", "优优独播剧场", "subtítulos realizados"))
+
+                def _transcribir_gemini_limpio():
+                    g_key = get_gemini_api_key_traductor()
+                    if not g_key or len(audio_bytes) < 400:
+                        return "", ""
+                    try:
+                        import base64
+                        b64_aud = base64.b64encode(audio_bytes).decode("ascii")
+                        p_aud = (
+                            "Eres un especialista en aislamiento de voz y transcripción en mostrador de óptica Sunglass Hut.\n"
+                            "Escucha el audio e IGNORA ruido ambiental, música de tienda, eco, golpes o voces lejanas.\n"
+                            "Transcribe ÚNICAMENTE lo que dijo el hablante principal cercano al micrófono, respetando singular/plural y términos ópticos (polarizado, armazón, lentes, Ray-Ban, Oakley, 偏光, 太阳镜, 镜框, 多少钱).\n"
+                            + ("El hablante es un vendedor mexicano en español ('es').\n" if source == "vendedor" else "El hablante es un cliente (puede hablar mandarín 'zh', inglés 'en', francés 'fr', japonés 'ja', etc.).\n")
+                            + "Si solo hay ruido o silencio, devuelve text vacío.\n"
+                            + 'Responde ÚNICAMENTE JSON: {"text": "transcripcion limpia", "language": "codigo_iso2"}'
+                        )
+                        url_g = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={g_key}"
+                        payload_g = {
+                            "contents": [{
+                                "parts": [
+                                    {"text": p_aud},
+                                    {"inline_data": {"mime_type": mime, "data": b64_aud}}
+                                ]
+                            }]
+                        }
+                        rg = requests.post(url_g, json=payload_g, timeout=12)
+                        if rg.status_code == 200:
+                            raw_g = rg.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                            if "```json" in raw_g:
+                                raw_g = raw_g.split("```json")[1].split("```")[0].strip()
+                            elif "```" in raw_g:
+                                raw_g = raw_g.split("```")[1].split("```")[0].strip()
+                            dg = json.loads(raw_g)
+                            tg = (dg.get("text") or "").strip()
+                            lg = normalizar_codigo_idioma(dg.get("language"), tg)
+                            return tg, lg
+                    except Exception as ex_ga:
+                        print("Notice Gemini Audio:", ex_ga)
+                    return "", ""
+
                 try:
                     groq_keys = get_groq_api_keys_traductor()
                     for gkey in groq_keys:
@@ -497,21 +624,25 @@ def registrar_rutas_fastapi_traductor(app=None):
                                         "response_format": "verbose_json",
                                         "temperature": 0.0,
                                         "language": "es",
-                                        "prompt": "Conversación de ventas en mostrador de óptica Sunglass Hut: esta gafa cuesta, estas gafas, armazones, lentes de sol, polarizados, precio en pesos mexicanos, descuento, tarjeta, efectivo, marcas Ray-Ban, Oakley, Prada."
+                                        "prompt": "Mostrador de óptica Sunglass Hut: estos lentes, este lente polarizado, armazón, micas Prizm, Transitions, precio en pesos mexicanos, descuento, segunda pieza al cuarenta, meses sin intereses, tarjeta, garantía, Ray-Ban, Oakley, Prada."
                                     }
                                 else:
                                     data = {
                                         "model": "whisper-large-v3",
                                         "response_format": "verbose_json",
                                         "temperature": 0.0,
-                                        "prompt": "Conversación de mostrador en óptica Sunglass Hut: sunglasses, polarized lenses, price, how much is it, discount, Ray-Ban, Oakley, 偏光, 偏光镜, 太阳镜, 镜框, 多少钱."
+                                        "prompt": "Sunglass Hut counter: polarized sunglasses, lenses, frame, price, discount, 偏光镜, 太阳镜, 镜框, 多少钱, 刷卡, 打折, Ray-Ban, Oakley."
                                     }
                                 res_w = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data, timeout=12)
                             if res_w.status_code == 200:
                                 w_data = res_w.json()
                                 texto_transcrito = w_data.get("text", "").strip()
-                                idioma_detectado = w_data.get("language", "auto")
-                                print(f"[TRADUCTOR WHISPER] Transcrito exitoso: '{texto_transcrito}' ({idioma_detectado})")
+                                raw_lang = w_data.get("language", "auto")
+                                idioma_detectado = normalizar_codigo_idioma(raw_lang, texto_transcrito) or raw_lang
+                                segs = w_data.get("segments") or []
+                                if segs and all(float(sg.get("no_speech_prob") or 0) > 0.78 for sg in segs):
+                                    whisper_baja_confianza = True
+                                print(f"[TRADUCTOR WHISPER] Transcrito: '{texto_transcrito}' (raw={raw_lang}, norm={idioma_detectado}, low_conf={whisper_baja_confianza})")
                                 if texto_transcrito:
                                     break
                         except Exception as ex_w:
@@ -520,23 +651,35 @@ def registrar_rutas_fastapi_traductor(app=None):
                     try: os.unlink(temp_path)
                     except: pass
 
-                # Filtro de seguridad anti-ruido (evitar burbujas dobles con '...' o silencios)
-                clean_whisper = texto_transcrito.strip(" .!¡?¿").lower() if texto_transcrito else ""
-                if not clean_whisper or clean_whisper in ["you", "subtítulos realizados por la comunidad de amara.org", "gracias", "bye"] or texto_transcrito.strip() in [".", "..", "...", "...."]:
-                    print(f"[TRADUCTOR WHISPER] Transcripcion de ruido descartada: '{texto_transcrito}'")
-                    texto_transcrito = ""
+                if _es_alucinacion_ruido(texto_transcrito) or whisper_baja_confianza:
+                    print(f"[TRADUCTOR WHISPER] Ruido/baja confianza ('{texto_transcrito}'), validando con Gemini Audio...")
+                    tg, lg = _transcribir_gemini_limpio()
+                    if tg and not _es_alucinacion_ruido(tg):
+                        texto_transcrito = tg
+                        idioma_detectado = lg or idioma_detectado
+                        print(f"[TRADUCTOR GEMINI AUDIO] Recuperado limpio: '{texto_transcrito}' ({idioma_detectado})")
+                    elif _es_alucinacion_ruido(texto_transcrito):
+                        texto_transcrito = ""
 
                 if texto_transcrito and sess_handler:
-                    fn = sess_handler.get("procesar_vendedor" if source == "vendedor" else "procesar_cliente")
+                    if source == "vendedor":
+                        fn = sess_handler.get("procesar_vendedor")
+                        res_proc = fn(texto_transcrito) if fn else None
+                    else:
+                        fn = sess_handler.get("procesar_cliente")
+                        try:
+                            res_proc = fn(texto_transcrito, idioma_forzado=idioma_detectado) if fn else None
+                        except TypeError:
+                            res_proc = fn(texto_transcrito) if fn else None
                     if fn:
-                        res_proc = fn(texto_transcrito)
                         audio_url = (res_proc or {}).get("audio_url", "")
                         trad_txt = (res_proc or {}).get("traduccion", "")
+                        lang_final = normalizar_codigo_idioma((res_proc or {}).get("origen") or idioma_detectado, texto_transcrito) or idioma_detectado
                         return {
                             "status": "ok",
                             "text": texto_transcrito,
                             "translated": trad_txt,
-                            "language": idioma_detectado,
+                            "language": lang_final,
                             "audio_url": audio_url
                         }
 
@@ -570,7 +713,41 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
 
     vendedor_genero = ["female"]
     idioma_cliente_actual = ["en"]
+    historial_reciente = []
     grabando_estado = {"vendedor": False, "cliente": False}
+
+    def _on_select_idioma_cliente(e):
+        val = (e.control.value or "auto").strip().lower()
+        if val != "auto":
+            idioma_cliente_actual[0] = val
+            loc_map = {"zh": "zh-CN", "en": "en-US", "fr": "fr-FR", "de": "de-DE", "it": "it-IT", "pt": "pt-BR", "ja": "ja-JP", "ko": "ko-KR", "ru": "ru-RU", "ar": "ar-SA"}
+            loc = loc_map.get(val, "en-US")
+            ejecutar_js_traductor(page, f"window._luxoTradClientLocale = '{loc}';")
+
+    dd_idioma_cliente = ft.Dropdown(
+        value="auto",
+        width=168,
+        dense=True,
+        text_size=11,
+        bgcolor="#1a102b",
+        border_color="#D8B4FE",
+        color="white",
+        content_padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+        options=[
+            ft.dropdown.Option("auto", "🌐 Auto (Detectar)"),
+            ft.dropdown.Option("zh", "🇨🇳 Chino Mandarín"),
+            ft.dropdown.Option("en", "🇺🇸 Inglés"),
+            ft.dropdown.Option("fr", "🇫🇷 Francés"),
+            ft.dropdown.Option("ja", "🇯🇵 Japonés"),
+            ft.dropdown.Option("ko", "🇰🇷 Coreano"),
+            ft.dropdown.Option("de", "🇩🇪 Alemán"),
+            ft.dropdown.Option("it", "🇮🇹 Italiano"),
+            ft.dropdown.Option("pt", "🇧🇷 Portugués"),
+            ft.dropdown.Option("ru", "🇷🇺 Ruso"),
+            ft.dropdown.Option("ar", "🇸🇦 Árabe"),
+        ],
+        on_select=_on_select_idioma_cliente,
+    )
 
     chat_list = ft.ListView(
         expand=True,
@@ -627,11 +804,11 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
                             on_click=re_escuchar
                         )
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Text(f'"{texto_orig}"', color="#cccccc", size=14, italic=True),
+                    ft.Text(f'"{texto_orig}"', color="#cccccc", size=14, italic=True, selectable=True),
                     ft.Container(
                         content=ft.Row([
                             ft.Icon(ft.Icons.TRANSLATE_ROUNDED, color="#00FFFF", size=16),
-                            ft.Text(texto_trad, color="white", weight="bold", size=15, expand=True),
+                            ft.Text(texto_trad, color="white", weight="bold", size=15, expand=True, selectable=True),
                             ft.Container(
                                 content=ft.Icon(ft.Icons.VOLUME_UP_ROUNDED, color=color_accent, size=18),
                                 width=32,
@@ -825,16 +1002,25 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
 
         def _do_work():
             try:
-                # Pasar idioma activo del cliente extranjero a la IA
-                target_lang = idioma_cliente_actual[0] if (idioma_cliente_actual and idioma_cliente_actual[0]) else "en"
-                res = detectar_idioma_y_traducir_ia(texto, idioma_cliente=target_lang)
+                # Pasar idioma activo del cliente extranjero y contexto reciente a la IA
+                target_lang = normalizar_codigo_idioma(idioma_cliente_actual[0]) or "en"
+                if target_lang == "es":
+                    target_lang = "en"
+                res = detectar_idioma_y_traducir_ia(
+                    texto,
+                    idioma_cliente=target_lang,
+                    historial_contexto=historial_reciente,
+                    es_vendedor=True,
+                )
                 if res:
-                    idioma_dest = res.get("destino", target_lang)
-                    # Si el texto original era espanol y el cliente no es ingles, forzar el idioma del cliente
-                    if res.get("origen") == "es" and target_lang != "en" and idioma_dest == "en":
+                    idioma_dest = normalizar_codigo_idioma(res.get("destino"), res.get("texto_traducido", "")) or target_lang
+                    if idioma_dest == "es":
                         idioma_dest = target_lang
                     trad = res.get("texto_traducido", "")
-                    flag_dest = VOCES_NATIVAS_EXTRANJERAS.get(idioma_dest[:2].lower(), {}).get("name", idioma_dest.upper())
+                    historial_reciente.append(f"Vendedor: {texto} -> {trad}")
+                    if len(historial_reciente) > 6:
+                        del historial_reciente[:-6]
+                    flag_dest = VOCES_NATIVAS_EXTRANJERAS.get(idioma_dest, {}).get("name", idioma_dest.upper())
                     agregar_burbuja_traduccion(
                         f"Vendedor (Espanol -> {flag_dest})",
                         texto,
@@ -860,7 +1046,7 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
             threading.Thread(target=_do_work, daemon=True).start()
             return None
 
-    def procesar_traduccion_cliente_texto(texto_directo=None):
+    def procesar_traduccion_cliente_texto(texto_directo=None, idioma_forzado=None):
         set_visual_estado("cliente", "processing")
         texto = texto_directo if (isinstance(texto_directo, str) and texto_directo.strip()) else txt_input_cliente.value
         if not texto or not str(texto).strip():
@@ -872,13 +1058,26 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
 
         def _do_work():
             try:
-                res = detectar_idioma_y_traducir_ia(texto)
+                pista_lang = normalizar_codigo_idioma(idioma_forzado, texto) or idioma_cliente_actual[0]
+                res = detectar_idioma_y_traducir_ia(
+                    texto,
+                    idioma_cliente=pista_lang,
+                    historial_contexto=historial_reciente,
+                    es_vendedor=False,
+                )
                 if res:
-                    idioma_orig = res.get("origen", "en")
+                    idioma_orig = normalizar_codigo_idioma(idioma_forzado, texto) or normalizar_codigo_idioma(res.get("origen"), texto) or pista_lang or "en"
+                    if idioma_orig == "es":
+                        idioma_orig = normalizar_codigo_idioma("", texto) or "en"
                     idioma_cliente_actual[0] = idioma_orig
+                    if any(o.key == idioma_orig for o in dd_idioma_cliente.options):
+                        dd_idioma_cliente.value = idioma_orig
                     trad = res.get("texto_traducido", "")
+                    historial_reciente.append(f"Cliente ({idioma_orig}): {texto} -> {trad}")
+                    if len(historial_reciente) > 6:
+                        del historial_reciente[:-6]
                     gen_cliente = res.get("genero_detectado", "female")
-                    flag_orig = VOCES_NATIVAS_EXTRANJERAS.get(idioma_orig[:2].lower(), {}).get("name", idioma_orig.upper())
+                    flag_orig = VOCES_NATIVAS_EXTRANJERAS.get(idioma_orig, {}).get("name", idioma_orig.upper())
                     agregar_burbuja_traduccion(
                         f"Cliente ({flag_orig} -> Vendedor)",
                         texto,
@@ -965,6 +1164,9 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
 
     def limpiar_chat(e):
         chat_list.controls.clear()
+        historial_reciente.clear()
+        idioma_cliente_actual[0] = "en"
+        dd_idioma_cliente.value = "auto"
         try: page.update()
         except: pass
 
@@ -1003,8 +1205,9 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     card_cliente = ft.Container(
         content=ft.Column([
             ft.Row([
-                ft.Text("LADO CLIENTE (Cualquier Idioma)", color="#D8B4FE", weight="bold", size=13),
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Text("LADO CLIENTE", color="#D8B4FE", weight="bold", size=13),
+                dd_idioma_cliente,
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ft.Row([
                 txt_input_cliente,
                 btn_mic_cliente,
@@ -1025,9 +1228,9 @@ def build_traductor_view(page: ft.Page, user_info=None, conectar_db_fn=None, mos
     )
 
     controles_inferiores = (
-        ft.Column([card_vendedor, card_cliente], spacing=8)
+        ft.Column([card_cliente, card_vendedor], spacing=8)
         if is_mobile
-        else ft.Row([card_vendedor, card_cliente], spacing=10)
+        else ft.Row([card_cliente, card_vendedor], spacing=10)
     )
 
     ejecutar_js_traductor(page, "console.log('[TRADUCTOR] Vista iniciada correctamente');")

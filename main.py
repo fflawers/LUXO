@@ -7967,6 +7967,27 @@ Responde ÚNICAMENTE con el bloque JSON. No agregues textos introductorios ni de
                     "abrir ofertas": "descuentos",
                     "abre ofertas": "descuentos",
 
+                    # Calculadora / Cotizador POS
+                    "abre la calculadora": "cotizador",
+                    "abrir la calculadora": "cotizador",
+                    "abre calculadora": "cotizador",
+                    "abrir calculadora": "cotizador",
+                    "ir a la calculadora": "cotizador",
+                    "ir a calculadora": "cotizador",
+                    "ve a calculadora": "cotizador",
+                    "calculadora pos": "cotizador",
+                    "calculadora": "cotizador",
+                    "abre el cotizador": "cotizador",
+                    "abrir el cotizador": "cotizador",
+                    "abre cotizador": "cotizador",
+                    "abrir cotizador": "cotizador",
+                    "ir a cotizador": "cotizador",
+                    "ir al cotizador": "cotizador",
+                    "ve a cotizador": "cotizador",
+                    "cotizador pos": "cotizador",
+                    "cotizador": "cotizador",
+                    "cotizar": "cotizador",
+
                     # Catálogo de UPCs
                     "catalogo upc": "catalogo_upc",
                     "catalogo upcs": "catalogo_upc",
@@ -23592,6 +23613,11 @@ Ejemplo:
             on_click=lambda e: cambiar_vista("descuentos", desde_menu_manual=True),
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
         )
+        btn_cotizador = SidebarButton(
+            content=ft.Row([ft.Text("🧮", color="#00FFAA", size=14, weight="bold"), ft.Text(tr("Cotizador POS 🧮", "POS Calculator 🧮", "Calculateur POS 🧮", "Calcolatore POS 🧮", "POS 报价器 🧮"), color="white", weight="bold")], spacing=10),
+            on_click=lambda e: cambiar_vista("cotizador", desde_menu_manual=True),
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8))
+        )
 
         btn_panamericano = SidebarButton(
             content=ft.Row([ft.Text("🚚", color="#00FFFF", size=14, weight="bold"), ft.Text(tr("Fichas Panamericano 🚚", "Panamericano Files 🚚", "Fiches Panamericano 🚚", "Fiche Panamericano 🚚", "Panamericano 🚚"), color="white", weight="bold")], spacing=10),
@@ -23719,7 +23745,7 @@ Ejemplo:
                 (btn_meta_semanal, "meta_semanal"), (btn_weekly, "weekly"), (btn_polar, "polar"), (btn_enfoque, "enfoque_diario"),
                 (btn_enfoque_semanal, "enfoque_semanal"), (btn_parroquiales_minutas, "parroquiales_minutas"),
                 (btn_crm, "crm"), (btn_fedex, "fedex"),
-                (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_bitacora_conteo, "bitacora_conteo"), (btn_panamericano, "panamericano"), (btn_disa, "disa")
+                (btn_facturacion, "facturacion"), (btn_ciclicos, "ciclicos"), (btn_bitacora_conteo, "bitacora_conteo"), (btn_panamericano, "panamericano"), (btn_disa, "disa"), (btn_descuentos, "descuentos"), (btn_cotizador, "cotizador")
             ]
             for btn_tuple in all_btn_tuples:
                 btn = btn_tuple[0]
@@ -23814,6 +23840,22 @@ Ejemplo:
                             main_views_cache["descuentos"] = descuentos_view.build_descuentos_view(
                                 page, store_code=st_code, store_name=st_name, user_role=u_role,
                                 seleccionar_archivo_async=seleccionar_archivo_async
+                            )
+                        elif vista == "cotizador":
+                            import cotizador_view
+                            st_u = str(user_info.get("usuario") or "").strip()
+                            st_digits = "".join(filter(str.isdigit, st_u))
+                            st_code = st_digits if st_digits else str(user_info.get("codigo_tienda") or user_info.get("tienda") or "A540").strip()
+                            st_name = str(user_info.get("tienda") or user_info.get("nombre_tienda") or f"Tienda {st_code}").strip()
+                            u_role = "admin" if es_admin() else "tienda"
+                            main_views_cache["cotizador"] = cotizador_view.build_cotizador_view(
+                                page,
+                                store_code=st_code,
+                                store_name=st_name,
+                                user_info=user_info,
+                                user_role=u_role,
+                                seleccionar_archivo_async=seleccionar_archivo_async,
+                                mostrar_snack_fn=mostrar_snack,
                             )
                         elif vista == "historial":
                             main_views_cache["historial"] = build_historial_view()
@@ -24118,6 +24160,7 @@ Ejemplo:
                 btn_tareas.content.controls[1].value = tr("Tareas 📋", "Tasks 📋", "Tâches 📋", "Attività 📋", "任务 📋")
                 btn_campanas.content.controls[1].value = tr("Campañas 📸", "Campaigns 📸", "Campagnes 📸", "Campagne 📸", "活动 📸")
                 btn_presupuesto.content.controls[1].value = tr("Presupuesto 💰", "Budget 💰", "Budget 💰", "Budget 💰", "预算 💰")
+                btn_cotizador.content.controls[1].value = tr("Cotizador POS 🧮", "POS Calculator 🧮", "Calculateur POS 🧮", "Calcolatore POS 🧮", "POS 报价器 🧮")
                 btn_reto.content.controls[1].value = tr("Reto del Día 🏆", "Daily Quiz 🏆", "Défi du Jour 🏆", "Sfida del Giorno 🏆", "每日挑战 🏆")
                 btn_vendedores.content.controls[1].value = tr("Configuración Tienda 👥", "Store Config 👥", "Configuration 👥", "Configurazione 👥", "店铺配置 👥")
                 btn_simulador.content.controls[1].value = tr("Simulador IA 🎭", "AI Simulator 🎭", "Simulateur IA 🎭", "Simulatore IA 🎭", "AI 模拟器 🎭")
@@ -24260,7 +24303,7 @@ Ejemplo:
         ], alignment="start", vertical_alignment="center", spacing=6)
 
         # --- CATEGORÍAS AGRUPADAS CON ACORDEÓN DESPLEGABLE (ExpansionTile) ---
-        ventas_controls = [btn_presupuesto, btn_meta_semanal, btn_weekly, btn_polar, btn_enfoque_semanal]
+        ventas_controls = [btn_cotizador, btn_presupuesto, btn_meta_semanal, btn_weekly, btn_polar, btn_enfoque_semanal]
         if btn_dashboard:
             ventas_controls.append(btn_dashboard)
         if btn_bitacora:

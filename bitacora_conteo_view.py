@@ -326,16 +326,16 @@ def build_bitacora_conteo_view(
 
     async def _focus_ctrl_async(ctrl, scroll_off=None, from_tab=False):
         try:
-            if scroll_off is not None and body_scroll_col_ref[0] is not None:
-                await body_scroll_col_ref[0].scroll_to(offset=scroll_off, duration=50)
-        except Exception:
-            pass
-        try:
             if ctrl is not None:
                 await ctrl.focus()
                 if from_tab:
                     await asyncio.sleep(0.025)
                     await ctrl.focus()
+        except Exception:
+            pass
+        try:
+            if scroll_off is not None and body_scroll_col_ref[0] is not None:
+                await body_scroll_col_ref[0].scroll_to(offset=scroll_off, duration=0)
         except Exception:
             pass
 
@@ -414,7 +414,9 @@ def build_bitacora_conteo_view(
         marca_lbl = f_obj.get("marca") or rk
         lbl_celda_activa.value = f"{marca_lbl} • {nck.upper()}"
         tf_editor_rapido.value = _get_cell_value(rk, nck)
-        tf_editor_rapido.keyboard_type = ft.KeyboardType.TEXT if meta["editable_text"] else ft.KeyboardType.NUMBER
+        target_kb = ft.KeyboardType.TEXT if meta["editable_text"] else ft.KeyboardType.NUMBER
+        if tf_editor_rapido.keyboard_type != target_kb:
+            tf_editor_rapido.keyboard_type = target_kb
         upd_ctrls.extend([lbl_celda_activa, tf_editor_rapido])
         try:
             page.update(*upd_ctrls)
@@ -582,7 +584,7 @@ def build_bitacora_conteo_view(
 
     kb_listener = ft.KeyboardListener(
         content=tabla_host,
-        autofocus=True,
+        autofocus=not bool(pw_init < 950),
         on_key_down=_on_grid_key_down,
         on_key_up=_on_grid_key_up,
     )
@@ -604,7 +606,7 @@ def build_bitacora_conteo_view(
         W_MAR = 122 if es_movil else 180
         W_NUM = 44 if es_movil else 52
         W_OK = 48 if es_movil else 56
-        H_ROW = 36 if es_movil else 34
+        H_ROW = 40 if es_movil else 34
 
         def _hdr_cell(txt, width, bg="#D1D5DB", color="#111827"):
             return ft.Container(
@@ -701,6 +703,7 @@ def build_bitacora_conteo_view(
                 border=ft.Border.all(0.5, base_border),
                 padding=ft.padding.Padding(5, 0, 2, 0) if align_left else None,
                 alignment=ft.alignment.Alignment(-1, 0) if align_left else ft.alignment.Alignment(0, 0),
+                ink=False,
                 on_click=lambda e, rr=r_idx, cc=campo_key: _select_cell(rr, cc),
             )
             meta = {
@@ -891,7 +894,7 @@ def build_bitacora_conteo_view(
             ph_cur = int(ph_cur)
         except Exception:
             ph_cur = 760
-        vis_h = max(280, min(520, ph_cur - (310 if es_movil else 330)))
+        vis_h = max(380, min(640, ph_cur - 230)) if es_movil else max(440, min(720, ph_cur - 220))
         body_height_ref[0] = vis_h
 
         hdr_right_scroll = ft.Row(

@@ -1613,12 +1613,54 @@
                 // Fallback de compatibilidad
                 return navigator.mediaDevices.getUserMedia({ audio: true });
             })
-            .then(function(stream) {
+            .then(function(rawStream) {
                 if (!window._luxoTradRecording[source]) {
-                    stream.getTracks().forEach(function(t) { t.stop(); });
+                    rawStream.getTracks().forEach(function(t) { t.stop(); });
                     return;
                 }
-                window._luxoTradAudioStream[source] = stream;
+                // Cadena DSP WebAudio (Filtro paso-alto 95Hz + paso-bajo 7500Hz + compresor de voz)
+                let recordStream = rawStream;
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        const ctx = new AudioCtx();
+                        const srcNode = ctx.createMediaStreamSource(rawStream);
+                        const hp = ctx.createBiquadFilter();
+                        hp.type = 'highpass';
+                        hp.frequency.value = 95;
+                        hp.Q.value = 0.7;
+
+                        const lp = ctx.createBiquadFilter();
+                        lp.type = 'lowpass';
+                        lp.frequency.value = 7500;
+                        lp.Q.value = 0.7;
+
+                        const comp = ctx.createDynamicsCompressor();
+                        comp.threshold.value = -26;
+                        comp.knee.value = 18;
+                        comp.ratio.value = 4;
+                        comp.attack.value = 0.004;
+                        comp.release.value = 0.2;
+
+                        const dest = ctx.createMediaStreamDestination();
+                        srcNode.connect(hp);
+                        hp.connect(lp);
+                        lp.connect(comp);
+                        comp.connect(dest);
+
+                        window._luxoTradAudioCtx = window._luxoTradAudioCtx || {};
+                        window._luxoTradAudioCtx[source] = ctx;
+                        window._luxoTradRawStream = window._luxoTradRawStream || {};
+                        window._luxoTradRawStream[source] = rawStream;
+                        recordStream = dest.stream;
+                        console.log('[TRADUCTOR DSP] Filtro anti-ruido WebAudio activo para:', source);
+                    }
+                } catch (eDsp) {
+                    console.log('[TRADUCTOR DSP FALLBACK]', eDsp);
+                    recordStream = rawStream;
+                }
+
+                window._luxoTradAudioStream[source] = recordStream;
                 window._luxoTradChunks[source] = [];
 
                 let mimeType = 'audio/webm';
@@ -1630,7 +1672,7 @@
                 window._luxoTradMimeType[source] = mimeType;
 
                 const options = mimeType ? { mimeType: mimeType } : {};
-                const mr = new MediaRecorder(stream, options);
+                const mr = new MediaRecorder(recordStream, options);
                 window._luxoTradMediaRecorder[source] = mr;
 
                 mr.ondataavailable = function(e) {
@@ -1665,7 +1707,7 @@
                 rec.continuous = true;
                 rec.interimResults = false;
                 rec.maxAlternatives = 1;
-                rec.lang = (source === 'vendedor') ? 'es-MX' : 'en-US';
+                rec.lang = (source === 'vendedor') ? 'es-MX' : (window._luxoTradClientLocale || 'en-US');
 
                 rec.onresult = function(ev) {
                     let txt = '';
@@ -1716,6 +1758,14 @@
                     stream.getTracks().forEach(function(t) { t.stop(); });
                     window._luxoTradAudioStream[source] = null;
                 }
+                if (window._luxoTradRawStream && window._luxoTradRawStream[source]) {
+                    window._luxoTradRawStream[source].getTracks().forEach(function(t) { t.stop(); });
+                    window._luxoTradRawStream[source] = null;
+                }
+                if (window._luxoTradAudioCtx && window._luxoTradAudioCtx[source]) {
+                    try { window._luxoTradAudioCtx[source].close(); } catch(eCtx){}
+                    window._luxoTradAudioCtx[source] = null;
+                }
                 window._luxoTradMediaRecorder[source] = null;
 
                 const chunks = window._luxoTradChunks[source] || [];
@@ -1737,6 +1787,11 @@
                         return res.json();
                     }).then(function(data) {
                         console.log('[TRADUCTOR AUDIO UPLOAD RESULT]:', data);
+                        if (source === 'cliente' && data && data.language) {
+                            const locMap = { zh: 'zh-CN', en: 'en-US', fr: 'fr-FR', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', ja: 'ja-JP', ko: 'ko-KR', ru: 'ru-RU', ar: 'ar-SA' };
+                            const k2 = String(data.language).toLowerCase().slice(0, 2);
+                            if (locMap[k2]) window._luxoTradClientLocale = locMap[k2];
+                        }
                         if (data && data.audio_url) {
                             window.luxoPlayTraductorAudio(data.audio_url);
                         }
