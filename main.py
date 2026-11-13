@@ -24303,7 +24303,7 @@ Ejemplo:
         ], alignment="start", vertical_alignment="center", spacing=6)
 
         # --- CATEGORÍAS AGRUPADAS CON ACORDEÓN DESPLEGABLE (ExpansionTile) ---
-        ventas_controls = [btn_cotizador, btn_presupuesto, btn_meta_semanal, btn_weekly, btn_polar, btn_enfoque_semanal]
+        ventas_controls = [btn_cotizador, btn_presupuesto, btn_weekly, btn_polar]
         if btn_dashboard:
             ventas_controls.append(btn_dashboard)
         if btn_bitacora:
@@ -24352,7 +24352,7 @@ Ejemplo:
             entrenamiento_controls
         )
 
-        bitacora_controls = [btn_bitacora_conteo]
+        bitacora_controls = [btn_bitacora_conteo, btn_meta_semanal, btn_enfoque_semanal]
         tile_bitacora = crear_acordeon(
             ft.Text(tr("📒 BITÁCORA", "📒 LOGBOOK", "📒 JOURNAL", "📒 REGISTRO", "📒 日志"), color="#00FFFF", weight="bold", size=12),
             bitacora_controls
